@@ -65,7 +65,18 @@ describe('computeLaunchMode (launch billing mode selection)', () => {
     expect(computeLaunchMode({ maxPlayers: 3, addons: { aiCommissioner: true } }, FREE_THRESHOLD)).toBe('trial');
     expect(computeLaunchMode({ maxPlayers: 3, smsNotifications: true }, FREE_THRESHOLD)).toBe('trial');
     expect(computeLaunchMode({ whatIfSimulator: true }, FREE_THRESHOLD)).toBe('trial');
-    expect(computeLaunchMode({ customBranding: true }, FREE_THRESHOLD)).toBe('trial');
+  });
+
+  it('an INCLUDED add-on does NOT force trial (T4/D1, codex r2 [P1])', () => {
+    // customBranding costs nothing, so it must not push a launch off the free
+    // plan either. A stale wizard bundle still sending it would otherwise
+    // create a small pool as a 14-day TRIAL — which eventually LOCKS — while
+    // the quote on screen said free. Pricing and launch mode have to agree
+    // about what is paid.
+    expect(computeLaunchMode({ customBranding: true }, FREE_THRESHOLD)).toBe('free');
+    expect(computeLaunchMode({ maxPlayers: 3, addons: { customBranding: true } }, FREE_THRESHOLD)).toBe('free');
+    // ...and it does not mask a genuinely paid one selected alongside it.
+    expect(computeLaunchMode({ maxPlayers: 3, addons: { customBranding: true, aiCommissioner: true } }, FREE_THRESHOLD)).toBe('trial');
   });
 
   it('a cap of -1 / 0 (unlimited/unset) is treated as no estimate → free without add-on', () => {
@@ -125,8 +136,15 @@ describe('assertPaidCeilingForUpdate (updatePoolSettings paid ceiling)', () => {
     expect(() => assertPaidCeilingForUpdate(paidBilling, { featuresUnlocked: { whatIfSimulator: true } }))
       .toThrowError(/paid add-on beyond the paid ceiling/i);
     // sibling-flag shape is also caught.
-    expect(() => assertPaidCeilingForUpdate(paidBilling, { customBranding: true }))
+    expect(() => assertPaidCeilingForUpdate(paidBilling, { smsNotifications: true }))
       .toThrowError(/paid add-on beyond the paid ceiling/i);
+  });
+
+  it('ALLOWS enabling an INCLUDED add-on on a paid pool (T4/D1)', () => {
+    // Branding is free, so turning it on is not an upgrade and must not be
+    // refused as one. This is the same derived list computeLaunchMode uses.
+    expect(() => assertPaidCeilingForUpdate(paidBilling, { customBranding: true })).not.toThrow();
+    expect(() => assertPaidCeilingForUpdate(paidBilling, { featuresUnlocked: { customBranding: true } })).not.toThrow();
   });
 });
 

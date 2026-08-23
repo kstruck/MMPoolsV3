@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import type { PoolType } from '@shared/poolTypes';
 import {
-  ADDON_KEYS,
   type AddonKey,
   type AddonSelection,
   type PoolQuote,
@@ -15,6 +14,7 @@ import type { User } from '../../../types';
 import { profileUpdatesFrom } from './profilePrefill';
 import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState';
 import { CheckboxField, Field, NumberField } from '../fields';
+import { SELLABLE_ADDON_KEYS, stripFreeAddons } from '../../../config/freeAddons';
 
 // ---------------------------------------------------------------------------
 // LaunchStep — the final wizard step (PLAN-BUYFLOW-OVERHAUL Phase 2 #5).
@@ -133,7 +133,9 @@ export function LaunchStep(props: LaunchStepProps) {
         const q = await dbService.getPoolQuote({
           poolType,
           estimatedPlayers,
-          addons,
+          // Branding is included with every pool (T4/D1) — never quoted, so the
+          // price is right regardless of the billing_config save.
+          addons: stripFreeAddons(addons),
           couponCode: trimmed ? trimmed.toUpperCase() : undefined,
         });
         if (!cancelled) {
@@ -308,7 +310,7 @@ export function LaunchStep(props: LaunchStepProps) {
         poolName: name || 'Your pool',
         poolType,
         estimatedPlayers,
-        addons,
+        addons: stripFreeAddons(addons),
         couponCode: trimmed ? trimmed.toUpperCase() : undefined,
       });
       // Leaves the app for Stripe. If the user cancels/abandons there, the pool
@@ -363,7 +365,7 @@ export function LaunchStep(props: LaunchStepProps) {
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}
       <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Premium add-ons (optional)</p>
       <div className="mb-2 rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-        {ADDON_KEYS.filter((key) => {
+        {SELLABLE_ADDON_KEYS.filter((key) => {
           // SMS notifications disabled for now (product decision 2026-07-07).
           if (key === 'smsNotifications') return false;
           // What-If Simulator is a Bracket-only add-on (matches the pricing page + checkout).

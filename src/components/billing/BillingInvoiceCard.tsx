@@ -25,7 +25,7 @@ interface BillingInvoiceCardProps {
     estimatedPlayers: number;
     hasAiCommissioner?: boolean;
     hasWhatIfSimulator?: boolean;
-    hasCustomBranding?: boolean; // NEW
+    // hasCustomBranding removed 2026-08-23 (T4/D1) — see src/config/freeAddons.ts. // NEW
     hasSmsNotifications?: boolean;
     isWizard?: boolean;
     pricePaid?: number; // NEW
@@ -93,8 +93,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     poolType,
     estimatedPlayers,
     hasAiCommissioner = false,
-    hasWhatIfSimulator = false,
-    hasCustomBranding = false, // Premium add-on — opt-in only, never auto-charged
+    hasWhatIfSimulator = false, // Premium add-on — opt-in only, never auto-charged
     hasSmsNotifications = false,
     isWizard = false,
     pricePaid = 0, // NEW
@@ -138,7 +137,6 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // Local addon selection states for the Setup Wizard (Included in trial!)
     const [localAi, setLocalAi] = useState(hasAiCommissioner);
     const [localSim, setLocalSim] = useState(hasWhatIfSimulator);
-    const [localBranding, setLocalBranding] = useState(hasCustomBranding);
     const [localSms, setLocalSms] = useState(hasSmsNotifications);
 
     useEffect(() => {
@@ -150,17 +148,12 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     }, [hasWhatIfSimulator]);
 
     useEffect(() => {
-        setLocalBranding(hasCustomBranding);
-    }, [hasCustomBranding]);
-
-    useEffect(() => {
         setLocalSms(hasSmsNotifications);
     }, [hasSmsNotifications]);
 
     const handleToggleFeature = (key: 'aiCommissioner' | 'whatIfSimulator' | 'customBranding' | 'smsNotifications', enabled: boolean) => {
         if (key === 'aiCommissioner') setLocalAi(enabled);
         if (key === 'whatIfSimulator') setLocalSim(enabled);
-        if (key === 'customBranding') setLocalBranding(enabled);
         if (key === 'smsNotifications') setLocalSms(enabled);
 
         if (onFeatureToggle) {
@@ -253,7 +246,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         aiCommissioner: !!localAi,
         smsNotifications: !!localSms,
         whatIfSimulator: !!localSim,
-        customBranding: !!localBranding,
+        // Never requested: branding is included with every pool (T4/D1). A pool
+        // created before that ruling can still carry `addons.customBranding`,
+        // and this card seeds from exactly that — so without the hard false an
+        // old pool would still be quoted $29 for something no longer on screen.
+        customBranding: false,
     };
 
     // Identity of the inputs a quote prices. A quote is only usable for the
@@ -334,7 +331,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             clearTimeout(t);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput, quoteRetry]);
+    }, [poolType, estimatedPlayers, localAi, localSim, localSms, couponInput, quoteRetry]);
 
     // --- Derived display values, ALL sourced from the server quote ---
     const basePrice = quote?.basePrice ?? 0;
@@ -342,7 +339,6 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         quote?.addonLines.find(l => l.key === key)?.amount ?? 0;
     const aiCost = addonAmount('aiCommissioner');
     const simCost = addonAmount('whatIfSimulator');
-    const brandingCost = addonAmount('customBranding');
     const smsCost = addonAmount('smsNotifications');
 
     // Server subtotal already includes every add-on (incl. SMS). Previous
@@ -646,7 +642,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     { key: 'aiCommissioner' as const, label: 'AI Commissioner', desc: 'Auto trash-talk, weekly reviews, and dispute resolution.', value: localAi },
                                     ...( poolType.toUpperCase() === 'BRACKET' ? [{ key: 'whatIfSimulator' as const, label: 'What-If Simulator', desc: 'Interactively simulate potential game results to view projected standings.', value: localSim }] : [] ),
                                     // SMS Notifications add-on disabled for now (product decision 2026-07-07). Re-add here to bring it back.
-                                    { key: 'customBranding' as const, label: 'Custom Branding', desc: 'Upload headers, customized color schemes, and manager logos.', value: localBranding }
+                                    // Custom Branding removed 2026-08-23 (T4/D1): it is included with
+                                    // every pool. Nothing ever gated it, so selling it charged for a
+                                    // flag with no effect. Re-add here if a genuinely premium branding
+                                    // tier is ever built — see src/config/freeAddons.ts.
                                 ].map(({ key, label, desc, value }) => {
                                     const feat = config.features[key];
                                     // Only display if explicitly turned on (isPremium is true) in the superadmin settings
@@ -722,14 +721,6 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> What-If Standings Simulator</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
                                     {money(simCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
-                                </span>
-                            </div>
-                        )}
-                        {localBranding && config.features.customBranding?.isPremium && (
-                            <div className="flex justify-between items-center text-muted text-xs">
-                                <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> Premium Custom Branding & Covers</span>
-                                <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    {money(brandingCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}

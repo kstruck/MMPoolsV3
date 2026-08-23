@@ -107,6 +107,36 @@ export const ADDON_KEYS = [
 ] as const;
 export type AddonKey = (typeof ADDON_KEYS)[number];
 
+/**
+ * Add-ons that are INCLUDED with every pool and must never be priced
+ * (PLAN-WIZARD-BUYFLOW-FIXES T4, Kevin's ruling D1).
+ *
+ * `customBranding` was priced at $29 and stamped into
+ * `billing.featuresUnlocked.customBranding` on activation, but NOTHING gated
+ * it — no server path passed it to `checkBillingAccess`, no render path read
+ * the flag — while the wizard asked every commissioner for a logo and two
+ * colours anyway.
+ *
+ * ⚠️ This lives in `shared/` and is enforced in `computeAddonLines`, on the
+ * SERVER, deliberately. Removing the toggles from the UI is not enough: this
+ * is a single-page app served from a CDN, so a browser holding a stale bundle
+ * would keep sending `customBranding: true` and keep being quoted and CHARGED
+ * for it (codex r1 [P1] on T4). Nor can the guarantee rest on the
+ * `settings/billing_config` `isPremium:false` save — that is a human action on
+ * a document, and a money guarantee should not be one config edit away from
+ * being wrong.
+ *
+ * The key, the schema field and the `featuresUnlocked` plumbing all stay,
+ * dormant, for a future genuinely-premium branding tier. Delete the key from
+ * THIS list to start selling it again.
+ */
+export const INCLUDED_ADDON_KEYS = ['customBranding'] as const;
+
+/** True when this add-on ships with every pool and may never be charged for. */
+export function isIncludedAddon(key: string): boolean {
+  return (INCLUDED_ADDON_KEYS as readonly string[]).includes(key);
+}
+
 // --- getPoolQuote input -------------------------------------------------------
 export const poolQuoteInputSchema = z.object({
   // Accept any of the seven live pool formats. Unmapped formats are rejected by

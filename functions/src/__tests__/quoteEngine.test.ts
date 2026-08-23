@@ -114,7 +114,26 @@ describe('computeAddonLines — SMS is priced (the pre-overhaul bug)', () => {
     expect(byKey.aiCommissioner).toBe(19);
     expect(byKey.smsNotifications).toBe(5); // <-- SMS included
     expect(byKey.whatIfSimulator).toBe(9);
-    expect(byKey.customBranding).toBe(29);
+    // customBranding is NOT here: it is an INCLUDED add-on (T4/D1) — see below.
+    expect(byKey.customBranding).toBeUndefined();
+  });
+
+  it('NEVER prices an INCLUDED add-on, whatever the config says (T4/D1)', () => {
+    // codex r1 [P1] on T4: removing the toggles from the UI is not enough. This
+    // is a single-page app served from a CDN, so a browser on a stale bundle
+    // keeps sending `customBranding: true`. Priced here, that browser is
+    // CHARGED $29 for a feature nothing gates. The config's `isPremium: false`
+    // save would also fix it, but that is a human edit to a document and a
+    // money guarantee must not be one config change away from being wrong.
+    expect(CONFIG.features.customBranding.isPremium).toBe(true);
+    expect(CONFIG.features.customBranding.addonPrice).toBe(29);
+    const lines = computeAddonLines(CONFIG, { ...NO_ADDONS, customBranding: true });
+    expect(lines).toHaveLength(0);
+  });
+
+  it('the included add-on does not disturb the others', () => {
+    const lines = computeAddonLines(CONFIG, { ...NO_ADDONS, aiCommissioner: true, customBranding: true });
+    expect(lines.map((l) => l.key)).toEqual(['aiCommissioner']);
   });
 
   it('adds no line for an unselected add-on', () => {
