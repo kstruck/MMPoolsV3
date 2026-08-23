@@ -16,7 +16,9 @@ import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
 import { UpgradeInfoPopover } from './pricing/UpgradeInfoPopover';
 import { EstimateSummaryCard } from './pricing/EstimateSummaryCard';
 import { canAccessPoolCreation } from '../utils/auth';
+import { setPostAuthIntent } from '../utils/postAuthIntent';
 import { addonSeed } from './billing/addonSeed';
+import { PaymentSuccessBanner } from './billing/PaymentSuccessBanner';
 import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
 
 interface PricingPageProps {
@@ -123,6 +125,30 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         canCheckoutPool(selectedPoolData as never, user?.id) &&
         isUpgradeableStatus(selectedPoolData.billing?.status);
 
+    /**
+     * G2 — the create CTAs used to `navigate('/create-pool')` for everyone,
+     * including logged-out visitors. That route requires `user &&`
+     * (`App.tsx`), so an anonymous click on a button captioned
+     * "Build Your Pool — Free to Start / no account needed" was bounced to `/`
+     * with no auth modal and no message at all. `canAccessPoolCreation` never
+     * checks login, so nothing else caught it either.
+     *
+     * Now: open the auth modal, remember the intent, and continue to the wizard
+     * as soon as the user exists.
+     */
+    const startCreate = () => {
+        if (!canCreate) return;
+        if (!user) {
+            // The continuation is App's, not this page's: a brand-new account is
+            // navigated to /participant on sign-up, which unmounts this page
+            // before any effect here could run (codex r2 [P1]).
+            setPostAuthIntent('/create-pool');
+            onLogin();
+            return;
+        }
+        navigate('/create-pool');
+    };
+
     // Optional config-driven hero promo (shared BillingConfig schema field).
     const heroPromo = config.heroPromo;
     const heroPromoEndsAt = heroPromo?.endsAt != null ? new Date(heroPromo.endsAt).getTime() : Number.NaN;
@@ -203,6 +229,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 onCreatePool={onCreatePool}
             />
 
+            {/* G5 (codex r1 [P1]) — bundle purchases come back HERE, to
+                /pricing?payment=success, not to a pool route. Same banner, the
+                bundle message: there is no pool status to wait on. */}
+            <PaymentSuccessBanner purchase="bundle" />
+
             {/* Hero Header Section — navy chrome (always dark) */}
             <section className="relative overflow-hidden pt-24 pb-20 border-b border-[rgba(230,206,150,0.16)] text-white bg-gradient-to-b from-navy-950 via-navy-950 to-navy-900">
                 <div className="absolute inset-0 pointer-events-none">
@@ -247,7 +278,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                     {visitorState === 'anon' && (
                         <div className="pt-2 space-y-3">
                             <button
-                                onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                                onClick={startCreate}
                                 disabled={!canCreate}
                                 title={canCreate ? 'Start building your pool — no account needed' : 'Pool creation is coming soon'}
                                 className="inline-flex items-center justify-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-4 px-8 rounded-2xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
@@ -620,7 +651,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     />
 
                                     <button
-                                        onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                                        onClick={startCreate}
                                         disabled={!canCreate}
                                         className="w-full bg-surface hover:bg-card text-[color:var(--text)] border border-line hover:border-gold-500/40 py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line"
                                         title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
@@ -644,7 +675,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 />
 
                                 <button
-                                    onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                                    onClick={startCreate}
                                     disabled={!canCreate}
                                     className="w-full bg-brandred-600 hover:bg-brandred-500 text-white py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                     title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}

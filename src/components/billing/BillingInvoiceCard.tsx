@@ -877,8 +877,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     </>
                                 )}
                             </button>
+                            {/* G4 — this line used to name Stripe's test mode and
+                                promise that no card would actually be charged,
+                                unconditionally, on the LIVE upgrade path. Telling
+                                a paying commissioner their card will not be
+                                billed is the worst sentence that could sit under
+                                a real payment button. Both copies of it were
+                                replaced; `tests/buyflow-blockers.test.ts` counts
+                                them so a third cannot reintroduce the claim. */}
                             <p className="text-[10px] text-muted text-center">
-                                Transactions are processed securely in Stripe Sandbox. No real credit card charges will occur.
+                                Payments are processed securely by Stripe. We never see or store your card details.
                             </p>
                         </div>
                     )}
@@ -1103,8 +1111,9 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
+                    {/* G4 — the same test-mode claim, second copy (bundle tab). */}
                     <p className="text-[10px] text-muted text-center">
-                        Transactions are processed securely in Stripe Sandbox. No real credit card charges will occur.
+                        Payments are processed securely by Stripe. We never see or store your card details.
                     </p>
                 </div>
             )}
