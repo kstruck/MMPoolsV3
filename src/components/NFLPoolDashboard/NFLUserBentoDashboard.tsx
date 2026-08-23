@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
-import type { User as UserType, Pool, NFLGame, WeeklyRecap } from '../../types';
+import type { User as UserType, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { NFLGameTicker } from './NFLGameTicker';
+import { BanterFeed } from './BanterFeed';
+import { PinnedMessageBand } from './PinnedMessageBand';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } from '../../utils/nflPending';
 import { nflLockMode, weekLockOverrideFor, gameLockAt } from '@shared/nflLockMode';
@@ -56,6 +58,25 @@ interface NFLUserBentoDashboardProps {
   onOpenAuth: () => void;
   isManager: boolean;
   onSelectTab: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
+  /**
+   * The pool feed (T9), subscribed by `NFLPoolDashboard` so ONE reader serves
+   * both this card and the commissioner's. Kevin, 2026-08-23: "I want to move
+   * the Pool Feed card next to the Pool Standings card on the Pool Homepage so
+   * people actually see it. The bottom of the page is useless."
+   */
+  poolFeed?: BanterMessage[];
+  /** The feed could not be READ, which is not the same as an empty feed. */
+  poolFeedError?: boolean;
+  /**
+   * The reader is a member of this pool. The feed's read rule is
+   * `isPoolParticipant()`, so a signed-in NON-member of a public pool must not
+   * be shown the card at all — subscribing would deny and leave them staring at
+   * a permanent error for a feed they were never entitled to read.
+   */
+  isPoolMember?: boolean;
+  /** The commissioner's pinned post, rendered directly below the score ticker. */
+  pinnedMessage?: BanterMessage | null;
+  pinnedError?: boolean;
 }
 
 // A beautiful dynamic SVG Football Helmet Component that paints itself in team colors (used as premium image fallback)
@@ -142,6 +163,11 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   onBack,
   onOpenAuth: _onOpenAuth,
   isManager,
+  poolFeed = [],
+  poolFeedError = false,
+  isPoolMember = false,
+  pinnedMessage = null,
+  pinnedError = false,
   onSelectTab
 }) => {
   const NFL_TEAM_COLORS: Record<string, { primary: string; secondary: string }> = {
@@ -546,6 +572,11 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     <>
       {/* Live-score ticker across the top of the pool homepage (item 7) */}
       <NFLGameTicker games={weeklyGames} onSelectGame={selectGame} />
+
+      {/* The commissioner's pinned post, "right below the score ticker"
+          (Kevin, 2026-08-23). Members only, same read rule as the feed; renders
+          nothing when nothing is pinned. */}
+      {isPoolMember && <PinnedMessageBand message={pinnedMessage} error={pinnedError} />}
 
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-8 items-stretch">
 
@@ -1161,6 +1192,45 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </span>
           </div>
         </div>
+
+        {/* CARD D2: POOL FEED — beside Pool Standings, not at the bottom of the
+            page (Kevin, 2026-08-23). ONE component with the commissioner's card
+            (`BanterFeed`), so the two views cannot drift; only the delete and
+            pin controls differ, and this one has neither.
+
+            ⚠️ THE SPAN IS NOT DECORATION. This grid is 2-up, and which cards
+            precede this one depends on the pool type: Pick'em renders A (full
+            width) then D, leaving the row beside Pool Standings EMPTY — the gap
+            in Kevin's screenshot, and exactly where he asked the feed to go.
+            Survivor renders B+D and Margin renders C+D, which already fill that
+            row, so there the feed starts a row of its own and spanning both
+            columns is what stops it leaving a new hole one row down. */}
+        {isPoolMember && (
+          <div
+            className={`${_pool.type === 'NFL_PICKEM' ? '' : 'md:col-span-2'} bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between`}
+          >
+            <div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Feed</h3>
+                  <p className="text-[10px] text-faint mt-0.5 font-display font-bold uppercase tracking-[0.08em] num">From your commissioner</p>
+                </div>
+              </div>
+              <BanterFeed
+                messages={poolFeed}
+                error={poolFeedError}
+                emptyText="No posts yet. Your commissioner can post here - everyone in the pool sees it."
+              />
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-line flex justify-between items-center text-[10px]">
+              <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Pool Feed</span>
+              <span className="text-navy-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] num">
+                {poolFeed.length === 0 ? 'Nothing posted yet' : `${poolFeed.length} post${poolFeed.length === 1 ? '' : 's'}`}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* CARD E: MY PERFORMANCE RADAR & PICK ANALYTICS (Bottom Spanning Bento Box) */}
         <div 

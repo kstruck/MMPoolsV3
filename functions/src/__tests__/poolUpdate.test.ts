@@ -87,6 +87,45 @@ describe('buildPoolSettingsUpdate', () => {
   });
 });
 
+describe('pinnedMessageId — the commissioner pins a post mid-season', () => {
+  /**
+   * Kevin, 2026-08-23: pin a message to the top of the pool home page. The id
+   * lives on the POOL doc rather than as a `pinned` flag on the message, so
+   * `pools/{id}/messages` keeps `allow update: if false`.
+   *
+   * ⚠️ THE LOCKED CASE IS THE POINT. The client rule for a pool update carries
+   * `poolIsEditable()` (DRAFT/OPEN only), so a direct `updateDoc` would be
+   * denied in the middle of a locked season — which is exactly when a pin is
+   * wanted. This callable is the path that works, and this is the assertion that
+   * says so.
+   */
+  it('is accepted while the pool is LOCKED', () => {
+    const plan = buildPoolSettingsUpdate({ isLocked: true }, { pinnedMessageId: 'msg123' });
+    expect(plan.set.pinnedMessageId).toBe('msg123');
+  });
+
+  it('unpins with an empty string, in every phase', () => {
+    for (const pool of [{ status: 'DRAFT' }, { status: 'OPEN' }, { isLocked: true }, { status: 'ARCHIVED' }]) {
+      expect(buildPoolSettingsUpdate(pool, { pinnedMessageId: '' }).set.pinnedMessageId).toBe('');
+    }
+  });
+
+  it('refuses a value that would break the document path (codex r1 [P2])', () => {
+    // The matrix gates KEYS, not values, and this value becomes a path segment
+    // on the client: `doc(db, 'pools', id, 'messages', <this>)` throws for a
+    // slash or a non-string, inside the effect every member of the pool runs.
+    for (const bad of ['a/b', '..', { id: 'x' }, 42, null]) {
+      expect(() => buildPoolSettingsUpdate({ status: 'OPEN' }, { pinnedMessageId: bad })).toThrow();
+    }
+  });
+
+  it('does not unlock anything else on a locked pool', () => {
+    // Discriminating: the new `announcement` group is one key wide.
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { entryFee: 25 })).toThrow();
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { pinned: 'msg123' })).toThrow();
+  });
+});
+
 describe('the public-listing payload survives the whole pipeline', () => {
   it('lands isPublic at the top level and isListedPublic under settings', () => {
     const { set } = buildPoolSettingsUpdate(

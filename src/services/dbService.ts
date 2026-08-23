@@ -372,6 +372,34 @@ export const dbService = {
     },
 
     /**
+     * The ONE pinned post, watched as a single document.
+     *
+     * Not resolved out of `subscribeToPoolFeed`'s array: that query is the last
+     * 50 messages, and a pin set in week 2 of a chatty pool would silently stop
+     * rendering once it fell off the end. A direct doc listener also handles the
+     * two states the band has to distinguish — the post was DELETED (snapshot
+     * stops existing, band disappears) versus the read FAILED — without either
+     * looking like "nothing is pinned".
+     *
+     * Same read rule as the feed (`isPoolParticipant`), so callers gate on
+     * membership before subscribing, exactly as they do for the feed.
+     */
+    subscribeToPinnedMessage: (
+        poolId: string,
+        messageId: string,
+        callback: (message: BanterMessage | null) => void,
+        onError?: (e: unknown) => void,
+    ) => {
+        const ref = doc(db, 'pools', poolId, 'messages', messageId);
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as BanterMessage) : null);
+        }, (error) => {
+            logger.error('[dbService] subscribeToPinnedMessage error:', error);
+            if (onError) onError(error); else callback(null);
+        });
+    },
+
+    /**
      * The requester's own BANTER requests (T9, codex r5 [P2]).
      *
      * Generation is ASYNCHRONOUS: the card gets an optimistic "it appears in a
