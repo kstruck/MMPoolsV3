@@ -176,6 +176,8 @@ describe('invite path — a stranger with the link (emulator)', () => {
 
     await expect(wJoin({
       data: { poolId: cappedId }, auth: { uid: STRANGER, token: { name: 'Invited Stranger' } },
-    } as never)).rejects.toThrow(/Free Plan.*limit of 10/);
+    // T6b/G9: member-facing copy. The old message explained the platform's
+    // billing tiers to an invitee who has no billing relationship with us.
+    } as never)).rejects.toThrow(/This pool is full/);
   }, 60000);
 });
