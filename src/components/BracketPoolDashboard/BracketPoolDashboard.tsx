@@ -32,6 +32,7 @@ import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
 import { AICommissioner } from '../AICommissioner';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { BanterBoard } from './BanterBoard';
 import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
@@ -159,6 +160,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const toggleSection = (key: string) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     const isManager = isPoolManager(user, pool);
+    /**
+     * The pool's billing, read ONCE and typed — the AI Commissioner gate and the
+     * mid-season add-on offer both need it, and `(pool as any)` would be two new
+     * lint warnings for a shape this file can name.
+     */
+    const aiPoolBilling = (pool as unknown as {
+        billing?: { status?: string; featuresUnlocked?: Record<string, boolean> };
+    }).billing;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser && (pool.status === 'OPEN' || pool.status === 'DRAFT');
@@ -839,10 +848,25 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                 </div>
 
-                                {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                                {aiPoolBilling?.featuresUnlocked?.aiCommissioner ? (
                                     <div className="mt-8 pt-8 border-t border-line">
                                         <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType="BRACKET" />
                                     </div>
+                                ) : (
+                                    /* C2 / codex r1 [P1]: the add-on checkout is pool-type
+                                       agnostic on the server, so a Bracket commissioner gets
+                                       the same mid-season path the NFL one does. Commissioner
+                                       only, and only on an ACTIVE pool — the server refuses an
+                                       add-on checkout for a pool with no hosting purchase. */
+                                    isManager && aiPoolBilling?.status === 'active' && (
+                                        <div className="mt-8 pt-8 border-t border-line">
+                                            <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">AI Commissioner</h3>
+                                            <p className="mt-1 font-body text-[13px] text-muted">
+                                                Written recaps and banter for this pool, generated from its own results. Not switched on yet.
+                                            </p>
+                                            <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                                        </div>
+                                    )
                                 )}
 
                                 {/* User's existing entries */}
