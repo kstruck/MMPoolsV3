@@ -37,7 +37,7 @@ import {
     type BillingCharge,
 } from "./lib/billingCharges";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
-import { computeQuote, pricedAddonKeys } from "./lib/quoteEngine";
+import { computeQuote, computeAddonUpgradeQuote, pricedAddonKeys } from "./lib/quoteEngine";
 import {
     checkoutPoolInputSchema,
     unsellableClampOutcome,
@@ -215,6 +215,10 @@ export const createCheckoutSession = validated(
     // STANDARD POOL PURCHASE PATH
     // =====================================================================
     const { poolId, poolName, poolType, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = input;
+    // PLAN-PER-POOL-PREMIUM C2. Default 'pool', so every client that predates
+    // this field behaves exactly as before.
+    const purchaseKind = input.purchaseKind ?? "pool";
+    const isAddonPurchase = purchaseKind === "addon";
 
     // --- Verify pool exists ---
     const poolDoc = await db.collection("pools").doc(poolId).get();
@@ -237,36 +241,118 @@ export const createCheckoutSession = validated(
         ? await resolveCouponForQuote(db, couponCode, { userId, poolType, now: Date.now() })
         : undefined;
 
+    // ---------------------------------------------------------------------
+    // MID-SEASON ADD-ON PURCHASE (C2). Different preconditions, different
+    // quote, different snapshot — so it is resolved here rather than threaded
+    // through the hosting path as a flag.
+    // ---------------------------------------------------------------------
+    const existingBilling = (poolData?.billing ?? {}) as {
+        status?: string;
+        tier?: string;
+        maxPlayersAllowed?: number;
+        featuresUnlocked?: Record<string, boolean>;
+        paid?: { tier?: string; maxPlayersAllowed?: number; addons?: string[] };
+    };
+    /**
+     * What the pool ALREADY holds, from BOTH sources, because they can differ:
+     * `paid.addons` records purchases, `featuresUnlocked` also carries a
+     * super-admin grant (adminSetPoolFeature) on a pool that never bought
+     * anything. Selling a commissioner something Kevin already gave them would
+     * be the worst possible version of this feature.
+     */
+    const ownedAddons: string[] = Array.from(new Set([
+        ...(Array.isArray(existingBilling.paid?.addons) ? existingBilling.paid!.addons! : []),
+        ...Object.entries(existingBilling.featuresUnlocked ?? {})
+            .filter(([, on]) => on === true)
+            .map(([k]) => k),
+    ]));
+
     let quote;
     try {
-        quote = computeQuote({
-            config,
-            poolType,
-            estimatedPlayers,
-            addons,
-            couponState: resolvedCoupon?.state,
-            coupon: resolvedCoupon?.coupon,
-        });
+        quote = isAddonPurchase
+            ? computeAddonUpgradeQuote({
+                config,
+                poolType,
+                // The pool's OWN allowance, never the client's number: an add-on
+                // purchase may not move the seat cap in either direction.
+                estimatedPlayers: existingBilling.paid?.maxPlayersAllowed
+                    ?? existingBilling.maxPlayersAllowed
+                    ?? 0,
+                currentTier: (existingBilling.paid?.tier ?? existingBilling.tier ?? "premium_tier") as typeof quote.tier,
+                addons,
+                owned: ownedAddons,
+            })
+            : computeQuote({
+                config,
+                poolType,
+                estimatedPlayers,
+                addons,
+                couponState: resolvedCoupon?.state,
+                coupon: resolvedCoupon?.coupon,
+            });
     } catch (e: any) {
         throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
     }
     const serverPrice = quote.total;
 
+    if (isAddonPurchase) {
+        // Preconditions, all server-side. The pool must be ACTIVE (an inactive
+        // pool buys hosting, which is the other path), there must be something
+        // left to sell, and none of the free-activation machinery applies.
+        if (existingBilling.status !== "active") {
+            throw new HttpsError("failed-precondition", "This pool is not active yet. Buy hosting for it first — add-ons come with that purchase.");
+        }
+        if (quote.addonLines.length === 0 || serverPrice <= 0) {
+            throw new HttpsError("failed-precondition", "There is nothing to buy: this pool already has the features you selected, or they are included with every pool.");
+        }
+        if (usedCredit || customCreditId) {
+            throw new HttpsError("invalid-argument", "Pool credits pay for hosting, not for add-ons.");
+        }
+        if (couponCode) {
+            // See computeAddonUpgradeQuote: a coupon reservation is keyed by
+            // (code, userId, poolId) and its limits assume one purchase per
+            // pool. Refusing is honest; silently ignoring the code would let a
+            // commissioner believe a discount applied.
+            throw new HttpsError("invalid-argument", "Coupons apply to a pool's hosting purchase, not to add-ons bought later.");
+        }
+    }
+
     // Pending billable snapshot — copied to billing.paid ONLY on success.
-    const snapshot: PendingBillableSnapshot = {
-        tier: quote.tier,
-        maxPlayersAllowed: estimatedPlayers,
-        addons: pricedAddonKeys(quote.addonLines),
-    };
-    const featuresUnlocked = {
-        aiCommissioner: addons.aiCommissioner === true,
-        smsNotifications: addons.smsNotifications === true,
-        whatIfSimulator: addons.whatIfSimulator === true,
-        customBranding: addons.customBranding === true,
-    };
+    //
+    // ⚠️ For an ADD-ON purchase the snapshot carries the pool's EXISTING tier
+    // and seat allowance (so finalization cannot move them) and ONLY the newly
+    // priced add-ons. The union with what the pool already owns happens at
+    // finalization, against the pool as read in that transaction.
+    const snapshot: PendingBillableSnapshot = isAddonPurchase
+        ? {
+            tier: quote.tier,
+            maxPlayersAllowed: quote.estimatedPlayers,
+            addons: pricedAddonKeys(quote.addonLines),
+        }
+        : {
+            tier: quote.tier,
+            maxPlayersAllowed: estimatedPlayers,
+            addons: pricedAddonKeys(quote.addonLines),
+        };
+    /**
+     * ⚠️ FOR AN ADD-ON PURCHASE THIS IS A PATCH, NOT A PICTURE. It names only
+     * the keys being bought; finalization merges it. Sending the full four-key
+     * object here — the hosting path's shape — would carry `false` for every
+     * add-on the pool already owns and REVOKE them on success.
+     */
+    const featuresUnlocked = isAddonPurchase
+        ? Object.fromEntries(pricedAddonKeys(quote.addonLines).map((k) => [k, true]))
+        : {
+            aiCommissioner: addons.aiCommissioner === true,
+            smsNotifications: addons.smsNotifications === true,
+            whatIfSimulator: addons.whatIfSimulator === true,
+            customBranding: addons.customBranding === true,
+        };
 
     // --- Enforce 1 active free pool limit (unchanged rule) ---
-    if (quote.tier === "free_tier" || serverPrice === 0) {
+    // Skipped for an add-on purchase: that pool is already active and already
+    // counted, and `serverPrice` is guaranteed > 0 above.
+    if (!isAddonPurchase && (quote.tier === "free_tier" || serverPrice === 0)) {
         if (quote.freeTierEligible || snapshot.tier === "free_tier") {
             const activeFreePoolsSnap = await db.collection("pools")
                 .where("ownerId", "==", userId)
@@ -414,8 +500,16 @@ export const createCheckoutSession = validated(
         if (pending && typeof pending.at === "number" && Date.now() - pending.at < PENDING_SESSION_TTL_MS) {
             throw new HttpsError("failed-precondition", "A checkout is already in progress for this pool. Please complete or cancel it before starting another.");
         }
-        if (freshBilling?.status === "active") {
+        // An ACTIVE pool has no hosting left to sell — but it is exactly the
+        // pool an ADD-ON purchase targets, so the guard is scoped to the
+        // hosting path rather than being a blanket refusal (C2).
+        if (!isAddonPurchase && freshBilling?.status === "active") {
             throw new HttpsError("failed-precondition", "This pool is already active.");
+        }
+        if (isAddonPurchase && freshBilling?.status !== "active") {
+            // Re-checked inside the transaction, against the pool AS READ HERE:
+            // the pre-transaction check above can race a cancellation.
+            throw new HttpsError("failed-precondition", "This pool is not active yet. Buy hosting for it first — add-ons come with that purchase.");
         }
 
         // Coupon reservation — ONLY reserve a coupon that actually applied a
@@ -447,6 +541,7 @@ export const createCheckoutSession = validated(
             userId,
             poolType,
             status: "pending",
+            purchaseKind,
             couponCode: appliedCouponCode ?? null,
             pendingSnapshot: snapshot,
             featuresUnlocked,
@@ -467,6 +562,7 @@ export const createCheckoutSession = validated(
         userId,
         tier: snapshot.tier,
         poolType,
+        purchaseKind,
         reservationId,
         couponCode: appliedCouponCode || "",
         maxPlayersAllowed: String(snapshot.maxPlayersAllowed),
@@ -725,16 +821,47 @@ async function finalizePoolPayment(args: {
         let snapshot: PendingBillableSnapshot | undefined;
         let featuresUnlocked: Record<string, boolean> | undefined;
         let sessionRef: FirebaseFirestore.DocumentReference | null = null;
+        let sessionKind: string | undefined;
         if (reservationId) {
             sessionRef = db.collection("checkoutSessions").doc(reservationId);
             const sSnap = await txn.get(sessionRef);
             const sData = sSnap.data() as any;
             snapshot = sData?.pendingSnapshot;
             featuresUnlocked = sData?.featuresUnlocked;
+            sessionKind = sData?.purchaseKind;
+        }
+        /**
+         * WHAT THIS SESSION BOUGHT (C2). The SESSION RECORD wins over Stripe
+         * metadata: the session doc is written by our own transaction, the
+         * metadata round-trips through Stripe. They agree in practice; when
+         * they cannot both be read, the one we wrote is the one to trust.
+         */
+        const purchaseKind = sessionKind ?? metadata.purchaseKind ?? "pool";
+        const isAddonPurchase = purchaseKind === "addon";
+
+        /**
+         * ⚠️ AN ADD-ON PURCHASE ARRIVES FOR AN ACTIVE POOL BY DEFINITION, so
+         * `status === "active"` stops being evidence of a double charge for it.
+         * Its idempotency comes from the LEDGER instead: the row's id IS the
+         * Stripe session id, so a replayed webhook finds it and no-ops. That
+         * matters more here than on the hosting path, because `pricePaid` is an
+         * INCREMENT — replaying it would inflate the pool's recorded spend even
+         * though the entitlement writes are idempotent.
+         */
+        if (isAddonPurchase) {
+            const ledgerRef = db.collection("billingCharges").doc(sessionId);
+            const ledgerSnap = await txn.get(ledgerRef);
+            if (ledgerSnap.exists) {
+                console.log(`[Stripe Webhook] Add-on session ${sessionId} already finalized for pool ${poolId}; no-op.`);
+                if (reservationId && sessionRef) {
+                    txn.set(sessionRef, { status: "confirmed", sessionId, confirmedAt: Date.now() }, { merge: true });
+                }
+                return;
+            }
         }
 
         // --- DOUBLE-CHARGE GUARD: pool already active → no-op + alert ---
-        if (billing?.status === "active") {
+        if (!isAddonPurchase && billing?.status === "active") {
             doubleCharge = true;
             const alertRef = db.collection("monetization_alerts").doc(`DOUBLE_CHARGE_${sessionId}`);
             txn.set(alertRef, {
@@ -822,22 +949,57 @@ async function finalizePoolPayment(args: {
             console.warn(`[Stripe Webhook] Unsellable add-on(s) ${soldWhileOff.join(",")} arrived on session ${sessionId} for pool ${poolId}; entitlement withheld, alert written for refund review.`);
         }
 
-        // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.
-        txn.update(poolRef, {
-            "billing.status": "active",
-            "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
-            "billing.stripeSessionId": sessionId,
-            "billing.tier": tier,
-            "billing.maxPlayersAllowed": maxPlayersAllowed,
-            "billing.pendingSessionId": FieldValue.delete(),
-            "billing.featuresUnlocked": unlocked,
-            "billing.paid": {
-                tier,
-                maxPlayersAllowed,
-                addons: snapshot?.addons ?? [],
-                at: Date.now(),
-            },
-        });
+        /**
+         * 🛑 MERGE, NEVER REPLACE.
+         *
+         * `billing.featuresUnlocked` and `billing.paid.addons` used to be
+         * written wholesale from the session snapshot. On the hosting path that
+         * silently revoked a super-admin grant made BEFORE activation
+         * (adminSetPoolFeature can grant on a free or trial pool); on the add-on
+         * path it would revoke every add-on the pool had already bought. Both
+         * are the same defect, so both paths union.
+         */
+        const priorUnlocked = (billing?.featuresUnlocked ?? {}) as Record<string, boolean>;
+        const mergedUnlocked: Record<string, boolean> = { ...priorUnlocked };
+        for (const [key, on] of Object.entries(unlocked)) {
+            if (on === true) mergedUnlocked[key] = true;
+            else if (mergedUnlocked[key] !== true) mergedUnlocked[key] = false;
+        }
+        const paidBefore = billing?.paid as { addons?: unknown } | undefined;
+        const priorPaidAddons: string[] = Array.isArray(paidBefore?.addons)
+            ? (paidBefore!.addons as string[])
+            : [];
+        const mergedPaidAddons = Array.from(new Set([...priorPaidAddons, ...(snapshot?.addons ?? [])]));
+
+        if (isAddonPurchase) {
+            // Entitlement + ceiling + money. NOT status, NOT tier, NOT the seat
+            // cap: the pool's hosting was bought already and this purchase does
+            // not renegotiate it.
+            txn.update(poolRef, {
+                "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
+                "billing.pendingSessionId": FieldValue.delete(),
+                "billing.featuresUnlocked": mergedUnlocked,
+                "billing.paid.addons": mergedPaidAddons,
+                "billing.paid.at": Date.now(),
+            });
+        } else {
+            // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.
+            txn.update(poolRef, {
+                "billing.status": "active",
+                "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
+                "billing.stripeSessionId": sessionId,
+                "billing.tier": tier,
+                "billing.maxPlayersAllowed": maxPlayersAllowed,
+                "billing.pendingSessionId": FieldValue.delete(),
+                "billing.featuresUnlocked": mergedUnlocked,
+                "billing.paid": {
+                    tier,
+                    maxPlayersAllowed,
+                    addons: mergedPaidAddons,
+                    at: Date.now(),
+                },
+            });
+        }
 
         if (sessionRef) {
             txn.set(sessionRef, { status: "confirmed", sessionId, confirmedAt: Date.now() }, { merge: true });

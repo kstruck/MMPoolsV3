@@ -29,6 +29,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
 import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
 import { BanterFeed } from './BanterFeed';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -769,9 +770,19 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               /* Honest, and specific: T5 makes a TRIAL unlock the add-ons the
                  wizard selected, so this now means "not selected / not bought",
                  not "wait until you pay". */
-              <p className="mt-2 font-body text-[11px] text-muted">
-                AI Commissioner is not switched on for this pool - your own posts still work.
-              </p>
+              <>
+                <p className="mt-2 font-body text-[11px] text-muted">
+                  AI Commissioner is not switched on for this pool - your own posts still work.
+                </p>
+                {/* C2: the commissioner can buy it here, mid-season, and it
+                    switches on by itself when Stripe confirms - no admin step.
+                    Offered only on an ACTIVE pool: a trial or free pool has no
+                    hosting purchase yet, and the server refuses an add-on
+                    checkout for one. */}
+                {castPool.billing?.status === 'active' && (
+                  <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                )}
+              </>
             )}
           </form>
 

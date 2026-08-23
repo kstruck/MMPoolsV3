@@ -196,6 +196,71 @@ export function computeQuote(args: {
   };
 }
 
+/**
+ * A MID-SEASON ADD-ON quote (PLAN-PER-POOL-PREMIUM C2).
+ *
+ * Same pricing table, same `computeAddonLines` choke point — so an included or
+ * unsellable add-on is skipped here for exactly the reasons it is skipped
+ * everywhere else — with two differences that are the whole point:
+ *
+ *  1. **No base price.** The pool's hosting is already paid for. Charging it
+ *     again is the defect this function exists to avoid.
+ *  2. **Already-owned add-ons are dropped before pricing.** `owned` comes from
+ *     the pool's own `billing.paid.addons` and `billing.featuresUnlocked`, read
+ *     on the SERVER — a client that re-sends an add-on the pool holds is quoted
+ *     $0 for it, not charged twice.
+ *
+ * No coupon parameter, deliberately. A coupon reservation is keyed by
+ * (code, userId, poolId) and its per-user and per-pool limits were written for
+ * one purchase per pool; a second reservation against the same pool would be
+ * judged by rules nobody designed for this. Add-on purchases are full price
+ * until that is thought through, which is a smaller cost than a coupon path
+ * that silently mis-counts.
+ *
+ * `tier` is reported as the caller's EXISTING tier, not re-derived: an add-on
+ * purchase must not promote or demote the pool's hosting tier.
+ */
+export function computeAddonUpgradeQuote(args: {
+  config: BillingConfig;
+  poolType: string;
+  /** The pool's existing seat allowance — carried through, never re-priced. */
+  estimatedPlayers: number;
+  /** Existing hosting tier, carried through unchanged. */
+  currentTier: PoolQuote["tier"];
+  addons: AddonSelection;
+  /** Add-on keys the pool ALREADY holds. Dropped before pricing. */
+  owned: readonly string[];
+}): PoolQuote {
+  const { config, poolType, estimatedPlayers, addons, owned, currentTier } = args;
+  const ownedSet = new Set(owned);
+  const requested = { ...addons } as AddonSelection;
+  for (const key of ADDON_KEYS) {
+    if (ownedSet.has(key)) (requested as Record<string, boolean>)[key] = false;
+  }
+
+  const addonLines = computeAddonLines(config, requested);
+  const total = addonLines.reduce((s, l) => s + l.amount, 0);
+  const { pricingKey } = computeBasePrice(config, poolType, estimatedPlayers);
+
+  return {
+    poolType,
+    pricingKey,
+    estimatedPlayers: Number(estimatedPlayers) || 0,
+    tier: currentTier,
+    basePrice: 0,
+    addonLines,
+    subtotal: total,
+    discount: 0,
+    total,
+    couponState: undefined,
+    // An add-on purchase is never a free-tier activation: the pool is already
+    // active, and a $0 total here means "nothing left to sell", which the
+    // caller refuses rather than processing.
+    freeTierEligible: false,
+    trialDays: config.trialDays,
+  };
+}
+
 /** The list of add-on keys that ended up priced (for the pending billable snapshot). */
 export function pricedAddonKeys(lines: QuoteLine[]): AddonKey[] {
   return lines.map((l) => l.key);

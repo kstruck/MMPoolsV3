@@ -15,6 +15,7 @@ import {
   applyCouponDiscount,
   discountLabel,
   computeQuote,
+  computeAddonUpgradeQuote,
 } from '../lib/quoteEngine';
 import { BillingConfigSchema, type BillingConfig } from '../shared/schemas/billingConfig';
 
@@ -245,5 +246,70 @@ describe('computeQuote — itemized, coupon-inclusive, free-tier eligibility', (
     expect(() =>
       computeQuote({ config: CONFIG, poolType: 'BOGUS', estimatedPlayers: 40, addons: NO_ADDONS })
     ).toThrow(/No pricing tier mapping/);
+  });
+});
+
+describe('computeAddonUpgradeQuote — buying an add-on mid-season (C2)', () => {
+  const owned: string[] = [];
+  const base = {
+    config: CONFIG,
+    poolType: 'NFL_PICKEM',
+    estimatedPlayers: 25,
+    currentTier: 'standard_tier' as const,
+    owned,
+  };
+
+  it('charges NO base price - the pool hosting is already paid for', () => {
+    const q = computeAddonUpgradeQuote({ ...base, addons: { ...NO_ADDONS, aiCommissioner: true } });
+    expect(q.basePrice).toBe(0);
+    expect(q.total).toBe(19);
+    expect(q.subtotal).toBe(19);
+  });
+
+  it('drops an add-on the pool ALREADY owns rather than selling it twice', () => {
+    const q = computeAddonUpgradeQuote({
+      ...base,
+      owned: ['aiCommissioner'],
+      addons: { ...NO_ADDONS, aiCommissioner: true, whatIfSimulator: true },
+    });
+    expect(q.addonLines.map((l) => l.key)).toEqual(['whatIfSimulator']);
+    expect(q.total).toBe(9);
+  });
+
+  it('quotes $0 with no lines when the pool owns everything asked for', () => {
+    // The caller refuses this rather than opening a $0 Stripe session.
+    const q = computeAddonUpgradeQuote({
+      ...base,
+      owned: ['aiCommissioner'],
+      addons: { ...NO_ADDONS, aiCommissioner: true },
+    });
+    expect(q.addonLines).toEqual([]);
+    expect(q.total).toBe(0);
+  });
+
+  it('never prices an INCLUDED add-on, same choke point as every other quote', () => {
+    const q = computeAddonUpgradeQuote({ ...base, addons: { ...NO_ADDONS, customBranding: true } });
+    expect(q.addonLines).toEqual([]);
+    expect(q.total).toBe(0);
+  });
+
+  it('carries the existing tier through — an add-on does not re-tier the pool', () => {
+    const q = computeAddonUpgradeQuote({
+      ...base,
+      currentTier: 'free_tier',
+      addons: { ...NO_ADDONS, aiCommissioner: true },
+    });
+    expect(q.tier).toBe('free_tier');
+  });
+
+  it('is never a free-tier activation', () => {
+    const q = computeAddonUpgradeQuote({ ...base, estimatedPlayers: 5, addons: { ...NO_ADDONS } });
+    expect(q.freeTierEligible).toBe(false);
+  });
+
+  it('applies no coupon — there is no coupon input on this path', () => {
+    const q = computeAddonUpgradeQuote({ ...base, addons: { ...NO_ADDONS, aiCommissioner: true } });
+    expect(q.discount).toBe(0);
+    expect(q.couponState).toBeUndefined();
   });
 });

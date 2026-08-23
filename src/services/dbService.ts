@@ -2092,6 +2092,13 @@ export const dbService = {
         usedCredit?: boolean;
         customCreditId?: string;
         bundleType?: string;
+        /**
+         * PLAN-PER-POOL-PREMIUM C2. `'addon'` buys features for a pool that is
+         * ALREADY ACTIVE; absent/`'pool'` buys hosting, which is what every
+         * existing caller does. The server refuses the wrong combination — an
+         * add-on purchase for an inactive pool, or hosting for an active one.
+         */
+        purchaseKind?: 'pool' | 'addon';
     }): Promise<{ sessionUrl: string }> {
         try {
             const fn = httpsCallable<Record<string, unknown>, { sessionUrl: string }>(functions, 'createCheckoutSession');
