@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import { Loader } from 'lucide-react';
 
@@ -62,7 +62,7 @@ import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
 import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
-import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent } from './utils/postAuthIntent';
+import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent, hasPostAuthIntent } from './utils/postAuthIntent';
 import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
@@ -177,10 +177,28 @@ const App: React.FC = () => {
   }, []);
 
   // Auth Helpers
+  /**
+   * Did the auth modal close because sign-in SUCCEEDED, or because the visitor
+   * dismissed it? Only the second case discards a pending post-auth intent
+   * (G2). A ref, not state: it is read inside handlers, never rendered.
+   */
+  const authSucceededRef = useRef(false);
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
+    authSucceededRef.current = false;
     setAuthMode(mode);
     setShowAuthModal(true);
   };
+
+  /**
+   * Post-auth continuation (G2, codex r4 [P1]). Runs when `user` has actually
+   * materialised — the auth observer resolves asynchronously, so the modal's
+   * success callback is too early to navigate into a `user &&`-guarded route.
+   */
+  useEffect(() => {
+    if (!user) return;
+    const intent = takePostAuthIntent();
+    if (intent) navigate(intent);
+  }, [user, navigate]);
   const handleLogout = async () => {
     await authService.logout();
     navigate('/');
@@ -495,28 +513,30 @@ const App: React.FC = () => {
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => {
-          // Closed without authenticating: drop any create intent, or it fires
+          // Closed WITHOUT authenticating: drop any create intent, or it fires
           // on a LATER unrelated sign-in from the header (G2, codex r2 [P2]).
-          clearPostAuthIntent();
+          // The ref is what separates "cancelled" from "succeeded, and the
+          // modal is closing because of it" — on success the intent must
+          // survive until `user` actually lands (codex r4 [P1]).
+          if (!authSucceededRef.current) clearPostAuthIntent();
           setShowAuthModal(false);
         }}
         initialMode={authMode}
         onAuthenticated={(result) => {
           const path = window.location.pathname;
-          // Where the visitor was going when we interrupted them to sign in
-          // (G2, codex r2 [P1]). Owned HERE because this handler navigates a
-          // brand-new account to /participant, unmounting whichever page set
-          // the intent before an effect of its own could act on it.
-          const intent = takePostAuthIntent();
+          authSucceededRef.current = true;
           if (result?.isNewUser) {
             toast.success('Account created! Check your email for a verification link.');
           } else {
             toast.success('Welcome back!');
           }
-          if (intent) {
-            navigate(intent);
-            return;
-          }
+          // ⚠️ Do NOT navigate to the intent here (codex r4 [P1]). Firebase's
+          // auth observer has not necessarily finished `syncUserToFirestore`
+          // yet, so `user` can still be null at this instant — and
+          // `/create-pool` is guarded on `user &&`, so navigating now would
+          // bounce the freshly-signed-in visitor to `/` and burn the intent
+          // doing it. The effect above waits for `user` to actually land.
+          if (hasPostAuthIntent()) return;
           if (result?.isNewUser) {
             // Join/pool pages handle their own post-auth continuation (auto-join) —
             // don't yank a fresh signup away from the pool they came to join

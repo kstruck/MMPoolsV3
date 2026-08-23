@@ -26,6 +26,11 @@ export function setPostAuthIntent(path: string): void {
     pendingPath = path;
 }
 
+/** Is an intent waiting? Does NOT consume it. */
+export function hasPostAuthIntent(): boolean {
+    return pendingPath !== null;
+}
+
 /** Consume the intent. Returns null when there is none. */
 export function takePostAuthIntent(): string | null {
     const path = pendingPath;

@@ -43,8 +43,13 @@ describe('G2 — a logged-out visitor gets the auth modal, not a silent bounce',
         expect(pricing).toMatch(/const startCreate = \(\) => \{[\s\S]{0,400}?setPostAuthIntent\('\/create-pool'\);[\s\S]{0,80}?onLogin\(\);/);
         // The continuation is App's, not this page's: a brand-new account is
         // navigated to /participant on sign-up, unmounting this page first.
+        // The continuation runs from an effect that waits for `user` to actually
+        // materialise — the auth observer resolves asynchronously, so the
+        // modal's success callback is too early to enter a `user &&`-guarded
+        // route (codex r4 [P1]).
         expect(app).toContain('const intent = takePostAuthIntent();');
-        expect(app).toMatch(/if \(intent\) \{[\s\S]{0,40}?navigate\(intent\);/);
+        expect(app).toMatch(/useEffect\(\(\) => \{[\s\S]{0,200}?takePostAuthIntent\(\);[\s\S]{0,80}?navigate\(intent\);/);
+        expect(app).toContain('if (hasPostAuthIntent()) return;');
     });
 
     it('startCreate still respects the pool-creation flag', () => {
@@ -57,7 +62,12 @@ describe('G2 — a cancelled sign-in does not teleport the visitor later', () =>
     const authModal = read('src/components/modals/AuthModal.tsx');
 
     it('closing the modal drops the intent', () => {
-        expect(app).toMatch(/onClose=\{\(\) => \{[\s\S]{0,300}?clearPostAuthIntent\(\);/);
+        // Only a CANCELLED close discards it: on success the intent must survive
+        // until `user` lands (codex r4 [P1]).
+        expect(app).toContain('if (!authSucceededRef.current) clearPostAuthIntent();');
+        expect(app).toContain('authSucceededRef.current = true;');
+        // Reset when the modal opens, or one success would arm every later close.
+        expect(app).toMatch(/handleOpenAuth = \([\s\S]{0,120}?authSucceededRef\.current = false;/);
     });
 
     it('a SUCCESSFUL auth runs the continuation before the close handler clears it', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent } from './postAuthIntent';
+import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent, hasPostAuthIntent } from './postAuthIntent';
 
 /**
  * PLAN-WIZARD-BUYFLOW-FIXES G2 (codex r2) — continuing to the wizard after an
@@ -25,6 +25,16 @@ describe('postAuthIntent', () => {
         setPostAuthIntent('/create-pool');
         clearPostAuthIntent();
         expect(takePostAuthIntent()).toBeNull();
+    });
+
+    it('can be peeked without being consumed', () => {
+        // App's success handler peeks to decide whether to run its own default
+        // navigation; the effect that waits for `user` is what consumes.
+        setPostAuthIntent('/create-pool');
+        expect(hasPostAuthIntent()).toBe(true);
+        expect(hasPostAuthIntent()).toBe(true);
+        expect(takePostAuthIntent()).toBe('/create-pool');
+        expect(hasPostAuthIntent()).toBe(false);
     });
 
     it('the newest intent replaces an older one', () => {
