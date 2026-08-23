@@ -11,6 +11,7 @@ import { getCreateInputSchema } from '../shared/schemas';
 import type { PoolType } from '../shared/poolTypes';
 import { isNflSeasonType } from '../shared/poolTypes';
 import { ensureMemberRecord } from './memberRecord';
+import { clampUnsellableAddons } from '../shared/schemas/quote';
 
 // Roles that must never create pools. Everyone else may (creating a first pool
 // upgrades a plain member — preserving today's behavior); we accept both legacy
@@ -141,7 +142,15 @@ export function trialFeaturesUnlocked(
   for (const key of Object.keys(LOCKED_FEATURES)) {
     out[key] = addons?.[key as keyof typeof LOCKED_FEATURES] === true;
   }
-  return out as typeof LOCKED_FEATURES;
+  // ⚠️ The UNSELLABLE clamp applies here too (codex r1 [P1] on T5).
+  // PLAN-COST-CONTROLS 0.5.4 turned SMS off everywhere, and its two existing
+  // enforcement points are the quote-input schema and the Stripe webhook's
+  // in-flight clamp — neither of which a CREATE payload passes through. The
+  // create envelopes are permissive (ADR-0001), so without this a crafted
+  // `addons.smsNotifications: true` would stamp the entitlement on a trial
+  // pool, which is exactly the "cannot unlock" guarantee that plan makes.
+  // One definition, in shared/, read by all three places.
+  return clampUnsellableAddons(out) as typeof LOCKED_FEATURES;
 }
 
 /** @deprecated Use billingForLaunch('free'). Retained so existing create

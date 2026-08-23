@@ -42,6 +42,24 @@ describe('trialFeaturesUnlocked', () => {
     it('is all-false for no selection at all', () => {
         expect(trialFeaturesUnlocked(undefined)).toEqual(LOCKED_FEATURES);
     });
+
+    it('NEVER unlocks an UNSELLABLE add-on (codex r1 [P1])', () => {
+        // PLAN-COST-CONTROLS 0.5.4 turned SMS off everywhere. Its two existing
+        // enforcement points are the quote-input schema and the Stripe webhook
+        // clamp — neither of which a CREATE payload passes through, and the
+        // create envelopes are permissive (ADR-0001). So a crafted
+        // `smsNotifications: true` would otherwise stamp the entitlement.
+        expect(trialFeaturesUnlocked({ smsNotifications: true }).smsNotifications).toBe(false);
+    });
+
+    it('clamping SMS does not disturb the add-ons selected alongside it', () => {
+        expect(trialFeaturesUnlocked({ smsNotifications: true, aiCommissioner: true })).toEqual({
+            aiCommissioner: true,
+            smsNotifications: false,
+            whatIfSimulator: false,
+            customBranding: false,
+        });
+    });
 });
 
 describe('billingForLaunch — trial', () => {
@@ -54,6 +72,10 @@ describe('billingForLaunch — trial', () => {
             whatIfSimulator: true,
             customBranding: false,
         });
+    });
+
+    it('a crafted SMS selection cannot buy the entitlement through the trial path', () => {
+        expect(billingForLaunch('trial', 14, NOW, { smsNotifications: true }).featuresUnlocked.smsNotifications).toBe(false);
     });
 
     it('still all-false when the wizard selected nothing', () => {

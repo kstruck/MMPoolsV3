@@ -48,6 +48,17 @@ describe('every create callable passes the wizard selection to billingForLaunch'
     });
 });
 
+describe('the trial path honours the UNSELLABLE clamp', () => {
+    it('trialFeaturesUnlocked routes through the shared clamp', () => {
+        // codex r1 [P1]: PLAN-COST-CONTROLS 0.5.4's two enforcement points are
+        // the quote-input schema and the Stripe webhook — a CREATE payload
+        // passes through neither, and the create envelopes are permissive.
+        const creation = read('functions/src/lib/poolCreation.ts');
+        expect(creation).toContain('clampUnsellableAddons(out)');
+        expect(creation).toContain("import { clampUnsellableAddons } from '../shared/schemas/quote';");
+    });
+});
+
 describe('the AI tab this unblocks is still entitlement-gated', () => {
     // T5 does not weaken any gate: it changes what a TRIAL pool's
     // featuresUnlocked says, not who may read it or what it authorizes.
