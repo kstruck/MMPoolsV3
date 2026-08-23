@@ -62,7 +62,7 @@ import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
 import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
-import { takePostAuthIntent, clearPostAuthIntent } from './utils/postAuthIntent';
+import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent } from './utils/postAuthIntent';
 import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
@@ -192,6 +192,13 @@ const App: React.FC = () => {
   // GLOBAL create entry (header button, landing hero), so it was the most-used
   // way to hit that silent dead end. `checkAccess` opens the register modal.
   const handleCreatePoolClick = () => {
+    if (!user) {
+      // Record where they were going BEFORE opening auth, so the modal's
+      // success handler continues here instead of dropping them on
+      // /participant (or leaving a returning user where they stood) —
+      // codex r3 [P2]. Same one-shot intent /pricing's CTAs use.
+      setPostAuthIntent('/create-pool');
+    }
     if (!checkAccess()) return;
     navigate('/create-pool');
   };

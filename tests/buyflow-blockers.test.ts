@@ -25,7 +25,13 @@ describe('G2 — a logged-out visitor gets the auth modal, not a silent bounce',
         // `/create-pool` requires `user &&` on its route, so this used to bounce
         // an anonymous visitor to `/` with no modal and no message.
         expect(app).not.toContain("const handleCreatePoolClick = () => navigate('/create-pool');");
-        expect(app).toMatch(/handleCreatePoolClick = \(\) => \{[\s\S]{0,200}?if \(!checkAccess\(\)\) return;/);
+        expect(app).toMatch(/handleCreatePoolClick = \(\) => \{[\s\S]{0,600}?if \(!checkAccess\(\)\) return;/);
+    });
+
+    it('the global entry records the create intent before opening auth', () => {
+        // codex r3 [P2]: without it, a new account lands on /participant and a
+        // returning user stays put, instead of continuing to the wizard.
+        expect(app).toMatch(/handleCreatePoolClick = \(\) => \{[\s\S]{0,400}?setPostAuthIntent\('\/create-pool'\);/);
     });
 
     it('every /pricing create CTA routes through startCreate', () => {
