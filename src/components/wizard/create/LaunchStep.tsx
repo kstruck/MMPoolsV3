@@ -470,7 +470,17 @@ export function LaunchStep(props: LaunchStepProps) {
               {freeEligible ? (
                 <span className="text-emerald-400">This pool qualifies for the free plan — launch at no charge.</span>
               ) : (
-                <span className="text-indigo-300">Launches on a {quote.trialDays}-day free trial. No card required to start.</span>
+                <span className="text-indigo-300">
+                  {/* T7 — the trial line said what it COST and nothing about what
+                      it does. Three facts a commissioner needs before they
+                      commit a pool of real people to it, and all three were
+                      missing: what is switched on, what happens when it ends,
+                      and whether anything charges them. */}
+                  Launches on a {quote.trialDays}-day free trial with everything you selected above switched on.
+                  No card required — nothing is charged automatically, ever.
+                  {' '}When the trial ends you get a short grace period to pay; after that the pool locks
+                  (members keep their picks and standings, and it all comes back the moment you activate).
+                </span>
               )}
             </p>
           </dl>

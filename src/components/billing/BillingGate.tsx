@@ -470,7 +470,12 @@ export const BillingGate: React.FC<BillingGateProps> = ({
                   fontWeight: 700,
                 }}
               >
-                Upgrade to keep full access after your trial period.
+                {/* T7 — "upgrade to keep full access" told the commissioner
+                    nothing about WHEN, or whether a card was about to be
+                    charged. Nothing charges automatically: there is no card on
+                    file, which is the fact that stops a trial banner reading
+                    like a countdown to a debit. */}
+                Nothing is charged automatically. When the trial ends you get a short grace period to pay; after that the pool locks until you do.
               </p>
             </div>
           </div>
