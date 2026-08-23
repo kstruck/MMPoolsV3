@@ -571,7 +571,16 @@ service cloud.firestore {
                       && request.resource.data.get('authorName', '') != 'AI Commissioner'
                       && request.resource.data.text is string
                       && request.resource.data.text.size() > 0
-                      && request.resource.data.text.size() <= 2000;
+                      && request.resource.data.text.size() <= 2000
+                      // The feed is ORDERED on this field (`subscribeToPoolFeed`
+                      // sorts timestamp desc), so a client-controlled value is a
+                      // client-controlled position: a member could post with a
+                      // far-future stamp and stay pinned above the commissioner
+                      // and the AI for everyone, indefinitely (codex r4 [P2]).
+                      // Bound to request time with a minute of clock-skew slack —
+                      // not `request.time` equality, which no client can hit.
+                      && request.resource.data.timestamp is number
+                      && request.resource.data.timestamp <= request.time.toMillis() + 60000;
         allow update: if false;
         allow delete: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||

@@ -192,6 +192,20 @@ describe('4. the commissioner can delete any message', () => {
         expect(rules).toContain("request.resource.data.get('authorName', '') != 'AI Commissioner'");
     });
 
+    it('the feed ordering key is bound to request time (codex r4 [P2])', () => {
+        // The feed sorts on `timestamp` desc, so a client-controlled value is a
+        // client-controlled POSITION.
+        expect(rules).toContain('request.resource.data.timestamp <= request.time.toMillis() + 60000');
+    });
+
+    it('the legacy bracket input is capped to match the rule', () => {
+        // Otherwise pasting over the cap fails with permission-denied and the
+        // catch only logs — a send that silently does nothing.
+        const board = read('src/components/BracketPoolDashboard/BanterBoard.tsx');
+        expect(board).toContain('maxLength={2000}');
+        expect(board).toContain('setSendError(');
+    });
+
     it('ai_artifacts is NOT given a blanket write to make deletion work', () => {
         // The plan is explicit: a delete path on the feed, never a write door on
         // the artifact store.

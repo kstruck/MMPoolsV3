@@ -12,6 +12,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
     const [messages, setMessages] = useState<BanterMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [sending, setSending] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -53,8 +54,13 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                 timestamp: Date.now()
             });
             setNewMessage('');
+            setSendError(null);
         } catch (error) {
+            // Surfaced, not just logged: the rules can refuse this write
+            // (non-participant, or an over-long message), and a send that
+            // silently does nothing is the worst version of that.
             console.error("Failed to send message:", error);
+            setSendError('Your message could not be posted. Check you are a member of this pool and try again.');
         } finally {
             setSending(false);
         }
@@ -119,13 +125,24 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
 
             <div className="p-3 border-t border-line bg-surface/50">
                 {user ? (
+                    <>
+                    {sendError && (
+                        <p className="mb-2 font-body text-xs text-brandred-600" role="alert">{sendError}</p>
+                    )}
                     <form onSubmit={handleSendMessage} className="flex items-end gap-2">
                         <div className="flex-1 relative">
+                            {/* `maxLength` matches the 2000-char cap
+                                firestore.rules now enforces on this collection
+                                (T9, codex r4 [P2]). Without it, pasting more
+                                than that failed with permission-denied and the
+                                catch only logged — a send that silently did
+                                nothing. */}
                             <input
                                 type="text"
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="Talk some trash..."
+                                maxLength={2000}
                                 className="w-full bg-card border border-line rounded-xl py-3 pl-4 pr-12 font-body text-[color:var(--text)] placeholder:text-faint focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors"
                                 disabled={sending}
                             />
@@ -138,6 +155,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                             <Send className="w-5 h-5" />
                         </button>
                     </form>
+                    </>
                 ) : (
                     <div className="text-center p-3 text-muted bg-card rounded-lg border border-line">
                         Please sign in to participate in the banter.

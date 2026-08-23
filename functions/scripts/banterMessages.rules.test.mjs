@@ -178,6 +178,22 @@ await check(
     assertSucceeds(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { text: 'x'.repeat(2000) }))),
 );
 
+// 4d — the ORDERING key must not be client-chosen (codex r4 [P2]). The feed
+// sorts on `timestamp` desc, so a far-future stamp pins a member's post above
+// the commissioner and the AI for everyone, indefinitely.
+await check(
+    'a far-future timestamp is refused',
+    assertFails(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { timestamp: Date.now() + 86_400_000 }))),
+);
+await check(
+    'a non-numeric timestamp is refused',
+    assertFails(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { timestamp: 'now' }))),
+);
+await check(
+    'a normal now() timestamp is accepted (the skew allowance works)',
+    assertSucceeds(addDoc(collection(alice, 'pools', POOL, 'messages'), msg(ALICE, { timestamp: Date.now() }))),
+);
+
 // 5 — 🛑 the feature still works.
 await check(
     'an ordinary participant CAN post their own message',
