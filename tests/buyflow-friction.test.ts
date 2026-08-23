@@ -36,7 +36,11 @@ describe('G7 — the player estimate must be answered', () => {
         // ...and does not CLAIM the estimate caps joins before activation
         // (codex r1 [P2]): on a free or trial pool it only selects pricing.
         expect(launch).not.toContain('the cap on how many people can join');
-        expect(launch).toContain('once you activate the pool it becomes its player limit');
+        // ...nor that it becomes the cap on activation, which is true of the
+        // paid path and NOT of a free launch (codex r3 [P2]). What is true on
+        // both paths is that growing past it costs money.
+        expect(launch).not.toContain('becomes its player limit');
+        expect(launch).toContain('growing past it later means upgrading');
     });
 
     it('and does NOT hardcode the free-plan figure a fourth time', () => {
