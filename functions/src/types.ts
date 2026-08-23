@@ -344,7 +344,9 @@ export interface AIRequest {
     category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER' | 'BANTER';
     /** BANTER only: the tone the commissioner picked on the card. */
     mood?: 'savage' | 'professional' | 'analyst';
-    status: 'PENDING' | 'COMPLETED' | 'ERROR';
+    /** 'GENERATING' is the claim onAIRequest takes before calling the provider,
+     *  so an at-least-once redelivery cannot double-charge (T9, codex r3). */
+    status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'ERROR';
     /** Machine-readable reason when status is ERROR (e.g. 'AI_NOT_UNLOCKED',
      *  written by onAIRequest's entitlement gate — PLAN-COST-CONTROLS 0.5.2). */
     error?: string;

@@ -513,15 +513,31 @@ async function generateBanter(args: {
     }
 
     try {
-        // IDEMPOTENCY (codex r2 [P2]). `onDocumentCreated` can deliver the same
-        // event more than once — e.g. the process dies after the commit but
-        // before acknowledging — and the event PAYLOAD is the original document,
-        // so `requestData.status` is still 'PENDING' on every redelivery. A
-        // fresh read is what actually sees the completed state, and it runs
-        // BEFORE the provider call so a retry costs nothing.
-        const fresh = await requestRef.get();
-        if (fresh.data()?.status !== 'PENDING') {
-            console.log(`[AI] BANTER request ${requestRef.id} already handled (${fresh.data()?.status}); skipping.`);
+        // IDEMPOTENCY (codex r2/r3 [P2]). `onDocumentCreated` is at-least-once,
+        // and the event PAYLOAD is the original document — so
+        // `requestData.status` reads 'PENDING' on every redelivery, however
+        // many times it arrives. A plain re-read is not enough either: two
+        // overlapping deliveries both read PENDING and both call Gemini.
+        //
+        // So the request is CLAIMED in a transaction before the provider is
+        // touched. The loser of the race sees 'GENERATING' and returns without
+        // spending.
+        //
+        // ⚠️ No abandoned-claim recovery, deliberately. If this process dies
+        // mid-generation the request stays 'GENERATING' and no post appears —
+        // the commissioner asks again, which creates a NEW request doc and
+        // costs one call. The alternative, a lease with a TTL, is a
+        // reclaim-and-retry machine whose failure mode is the double charge it
+        // exists to prevent. Stuck-and-visible beats charged-twice on a paid
+        // provider.
+        const claimed = await db.runTransaction(async (txn) => {
+            const cur = await txn.get(requestRef);
+            if (cur.data()?.status !== 'PENDING') return false;
+            txn.update(requestRef, { status: 'GENERATING', updatedAt: Date.now() });
+            return true;
+        });
+        if (!claimed) {
+            console.log(`[AI] BANTER request ${requestRef.id} already claimed; skipping.`);
             return;
         }
 

@@ -69,8 +69,15 @@ describe('2. the mood buttons and prompt reach the REAL pipeline', () => {
         // original document — so `requestData.status` is still PENDING on every
         // redelivery. The fresh read runs BEFORE the provider call; the
         // deterministic id means a race overwrites rather than appends.
-        expect(ai).toContain('const fresh = await requestRef.get();');
-        expect(ai).toContain("if (fresh.data()?.status !== 'PENDING') {");
+        // A plain re-read is not enough: two overlapping deliveries both read
+        // PENDING and both call Gemini. The request is CLAIMED in a transaction
+        // before the provider is touched (codex r3 [P2]).
+        expect(ai).toContain('const claimed = await db.runTransaction(async (txn) => {');
+        expect(ai).toContain("txn.update(requestRef, { status: 'GENERATING', updatedAt: Date.now() });");
+        expect(ai).toContain('if (!claimed) {');
+        // ...and the claim happens BEFORE the provider call, not after.
+        expect(ai.indexOf('const claimed = await db.runTransaction'))
+            .toBeLessThan(ai.indexOf('await generateAIResponse(BANTER_SYSTEM_PROMPT'));
         expect(ai).toContain('doc(`banter-${requestRef.id}`)');
     });
 
@@ -177,6 +184,15 @@ describe('4. the commissioner can delete any message', () => {
         // The plan is explicit: a delete path on the feed, never a write door on
         // the artifact store.
         expect(rules).toMatch(/match \/ai_artifacts\/\{docId\} \{[\s\S]{0,120}?allow write: if false;/);
+    });
+});
+
+describe('4b. BANTER does not leak into the member AI panel', () => {
+    it('the AI tab filters its own request history', () => {
+        // Those are the commissioner's trash-talk prompts, not questions this
+        // panel asked; listing them would show a commissioner their own prompts
+        // in their dispute history.
+        expect(read('src/components/AICommissioner.tsx')).toContain("filter(r => r.category !== 'BANTER')");
     });
 });
 

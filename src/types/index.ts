@@ -685,8 +685,12 @@ export interface AIRequest {
   userId: string;
   poolId: string;
   question: string;
-  category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
-  status: 'PENDING' | 'COMPLETED' | 'ERROR';
+  /** 'BANTER' is the commissioner's trash-talk request (T9); it is answered
+   *  into the pool feed rather than into an ai_artifact. */
+  category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER' | 'BANTER';
+  /** 'GENERATING' is the claim onAIRequest takes before calling the provider,
+   *  so an at-least-once redelivery cannot double-charge (T9, codex r3). */
+  status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'ERROR';
   /** Machine-readable reason when status is ERROR (e.g. 'AI_NOT_UNLOCKED',
    *  written by onAIRequest's entitlement gate — PLAN-COST-CONTROLS 0.5.2). */
   error?: string;
