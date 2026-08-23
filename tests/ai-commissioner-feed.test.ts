@@ -152,6 +152,13 @@ describe('3. members actually see it', () => {
         // they were never entitled to read.
         expect(dash).toContain('{isPoolMember && (');
         expect(dash).toContain('castPool.participantIds.includes(user.id)');
+        // ...mirroring ALL FOUR of isPoolParticipant()'s branches (codex r4
+        // [P2]): an owner or legacy manager absent from participantIds, and a
+        // super admin, are authorized to read the feed, and a narrower client
+        // gate would hide it from exactly the people the backend lets in.
+        expect(dash).toContain('castPool.ownerId === user.id');
+        expect(dash).toContain('castPool.managerUid === user.id');
+        expect(dash).toContain('isSuperAdmin(user)');
         expect(dash).toContain('if (!pool?.id || !isPoolMember) return;');
     });
 

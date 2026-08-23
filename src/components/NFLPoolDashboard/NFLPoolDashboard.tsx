@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
-import { isPoolManager } from '../../utils/auth';
+import { isPoolManager, isSuperAdmin } from '../../utils/auth';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
@@ -616,12 +616,22 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const [poolFeed, setPoolFeed] = useState<BanterMessage[]>([]);
   const [poolFeedError, setPoolFeedError] = useState(false);
   /**
-   * Membership, read the same way the Firestore rule reads it. Subscribing as a
-   * non-member terminates the listener on a permission error, so this gate is
-   * what keeps a public-pool visitor from seeing a permanent feed error.
+   * Membership, read the same way the Firestore rule reads it — ALL FOUR of
+   * `isPoolParticipant()`'s branches, not just participantIds (codex r4 [P2]).
+   * An owner or legacy manager absent from that array, and a super admin, are
+   * authorized to read the feed; a narrower client gate would hide it from
+   * exactly the people the backend lets in.
+   *
+   * Subscribing as a non-member terminates the listener on a permission error,
+   * so this gate is also what keeps a public-pool visitor from seeing a
+   * permanent feed error.
    */
-  const isPoolMember = !!user?.id && Array.isArray(castPool.participantIds)
-    && castPool.participantIds.includes(user.id);
+  const isPoolMember = !!user?.id && (
+    castPool.ownerId === user.id ||
+    castPool.managerUid === user.id ||
+    (Array.isArray(castPool.participantIds) && castPool.participantIds.includes(user.id)) ||
+    isSuperAdmin(user)
+  );
 
   useEffect(() => {
     if (!pool?.id || !isPoolMember) return;
