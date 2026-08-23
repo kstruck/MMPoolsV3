@@ -8,6 +8,7 @@ import {
     relativeLuminance,
     DEFAULT_ACCENT,
     PAGE_TINT_ALPHA,
+    contrastRatio,
 } from './brandingStyles';
 
 /**
@@ -198,5 +199,58 @@ describe('the branded header band (Kevin 2026-08-24, option (ii))', () => {
     it('a legacy bgColor still wins the page, untouched by the tint change', () => {
         expect(brandingStyles({ bgColor: '#101010', primaryColor: '#4f46e5' }).page.backgroundColor)
             .toBe('#101010');
+    });
+});
+
+describe('readableTextOn picks the HIGHER-CONTRAST ink, not a threshold (codex)', () => {
+    /**
+     * The old rule was `lum > 0.45 ? black : white`. The true crossover — where
+     * white-on-colour and black-on-colour are equally legible — is at a relative
+     * luminance of about 0.19, so every mid-tone between 0.19 and 0.45 was given
+     * white text when black was better, sometimes below the WCAG AA floor.
+     */
+    const lumOf = (hex: string) => relativeLuminance(hex)!;
+    const ratioTo = (hex: string, ink: string) => contrastRatio(lumOf(hex), lumOf(ink));
+
+    it('teal — the case that was actually broken', () => {
+        // white 3.2:1 (under the 4.5:1 AA floor) vs black 6.5:1.
+        expect(readableTextOn('#00a0a0')).toBe('#111111');
+        expect(ratioTo('#00a0a0', '#111111')).toBeGreaterThan(ratioTo('#00a0a0', '#ffffff'));
+    });
+
+    it('saturated blue still gets white — the old comment’s intent survives', () => {
+        expect(readableTextOn('#0000ff')).toBe('#ffffff');
+        expect(ratioTo('#0000ff', '#ffffff')).toBeGreaterThan(ratioTo('#0000ff', '#111111'));
+    });
+
+    it('the extremes are unchanged', () => {
+        expect(readableTextOn('#000000')).toBe('#ffffff');
+        expect(readableTextOn('#ffffff')).toBe('#111111');
+        expect(readableTextOn('#ffff00')).toBe('#111111');
+    });
+
+    it('whatever it picks is the higher-contrast ink, for every hue', () => {
+        // The property, rather than a list of cases: no pick may be beaten by
+        // the other ink.
+        const hexes = [
+            '#0b1d3a', '#4f46e5', '#00a0a0', '#7f7f7f', '#c9a867', '#8b0000',
+            '#006400', '#ff6600', '#123456', '#abcdef', '#333333', '#e0e0e0',
+        ];
+        for (const hex of hexes) {
+            const chosen = readableTextOn(hex);
+            const other = chosen === '#111111' ? '#ffffff' : '#111111';
+            expect(ratioTo(hex, chosen)).toBeGreaterThanOrEqual(ratioTo(hex, other));
+        }
+    });
+
+    it('an unusable colour still falls back to white rather than throwing', () => {
+        expect(readableTextOn('blue')).toBe('#ffffff');
+        expect(readableTextOn(undefined)).toBe('#ffffff');
+    });
+
+    it('contrastRatio is order-independent and spans 1..21', () => {
+        expect(contrastRatio(0, 1)).toBeCloseTo(21, 5);
+        expect(contrastRatio(1, 0)).toBeCloseTo(21, 5);
+        expect(contrastRatio(0.5, 0.5)).toBe(1);
     });
 });

@@ -68,13 +68,44 @@ export function relativeLuminance(value: unknown): number | undefined {
     return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-/** Black or white, whichever is readable on `value`. Defaults to white. */
+/** WCAG contrast ratio between two relative luminances. Order-independent. */
+export function contrastRatio(a: number, b: number): number {
+    const [hi, lo] = a > b ? [a, b] : [b, a];
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Relative luminance of the two ink colours this module can choose between. */
+const INK_DARK = '#111111';
+const INK_LIGHT = '#ffffff';
+const INK_DARK_LUM = relativeLuminance(INK_DARK)!;
+const INK_LIGHT_LUM = relativeLuminance(INK_LIGHT)!;
+
+/**
+ * Black or white, whichever is readable on `value`. Defaults to white.
+ *
+ * ⚠️ THIS COMPARES ACTUAL CONTRAST RATIOS. It used to switch on a luminance
+ * THRESHOLD of 0.45, which is wrong and wrong in a direction that matters: the
+ * true crossover — where white-on-colour and black-on-colour are equally
+ * legible — is at a relative luminance of about **0.19**, not 0.45. Everything
+ * between those two numbers was given white text when black was the better
+ * choice, sometimes by a lot. `#00a0a0` is white at 3.2:1 (below the WCAG AA
+ * floor of 4.5:1 for body text) where black would be 6.5:1. (codex, on the
+ * header-band PR.)
+ *
+ * It matters more now than it did: the same helper inks a small button label
+ * AND, since 2026-08-24, the always-visible header band carrying the pool name.
+ *
+ * The old comment claimed 0.45 protected "saturated blues and reds", and that
+ * intent survives the fix — `#0000ff` has a luminance of 0.072, far below the
+ * real crossover, so it still gets white text. It was the mid-tones that were
+ * wrong.
+ */
 export function readableTextOn(value: unknown): string {
     const lum = relativeLuminance(value);
-    if (lum === undefined) return '#ffffff';
-    // 0.45 rather than the naive 0.5: the WCAG curve puts mid greys and
-    // saturated blues/reds below it, where white is the better contrast.
-    return lum > 0.45 ? '#111111' : '#ffffff';
+    if (lum === undefined) return INK_LIGHT;
+    return contrastRatio(lum, INK_DARK_LUM) >= contrastRatio(lum, INK_LIGHT_LUM)
+        ? INK_DARK
+        : INK_LIGHT;
 }
 
 export interface PoolBranding {
