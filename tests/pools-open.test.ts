@@ -35,6 +35,33 @@ describe('with pool creation OPEN', () => {
     });
 });
 
+describe('the front door does not contradict the flip', () => {
+    it('the landing hero badge follows POOL_CREATION_ENABLED (codex [P2])', () => {
+        // It was the one unconditional launch-status line, and it sat directly
+        // above an enabled "Create an NFL Pool" button — on the page Monday's
+        // invite traffic lands on.
+        const landing = read('src/components/LandingPage.tsx');
+        expect(landing).not.toMatch(/>2026 NFL Season Pools Coming Soon</);
+        expect(landing).toContain("POOL_CREATION_ENABLED ? '2026 NFL Season Pools Are Open'");
+    });
+
+    it('every other launch CTA was already gated on the same flag', () => {
+        // Not a text scan of the whole file — one that greps for "Coming Soon"
+        // trips on prose about the fix. These are the concrete CTAs, and each
+        // reads canCreate / canAccessPoolCreation, which follow POOLS_OPEN.
+        for (const file of [
+            'src/components/FeaturesPage.tsx',
+            'src/components/HowItWorksPage.tsx',
+            'src/components/CreatePoolSelection.tsx',
+            'src/components/Header.tsx',
+            'src/components/GamedaySquaresLanding.tsx',
+        ]) {
+            const src = read(file);
+            expect(/canCreate|canAccessPoolCreation/.test(src), file).toBe(true);
+        }
+    });
+});
+
 describe('the G2 prerequisite is actually in place', () => {
     // 🛑 If these fail, DO NOT MERGE THE FLIP. An anonymous visitor clicking a
     // now-enabled "Build Your Pool — Free to Start" button would be redirected
