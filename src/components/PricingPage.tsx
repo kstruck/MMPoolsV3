@@ -16,6 +16,7 @@ import { BillingInvoiceCard } from './billing/BillingInvoiceCard';
 import { UpgradeInfoPopover } from './pricing/UpgradeInfoPopover';
 import { EstimateSummaryCard } from './pricing/EstimateSummaryCard';
 import { canAccessPoolCreation } from '../utils/auth';
+import { addonSeed } from './billing/addonSeed';
 
 interface PricingPageProps {
     user?: User | null;
@@ -159,9 +160,20 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 // Synchronize calculator inputs to match selected pool for convenience
                 setCalcPoolType(pool.type);
                 setCalcPlayers((pool as any).estimatedPlayers || ((pool as any).settings?.maxEntriesTotal > 0 ? (pool as any).settings.maxEntriesTotal : 30));
-                setCalcAi(pool.billing?.featuresUnlocked?.aiCommissioner || false);
-                setCalcSms(pool.billing?.featuresUnlocked?.smsNotifications || false);
-                setCalcSim(pool.billing?.featuresUnlocked?.whatIfSimulator || false);
+                // ⚠️ `pool.addons` FIRST, `billing.featuresUnlocked` only as the
+                // legacy fallback (PLAN-WIZARD-BUYFLOW-FIXES T3). `addons` is the
+                // commissioner's own wizard selection, stored top-level by
+                // `readLaunchFields`. `featuresUnlocked` is what the pool has
+                // ACTIVE — and a trial launch stamps it all-false
+                // (`poolCreation.LOCKED_FEATURES`), so seeding from it wiped
+                // every add-on the commissioner had picked and the upgrade page
+                // opened with nothing selected. Kevin's repro exactly: a $147
+                // quote in the wizard, an empty checkout on /pricing.
+                const seed = addonSeed(pool);
+                setCalcAi(seed.aiCommissioner);
+                setCalcSms(seed.smsNotifications);
+                setCalcSim(seed.whatIfSimulator);
+                setCalcBranding(seed.customBranding);
             }
         }, (err) => {
             console.error('[PricingPage] Error fetching pool details:', err);
@@ -559,10 +571,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         poolName={selectedPoolData.name}
                                         poolType={calcPoolType}
                                         estimatedPlayers={calcPlayers}
-                                        hasAiCommissioner={false}
-                                        hasSmsNotifications={false}
-                                        hasWhatIfSimulator={false}
-                                        hasCustomBranding={false}
+                                        hasAiCommissioner={calcAi}
+                                        hasSmsNotifications={calcSms}
+                                        hasWhatIfSimulator={calcSim}
+                                        hasCustomBranding={calcBranding}
                                         isWizard={false} // Renders "Complete Payment & Upgrade" button
                                         pricePaid={selectedPoolData.billing?.pricePaid || 0}
                                         initialCouponCode={selectedPoolData.billing?.couponCode || ''}

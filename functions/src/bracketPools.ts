@@ -6,7 +6,8 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
 import { computeLaunchMode } from "./poolOps";
-import { loadBillingConfig } from "./billing";
+import { loadBillingConfig, resolveCouponForQuote } from "./billing";
+import { validLaunchCouponCode } from "./lib/launchCoupon";
 import {
     validateCreateInput,
     assertNotBanned,
@@ -113,8 +114,17 @@ export const createBracketPool = onCall(async (request) => {
     // fails open to defaults inside loadBillingConfig.
     const billingConfig = await loadBillingConfig(db);
     const launchMode = computeLaunchMode(request.data, billingConfig.freePlayerThreshold);
+    // Remember the wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3) — validated
+    // server-side, never redeemed here; redemption stays in createCheckoutSession.
+    const launchCouponCode = await validLaunchCouponCode(
+        (code) => resolveCouponForQuote(db, code, { userId: uid, poolType: "BRACKET", now }),
+        (request.data as Record<string, unknown> | undefined)?.couponCode,
+    );
     // free or trial per server-computed launch mode (server-authoritative)
-    (newPool as any).billing = billingForLaunch(launchMode, billingConfig.trialDays, now);
+    (newPool as any).billing = {
+        ...billingForLaunch(launchMode, billingConfig.trialDays, now),
+        ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+    };
 
     // Transaction: create pool + uniform side-effect bundle (managedPools,
     // POOL_CREATED activity, role upgrade). Bracket previously wrote no owner
