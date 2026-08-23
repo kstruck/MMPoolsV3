@@ -1,0 +1,53 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { POOLS_OPEN } from '../src/config/season';
+import { canAccessPoolCreation, POOL_CREATION_ENABLED } from '../src/utils/auth';
+
+/**
+ * PLAN-WIZARD-BUYFLOW-FIXES G1 / D6 — the launch flip.
+ *
+ * `POOLS_OPEN` is a BUILD-TIME constant, so opening pool creation is a code
+ * change plus a Coolify `www` rebuild, not a config save. This suite exists so
+ * the flip is a decision with consequences someone can read, rather than a
+ * one-character diff nobody can review.
+ */
+
+const repoRoot = path.resolve(__dirname, '..');
+const read = (p: string) => readFileSync(path.join(repoRoot, p), 'utf8');
+
+describe('with pool creation OPEN', () => {
+    it('the flag is on', () => {
+        expect(POOLS_OPEN).toBe(true);
+        expect(POOL_CREATION_ENABLED).toBe(true);
+    });
+
+    it('a logged-OUT visitor may reach the creation flows', () => {
+        // This is the whole point of the flip, and it is also what makes G2 a
+        // hard prerequisite: until T6a, this returning true meant an anonymous
+        // click was bounced to `/` with no modal and no message.
+        expect(canAccessPoolCreation(null)).toBe(true);
+        expect(canAccessPoolCreation(undefined)).toBe(true);
+    });
+
+    it('an ordinary signed-in member may too', () => {
+        expect(canAccessPoolCreation({ id: 'u1', role: 'PARTICIPANT' } as never)).toBe(true);
+    });
+});
+
+describe('the G2 prerequisite is actually in place', () => {
+    // 🛑 If these fail, DO NOT MERGE THE FLIP. An anonymous visitor clicking a
+    // now-enabled "Build Your Pool — Free to Start" button would be redirected
+    // to `/` with no explanation — a silent dead end on the launch-day CTA.
+    it('the global create entry opens auth instead of navigating', () => {
+        const app = read('src/App.tsx');
+        expect(app).not.toContain("const handleCreatePoolClick = () => navigate('/create-pool');");
+        expect(app).toContain('if (!checkAccess()) return;');
+    });
+
+    it('/pricing create CTAs open auth and remember the intent', () => {
+        const pricing = read('src/components/PricingPage.tsx');
+        expect(pricing).toContain("setPostAuthIntent('/create-pool')");
+        expect(pricing).not.toContain("onClick={canCreate ? () => navigate('/create-pool') : undefined}");
+    });
+});
