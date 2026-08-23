@@ -4,6 +4,7 @@ import {
   Play, Edit3, Save, Lock, Unlock, AlertTriangle, ShieldCheck, BellRing,
   ChevronDown, ChevronUp, Clock, UserCog, Ban
 } from 'lucide-react';
+import { NFLBrandingSettings } from './NFLBrandingSettings';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { isPoolManager, poolCoManagers } from '../../utils/auth';
@@ -1826,6 +1827,17 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════
+           SECTION: POOL BRANDING (T8)
+           Its own card and its own save, OUTSIDE `canEditSettings`. That gate
+           locks pool RULES once the season starts, and rightly so — but
+           branding is not a rule, and the server agrees: `shared/editability.ts`
+           lists `branding` in open, locked AND archived. Folding it into the
+           gated form would lock a commissioner out of fixing their own logo in
+           week 3 for no reason the server asks for.
+      ═══════════════════════════════════════════ */}
+      {commishTab === 'settings' && <NFLBrandingSettings pool={pool} />}
 
       {commishTab === 'settings' && (
       /* ═══════════════════════════════════════════
