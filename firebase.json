@@ -24,6 +24,8 @@
         "ignore": [
             "firebase.json",
             "**/.*",
+            "!/.well-known",
+            "!/.well-known/**",
             "**/node_modules/**"
         ],
         "rewrites": [
@@ -37,6 +39,36 @@
             }
         ],
         "headers": [
+            {
+                "source": "/auth.md",
+                "headers": [
+                    {
+                        "key": "Content-Type",
+                        "value": "text/markdown; charset=utf-8"
+                    },
+                    {
+                        "key": "Cache-Control",
+                        "value": "public, max-age=3600"
+                    }
+                ]
+            },
+            {
+                "source": "/.well-known/api-catalog",
+                "headers": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/linkset+json; profile=\"https://www.rfc-editor.org/info/rfc9727\""
+                    },
+                    {
+                        "key": "Cache-Control",
+                        "value": "public, max-age=3600"
+                    },
+                    {
+                        "key": "Link",
+                        "value": "</.well-known/api-catalog>; rel=\"api-catalog\""
+                    }
+                ]
+            },
             {
                 "source": "**/index.html",
                 "headers": [
@@ -82,6 +114,10 @@
                     {
                         "key": "Content-Security-Policy",
                         "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://apis.google.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.espncdn.com https://*.espn.com https://a.espncdn.com https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://*.firebase.com https://*.firebaseapp.com https://www.google-analytics.com https://site.api.espn.com https://generativelanguage.googleapis.com wss://*.firebaseio.com https://us-central1-gridiron-gamble-uzuqo.cloudfunctions.net https://*.ingest.us.sentry.io; frame-src 'self' https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self';"
+                    },
+                    {
+                        "key": "Link",
+                        "value": "</.well-known/api-catalog>; rel=\"api-catalog\", </api/openapi.json>; rel=\"service-desc\", </api/docs.html>; rel=\"service-doc\", </api/openapi.json>; rel=\"describedby\""
                     }
                 ]
             }

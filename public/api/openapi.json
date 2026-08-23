@@ -1,0 +1,47 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "March Melee Pools Public HTTP API",
+    "version": "1.0.0",
+    "description": "Public HTTP endpoints for March Melee Pools."
+  },
+  "servers": [
+    {
+      "url": "https://us-central1-gridiron-gamble-uzuqo.cloudfunctions.net",
+      "description": "Production Cloud Functions"
+    }
+  ],
+  "paths": {
+    "/readiness": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Check service readiness",
+        "description": "Returns 200 with a plain-text OK response when the service and its Firestore dependency are ready, otherwise 503 with UNAVAILABLE.",
+        "responses": {
+          "200": {
+            "description": "Service is ready.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "const": "OK"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service is not ready.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "const": "UNAVAILABLE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
