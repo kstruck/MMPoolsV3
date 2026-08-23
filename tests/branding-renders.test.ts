@@ -57,6 +57,19 @@ describe('the NFL dashboard paints with the pool\u2019s colours', () => {
         expect(dash).toContain('{!brand.themed && (');
     });
 
+    it('BOTH previews render the band, or one of them lies (codex)', () => {
+        // The previews exist to promise the look the pool will actually have.
+        // A bordered header in the preview and a solid band on the pool page is
+        // the exact drift they were built to prevent.
+        const editor = read('src/components/NFLPoolDashboard/NFLBrandingSettings.tsx');
+        for (const src of [step, editor]) {
+            expect(src).toContain('style={brand.headerBand}');
+            expect(src).toContain('{brand.themed && (');
+            // ...and the card has to clip it, same as the real header.
+            expect(src).toContain('overflow-hidden rounded-lg');
+        }
+    });
+
     it('the card clips the band to its rounded corners', () => {
         // Without `overflow-hidden` the colour squares off the top corners.
         expect(dash).toContain('className="bg-card border border-line rounded-xl shadow-card overflow-hidden"');
