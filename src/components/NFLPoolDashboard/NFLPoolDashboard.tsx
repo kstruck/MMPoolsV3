@@ -16,7 +16,7 @@ import { CountdownTo } from '../common/CountdownTo';
 import { PickemPickEntry } from './PickemPickEntry';
 import { SurvivorPickEntry } from './SurvivorPickEntry';
 import { MarginPickEntry } from './MarginPickEntry';
-import { NFLStandings } from './NFLStandings';
+import { NFLStandingsTab } from './NFLStandingsTab';
 import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
@@ -35,10 +35,10 @@ import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
 // conflicted when they didn't (measured).
-import { NFLResults } from './NFLResults';
 import { NFLPicksGrid } from './NFLPicksGrid';
 import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
 import { HelpRoutePublisher } from '../../help/publish';
+import { resolveStandingsAlias, type StandingsScope } from '../../utils/nflStandingsScope';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -62,13 +62,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Tab lives in the URL so the browser Back button steps through tabs (and refresh
   // restores the view) instead of leaving the pool. Tab changes push a history entry.
   const [searchParams, setSearchParams] = useSearchParams();
-  // `results` sits next to `standings`: Standings answers "who is winning the
-  // season", Results answers "what happened in a week / across the weeks".
-  // Survivor has no per-week score to tabulate, so the tab is hidden for it
-  // (see the strip below) — but the value stays VALID for every pool type on
-  // purpose: a stale `?tab=results` link into a Survivor pool must fall back to
-  // the dashboard rather than crash, and dropping it from this list is what
-  // makes that fallback happen.
+  // 🛑 T10: `results` IS NO LONGER A TAB. It is a URL ALIAS for the Standings
+  // tab's "This Week" segment (Kevin, 2026-08-23: one Standings tab on every
+  // NFL pool type, the shape Survivor already had). It stays VALID here for two
+  // separate reasons:
+  //   1. a shared `?tab=results` link, a Help link or browser history from
+  //      before the merge must LAND on the week view rather than fall to the
+  //      dashboard — `resolveStandingsAlias` does that mapping; and
+  //   2. on a SURVIVOR pool there is no week view to land on, and dropping the
+  //      value from this list is exactly what makes it fall back to the
+  //      dashboard rather than render an empty content area.
+  // `tabOffered.results` below is still what separates those two cases.
   type TabType = 'dashboard' | 'picks' | 'grid' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
   const VALID_TABS: TabType[] = ['dashboard', 'picks', 'grid', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
   const showResultsTab = pool.type !== 'NFL_SURVIVOR';
@@ -102,7 +106,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     dashboard: true, picks: true, standings: true, recaps: true, rules: true, manager: isManager,
     payments: !!user, results: showResultsTab, grid: showPicksGridTab,
   };
-  const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
+  const resolvedTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
+  // T10: `results` collapses into `standings` HERE, once, so the strip, the tab
+  // router and Help all see one tab. Everything downstream reads `activeTab`.
+  const { tab: activeTab, scope: standingsScope } =
+    resolveStandingsAlias(resolvedTab) as { tab: TabType; scope: StandingsScope };
   // `section` = which commissioner sub-tab the manager view opens on (only
   // `?tab=manager&section=members` is used today — the member Payments tab's
   // "Open Payment Ledger"). Cleared on every other tab change so a later click
@@ -661,7 +669,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     <HelpRoutePublisher
       tab={activeTab}
       isManager={isManager}
-      offeredTabs={VALID_TABS.filter(t => tabOffered[t])}
+      /* T10: `results` is filtered OUT even where it is still "offered" as a
+         URL. It is an alias, not a screen, and publishing it would let Help
+         list a tab this pool's strip does not have. */
+      offeredTabs={VALID_TABS.filter(t => t !== 'results' && tabOffered[t])}
     />
     <div
       className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 relative transition-colors duration-500"
@@ -805,21 +816,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             }`}
             style={activeTab === 'standings' ? { borderBottomColor: accentHex } : {}}
           >
-            Standings & Leaderboard
+            Standings & Results
           </button>
-          {showResultsTab && (
-            <button
-              onClick={() => setActiveTab('results')}
-              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-                activeTab === 'results'
-                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
-              }`}
-              style={activeTab === 'results' ? { borderBottomColor: accentHex } : {}}
-            >
-              Results
-            </button>
-          )}
           <button
             onClick={() => setActiveTab('recaps')}
             className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
@@ -1066,9 +1064,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 )
               )}
 
-              {/* TAB 2: STANDINGS */}
+              {/* TAB 2: STANDINGS — season / week / summary in ONE tab (T10).
+                  The weekly and season tables are the same tested components
+                  that used to sit on two tabs; only the parent changed. */}
               {activeTab === 'standings' && (
-                <NFLStandings
+                <NFLStandingsTab
                   pool={pool}
                   entries={entries}
                   games={games}
@@ -1077,22 +1077,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   pickCounts={weekReveal?.counts}
                   reveal={weekReveal}
                   ownEntryLoaded={ownEntryKnown}
-                />
-              )}
-
-              {/* TAB 2b: RESULTS — weekly + season tables over the SAME scored
-                  projection the standings render. `activeTab` is already
-                  normalized above, so this can only be true on a pool that
-                  offers the tab. */}
-              {activeTab === 'results' && (
-                <NFLResults
-                  pool={pool}
-                  entries={entries}
-                  games={games}
-                  week={selectedWeek}
-                  viewerUid={user?.id}
-                  reveal={weekReveal}
-                  ownEntryLoaded={ownEntryKnown}
+                  scope={standingsScope}
                 />
               )}
 
