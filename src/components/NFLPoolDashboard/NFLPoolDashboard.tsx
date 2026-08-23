@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
-import { isPoolManager } from '../../utils/auth';
+import { isPoolManager, isSuperAdmin } from '../../utils/auth';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { logger } from '../../utils/logger';
-import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
+import type { User, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { formatSharpScore, recapHasHighlights, weeklyWinnerLabel } from '../../utils/recapHighlight';
 import { WeeklyWinnersList } from './WeeklyWinnersList';
@@ -29,6 +29,7 @@ import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } f
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { brandingStyles } from '../../utils/brandingStyles';
+import { BanterFeed } from './BanterFeed';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -605,6 +606,42 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // `primaryColor` previously had no renderer at all and `bgColor` (which no
   // wizard collects) was the only thing driving the page, so a commissioner's
   // colour choices appeared to do nothing. See src/utils/brandingStyles.ts.
+  /**
+   * The pool feed (T9). Subscribed HERE rather than inside `BanterFeed` so the
+   * manager card and the member Overview render the same data from one reader,
+   * and so a failed read is distinguishable from an empty feed - `onSnapshot`
+   * TERMINATES a listener on error, and "nothing posted yet" for a permission
+   * failure is the silence-as-success defect this repo keeps finding.
+   */
+  const [poolFeed, setPoolFeed] = useState<BanterMessage[]>([]);
+  const [poolFeedError, setPoolFeedError] = useState(false);
+  /**
+   * Membership, read the same way the Firestore rule reads it — ALL FOUR of
+   * `isPoolParticipant()`'s branches, not just participantIds (codex r4 [P2]).
+   * An owner or legacy manager absent from that array, and a super admin, are
+   * authorized to read the feed; a narrower client gate would hide it from
+   * exactly the people the backend lets in.
+   *
+   * Subscribing as a non-member terminates the listener on a permission error,
+   * so this gate is also what keeps a public-pool visitor from seeing a
+   * permanent feed error.
+   */
+  const isPoolMember = !!user?.id && (
+    castPool.ownerId === user.id ||
+    castPool.managerUid === user.id ||
+    (Array.isArray(castPool.participantIds) && castPool.participantIds.includes(user.id)) ||
+    isSuperAdmin(user)
+  );
+
+  useEffect(() => {
+    if (!pool?.id || !isPoolMember) return;
+    return dbService.subscribeToPoolFeed(
+      pool.id,
+      (messages) => { setPoolFeedError(false); setPoolFeed(messages); },
+      () => setPoolFeedError(true),
+    );
+  }, [pool?.id, isPoolMember]);
+
   const branding = castPool.branding || {};
   const brand = brandingStyles(branding);
   const accentHex = brand.accent;
@@ -848,6 +885,28 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     isManager={isManager}
                     onSelectTab={(tab) => setActiveTab(tab)}
                   />
+                  {/* T9 - the pool feed, where MEMBERS finally see the
+                      commissioner's posts and the AI's banter. Kevin: "where
+                      are these messages shown to members?" - until now, nowhere:
+                      the commissioner's card kept its feed in React state.
+
+                      Rendered for pool MEMBERS only (codex r1 [P2]), not merely
+                      signed-in visitors: the read rule is `isPoolParticipant()`,
+                      so on a public pool a signed-in non-member would subscribe,
+                      be denied, and be shown a permanent load error for a feed
+                      they were never entitled to read. */}
+                  {isPoolMember && (
+                    <div className="max-w-4xl mx-auto mt-6 bg-card border border-line rounded-xl shadow-card p-6">
+                      <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-3">
+                        Pool feed
+                      </h3>
+                      <BanterFeed
+                        messages={poolFeed}
+                        error={poolFeedError}
+                        emptyText="No posts yet. Your commissioner can post here - everyone in the pool sees it."
+                      />
+                    </div>
+                  )}
                   {castPool.billing?.featuresUnlocked?.aiCommissioner && (
                     <div className="max-w-4xl mx-auto mt-6">
                       <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />
