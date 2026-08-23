@@ -85,6 +85,28 @@ export function billingForLaunch(
   mode: LaunchBillingMode = 'free',
   trialDays = 14,
   nowMs: number = Date.now(),
+  /**
+   * The add-ons the commissioner selected in the wizard
+   * (PLAN-WIZARD-BUYFLOW-FIXES T5, Kevin's D2: approved).
+   *
+   * A trial used to stamp `featuresUnlocked` ALL FALSE regardless, so a
+   * commissioner who ticked AI Commissioner and started the trial had no AI tab
+   * for the whole trial — they could not try the very thing the trial exists to
+   * sell, and add-ons only turned on after payment. `featuresUnlocked` is what
+   * gates the AI tab (`NFLPoolDashboard`) and `checkBillingAccess`.
+   *
+   * ⚠️ The FREE path stays all-false, and that is not an oversight: any paid
+   * add-on forces `computeLaunchMode` to 'trial', so a free pool by definition
+   * selected none. Unlocking there would hand out paid features permanently to
+   * pools that never enter a trial at all.
+   *
+   * Expiry is the only guard needed: trial → grace → locked already reclaims
+   * these. The named risk (codex r1 #4 on the plan) is that trial OUTPUT is
+   * durable — a pool can run 14 days, extract the AI recaps and never pay. D2
+   * accepts that as the ordinary cost of a free trial; the exposure is one pool
+   * for 14 days, and the alternative is selling add-ons nobody can try.
+   */
+  addons?: Partial<Record<keyof typeof LOCKED_FEATURES, boolean>>,
 ) {
   if (mode === 'trial') {
     return {
@@ -92,7 +114,7 @@ export function billingForLaunch(
       tier: 'standard_tier' as const,
       pricePaid: 0,
       trialEndsAt: nowMs + Math.max(1, Math.round(trialDays)) * 24 * 60 * 60 * 1000,
-      featuresUnlocked: { ...LOCKED_FEATURES },
+      featuresUnlocked: trialFeaturesUnlocked(addons),
     };
   }
   return {
@@ -101,6 +123,25 @@ export function billingForLaunch(
     pricePaid: 0,
     featuresUnlocked: { ...LOCKED_FEATURES },
   };
+}
+
+/**
+ * The trial's `featuresUnlocked`: every selected add-on on, everything else
+ * explicitly off. Only an explicit `true` counts — Firestore payload shapes are
+ * untrusted, and a truthy string must not unlock a paid feature.
+ *
+ * Keyed off LOCKED_FEATURES so a feature added there is off by default here
+ * rather than silently absent, which `checkBillingAccess` would read as denied
+ * anyway but leaves the document illegible.
+ */
+export function trialFeaturesUnlocked(
+  addons?: Partial<Record<keyof typeof LOCKED_FEATURES, boolean>>,
+): typeof LOCKED_FEATURES {
+  const out = { ...LOCKED_FEATURES } as Record<string, boolean>;
+  for (const key of Object.keys(LOCKED_FEATURES)) {
+    out[key] = addons?.[key as keyof typeof LOCKED_FEATURES] === true;
+  }
+  return out as typeof LOCKED_FEATURES;
 }
 
 /** @deprecated Use billingForLaunch('free'). Retained so existing create
