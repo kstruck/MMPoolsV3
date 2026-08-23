@@ -72,11 +72,11 @@ describe('2. the mood buttons and prompt reach the REAL pipeline', () => {
         // A plain re-read is not enough: two overlapping deliveries both read
         // PENDING and both call Gemini. The request is CLAIMED in a transaction
         // before the provider is touched (codex r3 [P2]).
-        expect(ai).toContain('const claimed = await db.runTransaction(async (txn) => {');
+        expect(ai).toContain('const claim = await db.runTransaction(async (txn) => {');
         expect(ai).toContain("txn.update(requestRef, { status: 'GENERATING', updatedAt: Date.now() });");
-        expect(ai).toContain('if (!claimed) {');
+        expect(ai).toContain("if (claim !== 'CLAIMED') {");
         // ...and the claim happens BEFORE the provider call, not after.
-        expect(ai.indexOf('const claimed = await db.runTransaction'))
+        expect(ai.indexOf('const claim = await db.runTransaction'))
             .toBeLessThan(ai.indexOf('await generateAIResponse(BANTER_SYSTEM_PROMPT'));
         expect(ai).toContain('doc(`banter-${requestRef.id}`)');
     });
@@ -221,6 +221,24 @@ describe('4. the commissioner can delete any message', () => {
 });
 
 describe('4b. BANTER does not leak into the member AI panel', () => {
+    it('but the card SURFACES a failed request (codex r5 [P2])', () => {
+        // Filtering BANTER out of the AI panel removed the only status
+        // listener, so a failed generation left the commissioner with an
+        // optimistic toast and nothing else. The card watches its own now.
+        expect(dbService).toContain('subscribeToMyBanterRequests:');
+        expect(card).toContain('dbService.subscribeToMyBanterRequests(pool.id, _user.id,');
+        expect(card).toContain("lastBanterRequest?.status === 'ERROR'");
+        expect(card).toContain("lastBanterRequest?.status === 'GENERATING'");
+    });
+
+    it('authority is revalidated inside the claim, against a FRESH pool read', () => {
+        // Document triggers run asynchronously, so ownership or a
+        // co-commissioner assignment can be revoked between the snapshot and
+        // the write — and the thing authorized is a pool-wide message.
+        expect(ai).toContain('const freshPool = await txn.get(poolRef);');
+        expect(ai).toContain('if (!isPoolCommissionerUid(freshPool.data(), requestData.userId, callerRole)) {');
+    });
+
     it('the AI tab filters its own request history', () => {
         // Those are the commissioner's trash-talk prompts, not questions this
         // panel asked; listing them would show a commissioner their own prompts

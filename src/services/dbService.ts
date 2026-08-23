@@ -371,6 +371,33 @@ export const dbService = {
         });
     },
 
+    /**
+     * The requester's own BANTER requests (T9, codex r5 [P2]).
+     *
+     * Generation is ASYNCHRONOUS: the card gets an optimistic "it appears in a
+     * few seconds" toast, and if the provider fails, the model returns nothing,
+     * or authority was revoked between request and publication, `onAIRequest`
+     * marks the request ERROR and NO post ever arrives. Without this the
+     * commissioner would simply be left waiting for something that is not coming.
+     *
+     * Filtered by `userId` only and narrowed client-side, exactly as
+     * `AICommissioner` does — a compound where() would need a composite index.
+     */
+    subscribeToMyBanterRequests: (poolId: string, userId: string, callback: (requests: { id: string; status: string; error?: string; createdAt: number }[]) => void) => {
+        const q = query(collection(db, `pools/${poolId}/ai_requests`), where('userId', '==', userId));
+        return onSnapshot(q, (snap) => {
+            callback(
+                snap.docs
+                    .map(d => ({ id: d.id, ...(d.data() as Record<string, unknown>) }) as { id: string; status: string; error?: string; createdAt: number; category?: string })
+                    .filter(r => r.category === 'BANTER')
+                    .sort((a, b) => b.createdAt - a.createdAt),
+            );
+        }, (error) => {
+            logger.error('[dbService] subscribeToMyBanterRequests error:', error);
+            callback([]);
+        });
+    },
+
     /** Commissioner moderation (T9). Rules allow delete for owner/manager/co-commissioner only. */
     deletePoolMessage: async (poolId: string, messageId: string) => {
         await deleteDoc(doc(db, 'pools', poolId, 'messages', messageId));

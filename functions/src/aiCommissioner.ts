@@ -511,6 +511,8 @@ async function generateBanter(args: {
         await requestRef.update({ status: 'ERROR', error: 'BANTER_NOT_COMMISSIONER', updatedAt: Date.now() });
         return;
     }
+    // Re-checked again inside the claim transaction below, against a FRESH read
+    // of the pool. This early check exists to fail cheap; that one is the guard.
 
     try {
         // IDEMPOTENCY (codex r2/r3 [P2]). `onDocumentCreated` is at-least-once,
@@ -530,14 +532,25 @@ async function generateBanter(args: {
         // reclaim-and-retry machine whose failure mode is the double charge it
         // exists to prevent. Stuck-and-visible beats charged-twice on a paid
         // provider.
-        const claimed = await db.runTransaction(async (txn) => {
+        //
+        // The pool is RE-READ inside the same transaction and the commissioner
+        // check re-run against it (codex r5 [P2]). Document triggers run
+        // asynchronously, so ownership or a co-commissioner assignment can be
+        // revoked between the snapshot above and this write — and the thing
+        // being authorized is a message published to the whole pool.
+        const claim = await db.runTransaction(async (txn) => {
             const cur = await txn.get(requestRef);
-            if (cur.data()?.status !== 'PENDING') return false;
+            if (cur.data()?.status !== 'PENDING') return 'ALREADY_CLAIMED' as const;
+            const freshPool = await txn.get(poolRef);
+            if (!isPoolCommissionerUid(freshPool.data(), requestData.userId, callerRole)) {
+                txn.update(requestRef, { status: 'ERROR', error: 'BANTER_NOT_COMMISSIONER', updatedAt: Date.now() });
+                return 'NOT_COMMISSIONER' as const;
+            }
             txn.update(requestRef, { status: 'GENERATING', updatedAt: Date.now() });
-            return true;
+            return 'CLAIMED' as const;
         });
-        if (!claimed) {
-            console.log(`[AI] BANTER request ${requestRef.id} already claimed; skipping.`);
+        if (claim !== 'CLAIMED') {
+            console.log(`[AI] BANTER request ${requestRef.id} not claimed (${claim}); skipping.`);
             return;
         }
 

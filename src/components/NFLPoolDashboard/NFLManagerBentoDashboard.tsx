@@ -96,6 +96,20 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     );
   }, [pool?.id]);
 
+  /**
+   * Generation is ASYNCHRONOUS (codex r5 [P2]). "Asked the AI" is an optimistic
+   * toast; if the provider fails, the model returns nothing, or authority was
+   * revoked in between, the request is marked ERROR and no post ever arrives.
+   * Without this the commissioner waits for something that is not coming.
+   */
+  const [lastBanterRequest, setLastBanterRequest] = useState<{ status: string; error?: string } | null>(null);
+  useEffect(() => {
+    if (!pool?.id || !_user?.id) return;
+    return dbService.subscribeToMyBanterRequests(pool.id, _user.id, (reqs) => {
+      setLastBanterRequest(reqs[0] ?? null);
+    });
+  }, [pool?.id, _user?.id]);
+
   const [isNudging, setIsNudging] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -710,6 +724,16 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 <Sparkles size={13} aria-hidden="true" /> {banterBusy === 'ai' ? 'Asking...' : 'Let AI write it'}
               </button>
             </div>
+            {lastBanterRequest?.status === 'ERROR' && (
+              <p className="mt-2 font-body text-[11px] text-brandred-600" role="alert">
+                {lastBanterRequest.error === 'BANTER_NOT_COMMISSIONER'
+                  ? 'Only a commissioner of this pool can have the AI post to the feed.'
+                  : 'The AI could not write that one. Nothing was posted — try again, or post it yourself.'}
+              </p>
+            )}
+            {lastBanterRequest?.status === 'GENERATING' && (
+              <p className="mt-2 font-body text-[11px] text-muted">The AI Commissioner is writing…</p>
+            )}
             {!aiUnlocked && (
               /* Honest, and specific: T5 makes a TRIAL unlock the add-ons the
                  wizard selected, so this now means "not selected / not bought",
