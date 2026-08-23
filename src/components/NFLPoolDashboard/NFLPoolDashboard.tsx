@@ -38,6 +38,7 @@ import { NFLPicksGrid } from './NFLPicksGrid';
 import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
 import { HelpRoutePublisher } from '../../help/publish';
 import { resolveStandingsAlias, type StandingsScope } from '../../utils/nflStandingsScope';
+import { isPinnableMessageId } from '@shared/pinnedMessage';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -660,7 +661,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
    * removed needs no setState in an effect body (a cascading render, and a lint
    * error in this repo).
    */
-  const pinnedMessageId = (castPool.pinnedMessageId as string | undefined) ?? '';
+  // Validated on the way IN as well as on the way out (codex r1 [P2]). The
+  // callable refuses to store a value that is not a safe document id, but a
+  // pool document predating that check — or written by the Admin SDK, which
+  // never sees it — must not be able to throw `doc()` inside the effect below
+  // and take the pool home page down for every member.
+  const rawPinnedId = castPool.pinnedMessageId as unknown;
+  const pinnedMessageId = isPinnableMessageId(rawPinnedId) ? rawPinnedId : '';
   const [pinned, setPinned] = useState<{ id: string; message: BanterMessage | null; error: boolean }>(
     { id: '', message: null, error: false },
   );

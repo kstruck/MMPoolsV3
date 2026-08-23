@@ -7,6 +7,7 @@ import {
   normalizePhase,
   type LifecyclePhase,
 } from '../shared/editability';
+import { isPinnableMessageId } from '../shared/pinnedMessage';
 
 /**
  * Kevin, 2026-08-23: "I also want the Pool manager to be able to PIN a message
@@ -64,6 +65,30 @@ describe('the pin is editable in every phase, because pinning is an in-season ac
   it('a mid-season NFL pool normalizes to a phase the pin is allowed in', () => {
     expect(isGroupEditable(normalizePhase({ isLocked: true }), 'announcement')).toBe(true);
     expect(isGroupEditable(normalizePhase({ status: 'OPEN' }), 'announcement')).toBe(true);
+  });
+});
+
+describe('the id is a PATH SEGMENT, so it is validated at both ends (codex r1 [P2])', () => {
+  it('accepts a Firestore auto-id and the empty unpin value', () => {
+    expect(isPinnableMessageId('aBcD1234EfGh5678IjKl')).toBe(true);
+    expect(isPinnableMessageId('')).toBe(true);
+    expect(isPinnableMessageId('msg_123-abc')).toBe(true);
+  });
+
+  it('refuses anything that would make doc() throw', () => {
+    // A slash is the dangerous one: `doc(db, 'pools', id, 'messages', 'a/b')`
+    // throws SYNCHRONOUSLY, inside the effect every member of the pool runs.
+    expect(isPinnableMessageId('a/b')).toBe(false);
+    expect(isPinnableMessageId('..')).toBe(false);
+    expect(isPinnableMessageId({ id: 'x' })).toBe(false);
+    expect(isPinnableMessageId(null)).toBe(false);
+    expect(isPinnableMessageId(undefined)).toBe(false);
+    expect(isPinnableMessageId(123)).toBe(false);
+    expect(isPinnableMessageId('x'.repeat(201))).toBe(false);
+  });
+
+  it('the pool page runs a stored value through the same check before subscribing', () => {
+    expect(dash).toContain('isPinnableMessageId(rawPinnedId) ? rawPinnedId :');
   });
 });
 

@@ -110,6 +110,15 @@ describe('pinnedMessageId — the commissioner pins a post mid-season', () => {
     }
   });
 
+  it('refuses a value that would break the document path (codex r1 [P2])', () => {
+    // The matrix gates KEYS, not values, and this value becomes a path segment
+    // on the client: `doc(db, 'pools', id, 'messages', <this>)` throws for a
+    // slash or a non-string, inside the effect every member of the pool runs.
+    for (const bad of ['a/b', '..', { id: 'x' }, 42, null]) {
+      expect(() => buildPoolSettingsUpdate({ status: 'OPEN' }, { pinnedMessageId: bad })).toThrow();
+    }
+  });
+
   it('does not unlock anything else on a locked pool', () => {
     // Discriminating: the new `announcement` group is one key wide.
     expect(() => buildPoolSettingsUpdate({ isLocked: true }, { entryFee: 25 })).toThrow();
