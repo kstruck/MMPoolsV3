@@ -90,7 +90,7 @@ describe('d. the coupon survives the launch', () => {
         // and dropped `addons`, so the new seed had nothing to read there and
         // the toggles still opened unchecked on the one path that never spread
         // the payload.
-        expect(bracketPools).toContain('normalizeAddonSelection(request.data');
+        expect(bracketPools).toContain('poolExtras.addons = normalizeAddonSelection(rawCreate)');
         expect(bracketPools).toContain('poolExtras.estimatedPlayers = bracketEstimate');
     });
 
