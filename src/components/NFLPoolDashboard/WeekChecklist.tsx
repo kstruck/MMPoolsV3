@@ -26,6 +26,13 @@ interface WeekChecklistProps {
      */
     entryKnown: boolean;
     entry: any;
+    /**
+     * The pool's branded primary-button style (T1), or `{}` when the pool has
+     * chosen no primary colour — in which case the button keeps its theme
+     * appearance exactly. This is the most-looked-at action on the dashboard,
+     * so it is the one place outside this file's own chrome worth theming.
+     */
+    primaryButtonStyle?: React.CSSProperties;
     games: NFLGame[];
     selectedWeek: number;
     onSelectWeek: (week: number) => void;
@@ -56,7 +63,7 @@ const CHIP_MARKS: Record<WeekStatus, React.ReactNode> = {
  * Answers "what do I still need to do?" at a glance — the audit's top
  * repeat-loop gap.
  */
-export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, entry, games, selectedWeek, onSelectWeek, onPickNow }) => {
+export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, entry, games, selectedWeek, onSelectWeek, onPickNow, primaryButtonStyle }) => {
     const castPool = pool as any;
     const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
@@ -140,6 +147,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
                             size="sm"
                             onClick={() => onPickNow(nextDue.week)}
                             className="shrink-0"
+                            style={primaryButtonStyle}
                         >
                             Make Picks <ArrowRight size={13} aria-hidden="true" />
                         </Button>
