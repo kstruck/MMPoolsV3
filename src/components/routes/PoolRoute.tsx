@@ -190,7 +190,15 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             {/* G5 — acknowledge a return from checkout. Mounted HERE, in the one
                 wrapper every pool-type branch returns through, rather than
                 repeated in each of the five branches below. */}
-            <PaymentSuccessBanner status={(pool as { billing?: { status?: BillingStatus } }).billing?.status} />
+            {/* ⚠️ `key` is load-bearing (codex r1 [P2]). This route stays MOUNTED
+                across pool navigation — see the long note on the NFL branch's
+                `key` below — so without it the banner's once-per-mount read of
+                `payment=success` would persist onto the NEXT pool and announce
+                a payment that pool never received. */}
+            <PaymentSuccessBanner
+                key={pool.id}
+                status={(pool as { billing?: { status?: BillingStatus } }).billing?.status}
+            />
             {node}
         </HelpScopeProvider>
     );

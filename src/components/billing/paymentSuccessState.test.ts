@@ -37,6 +37,23 @@ describe('paymentAckState', () => {
     });
 });
 
+describe('bundle purchases (codex r1 [P1])', () => {
+    it('gets its own single-state message — there is no pool status to wait on', () => {
+        const s = paymentAckState(true, undefined, 'bundle');
+        expect(s.kind).toBe('active');
+        expect(s.title).toContain('Payment received');
+        expect(s.detail).toContain('Credits and passes');
+    });
+
+    it('still says nothing when the visitor did not come back from checkout', () => {
+        expect(paymentAckState(false, undefined, 'bundle').kind).toBe('none');
+    });
+
+    it('defaults to the pool wording when the kind is omitted', () => {
+        expect(paymentAckState(true, 'trial').detail).toContain('trial banner');
+    });
+});
+
 describe('consumePaymentSuccess', () => {
     it('detects the marker and strips it', () => {
         const r = consumePaymentSuccess('?payment=success&session_id=cs_test_123');

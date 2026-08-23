@@ -5,7 +5,12 @@ import { paymentAckState, consumePaymentSuccess } from './paymentSuccessState';
 
 interface PaymentSuccessBannerProps {
     /** The pool's live billing status — this route subscribes, so it updates. */
-    status: BillingStatus | undefined;
+    status?: BillingStatus | undefined;
+    /**
+     * 'bundle' for the /pricing return from a credit-pack or pass purchase,
+     * which has no pool and therefore no status to wait on.
+     */
+    purchase?: 'pool' | 'bundle';
 }
 
 /**
@@ -18,7 +23,7 @@ interface PaymentSuccessBannerProps {
  * banner survives the webhook round-trip (component state) without a refresh
  * re-announcing the payment.
  */
-export const PaymentSuccessBanner: React.FC<PaymentSuccessBannerProps> = ({ status }) => {
+export const PaymentSuccessBanner: React.FC<PaymentSuccessBannerProps> = ({ status, purchase = 'pool' }) => {
     // Read the marker ONCE, on the first render, and hold the answer. A lazy
     // initializer rather than an effect: `consumePaymentSuccess` is a pure read
     // of the query string, and holding the verdict in state is what lets the
@@ -34,7 +39,7 @@ export const PaymentSuccessBanner: React.FC<PaymentSuccessBannerProps> = ({ stat
         window.history.replaceState({}, '', `${window.location.pathname}${arrival.cleanedSearch}${window.location.hash}`);
     }, [arrival]);
 
-    const ack = paymentAckState(arrival.returned, status);
+    const ack = paymentAckState(arrival.returned, status, purchase);
     if (ack.kind === 'none' || dismissed) return null;
 
     const isActive = ack.kind === 'active';

@@ -57,12 +57,25 @@ describe('G4 — the live checkout must not claim it is a sandbox', () => {
 
 describe('G5 — a return from checkout is acknowledged', () => {
     it('the banner is mounted once, in the wrapper every pool type returns through', () => {
-        expect(poolRoute).toContain('<PaymentSuccessBanner status=');
+        expect(poolRoute).toContain('<PaymentSuccessBanner');
         // One insertion point, not one per pool-type branch.
         expect(poolRoute.match(/<PaymentSuccessBanner/g)?.length).toBe(1);
     });
 
     it('it reads the pool\u2019s LIVE billing status, so it flips itself when the webhook lands', () => {
-        expect(poolRoute).toContain('.billing?.status} />');
+        expect(poolRoute).toContain('.billing?.status}');
+    });
+
+    it('the banner is keyed by pool id (codex r1 [P2])', () => {
+        // PoolRoute stays MOUNTED across pool navigation — its own NFL branch
+        // documents that. Without the key, the once-per-mount `payment=success`
+        // read would persist onto the NEXT pool and announce a payment that
+        // pool never received.
+        expect(poolRoute).toMatch(/<PaymentSuccessBanner[\s\S]{0,40}?key=\{pool\.id\}/);
+    });
+
+    it('a BUNDLE purchase is acknowledged too (codex r1 [P1])', () => {
+        // Bundle checkout returns to /pricing?payment=success, not a pool route.
+        expect(pricing).toContain('<PaymentSuccessBanner purchase="bundle" />');
     });
 });

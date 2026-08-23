@@ -34,9 +34,23 @@ export interface PaymentAckState {
 export function paymentAckState(
     returnedFromCheckout: boolean,
     status: BillingStatus | undefined,
+    /**
+     * Bundle purchases (credit packs / unlimited passes) come back to
+     * `/pricing?payment=success` instead — there is no pool and no
+     * `billing.status` to flip, so they get their own single-state message
+     * (codex r1 [P1]).
+     */
+    kindOfPurchase: 'pool' | 'bundle' = 'pool',
 ): PaymentAckState {
     if (!returnedFromCheckout) {
         return { kind: 'none', title: '', detail: '' };
+    }
+    if (kindOfPurchase === 'bundle') {
+        return {
+            kind: 'active',
+            title: 'Payment received — your purchase is on its way.',
+            detail: 'Credits and passes appear on your account within a few seconds. Launch a pool and redeem one at the last step.',
+        };
     }
     if (status === 'active') {
         return {

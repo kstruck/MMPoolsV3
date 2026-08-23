@@ -17,6 +17,7 @@ import { UpgradeInfoPopover } from './pricing/UpgradeInfoPopover';
 import { EstimateSummaryCard } from './pricing/EstimateSummaryCard';
 import { canAccessPoolCreation } from '../utils/auth';
 import { addonSeed } from './billing/addonSeed';
+import { PaymentSuccessBanner } from './billing/PaymentSuccessBanner';
 import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
 
 interface PricingPageProps {
@@ -233,6 +234,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />
+
+            {/* G5 (codex r1 [P1]) — bundle purchases come back HERE, to
+                /pricing?payment=success, not to a pool route. Same banner, the
+                bundle message: there is no pool status to wait on. */}
+            <PaymentSuccessBanner purchase="bundle" />
 
             {/* Hero Header Section — navy chrome (always dark) */}
             <section className="relative overflow-hidden pt-24 pb-20 border-b border-[rgba(230,206,150,0.16)] text-white bg-gradient-to-b from-navy-950 via-navy-950 to-navy-900">
