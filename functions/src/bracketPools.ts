@@ -5,7 +5,8 @@ import { BracketPool } from "./types";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
-import { computeLaunchMode } from "./poolOps";
+import { computeLaunchMode, estimatedPlayersFromPayload } from "./poolOps";
+import { normalizeAddonSelection } from "./lib/launchFields";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { validLaunchCouponCode } from "./lib/launchCoupon";
 import {
@@ -120,6 +121,15 @@ export const createBracketPool = onCall(async (request) => {
         (code) => resolveCouponForQuote(db, code, { userId: uid, poolType: "BRACKET", now }),
         (request.data as Record<string, unknown> | undefined)?.couponCode,
     );
+    // Persist what the commissioner picked, so the upgrade page can pre-select it
+    // (T3, codex r1 [P1]). The other two create callables get this for free by
+    // spreading the payload; this one builds its document field by field.
+    // Normalized server-side — an explicit `true` or nothing.
+    const rawCreate = request.data as Record<string, unknown>;
+    const poolExtras = newPool as unknown as Record<string, unknown>;
+    poolExtras.addons = normalizeAddonSelection(rawCreate);
+    const bracketEstimate = estimatedPlayersFromPayload(rawCreate);
+    if (bracketEstimate !== undefined) poolExtras.estimatedPlayers = bracketEstimate;
     // free or trial per server-computed launch mode (server-authoritative)
     (newPool as any).billing = {
         ...billingForLaunch(launchMode, billingConfig.trialDays, now),

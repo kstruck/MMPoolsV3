@@ -85,6 +85,15 @@ describe('d. the coupon survives the launch', () => {
         }
     });
 
+    it('a bracket launch persists what the commissioner picked', () => {
+        // codex r1 [P1]: createBracketPool builds its document field by field
+        // and dropped `addons`, so the new seed had nothing to read there and
+        // the toggles still opened unchecked on the one path that never spread
+        // the payload.
+        expect(bracketPools).toContain('normalizeAddonSelection(request.data');
+        expect(bracketPools).toContain('poolExtras.estimatedPlayers = bracketEstimate');
+    });
+
     it('nothing in the create path reserves or increments coupon usage', () => {
         // T3 stamps a remembered INTENT. Redemption stays atomic in
         // createCheckoutSession; a second increment path would double-count.

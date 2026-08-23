@@ -74,3 +74,44 @@ describe('validLaunchCouponCode', () => {
         expect(logger.warn).toHaveBeenCalled();
     });
 });
+
+// ---------------------------------------------------------------------------
+// codex r1 [P1] on T3: `createBracketPool` builds its pool document field by
+// field and never persisted `addons`, so a bracket launch left the upgrade
+// page's seed nothing to read and every toggle opened unchecked — the exact
+// defect T3 exists to fix, surviving on one of the three create paths.
+// ---------------------------------------------------------------------------
+describe('normalizeAddonSelection', () => {
+    it('returns all four keys, all false, for a payload with no addons', async () => {
+        const { normalizeAddonSelection } = await import('../lib/launchFields');
+        expect(normalizeAddonSelection({})).toEqual({
+            aiCommissioner: false,
+            smsNotifications: false,
+            whatIfSimulator: false,
+            customBranding: false,
+        });
+    });
+
+    it('carries the selected add-ons through', async () => {
+        const { normalizeAddonSelection } = await import('../lib/launchFields');
+        expect(normalizeAddonSelection({ addons: { aiCommissioner: true, whatIfSimulator: true } })).toEqual({
+            aiCommissioner: true,
+            smsNotifications: false,
+            whatIfSimulator: true,
+            customBranding: false,
+        });
+    });
+
+    it('counts ONLY an explicit true', async () => {
+        const { normalizeAddonSelection } = await import('../lib/launchFields');
+        const out = normalizeAddonSelection({ addons: { aiCommissioner: 'yes', customBranding: 1 } });
+        expect(out.aiCommissioner).toBe(false);
+        expect(out.customBranding).toBe(false);
+    });
+
+    it('tolerates null / a non-object addons field', async () => {
+        const { normalizeAddonSelection } = await import('../lib/launchFields');
+        expect(normalizeAddonSelection(null).aiCommissioner).toBe(false);
+        expect(normalizeAddonSelection({ addons: 'nope' }).aiCommissioner).toBe(false);
+    });
+});
