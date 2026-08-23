@@ -1,0 +1,144 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+/**
+ * PLAN-WIZARD-BUYFLOW-FIXES T9 — the AI Commissioner is real, visible and
+ * manageable.
+ *
+ * Kevin's report: "I still do not see the AI features working. I see draft only
+ * — not saved… users do not know what to do on that card… commissioners must be
+ * able to delete any message… where are these messages shown to members?"
+ *
+ * The behaviour is unit-tested in `functions/src/__tests__/banter.test.ts`,
+ * `src/components/NFLPoolDashboard/BanterFeed.test.ts` and the emulator suite
+ * `functions/scripts/banterMessages.rules.test.mjs`. What cannot be reached
+ * from any of those is the wiring — and the entire defect WAS wiring: a card
+ * that talked to nothing.
+ */
+
+const repoRoot = path.resolve(__dirname, '..');
+const read = (p: string) => readFileSync(path.join(repoRoot, p), 'utf8');
+
+const card = read('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
+const dash = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+const dbService = read('src/services/dbService.ts');
+const ai = read('functions/src/aiCommissioner.ts');
+const rules = read('firestore.rules');
+
+describe('1. the feed is persisted, not component state', () => {
+    it('the card subscribes instead of holding an array of strings', () => {
+        expect(card).not.toContain('useState<string[]>([])');
+        expect(card).toContain('dbService.subscribeToPoolFeed(');
+    });
+
+    it('the honest "not saved" label is gone because it is no longer true', () => {
+        expect(card).not.toContain('Draft only');
+        expect(card).not.toContain('local to this browser tab');
+    });
+
+    it('a commissioner post is a real write with the author bound to their uid', () => {
+        // firestore.rules binds authorUid to request.auth.uid; a client that
+        // sent anything else would simply be denied.
+        expect(card).toContain('dbService.sendBanterMessage(pool.id, {');
+        expect(card).toContain('authorUid: _user.id,');
+        expect(card).toContain("kind: 'COMMISSIONER',");
+    });
+});
+
+describe('2. the mood buttons and prompt reach the REAL pipeline', () => {
+    it('the card asks through ai_requests, the same door every other category uses', () => {
+        expect(card).toContain('dbService.requestAIBanter(pool.id, _user.id, prompt, aiMood)');
+        expect(dbService).toContain("category: 'BANTER',");
+        expect(dbService).toContain('collection(db, `pools/${poolId}/ai_requests`)');
+    });
+
+    it('there is no SECOND route to the paid provider', () => {
+        // PLAN-COST-CONTROLS 0.5 closed the extra doors. BANTER is handled
+        // inside onAIRequest, AFTER its entitlement gate, not in a new trigger.
+        expect(ai).toContain("if (requestData.category === 'BANTER') {");
+        expect(ai).toContain('await generateBanter({');
+        const entitlement = ai.indexOf("if (!poolRaw.billing?.featuresUnlocked?.aiCommissioner) {");
+        const banterBranch = ai.indexOf("if (requestData.category === 'BANTER') {");
+        expect(entitlement).toBeGreaterThan(-1);
+        expect(banterBranch).toBeGreaterThan(entitlement);
+    });
+
+    it('generated banter lands in the member-readable feed', () => {
+        expect(ai).toContain("poolRef.collection('messages').doc()");
+        expect(ai).toContain("kind: 'AI',");
+    });
+
+    it('the AI gets its own prompt, not the dispute-resolution one', () => {
+        // COMMISSIONER_SYSTEM_PROMPT's whole job is neutrality and "show the
+        // math"; asking it for trash talk produces a referee reading a scoreboard.
+        expect(ai).toContain('BANTER_SYSTEM_PROMPT');
+        const gemini = read('functions/src/gemini.ts');
+        expect(gemini).toContain('export const BANTER_SYSTEM_PROMPT');
+        expect(gemini).toContain('**PLAY, NOT PEOPLE.**');
+        expect(gemini).toContain('**NO HALLUCINATIONS.**');
+    });
+});
+
+describe('3. members actually see it', () => {
+    it('the feed renders on the pool homepage Overview, not only in the manager view', () => {
+        expect(dash).toContain('<BanterFeed');
+        expect(dash).toContain('dbService.subscribeToPoolFeed(');
+    });
+
+    it('one component renders both views, so they cannot drift', () => {
+        expect(card).toContain("import { BanterFeed } from './BanterFeed';");
+        expect(dash).toContain("import { BanterFeed } from './BanterFeed';");
+    });
+
+    it('a failed read is not rendered as an empty feed', () => {
+        // onSnapshot TERMINATES a listener on error, so "nothing posted yet"
+        // for a permission failure is permanent and wrong.
+        expect(dbService).toContain('if (onError) onError(error); else callback([]);');
+        expect(card).toContain('() => setFeedError(true),');
+        expect(dash).toContain('() => setPoolFeedError(true),');
+    });
+});
+
+describe('4. the commissioner can delete any message', () => {
+    it('the card offers it and the service performs it', () => {
+        expect(card).toContain('onDelete={handleDeleteBanter}');
+        expect(dbService).toContain('deletePoolMessage: async (poolId: string, messageId: string)');
+    });
+
+    it('the rule allows DELETE for commissioners and still forbids UPDATE', () => {
+        // Removable, never silently rewritable under its author's name.
+        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,900}?allow update: if false;/);
+        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,1200}?allow delete: if request\.auth != null/);
+    });
+
+    it('the create rule gained the participant check and refuses kind: AI', () => {
+        expect(rules).toMatch(/match \/messages\/\{messageId\} \{[\s\S]{0,900}?isPoolParticipant\(\)\s*\r?\n\s*&& request\.resource\.data\.kind != 'AI';/);
+    });
+
+    it('ai_artifacts is NOT given a blanket write to make deletion work', () => {
+        // The plan is explicit: a delete path on the feed, never a write door on
+        // the artifact store.
+        expect(rules).toMatch(/match \/ai_artifacts\/\{docId\} \{[\s\S]{0,120}?allow write: if false;/);
+    });
+});
+
+describe('5. the card explains itself', () => {
+    it('says what the input does and who sees the result', () => {
+        expect(card).toContain('Type your own message, or describe what the AI should write');
+        expect(card).toContain('Everyone in your pool sees this');
+        expect(card).toContain('AI tone');
+    });
+
+    it('offers the two actions separately instead of one ambiguous Send', () => {
+        expect(card).toContain('Post as me');
+        expect(card).toContain('Let AI write it');
+    });
+
+    it('says plainly when AI is not switched on, without blocking the human path', () => {
+        expect(card).toContain('AI Commissioner is not switched on for this pool');
+        // The POST button must not be gated on the entitlement — the
+        // commissioner's own words cost nothing.
+        expect(card).toContain('disabled={!banterText.trim() || banterBusy !== null}');
+    });
+});

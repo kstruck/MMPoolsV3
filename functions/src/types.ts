@@ -334,7 +334,16 @@ export interface AIRequest {
     userId: string;
     poolId: string;
     question: string;
-    category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
+    /**
+     * 'BANTER' (PLAN-WIZARD-BUYFLOW-FIXES T9) is the commissioner's trash-talk
+     * request. It is handled by the SAME `onAIRequest` trigger as every other
+     * category — deliberately, so it inherits the entitlement gate and whatever
+     * cost controls that path carries, rather than opening a second door to the
+     * paid provider.
+     */
+    category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER' | 'BANTER';
+    /** BANTER only: the tone the commissioner picked on the card. */
+    mood?: 'savage' | 'professional' | 'analyst';
     status: 'PENDING' | 'COMPLETED' | 'ERROR';
     /** Machine-readable reason when status is ERROR (e.g. 'AI_NOT_UNLOCKED',
      *  written by onAIRequest's entitlement gate — PLAN-COST-CONTROLS 0.5.2). */

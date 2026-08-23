@@ -1,9 +1,10 @@
 import * as admin from "firebase-admin";
 import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as crypto from "crypto";
-import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
+import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, BANTER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
 import { resolveGameSpreads } from "./lib/frozenSpreads";
+import { normalizeBanterMood, banterTextFromAI } from "./lib/banter";
 import { GameState, Winner, AIArtifact, AIRequest, BracketPool, Tournament, BracketEntry } from "./types";
 
 const db = admin.firestore();
@@ -164,6 +165,22 @@ export const onAIRequest = onDocumentCreated({
     }
 
     const poolType: string = poolRaw.type ?? 'SQUARES';
+
+    // ── BANTER (PLAN-WIZARD-BUYFLOW-FIXES T9) ───────────────────────────────
+    // The commissioner's trash-talk request. Handled HERE rather than in its
+    // own trigger so it passes the same entitlement gate above and inherits
+    // whatever cost controls this path carries — a second door to the paid
+    // provider is exactly what PLAN-COST-CONTROLS 0.5 closed.
+    //
+    // It ends by writing into `pools/{id}/messages`, the member-readable feed,
+    // rather than `ai_artifacts`: the message IS the artifact here, and the
+    // feed is what every member reads on the pool homepage. The Admin SDK
+    // bypasses rules, which is why the client is forbidden to stamp
+    // `kind: 'AI'` — see firestore.rules.
+    if (requestData.category === 'BANTER') {
+        await generateBanter({ poolId, poolRef, poolRaw, poolType, requestData, requestRef: snapshot.ref });
+        return;
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let facts: Record<string, any>;
@@ -453,3 +470,79 @@ export const onWeeklyRecapCreated = onDocumentCreated({
         console.error("Weekly Recap AI Generation Failed", e);
     }
 });
+
+// ---------------------------------------------------------------------------
+// BANTER generation (PLAN-WIZARD-BUYFLOW-FIXES T9)
+// ---------------------------------------------------------------------------
+
+async function generateBanter(args: {
+    poolId: string;
+    poolRef: FirebaseFirestore.DocumentReference;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    poolRaw: any;
+    poolType: string;
+    requestData: AIRequest;
+    requestRef: FirebaseFirestore.DocumentReference;
+}): Promise<void> {
+    const { poolId, poolRef, poolRaw, poolType, requestData, requestRef } = args;
+    const mood = normalizeBanterMood(requestData.mood);
+
+    try {
+        // A deliberately SMALL fact set. Banter needs the scoreboard, not the
+        // schedule: the dispute path's game/tournament fetches are several reads
+        // per request and none of them makes a one-liner funnier.
+        const standingsSnap = await poolRef.collection('standings').doc('current').get();
+        const standingsRows = (standingsSnap.data()?.rows ?? []) as Record<string, unknown>[];
+
+        const facts = {
+            context: 'POOL_BANTER',
+            mood,
+            commissionerPrompt: requestData.question,
+            poolConfig: {
+                type: poolType,
+                name: poolRaw.name,
+                season: poolRaw.season,
+            },
+            // Names and numbers only. Everything the model is allowed to be rude
+            // about has to be in here, and nothing else is.
+            standings: standingsRows.slice(0, 20).map((r) => ({
+                rank: r.rank ?? null,
+                name: r.displayName ?? r.name ?? null,
+                seasonPoints: r.seasonPoints ?? r.points ?? null,
+                weekPoints: r.weekPoints ?? null,
+            })),
+            hasPlayedAWeek: standingsRows.length > 0,
+        };
+
+        const ai = await generateAIResponse(BANTER_SYSTEM_PROMPT, facts);
+        const text = banterTextFromAI(ai);
+        if (!text) throw new Error('BANTER_EMPTY');
+
+        const batch = db.batch();
+        batch.set(poolRef.collection('messages').doc(), {
+            authorUid: 'ai-commissioner',
+            authorName: 'AI Commissioner',
+            text,
+            kind: 'AI',
+            mood,
+            requestedByUid: requestData.userId,
+            timestamp: Date.now(),
+        });
+        batch.update(requestRef, { status: 'COMPLETED', updatedAt: Date.now() });
+        await batch.commit();
+
+        await writeAuditEvent({
+            poolId,
+            type: 'AI_ARTIFACT_CREATED',
+            message: `AI Commissioner posted ${mood} banter`,
+            severity: 'INFO',
+            actor: { uid: 'ai-commissioner', role: 'SYSTEM', label: 'Gemini' },
+            payload: { mood, requestedByUid: requestData.userId },
+        });
+    } catch (e) {
+        console.error('AI Banter generation failed', e);
+        // Same shape as every other failure on this trigger: the request carries
+        // the verdict so the card can say something specific instead of spinning.
+        await requestRef.update({ status: 'ERROR', error: 'BANTER_FAILED', updatedAt: Date.now() });
+    }
+}

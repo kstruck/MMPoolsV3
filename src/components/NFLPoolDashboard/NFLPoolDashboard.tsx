@@ -6,7 +6,7 @@ import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { logger } from '../../utils/logger';
-import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
+import type { User, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { formatSharpScore, recapHasHighlights, weeklyWinnerLabel } from '../../utils/recapHighlight';
 import { WeeklyWinnersList } from './WeeklyWinnersList';
@@ -29,6 +29,7 @@ import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } f
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { brandingStyles } from '../../utils/brandingStyles';
+import { BanterFeed } from './BanterFeed';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
@@ -605,6 +606,24 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // `primaryColor` previously had no renderer at all and `bgColor` (which no
   // wizard collects) was the only thing driving the page, so a commissioner's
   // colour choices appeared to do nothing. See src/utils/brandingStyles.ts.
+  /**
+   * The pool feed (T9). Subscribed HERE rather than inside `BanterFeed` so the
+   * manager card and the member Overview render the same data from one reader,
+   * and so a failed read is distinguishable from an empty feed - `onSnapshot`
+   * TERMINATES a listener on error, and "nothing posted yet" for a permission
+   * failure is the silence-as-success defect this repo keeps finding.
+   */
+  const [poolFeed, setPoolFeed] = useState<BanterMessage[]>([]);
+  const [poolFeedError, setPoolFeedError] = useState(false);
+  useEffect(() => {
+    if (!pool?.id || !user?.id) return;
+    return dbService.subscribeToPoolFeed(
+      pool.id,
+      (messages) => { setPoolFeedError(false); setPoolFeed(messages); },
+      () => setPoolFeedError(true),
+    );
+  }, [pool?.id, user?.id]);
+
   const branding = castPool.branding || {};
   const brand = brandingStyles(branding);
   const accentHex = brand.accent;
@@ -848,6 +867,26 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     isManager={isManager}
                     onSelectTab={(tab) => setActiveTab(tab)}
                   />
+                  {/* T9 - the pool feed, where MEMBERS finally see the
+                      commissioner's posts and the AI's banter. Kevin: "where
+                      are these messages shown to members?" - until now, nowhere:
+                      the commissioner's card kept its feed in React state.
+
+                      Rendered for signed-in members only, because the read rule
+                      is `isPoolParticipant()`; showing the card to a logged-out
+                      visitor would only ever render its error state. */}
+                  {user && (
+                    <div className="max-w-4xl mx-auto mt-6 bg-card border border-line rounded-xl shadow-card p-6">
+                      <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-3">
+                        Pool feed
+                      </h3>
+                      <BanterFeed
+                        messages={poolFeed}
+                        error={poolFeedError}
+                        emptyText="No posts yet. Your commissioner can post here - everyone in the pool sees it."
+                      />
+                    </div>
+                  )}
                   {castPool.billing?.featuresUnlocked?.aiCommissioner && (
                     <div className="max-w-4xl mx-auto mt-6">
                       <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType={pool.type} />

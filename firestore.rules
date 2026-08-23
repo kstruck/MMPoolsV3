@@ -533,14 +533,39 @@ service cloud.firestore {
         );
       }
 
-      // BANTER MESSAGES
-      // Reads scoped to pool participants (audit M2). authorUid must match the
-      // authenticated user to prevent identity spoofing.
+      // BANTER MESSAGES — the AI Commissioner feed (PLAN-WIZARD-BUYFLOW-FIXES T9).
+      //
+      // Reads stay scoped to pool participants (audit M2), which is what makes
+      // this feed member-visible on the pool homepage. The three changes are:
+      //
+      //  1. CREATE now also requires `isPoolParticipant()`. It required only
+      //     `auth != null` + own-uid, so ANY signed-in user could post into ANY
+      //     pool's feed — harmless while nothing rendered it, and not harmless
+      //     now that every member sees it on the Overview tab.
+      //  2. CREATE refuses `kind: 'AI'`. AI banter is written by `onAIRequest`
+      //     through the Admin SDK, which bypasses rules; a client that could
+      //     stamp that kind could put words in the AI's mouth in a feed the
+      //     whole pool reads.
+      //  3. DELETE is allowed for the pool's commissioners — Kevin's T9
+      //     requirement ("commissioners must be able to delete any message").
+      //     Deliberately DELETE only: `update` stays false, so a message can be
+      //     removed but never silently rewritten under its author's name.
+      //
+      // The commissioner set is the same one `announcements` uses, co-managers
+      // included; it is not widened here.
       match /messages/{messageId} {
         allow read: if isPoolParticipant();
         allow create: if request.auth != null
-                      && request.resource.data.authorUid == request.auth.uid;
-        allow update, delete: if false;
+                      && request.resource.data.authorUid == request.auth.uid
+                      && isPoolParticipant()
+                      && request.resource.data.kind != 'AI';
+        allow update: if false;
+        allow delete: if request.auth != null && (
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
+          isSuperAdmin()
+        );
       }
 
       // PROP CARDS

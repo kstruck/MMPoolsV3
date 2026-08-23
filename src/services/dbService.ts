@@ -347,6 +347,56 @@ export const dbService = {
         }
     },
 
+    /**
+     * The banter feed NEWEST-FIRST (PLAN-WIZARD-BUYFLOW-FIXES T9).
+     *
+     * A separate reader from `subscribeToBanterMessages`, which is the bracket
+     * chat transcript: that one is oldest-first and capped at 150 because a
+     * chat log reads top-down. This is a feed — the last thing posted is the
+     * thing to read — and `orderBy desc + limit` keeps a long-running pool from
+     * pulling its whole history to show ten posts.
+     */
+    subscribeToPoolFeed: (poolId: string, callback: (messages: BanterMessage[]) => void, onError?: (e: unknown) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'messages'), orderBy('timestamp', 'desc'), limit(50));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as BanterMessage)));
+        }, (error) => {
+            logger.error('[dbService] subscribeToPoolFeed error:', error);
+            // ⚠️ Report rather than swallow. `onSnapshot` TERMINATES a listener on
+            // error, so a permission-denied (a non-participant, or a rules
+            // regression) means nothing ever arrives — and an empty array is
+            // indistinguishable from "this pool has no banter yet". The caller
+            // needs to be able to say which.
+            if (onError) onError(error); else callback([]);
+        });
+    },
+
+    /** Commissioner moderation (T9). Rules allow delete for owner/manager/co-commissioner only. */
+    deletePoolMessage: async (poolId: string, messageId: string) => {
+        await deleteDoc(doc(db, 'pools', poolId, 'messages', messageId));
+    },
+
+    /**
+     * Ask the AI Commissioner for a banter post (T9).
+     *
+     * Writes an `ai_requests` doc, exactly like the dispute/insight paths — the
+     * SAME collection `onAIRequest` triggers on, so this inherits the
+     * four-condition create rule and the entitlement gate rather than opening a
+     * second route to the paid provider. The generated post arrives in the feed
+     * subscription above; nothing is returned here.
+     */
+    requestAIBanter: async (poolId: string, userId: string, prompt: string, mood: 'savage' | 'professional' | 'analyst') => {
+        await addDoc(collection(db, `pools/${poolId}/ai_requests`), {
+            userId,
+            poolId,
+            question: prompt,
+            category: 'BANTER',
+            mood,
+            status: 'PENDING',
+            createdAt: Date.now(),
+        });
+    },
+
     subscribeToBracketEntries: (poolId: string, callback: (entries: BracketEntry[]) => void) => {
         const q = query(collection(db, 'pools', poolId, 'entries'), orderBy('score', 'desc'));
         return onSnapshot(q, (snapshot) => {
