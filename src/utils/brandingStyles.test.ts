@@ -7,6 +7,7 @@ import {
     readableTextOn,
     relativeLuminance,
     DEFAULT_ACCENT,
+    PAGE_TINT_ALPHA,
 } from './brandingStyles';
 
 /**
@@ -104,7 +105,7 @@ describe('brandingStyles — the fallback order', () => {
         const b = brandingStyles({ primaryColor: '#4f46e5' });
         expect(b.themed).toBe(true);
         expect(b.accent).toBe('#4f46e5');
-        expect(b.page.backgroundColor).toBe('rgba(79, 70, 229, 0.06)');
+        expect(b.page.backgroundColor).toBe(`rgba(79, 70, 229, ${PAGE_TINT_ALPHA})`);
         expect(b.headerCard.borderColor).toBe('rgba(79, 70, 229, 0.55)');
         expect(b.primaryButton.backgroundColor).toBe('#4f46e5');
         expect(b.primaryButton.color).toBe('#ffffff');
@@ -142,10 +143,60 @@ describe('brandingStyles — the fallback order', () => {
 
     it('an invalid bgColor does not blank the page', () => {
         const b = brandingStyles({ bgColor: 'transparent', primaryColor: '#4f46e5' });
-        expect(b.page.backgroundColor).toBe('rgba(79, 70, 229, 0.06)');
+        expect(b.page.backgroundColor).toBe(`rgba(79, 70, 229, ${PAGE_TINT_ALPHA})`);
     });
 
     it('a yellow primary still yields a readable button', () => {
         expect(brandingStyles({ primaryColor: '#ffff00' }).primaryButton.color).toBe('#111111');
+    });
+});
+
+describe('the branded header band (Kevin 2026-08-24, option (ii))', () => {
+    it('paints BOTH its own background and its own text colour', () => {
+        // This is the property the whole decision rests on: the band reads no
+        // theme token, so it cannot be wrong in light mode or dark mode. A
+        // background with no colour beside it would inherit `--text` and be
+        // exactly the silent-contrast-failure a full page background risks.
+        const b = brandingStyles({ primaryColor: '#0b1d3a' });
+        expect(b.headerBand.backgroundColor).toBe('#0b1d3a');
+        expect(b.headerBand.color).toBe('#ffffff');
+    });
+
+    it('flips the text to black on a light pick', () => {
+        expect(brandingStyles({ primaryColor: '#ffff00' }).headerBand.color).toBe('#111111');
+        expect(brandingStyles({ primaryColor: '#ffffff' }).headerBand.color).toBe('#111111');
+    });
+
+    it('gives secondary band text the SAME readable colour, dimmed', () => {
+        // Not `text-muted`: that token is tuned against `--card`, which is not
+        // what is behind this text.
+        const b = brandingStyles({ primaryColor: '#ffff00' });
+        expect(b.headerBandMuted.color).toBe(b.headerBand.color);
+        expect(b.headerBandMuted.opacity).toBeLessThan(1);
+    });
+
+    it('is EMPTY with no primary, so the header renders as it always did', () => {
+        expect(brandingStyles(undefined).headerBand).toEqual({});
+        expect(brandingStyles(undefined).headerBandMuted).toEqual({});
+        expect(brandingStyles({ secondaryColor: '#ff0000' }).headerBand).toEqual({});
+    });
+
+    it('an invalid primary gets no band rather than a broken one', () => {
+        expect(brandingStyles({ primaryColor: 'blue' }).headerBand).toEqual({});
+        expect(brandingStyles({ primaryColor: '#12' }).headerBand).toEqual({});
+    });
+
+    it('the page tint is perceptible now', () => {
+        // 0.06 was invisible on the dark navy theme, which is the complaint
+        // this change answers. The band does the work; the tint just has to not
+        // look broken.
+        expect(PAGE_TINT_ALPHA).toBeGreaterThan(0.06);
+        expect(brandingStyles({ primaryColor: '#4f46e5' }).page.backgroundColor)
+            .toBe(`rgba(79, 70, 229, ${PAGE_TINT_ALPHA})`);
+    });
+
+    it('a legacy bgColor still wins the page, untouched by the tint change', () => {
+        expect(brandingStyles({ bgColor: '#101010', primaryColor: '#4f46e5' }).page.backgroundColor)
+            .toBe('#101010');
     });
 });

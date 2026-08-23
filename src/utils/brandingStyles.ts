@@ -85,6 +85,15 @@ export interface PoolBranding {
     bgColor?: string;
 }
 
+/**
+ * How strong the page tint is. 0.06 was invisible on the dark navy theme —
+ * Kevin, 2026-08-24: "It really does not do anything noticeable to anyone." The
+ * tint is not what makes branding visible (the header band is), but a tint
+ * nobody can see is worse than none: it costs the same and looks like the
+ * feature is broken.
+ */
+export const PAGE_TINT_ALPHA = 0.1;
+
 export interface BrandingStyles {
     /** The pool's chosen primary, or undefined when it has none/an invalid one. */
     primary?: string;
@@ -96,6 +105,31 @@ export interface BrandingStyles {
     page: { backgroundColor?: string };
     /** Inline style for the pool header card. */
     headerCard: { borderColor?: string; boxShadow?: string; background?: string };
+    /**
+     * THE BRANDED HEADER BAND (Kevin's decision, 2026-08-24 — option (ii)).
+     *
+     * A solid band of the pool's primary colour across the top of the header
+     * card, carrying the logo and the pool name. This is the thing that makes
+     * branding actually visible, and it is theme-safe BY CONSTRUCTION: it paints
+     * BOTH its own background and its own text colour, so it never reads a
+     * theme token and cannot be wrong in light mode or dark mode.
+     *
+     * That is the whole reason a full-page background was rejected. `--card`,
+     * `--surface`, `--line`, `--text` and `--muted` were all chosen against
+     * `--page`; replacing `--page` per pool breaks them for roughly half of all
+     * colour picks, and it fails SILENTLY — a member who cannot read the page
+     * is the only signal.
+     *
+     * Empty when the pool has no usable primary, in which case the header
+     * renders exactly as it did before.
+     */
+    headerBand: { backgroundColor?: string; color?: string };
+    /**
+     * Secondary text ON the band — the pool-type label. Same readable colour at
+     * reduced opacity, NOT `text-muted`: a theme token here would be tuned
+     * against `--card`, which is not what is behind it.
+     */
+    headerBandMuted: { color?: string; opacity?: number };
     /** Inline style for a primary action button. */
     primaryButton: { backgroundColor?: string; color?: string; borderColor?: string };
     /** Inline style for the ACTIVE tab underline. */
@@ -110,8 +144,12 @@ export interface BrandingStyles {
  *    an unrelated gold one.
  *  - page    ← legacy `bgColor` if present (those pools already look that way
  *    and changing it under them is not this ticket), else a very light tint of
- *    the primary. The tint is 6% so it reads as "this pool has a colour",
+ *    the primary (`PAGE_TINT_ALPHA`) so it reads as "this pool has a colour",
  *    never as a background that fights the card surfaces or the dark theme.
+ *  - band    ← a SOLID bar of the primary with automatically readable text.
+ *    The one branded element a member cannot miss, and the only one that owns
+ *    both of its own colours — which is what keeps it out of the light/dark
+ *    token system entirely.
  *  - header  ← primary border plus a soft glow of the same colour.
  *  - button  ← solid primary with automatically readable text.
  *
@@ -131,10 +169,16 @@ export function brandingStyles(branding: PoolBranding | null | undefined): Brand
         accent,
         themed: !!primary,
         page: {
-            backgroundColor: legacyBg || (primary ? hexToRgba(primary, 0.06) : undefined),
+            backgroundColor: legacyBg || (primary ? hexToRgba(primary, PAGE_TINT_ALPHA) : undefined),
         },
         headerCard: primary
             ? { borderColor: hexToRgba(primary, 0.55), boxShadow: `0 1px 24px ${hexToRgba(primary, 0.14)}` }
+            : {},
+        headerBand: primary
+            ? { backgroundColor: primary, color: readableTextOn(primary) }
+            : {},
+        headerBandMuted: primary
+            ? { color: readableTextOn(primary), opacity: 0.75 }
             : {},
         primaryButton: primary
             ? { backgroundColor: primary, color: readableTextOn(primary), borderColor: primary }
