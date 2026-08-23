@@ -982,6 +982,42 @@ async function finalizePoolPayment(args: {
             : [];
         const mergedPaidAddons = Array.from(new Set([...priorPaidAddons, ...(snapshot?.addons ?? [])]));
 
+        /**
+         * codex r2 [P2] — THE OWNERSHIP SNAPSHOT IS TAKEN AT CHECKOUT AND CAN GO
+         * STALE WHILE THE CUSTOMER IS ON STRIPE.
+         *
+         * `createCheckoutSession` reads what the pool owns and drops those
+         * add-ons before pricing. If Kevin then grants one of the remaining
+         * add-ons with `adminSetPoolFeature` before the commissioner finishes
+         * paying, the merge below is still CORRECT — they end up owning it — but
+         * they have been charged for something that became free in between.
+         *
+         * The money is already taken by the time this webhook runs, so nothing
+         * here can prevent the charge. What it can do is refuse to let the
+         * discrepancy be silent: same idiom as the UNSELLABLE_ADDON_SOLD alert
+         * above, which exists for exactly this class of problem.
+         *
+         * ⚠️ Read from `priorUnlocked` — the pool AS READ IN THIS TRANSACTION —
+         * never from the session's snapshot, which is the stale value.
+         */
+        const grantedWhilePending = isAddonPurchase
+            ? (snapshot?.addons ?? []).filter((k) => priorUnlocked[k] === true)
+            : [];
+        if (grantedWhilePending.length > 0) {
+            txn.set(db.collection("monetization_alerts").doc(`ADDON_ALREADY_OWNED_${sessionId}`), {
+                type: "ADDON_ALREADY_OWNED",
+                addons: grantedWhilePending,
+                poolId,
+                userId,
+                sessionId,
+                paymentIntentId: paymentIntentId ?? null,
+                amount,
+                status: "open",
+                createdAt: Date.now(),
+            }, { merge: true });
+            console.warn(`[Stripe Webhook] Add-on(s) ${grantedWhilePending.join(",")} were already granted on pool ${poolId} before session ${sessionId} completed; entitlement stands, alert written for refund review.`);
+        }
+
         if (isAddonPurchase) {
             // Entitlement + ceiling + money. NOT status, NOT tier, NOT the seat
             // cap: the pool's hosting was bought already and this purchase does

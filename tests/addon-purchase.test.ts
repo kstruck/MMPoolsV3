@@ -178,6 +178,18 @@ describe('codex r1 findings', () => {
     expect(stripe).toContain('Your hosting is already paid for and is not charged again.');
   });
 
+  it('[r2 P2] a grant that lands while the buyer is on Stripe is not silent', () => {
+    // The ownership snapshot is taken at checkout. If Kevin grants the same
+    // add-on before the customer finishes paying, the merge is still correct -
+    // they own it - but they were charged for something that became free. The
+    // money is already gone by webhook time, so the alert is the fix.
+    expect(stripe).toContain('type: "ADDON_ALREADY_OWNED"');
+    expect(stripe).toContain('.filter((k) => priorUnlocked[k] === true)');
+    // Read from the pool AS READ IN THIS TRANSACTION, never from the session's
+    // (stale) snapshot of what was owned.
+    expect(stripe).toContain('const priorUnlocked = (billing?.featuresUnlocked ?? {}) as Record<string, boolean>;');
+  });
+
   it('[P1] a Bracket commissioner gets the same path', () => {
     // The server path is pool-type agnostic; only the button placement was
     // NFL-only.
