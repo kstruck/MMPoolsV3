@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: TEN PRs MERGED. THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
+> ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
 >
 > Full detail: **[MORNING-2026-08-24.md](MORNING-2026-08-24.md)**. Read that before
 > touching this effort — this box is the live state, that file is the reasoning.
@@ -11,9 +11,9 @@
 > free — enforced server-side), #526 (T1 branding colours actually theme the
 > pool), #527 (T5 trial unlocks the selected add-ons), #528 (G2 second pass —
 > six more public create CTAs), #530 (T9 AI Commissioner, **10 codex rounds**),
-> #531 (T6b friction), #532 (T7 trial copy).
+> #531 (T6b friction), #532 (T7 trial copy), **#534 (T8 post-wizard branding editor)**.
 >
-> **37 codex findings, 36 absorbed, 0 rejected.** Root suite 1762 → **2006**
+> **38 codex findings, 37 absorbed, 0 rejected.** Root suite 1762 → **2013**
 > tests. Emulator rules **11/11** files (one new: `banterMessages.rules.test.mjs`).
 >
 > 🛑 **TWO DEPLOYS ARE OWED AND NOTHING IS LIVE UNTIL THEY RUN.**
@@ -33,12 +33,13 @@
 > merged, and `tests/pools-open.test.ts` asserts that prerequisite still holds —
 > **if those assertions fail, do not merge the flip.**
 >
-> ⚠️ **NOT BUILT: T8 (post-wizard branding editor) and T10 (Standings/Results
-> merge).** T9 consumed the cap in review rounds; the remaining hours went to
-> T6b and T7 because they are launch-facing. **T8's blocker is cleared** —
-> `shared/editability.ts` allows `branding` in open/locked/archived, so it is
-> UI-only work reusing T1's `ColorField`. T10 should not be attempted before
-> Monday: it touches the published `offeredTabs` list (K13).
+> ⚠️ **NOT BUILT: T10 only** (Standings/Results tab merge). It should not be
+> attempted before Monday: it touches the published `offeredTabs` list (K13)
+> and the help registry, and a half-finished tab merge is worse than none.
+> **T8 SHIPPED after the first draft of this box** — #534. Its stated blocker
+> turned out not to exist: `shared/editability.ts` allows `branding` in draft,
+> open, LOCKED and archived, so the editor sits OUTSIDE the season-locked
+> settings form and a commissioner can fix their logo in week 3.
 >
 > ⚠️ **THE PLAYWRIGHT E2E SUITE IS 8/8 RED, AND WAS ALREADY RED AT `925c6d7d`**
 > (verified by running it in a scratch worktree at the pre-session commit). Last
