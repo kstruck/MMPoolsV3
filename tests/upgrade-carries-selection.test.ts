@@ -64,6 +64,15 @@ describe('b2. a free / locked pool can actually be upgraded here (G3)', () => {
         expect(pricing).toContain('canCheckoutPool(selectedPoolData as never, user?.id)');
     });
 
+    it('a deep link to a pool the visitor does not own stays estimate-only', () => {
+        // codex r3 [P2]: pool docs are publicly readable, so the card must key
+        // off payability, not merely "a pool loaded". Otherwise a visitor gets
+        // a quote and a terms box that only fail at the server's ownership rule.
+        expect(pricing).toContain('selectedIsPayable ? (');
+        expect(pricing).not.toContain('selectedPoolData ? (');
+        expect(pricing).toContain('{!selectedIsPayable && (');
+    });
+
     it('the list stops labelling every pool a trial', () => {
         expect(pricing).not.toContain('Trial State');
         expect(pricing).toContain('upgradeStatusLabel(pool.billing?.status)');

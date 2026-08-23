@@ -323,8 +323,8 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                             </div>
                         )}
 
-                        {/* Interactive Billing Calculator Panel — hidden when a specific pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool) */}
-                        {!selectedPoolData && (
+                        {/* Interactive Billing Calculator Panel — hidden when a PAYABLE pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool). A deep link to a pool the visitor cannot pay for keeps the estimator, since the right column stays estimate-only too. */}
+                        {!selectedIsPayable && (
                         <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden`}>
                             {/* Inner background blob */}
                             <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
@@ -566,7 +566,12 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                     {/* RIGHT COLUMN: state-driven — real checkout for trial pools, estimate-only quote otherwise */}
                     <div className="lg:col-span-5 space-y-6">
                         {visitorState === 'hasUpgradeablePools' || selectedIsPayable ? (
-                            selectedPoolData ? (
+                            // ⚠️ `selectedIsPayable`, NOT `selectedPoolData` (codex r3 [P2]).
+                            // Pool documents are publicly readable, so a bare
+                            // `?poolId=` of somebody else's pool would otherwise
+                            // render a full checkout — quote, terms and all —
+                            // that only fails at the server's ownership rule.
+                            selectedIsPayable ? (
                                 <>
                                     <div className="bg-card border border-gold-500/25 p-5 rounded-2xl space-y-2">
                                         <h4 className="text-sm font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-1.5">
