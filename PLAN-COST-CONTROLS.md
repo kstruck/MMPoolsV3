@@ -31,7 +31,22 @@ functions deploy — which is where Kevin wants it (decision #3). Ops and
 security-alert SMS are unaffected (D4). Set `costControls.sms.enabled = true` to
 re-enable member SMS.
 
-📌 **Phases 1, 2, 3, 4, 6 and 7 are NOT started.** Phase 5 is deferred (D5).
+**Phase 1 — BUILT and reviewed, in [#518](https://github.com/kstruck/MMPoolsV3/pull/518).
+NOT merged, NOT deployed.**
+
+| Item | State |
+|---|---|
+| 1.3 usage events (tokens, model, latency, outcome, cost, catalog version) | ✅ built — new `lib/usageEvents.ts`, `provider_usage_events` |
+| 1.4 daily aggregates per provider/feature/pool | ✅ built — `provider_usage_daily`, same atomic batch |
+| 1.5 versioned price catalog in code | ✅ built — new `lib/priceCatalog.ts`, unpriced ⇒ NULL cost |
+| wrapper attribution | ✅ built — required context on `generateAIResponse` + `sendCourierSMS`; all 6 AI call sites, all 5 SMS return paths, and `sendOpsSMS` |
+| rules | ✅ built — both collections append-only, SUPER_ADMIN read |
+
+⚠️ **Phase 1 adds a THIRD manual step to the deploy: the TTL policy** (see the
+Phase 1 section). Functions → rules → indexes covers the code; the TTL policy is
+GCP-level and no deploy command creates it.
+
+📌 **Phases 2, 3, 4, 6 and 7 are NOT started.** Phase 5 is deferred (D5).
 
 ## Gate status (2026-08-22, updated same day after the environment fix)
 
