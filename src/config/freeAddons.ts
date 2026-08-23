@@ -1,4 +1,4 @@
-import { ADDON_KEYS, type AddonSelection } from '@shared/schemas/quote';
+import { ADDON_KEYS, INCLUDED_ADDON_KEYS, isIncludedAddon, type AddonSelection } from '@shared/schemas/quote';
 
 /**
  * Add-ons that are INCLUDED with every pool and must never be sold
@@ -23,11 +23,16 @@ import { ADDON_KEYS, type AddonSelection } from '@shared/schemas/quote';
  * for a future genuinely-premium branding tier (cover images, custom headers,
  * themes). When that exists, delete the key from this list.
  */
-export const FREE_ADDON_KEYS = ['customBranding'] as const;
+/**
+ * ⚠️ The list itself lives in `shared/schemas/quote.ts` and is ENFORCED on the
+ * server in `computeAddonLines`. This module is the client's view of it —
+ * which surfaces to hide, and a strip for requests — never the guarantee. A
+ * stale bundle cannot be trusted to strip anything, which is why the server
+ * skips the line regardless of what arrives.
+ */
+export const FREE_ADDON_KEYS = INCLUDED_ADDON_KEYS;
 
-export function isFreeAddon(key: string): boolean {
-    return (FREE_ADDON_KEYS as readonly string[]).includes(key);
-}
+export const isFreeAddon = isIncludedAddon;
 
 /** The add-on keys a wizard or pricing surface may offer for sale. */
 export const SELLABLE_ADDON_KEYS = ADDON_KEYS.filter((k) => !isFreeAddon(k));

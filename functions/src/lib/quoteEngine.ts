@@ -19,7 +19,7 @@ import type {
   PoolQuote,
   QuoteLine,
 } from "../shared/schemas/quote";
-import { ADDON_KEYS } from "../shared/schemas/quote";
+import { ADDON_KEYS, isIncludedAddon } from "../shared/schemas/quote";
 
 /** A coupon as needed by the quote engine (subset of the stored Coupon doc). */
 export interface QuoteCoupon {
@@ -105,6 +105,11 @@ export function computeAddonLines(
   const lines: QuoteLine[] = [];
   for (const key of ADDON_KEYS) {
     if (!addons[key]) continue;
+    // Included with every pool — never priced, whatever the config says and
+    // whatever a stale client sends (T4/D1, codex r1 [P1]). This is the choke
+    // point both getPoolQuote and createCheckoutSession price through, so a
+    // skip here is a skip everywhere.
+    if (isIncludedAddon(key)) continue;
     const feat = config.features[ADDON_TO_FEATURE[key]];
     // Missing feature config or non-premium/zero-price → no charge, no line.
     if (!feat || !feat.isPremium || !(feat.addonPrice > 0)) continue;

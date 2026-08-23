@@ -57,6 +57,24 @@ describe('the branding step says it is free', () => {
     });
 });
 
+describe('the SERVER is the guarantee, not the UI', () => {
+    // codex r1 [P1]: this is a single-page app served from a CDN, so a browser
+    // on a stale bundle keeps sending `customBranding: true`. If pricing still
+    // honoured it, that browser would be CHARGED for a feature nothing gates.
+    it('the included list lives in shared/, crossing the client/server boundary', () => {
+        expect(read('shared/schemas/quote.ts')).toContain("export const INCLUDED_ADDON_KEYS = ['customBranding'] as const;");
+        expect(read('src/config/freeAddons.ts')).toContain('export const FREE_ADDON_KEYS = INCLUDED_ADDON_KEYS;');
+    });
+
+    it('computeAddonLines skips it — the one choke point both buy paths price through', () => {
+        const engine = read('functions/src/lib/quoteEngine.ts');
+        expect(engine).toContain('if (isIncludedAddon(key)) continue;');
+        // Before the config lookup, so `isPremium: true` cannot resurrect it.
+        expect(engine.indexOf('if (isIncludedAddon(key)) continue;'))
+            .toBeLessThan(engine.indexOf('const feat = config.features[ADDON_TO_FEATURE[key]];'));
+    });
+});
+
 describe('the plumbing stays, dormant', () => {
     it('the add-on key still exists in the shared schema', () => {
         // D1 keeps the key, the schema and featuresUnlocked for a future
