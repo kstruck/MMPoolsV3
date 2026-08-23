@@ -47,6 +47,11 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
         return onSnapshot(q, (snap) => {
             const reqs = snap.docs
                 .map(d => ({ ...d.data(), id: d.id } as AIRequest))
+                // BANTER requests belong to the commissioner's card (T9); they
+                // are not questions this panel asked and listing them here
+                // would show a commissioner their own trash-talk prompts in
+                // their dispute history.
+                .filter(r => r.category !== 'BANTER')
                 .sort((a, b) => b.createdAt - a.createdAt); // Client-side sort
             setUserRequests(reqs);
         });

@@ -1,9 +1,10 @@
 import * as admin from "firebase-admin";
 import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as crypto from "crypto";
-import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
+import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, BANTER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
 import { resolveGameSpreads } from "./lib/frozenSpreads";
+import { normalizeBanterMood, banterTextFromAI, isPoolCommissionerUid, banterStandingsRow } from "./lib/banter";
 import { GameState, Winner, AIArtifact, AIRequest, BracketPool, Tournament, BracketEntry } from "./types";
 
 const db = admin.firestore();
@@ -164,6 +165,22 @@ export const onAIRequest = onDocumentCreated({
     }
 
     const poolType: string = poolRaw.type ?? 'SQUARES';
+
+    // ── BANTER (PLAN-WIZARD-BUYFLOW-FIXES T9) ───────────────────────────────
+    // The commissioner's trash-talk request. Handled HERE rather than in its
+    // own trigger so it passes the same entitlement gate above and inherits
+    // whatever cost controls this path carries — a second door to the paid
+    // provider is exactly what PLAN-COST-CONTROLS 0.5 closed.
+    //
+    // It ends by writing into `pools/{id}/messages`, the member-readable feed,
+    // rather than `ai_artifacts`: the message IS the artifact here, and the
+    // feed is what every member reads on the pool homepage. The Admin SDK
+    // bypasses rules, which is why the client is forbidden to stamp
+    // `kind: 'AI'` — see firestore.rules.
+    if (requestData.category === 'BANTER') {
+        await generateBanter({ poolId, poolRef, poolRaw, poolType, requestData, requestRef: snapshot.ref });
+        return;
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let facts: Record<string, any>;
@@ -453,3 +470,156 @@ export const onWeeklyRecapCreated = onDocumentCreated({
         console.error("Weekly Recap AI Generation Failed", e);
     }
 });
+
+// ---------------------------------------------------------------------------
+// BANTER generation (PLAN-WIZARD-BUYFLOW-FIXES T9)
+// ---------------------------------------------------------------------------
+
+
+async function generateBanter(args: {
+    poolId: string;
+    poolRef: FirebaseFirestore.DocumentReference;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    poolRaw: any;
+    poolType: string;
+    requestData: AIRequest;
+    requestRef: FirebaseFirestore.DocumentReference;
+}): Promise<void> {
+    const { poolId, poolRef, poolRaw, poolType, requestData, requestRef } = args;
+    const mood = normalizeBanterMood(requestData.mood);
+
+    // ⚠️ COMMISSIONER-ONLY (codex r1 [P1] on T9). `ai_requests` create is
+    // participant-scoped — correctly, since disputes and insights are a
+    // member's to ask — but BANTER is different in kind: the result is posted
+    // pool-wide under the AI Commissioner's identity. Without this, any
+    // participant could bypass the manager-only card, spend the paid provider,
+    // and publish AI-authored posts to everyone.
+    //
+    // Enforced HERE rather than by widening the ai_requests create rule: those
+    // four conditions are load-bearing and category-blind, and a per-category
+    // branch in a security rule is the kind of complexity that gets
+    // "simplified" later. This also stops the SPEND, which the rule would not
+    // if a write ever landed another way.
+    // The role read is deliberately LAST and only on the path where the cheap
+    // pool-field checks already failed: one extra document read on a rare
+    // request, never on the common commissioner one.
+    const callerRole = isPoolCommissionerUid(poolRaw, requestData.userId)
+        ? undefined
+        : (await db.collection('users').doc(requestData.userId).get()).data()?.role;
+    if (!isPoolCommissionerUid(poolRaw, requestData.userId, callerRole)) {
+        console.warn(`[AI] BANTER request on pool ${poolId} from a non-commissioner; refusing.`);
+        await requestRef.update({ status: 'ERROR', error: 'BANTER_NOT_COMMISSIONER', updatedAt: Date.now() });
+        return;
+    }
+    // Re-checked again inside the claim transaction below, against a FRESH read
+    // of the pool. This early check exists to fail cheap; that one is the guard.
+
+    try {
+        // IDEMPOTENCY (codex r2/r3 [P2]). `onDocumentCreated` is at-least-once,
+        // and the event PAYLOAD is the original document — so
+        // `requestData.status` reads 'PENDING' on every redelivery, however
+        // many times it arrives. A plain re-read is not enough either: two
+        // overlapping deliveries both read PENDING and both call Gemini.
+        //
+        // So the request is CLAIMED in a transaction before the provider is
+        // touched. The loser of the race sees 'GENERATING' and returns without
+        // spending.
+        //
+        // ⚠️ No abandoned-claim recovery, deliberately. If this process dies
+        // mid-generation the request stays 'GENERATING' and no post appears —
+        // the commissioner asks again, which creates a NEW request doc and
+        // costs one call. The alternative, a lease with a TTL, is a
+        // reclaim-and-retry machine whose failure mode is the double charge it
+        // exists to prevent. Stuck-and-visible beats charged-twice on a paid
+        // provider.
+        //
+        // The pool is RE-READ inside the same transaction and the commissioner
+        // check re-run against it (codex r5 [P2]). Document triggers run
+        // asynchronously, so ownership or a co-commissioner assignment can be
+        // revoked between the snapshot above and this write — and the thing
+        // being authorized is a message published to the whole pool.
+        const claim = await db.runTransaction(async (txn) => {
+            const cur = await txn.get(requestRef);
+            if (cur.data()?.status !== 'PENDING') return 'ALREADY_CLAIMED' as const;
+            const freshPool = await txn.get(poolRef);
+            if (!isPoolCommissionerUid(freshPool.data(), requestData.userId, callerRole)) {
+                txn.update(requestRef, { status: 'ERROR', error: 'BANTER_NOT_COMMISSIONER', updatedAt: Date.now() });
+                return 'NOT_COMMISSIONER' as const;
+            }
+            txn.update(requestRef, { status: 'GENERATING', updatedAt: Date.now() });
+            return 'CLAIMED' as const;
+        });
+        if (claim !== 'CLAIMED') {
+            console.log(`[AI] BANTER request ${requestRef.id} not claimed (${claim}); skipping.`);
+            return;
+        }
+
+        // A deliberately SMALL fact set. Banter needs the scoreboard, not the
+        // schedule: the dispute path's game/tournament fetches are several reads
+        // per request and none of them makes a one-liner funnier.
+        const standingsSnap = await poolRef.collection('standings').doc('current').get();
+        const standingsRows = (standingsSnap.data()?.rows ?? []) as Record<string, unknown>[];
+
+        const facts = {
+            context: 'POOL_BANTER',
+            mood,
+            commissionerPrompt: requestData.question,
+            poolConfig: {
+                type: poolType,
+                name: poolRaw.name,
+                season: poolRaw.season,
+            },
+            // Names and numbers only. Everything the model is allowed to be rude
+            // about has to be in here, and nothing else is. Mapped through
+            // `banterStandingsRow` because the projection's field names are
+            // type-specific and none of them is the obvious one (codex r3 [P1]).
+            standings: standingsRows.slice(0, 20).map((r) => banterStandingsRow(r, poolType)),
+            hasPlayedAWeek: standingsRows.length > 0,
+        };
+
+        const ai = await generateAIResponse(BANTER_SYSTEM_PROMPT, facts);
+        const text = banterTextFromAI(ai);
+        if (!text) throw new Error('BANTER_EMPTY');
+
+        const batch = db.batch();
+        // DETERMINISTIC id, for the same reason and as a second line: if a
+        // redelivery does slip past the check above (two invocations racing),
+        // it OVERWRITES this post rather than adding a second one to a feed the
+        // whole pool reads. Mirrors the dispute path's `resp-${requestId}`.
+        batch.set(poolRef.collection('messages').doc(`banter-${requestRef.id}`), {
+            authorUid: 'ai-commissioner',
+            authorName: 'AI Commissioner',
+            text,
+            kind: 'AI',
+            mood,
+            requestedByUid: requestData.userId,
+            timestamp: Date.now(),
+        });
+        batch.update(requestRef, { status: 'COMPLETED', updatedAt: Date.now() });
+        await batch.commit();
+
+        // ⚠️ Its OWN catch, deliberately (codex r6 [P2]). The post and the
+        // COMPLETED status are already committed at this point, so letting an
+        // audit-write failure fall into the outer catch would stamp the request
+        // ERROR and tell the commissioner nothing was posted — while the post
+        // is sitting in the feed for the whole pool to read. A lost audit line
+        // is a lost audit line.
+        try {
+            await writeAuditEvent({
+                poolId,
+                type: 'AI_ARTIFACT_CREATED',
+                message: `AI Commissioner posted ${mood} banter`,
+                severity: 'INFO',
+                actor: { uid: 'ai-commissioner', role: 'SYSTEM', label: 'Gemini' },
+                payload: { mood, requestedByUid: requestData.userId },
+            });
+        } catch (auditErr) {
+            console.error('AI Banter audit write failed AFTER the post was published', auditErr);
+        }
+    } catch (e) {
+        console.error('AI Banter generation failed', e);
+        // Same shape as every other failure on this trigger: the request carries
+        // the verdict so the card can say something specific instead of spinning.
+        await requestRef.update({ status: 'ERROR', error: 'BANTER_FAILED', updatedAt: Date.now() });
+    }
+}

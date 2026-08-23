@@ -6,11 +6,31 @@ export interface FirestoreTimestamp {
   toMillis: () => number;
 }
 
+/**
+ * One post in a pool's banter feed (`pools/{poolId}/messages`).
+ *
+ * PLAN-WIZARD-BUYFLOW-FIXES T9 made this collection real. The commissioner's
+ * card used to keep its feed in React state and throw it away on navigation
+ * ("Draft only — not saved"); now commissioner posts and AI-generated banter
+ * land here and every member reads them on the pool homepage.
+ *
+ * `userId`/`userName` are the LEGACY field names (bracket chat wrote them).
+ * New writes use `authorUid`/`authorName`, which is what firestore.rules binds
+ * to `request.auth.uid`; both are optional here so a feed containing old and
+ * new documents renders without a migration.
+ */
 export interface BanterMessage {
   id?: string;
-  userId: string;
-  userName: string;
+  /** @deprecated legacy bracket-chat field; read via `banterAuthorUid`. */
+  userId?: string;
+  /** @deprecated legacy bracket-chat field; read via `banterAuthorName`. */
+  userName?: string;
+  authorUid?: string;
+  authorName?: string;
   text: string;
+  /** 'AI' is written ONLY by onAIRequest through the Admin SDK; rules forbid it from a client. */
+  kind?: 'COMMISSIONER' | 'AI';
+  mood?: 'savage' | 'professional' | 'analyst';
   timestamp: number;
 }
 
@@ -665,8 +685,12 @@ export interface AIRequest {
   userId: string;
   poolId: string;
   question: string;
-  category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
-  status: 'PENDING' | 'COMPLETED' | 'ERROR';
+  /** 'BANTER' is the commissioner's trash-talk request (T9); it is answered
+   *  into the pool feed rather than into an ai_artifact. */
+  category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER' | 'BANTER';
+  /** 'GENERATING' is the claim onAIRequest takes before calling the provider,
+   *  so an at-least-once redelivery cannot double-charge (T9, codex r3). */
+  status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'ERROR';
   /** Machine-readable reason when status is ERROR (e.g. 'AI_NOT_UNLOCKED',
    *  written by onAIRequest's entitlement gate — PLAN-COST-CONTROLS 0.5.2). */
   error?: string;
