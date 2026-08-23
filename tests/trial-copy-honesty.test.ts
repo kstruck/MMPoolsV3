@@ -54,4 +54,13 @@ describe('the trial banner on the pool page', () => {
         expect(gate).toContain('short grace period to pay');
         expect(gate).not.toContain('Upgrade to keep full access after your trial period.');
     });
+
+    it('is addressed by ROLE — a member cannot pay (codex [P2])', () => {
+        // The banner renders for everyone but the pay CTA is commissioner-only,
+        // so second-person "you pay" told a member to do something they cannot.
+        // Same split the grace and locked banners already use.
+        expect(gate).toContain('the commissioner has a short grace period to pay');
+        expect(gate).toContain('Your picks and standings are safe.');
+        expect(gate).toContain("{isCommissioner");
+    });
 });

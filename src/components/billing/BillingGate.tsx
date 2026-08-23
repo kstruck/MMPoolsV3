@@ -475,7 +475,13 @@ export const BillingGate: React.FC<BillingGateProps> = ({
                     charged. Nothing charges automatically: there is no card on
                     file, which is the fact that stops a trial banner reading
                     like a countdown to a debit. */}
-                Nothing is charged automatically. When the trial ends you get a short grace period to pay; after that the pool locks until you do.
+                {/* Addressed by ROLE, like the grace and locked banners already
+                    are (codex [P2]). This banner renders for everyone but the
+                    pay CTA is commissioner-only, so second-person "you pay"
+                    told a member to take an action they cannot take. */}
+                {isCommissioner
+                  ? 'Nothing is charged automatically. When the trial ends you get a short grace period to pay; after that the pool locks until you do.'
+                  : 'Your picks and standings are safe. When the trial ends the commissioner has a short grace period to pay; after that the pool pauses until they do.'}
               </p>
             </div>
           </div>
