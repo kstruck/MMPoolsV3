@@ -54,4 +54,12 @@ VERDICT: REVISE. 2 P2:
 
 ## Round 5 — final
 
-VERDICT: recorded after the run (below).
+VERDICT: CLEAN. "The changes correctly apply the stricter role checks and
+bracket-settings handling, and the password-reset notification flow is
+internally consistent with its documented best-effort limitations."
+
+RESOLUTION: CONVERGED. 5 rounds, 8 findings — 6 accepted and fixed, 2
+partially accepted (limitation documented + copy hedged; removal rejected
+with reasoning in rounds 3-4), 0 carried. Own read of the final diff agrees.
+The canonical statement of the residual limits lives at the top of
+`functions/src/securityNotices.ts`.
