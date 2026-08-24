@@ -185,6 +185,13 @@ export const sendSecuritySMSAlert = validated(
  * Test Endpoint for SMS
  */
 export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToken] }, async (req, res) => {
+    // Hand-run admin test tool, historically driven by curl GET with query
+    // params (PLAN-SECURITY-OBSERVABILITY-SWEEPS #108) — keep GET alongside
+    // POST rather than breaking that muscle memory; reject everything else.
+    if (req.method !== "GET" && req.method !== "POST") {
+        res.status(405).send("Method Not Allowed");
+        return;
+    }
     // Security: Require Firebase Auth Bearer token with SUPER_ADMIN role
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {

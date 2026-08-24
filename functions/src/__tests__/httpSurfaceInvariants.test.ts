@@ -30,7 +30,9 @@ describe("HTTP surface invariants", () => {
         const offenders: string[] = [];
         for (const f of files) {
             const text = readFileSync(f, "utf8");
-            if (!/export const \w+ = onRequest/.test(text)) continue;
+            // Match bare `onRequest(` and qualified forms (`functions.https.onRequest(`,
+            // `v1.https.onRequest(`) — codex r1: the bare-only match skipped testSmsHttp.
+            if (!/export const \w+ = [\w.]*onRequest\(/.test(text)) continue;
             if (!/req\.method/.test(text)) offenders.push(f);
         }
         expect(offenders, `onRequest endpoints with no req.method check: ${offenders.join(", ")}`).toEqual([]);
