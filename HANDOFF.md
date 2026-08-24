@@ -1,5 +1,42 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-24 (latest) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+>
+> Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](MORNING-2026-08-24-AUDIT-FIXES.md)**.
+> Worked from Kevin's six audits (DB/storage, backend, auth, hosting, cloud,
+> VCS). Two new plan docs: PLAN-AUDIT-SCAN-BOUNDS (Phase 1 built) and
+> PLAN-AUDIT-AUTH-HARDENING (Phase A built; Phase B = pool-password plaintext
+> is a DECISION).
+>
+> ✅ Highlights: maxInstances caps exist for the first time; the reminders
+> full-collection scan (96×pools/day) is bounded; checkPlayoffScores stops
+> fetching ESPN off-season; password resets now email the owner; the three
+> aria-modal dialogs actually trap focus; header crest 935KB→8KB; recharts off
+> the landing page; **Playwright e2e 0/8 → 8/8** (all selector drift, zero
+> product bugs, run green locally in 2.2m).
+>
+> 🔴 **CORRECTED ON THE RECORD: the Gemini key WAS leaked** (public git
+> history since 2025-12-13, count-only check:
+> `git show 3340fff0^:.env | grep -c VITE_API_KEY`). The 2026-07-06 "NOT
+> leaked" owner claim was false; nine skill files corrected in #547. Rotation
+> stays Kevin's #1 owed action — same key, same rotation as the AI-commissioner
+> box below.
+>
+> 🛑 **OWED, order matters:**
+> 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
+>    `git pull --ff-only origin main` + `npm --prefix functions ci` — #547,
+>    #548, #549, #554 all change `functions/` (plus #542's guard if still
+>    undeployed). First deploy after #548 reconfigures EVERY function
+>    (maxInstances) — expect a long run. **No firestore.rules or indexes
+>    change in any overnight PR.**
+> 2. Coolify `www` rebuild — #551/#552/#553/#555 have frontend halves.
+>
+> 🟡 Kevin decisions D1–D7 (pool passwords, auto-deploy, PNG deletion, e2e in
+> CI, history scrub, blocking functions, emailVerified) restated with
+> recommendations in the morning chat message; next-session prompt in
+> [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md).
+
+
 > ## 🟢 2026-08-25 (latest) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
 >
 > Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)**.
