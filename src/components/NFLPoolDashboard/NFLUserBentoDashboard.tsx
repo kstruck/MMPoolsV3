@@ -12,6 +12,7 @@ import { pickCtaFor } from '../../utils/pickCta';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
+import { seasonCompare } from '../../utils/nflResults';
 import {
   CheckCircle2,
   Lock,
@@ -214,19 +215,20 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return entries.find(e => e.ownerUid === user.id || e.id === user.id) || null;
   }, [entries, user]);
 
+  // ONE season ordering for every list on this card — `seasonCompare` is the
+  // standings table's cascade (utils/nflResults); the three shallow copies
+  // that lived here could disagree with it on ties (codex, 2026-08-23).
+  const bySeason = React.useCallback(
+    (a: any, b: any) => seasonCompare(_pool.type, a, b) || (a.userName || '').localeCompare(b.userName || ''),
+    [_pool.type],
+  );
+
   const userRank = useMemo(() => {
     if (!user || entries.length === 0) return 'N/A';
-    const sorted = [...entries].sort((a, b) => {
-      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (_pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
+    const sorted = [...entries].sort(bySeason);
     const rankIndex = sorted.findIndex(e => e.ownerUid === user.id || e.id === user.id);
     return rankIndex !== -1 ? `#${rankIndex + 1}` : 'N/A';
-  }, [entries, user, _pool.type]);
+  }, [entries, user, bySeason]);
 
   // Full slate for the selected week (used to list every game, not just the focus game).
   const weeklyGames = useMemo(() => {
@@ -480,14 +482,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   const displayedMembers = useMemo(() => {
     if (entries.length === 0) return [];
-    const sorted = [...entries].sort((a, b) => {
-      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (_pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
+    const sorted = [...entries].sort(bySeason);
     return sorted.slice(0, 3).map(e => ({
       name: e.userName || 'Anonymous',
       week: nflWeekLabel(seasonType, selectedWeek),
@@ -497,7 +492,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
       highlight: e.ownerUid === user?.id
     }));
-  }, [entries, _pool.type, selectedWeek, user, seasonType]);
+  }, [entries, bySeason, _pool.type, selectedWeek, user, seasonType]);
 
   const userStats = useMemo(() => {
     if (!myEntry) {
@@ -537,14 +532,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   const displayedStandings = useMemo(() => {
     if (entries.length === 0) return [];
-    const sorted = [...entries].sort((a, b) => {
-      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (_pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
+    const sorted = [...entries].sort(bySeason);
     return sorted.slice(0, 5).map((e, idx) => ({
       rank: idx + 1,
       name: e.userName || 'Anonymous',
@@ -553,7 +541,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
       highlight: e.ownerUid === user?.id || e.id === user?.id
     }));
-  }, [entries, _pool.type, user]);
+  }, [entries, bySeason, _pool.type, user]);
 
   return (
     <>
