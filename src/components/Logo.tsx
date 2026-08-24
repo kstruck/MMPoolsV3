@@ -14,7 +14,7 @@ interface LogoProps {
 export const Logo: React.FC<LogoProps> = ({ className = "", height = "h-12", withWordmark = true }) => (
   <a href="/" className={`flex items-center gap-2.5 ${className}`}>
     <img
-      src="/mmp-crest.png"
+      src="/mmp-crest-small.webp"
       alt="March Melee Pools crest"
       className={`${height} w-auto`}
     />

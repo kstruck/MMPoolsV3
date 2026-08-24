@@ -159,7 +159,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-brandred-600/20 rounded-2xl blur-xl group-hover:bg-brandred-600/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-live-grid.png"
+                                src="/feature-live-grid.webp"
+                                loading="lazy"
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -196,7 +197,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500/20 rounded-2xl blur-xl group-hover:bg-gold-500/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-scoreboard.png"
+                                src="/feature-scoreboard.webp"
+                                loading="lazy"
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -233,7 +235,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500/20 rounded-2xl blur-xl group-hover:bg-gold-500/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-scenarios.png"
+                                src="/feature-scenarios.webp"
+                                loading="lazy"
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -270,7 +273,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500/20 rounded-2xl blur-xl group-hover:bg-gold-500/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-setup-wizard.png"
+                                src="/feature-setup-wizard.webp"
+                                loading="lazy"
                                 alt="Easy Pool Setup Wizard for commissioners with customization options"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />

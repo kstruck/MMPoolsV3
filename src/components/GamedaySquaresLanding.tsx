@@ -86,7 +86,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="rounded-3xl p-2 shadow-panel bg-navy-900 border border-[rgba(230,206,150,0.16)]">
                             <div className="rounded-xl overflow-hidden relative group bg-navy-950">
                                 <img
-                                    src="/hero-ui.png"
+                                    src="/hero-ui.webp"
                                     alt="Interactive 10x10 Super Bowl squares grid with live scoring and player names on March Melee Pools"
                                     loading="lazy"
                                     className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
@@ -112,7 +112,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-foil rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-live-grid.png"
+                                src="/feature-live-grid.webp"
+                                loading="lazy"
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -135,7 +136,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-navy-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-scoreboard.png"
+                                src="/feature-scoreboard.webp"
+                                loading="lazy"
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -158,7 +160,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-scenarios.png"
+                                src="/feature-scenarios.webp"
+                                loading="lazy"
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -181,7 +184,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-brandred-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-setup-wizard.png"
+                                src="/feature-setup-wizard.webp"
+                                loading="lazy"
                                 alt="AI commissioner chat for customizing Super Bowl pool rules"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
