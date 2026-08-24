@@ -7,7 +7,9 @@ import {
   ownedAddonKeys,
   PURCHASABLE_ADDON_KEYS,
   ADDON_LABELS,
+  sellableAddonKeys,
   type AddonablePool,
+  type AddonFeatureConfig,
 } from '../src/components/billing/addonablePools';
 import { upgradeablePools } from '../src/components/billing/upgradeablePools';
 import { ADDON_KEYS } from '../shared/schemas/quote';
@@ -100,11 +102,66 @@ describe('which pools are listed', () => {
   });
 });
 
+describe('codex [P2]: the CONFIG decides what is sellable, not a static list', () => {
+  /**
+   * `computeAddonLines` drops any add-on whose `billing_config` entry is
+   * `isPremium: false` or `addonPrice: 0`. A static list alone would render a
+   * button that opens a checkout the server prices at $0 and then refuses as
+   * "nothing to buy" — a guaranteed dead end, one config save away.
+   */
+  const priced: AddonFeatureConfig = {
+    aiCommissioner: { isPremium: true, addonPrice: 19 },
+    whatIfSimulator: { isPremium: true, addonPrice: 9 },
+  };
+
+  it('offers only what the config will price', () => {
+    expect(sellableAddonKeys(priced)).toEqual(['aiCommissioner', 'whatIfSimulator']);
+    expect(sellableAddonKeys({ ...priced, whatIfSimulator: { isPremium: false, addonPrice: 9 } }))
+      .toEqual(['aiCommissioner']);
+    expect(sellableAddonKeys({ ...priced, whatIfSimulator: { isPremium: true, addonPrice: 0 } }))
+      .toEqual(['aiCommissioner']);
+  });
+
+  it('offers NOTHING before the config has loaded', () => {
+    // An empty section for a moment beats a button that dead-ends.
+    expect(sellableAddonKeys(null)).toEqual([]);
+    expect(sellableAddonKeys(undefined)).toEqual([]);
+    expect(addonablePools([pool()], OWNER, null)).toEqual([]);
+  });
+
+  it('a pool whose only remaining add-on was switched off drops off the list', () => {
+    const p = pool({ billing: { status: 'active', featuresUnlocked: { aiCommissioner: true } } });
+    expect(addonablePools([p], OWNER, priced)).toHaveLength(1);
+    expect(addonablePools([p], OWNER, { ...priced, whatIfSimulator: { isPremium: false, addonPrice: 9 } }))
+      .toEqual([]);
+  });
+
+  it('omitting the config keeps the old static behaviour, for callers without one', () => {
+    expect(purchasableAddons(pool())).toEqual(['aiCommissioner', 'whatIfSimulator']);
+  });
+});
+
+describe('codex [P2]: the list follows the CURRENT user, never a stale snapshot', () => {
+  it('is empty with no signed-in user', () => {
+    // Derived from `user?.id` at render rather than filtered into state: the
+    // subscription effect returns early when there is no user, so it would
+    // never clear what it had written, and the previous account's pools would
+    // stay on screen after a sign-out or an account switch.
+    expect(addonablePools([pool()], undefined, undefined)).toEqual([]);
+  });
+
+  it('the page derives it rather than storing it', () => {
+    expect(page).toContain('const addonPools = useMemo(');
+    expect(page).toContain('addonablePools(rawPools, user?.id, config?.features)');
+    expect(page).not.toContain('setAddonPools(');
+  });
+});
+
 describe('the page renders it', () => {
   it('lists the pools and a button per missing add-on', () => {
     expect(page).toContain('Add-ons for your active pools');
-    expect(page).toContain('{addonPools.map((pool) => (');
-    expect(page).toContain('{purchasableAddons(pool).map((addon) => (');
+    expect(page).toContain('{addonPools.map((pool: AddonablePool) => (');
+    expect(page).toContain('{purchasableAddons(pool, config?.features).map((addon) => (');
     expect(page).toContain('<AddonUpgradeButton');
   });
 
@@ -116,7 +173,7 @@ describe('the page renders it', () => {
 
   it('feeds both lists from the SAME snapshot, so they cannot disagree', () => {
     expect(page).toContain('setUserPools(upgradeablePools(poolsList, user.id));');
-    expect(page).toContain('setAddonPools(addonablePools(poolsList as unknown as AddonablePool[], user.id));');
+    expect(page).toContain('setRawPools(poolsList as unknown as AddonablePool[]);');
   });
 
   it('quotes no price — Stripe does that (ADR-0001)', () => {

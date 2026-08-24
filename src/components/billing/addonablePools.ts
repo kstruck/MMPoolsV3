@@ -18,11 +18,36 @@ import type { BillingStatus } from '../../types';
  * button it cannot use is the defect this avoids, not a security boundary.
  */
 
-/** Add-on keys a pool may still be SOLD: not free with every pool, not withdrawn. */
+/**
+ * Add-on keys a pool may still be SOLD, before the live config is consulted:
+ * not free with every pool, not withdrawn from sale.
+ *
+ * ⚠️ NOT SUFFICIENT ON ITS OWN. `computeAddonLines` also drops any add-on whose
+ * `billing_config` entry is `isPremium: false` or `addonPrice: 0`, so a static
+ * list alone can offer a button that opens a checkout the server prices at $0
+ * and then refuses as "nothing to buy" — a guaranteed dead end reachable from
+ * one config save. `sellableAddonKeys(config)` applies that half. (codex.)
+ */
 export const PURCHASABLE_ADDON_KEYS: readonly AddonKey[] = ADDON_KEYS.filter(
     (k) => !(INCLUDED_ADDON_KEYS as readonly string[]).includes(k)
         && !(UNSELLABLE_ADDON_KEYS as readonly string[]).includes(k),
 );
+
+/** The `billing_config.features` shape this module needs. Identity-keyed to the add-ons. */
+export type AddonFeatureConfig = Partial<Record<AddonKey, { isPremium?: boolean; addonPrice?: number } | undefined>>;
+
+/**
+ * The add-ons the CONFIG will actually price, mirroring `computeAddonLines`:
+ * premium, and priced above zero. With no config loaded yet, nothing is
+ * offered — an empty section for a moment beats a button that dead-ends.
+ */
+export function sellableAddonKeys(features: AddonFeatureConfig | null | undefined): AddonKey[] {
+    if (!features) return [];
+    return PURCHASABLE_ADDON_KEYS.filter((k) => {
+        const feat = features[k];
+        return !!feat && feat.isPremium === true && (feat.addonPrice ?? 0) > 0;
+    });
+}
 
 /** Commissioner-facing names. The keys are internal; these are not. */
 export const ADDON_LABELS: Record<AddonKey, string> = {
@@ -65,10 +90,20 @@ export function ownedAddonKeys(pool: AddonablePool | null | undefined): string[]
     return Array.from(new Set([...paid, ...granted]));
 }
 
-/** The add-ons this pool could still buy. Empty means there is nothing to sell. */
-export function purchasableAddons(pool: AddonablePool | null | undefined): AddonKey[] {
+/**
+ * The add-ons this pool could still buy. Empty means there is nothing to sell.
+ *
+ * `features` is the live `billing_config.features` map. Omitted, it falls back
+ * to the static list — which is what the unit tests exercise, and what a caller
+ * with no config in hand gets.
+ */
+export function purchasableAddons(
+    pool: AddonablePool | null | undefined,
+    features?: AddonFeatureConfig | null,
+): AddonKey[] {
     const owned = new Set(ownedAddonKeys(pool));
-    return PURCHASABLE_ADDON_KEYS.filter((k) => !owned.has(k));
+    const offerable = features === undefined ? PURCHASABLE_ADDON_KEYS : sellableAddonKeys(features);
+    return offerable.filter((k) => !owned.has(k));
 }
 
 /**
@@ -82,9 +117,13 @@ export function purchasableAddons(pool: AddonablePool | null | undefined): Addon
  * excludes `active` and this includes only `active`. The two lists are
  * deliberately disjoint.
  */
-export function addonablePools<T extends AddonablePool>(pools: T[], uid: string | undefined): T[] {
+export function addonablePools<T extends AddonablePool>(
+    pools: T[],
+    uid: string | undefined,
+    features?: AddonFeatureConfig | null,
+): T[] {
     return pools.filter((p) =>
         canCheckoutPool(p, uid)
         && p.billing?.status === 'active'
-        && purchasableAddons(p).length > 0);
+        && purchasableAddons(p, features).length > 0);
 }

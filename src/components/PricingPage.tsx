@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import type { User, Pool, BillingConfig } from '../types';
 import { DEFAULT_TRIAL_DAYS, DEFAULT_FORMAT_TIER_MAP, normalizeLegacyPackage } from '@shared/schemas/billingConfig';
@@ -99,13 +99,20 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     const [userPools, setUserPools] = useState<Pool[]>([]);
     const [selectedPoolId, setSelectedPoolId] = useState<string | null>(targetPoolId);
     /**
-     * ACTIVE pools that can still be sold an add-on (PLAN-PER-POOL-PREMIUM C2).
+     * The raw pool snapshot behind the add-on list (PLAN-PER-POOL-PREMIUM C2).
      * `/pricing` is the surface because it is pool-type agnostic and is already
      * where the lock banner and the lock email send a commissioner — the
      * alternative was a bespoke CTA in three dashboards whose tab strips have
      * nowhere sensible to put one (Kevin's ruling, 2026-08-24, option (a)).
+     *
+     * ⚠️ RAW, and derived below rather than filtered on the way in. Filtering
+     * into state left the list showing the PREVIOUS account's pools after a
+     * sign-out or an account switch: the subscription effect returns early when
+     * there is no user, so it never clears what it wrote. Deriving from
+     * `user?.id` makes the list empty the instant the user goes away, with no
+     * effect to remember to write. (codex.)
      */
-    const [addonPools, setAddonPools] = useState<AddonablePool[]>([]);
+    const [rawPools, setRawPools] = useState<AddonablePool[]>([]);
     const [selectedPoolData, setSelectedPoolData] = useState<Pool | null>(null);
 
     // Calculator Inputs State
@@ -187,12 +194,22 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             // from the upgrade list above — that one is pools with hosting still
             // to buy, this one is pools whose hosting is paid and which can be
             // sold a feature. A pool is never in both.
-            setAddonPools(addonablePools(poolsList as unknown as AddonablePool[], user.id));
+            setRawPools(poolsList as unknown as AddonablePool[]);
         }, (err) => {
             console.error('[PricingPage] Failed subscribing to user pools:', err);
         }, user.id);
         return () => unsubscribe();
     }, [user?.id]);
+
+    /**
+     * Derived, never stored: an empty `user` or an unloaded config yields an
+     * empty list immediately. `config.features` is what stops us offering an
+     * add-on the server would price at $0 and then refuse.
+     */
+    const addonPools = useMemo(
+        () => addonablePools(rawPools, user?.id, config?.features),
+        [rawPools, user?.id, config],
+    );
 
     // Keep selection in sync when the ?poolId= deep link changes after mount.
     useEffect(() => {
@@ -385,7 +402,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     These pools are paid for and running. Add a feature to one at any point in the season — it switches on by itself the moment the payment completes. The price is shown at checkout before anything is charged.
                                 </p>
                                 <div className="grid grid-cols-1 gap-2.5">
-                                    {addonPools.map((pool) => (
+                                    {addonPools.map((pool: AddonablePool) => (
                                         <div
                                             key={pool.id}
                                             className="w-full p-4 rounded-xl border border-line bg-surface space-y-3"
@@ -397,7 +414,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                {purchasableAddons(pool).map((addon) => (
+                                                {purchasableAddons(pool, config?.features).map((addon) => (
                                                     <AddonUpgradeButton
                                                         key={addon}
                                                         pool={pool as never}
