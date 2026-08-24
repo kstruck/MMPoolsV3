@@ -15,7 +15,10 @@ const page = (title: string, body: string) => `<!doctype html>
 
 export const emailUnsubscribe = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, async (req, res) => {
     // Email-footer links are GETs (no List-Unsubscribe-Post header is sent).
-    if (req.method !== "GET" && req.method !== "HEAD") {
+    // HEAD is rejected too (codex r3): this endpoint mutates on request, and
+    // link scanners commonly probe with HEAD. (A scanner GET still opts out —
+    // a confirm-click page would close that; out of scope here.)
+    if (req.method !== "GET") {
         res.status(405).send(page("Not allowed", "Unsupported request method."));
         return;
     }
