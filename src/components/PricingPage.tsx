@@ -20,6 +20,8 @@ import { setPostAuthIntent } from '../utils/postAuthIntent';
 import { addonSeed } from './billing/addonSeed';
 import { PaymentSuccessBanner } from './billing/PaymentSuccessBanner';
 import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
+import { addonablePools, purchasableAddons, ADDON_LABELS, type AddonablePool } from './billing/addonablePools';
+import { AddonUpgradeButton } from './billing/AddonUpgradeButton';
 
 interface PricingPageProps {
     user?: User | null;
@@ -96,6 +98,14 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     const [config, setConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
     const [userPools, setUserPools] = useState<Pool[]>([]);
     const [selectedPoolId, setSelectedPoolId] = useState<string | null>(targetPoolId);
+    /**
+     * ACTIVE pools that can still be sold an add-on (PLAN-PER-POOL-PREMIUM C2).
+     * `/pricing` is the surface because it is pool-type agnostic and is already
+     * where the lock banner and the lock email send a commissioner — the
+     * alternative was a bespoke CTA in three dashboards whose tab strips have
+     * nowhere sensible to put one (Kevin's ruling, 2026-08-24, option (a)).
+     */
+    const [addonPools, setAddonPools] = useState<AddonablePool[]>([]);
     const [selectedPoolData, setSelectedPoolData] = useState<Pool | null>(null);
 
     // Calculator Inputs State
@@ -173,6 +183,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         if (!user?.id) return;
         const unsubscribe = dbService.subscribeToPools((poolsList) => {
             setUserPools(upgradeablePools(poolsList, user.id));
+            // C2: the ADD-ON list, from the same snapshot. Deliberately disjoint
+            // from the upgrade list above — that one is pools with hosting still
+            // to buy, this one is pools whose hosting is paid and which can be
+            // sold a feature. A pool is never in both.
+            setAddonPools(addonablePools(poolsList as unknown as AddonablePool[], user.id));
         }, (err) => {
             console.error('[PricingPage] Failed subscribing to user pools:', err);
         }, user.id);
@@ -351,6 +366,50 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         <X size={12} /> Clear selection and show calculator
                                     </button>
                                 )}
+                            </div>
+                        )}
+
+                        {/* ADD-ONS FOR ALREADY-PAID POOLS (C2).
+                            Rendered only when there is something to sell: the
+                            list is already filtered to active pools that are
+                            missing at least one purchasable add-on, so an empty
+                            list means every pool owns everything and a heading
+                            would be noise. */}
+                        {addonPools.length > 0 && (
+                            <div className="bg-card border border-line rounded-3xl p-6 space-y-4 shadow-panel">
+                                <h3 className="font-display font-bold uppercase text-lg text-[color:var(--text)] flex items-center gap-2">
+                                    <Sparkles className="text-gold-600 dark:text-gold-400" size={20} />
+                                    Add-ons for your active pools
+                                </h3>
+                                <p className="text-xs font-body text-muted">
+                                    These pools are paid for and running. Add a feature to one at any point in the season — it switches on by itself the moment the payment completes. The price is shown at checkout before anything is charged.
+                                </p>
+                                <div className="grid grid-cols-1 gap-2.5">
+                                    {addonPools.map((pool) => (
+                                        <div
+                                            key={pool.id}
+                                            className="w-full p-4 rounded-xl border border-line bg-surface space-y-3"
+                                        >
+                                            <div className="space-y-1">
+                                                <span className="text-sm font-display font-bold uppercase text-[color:var(--text)] block">{pool.name}</span>
+                                                <span className="text-xs text-faint font-mono capitalize">
+                                                    Format: {String(pool.type ?? '').toLowerCase().replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {purchasableAddons(pool).map((addon) => (
+                                                    <AddonUpgradeButton
+                                                        key={addon}
+                                                        pool={pool as never}
+                                                        addon={addon}
+                                                        label={ADDON_LABELS[addon]}
+                                                        className="inline-flex items-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
