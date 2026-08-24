@@ -871,13 +871,16 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
         {/* THE pool nav — one strip, directly under the header (2026-08-23
             mobile redesign: "standings are too far down, too many menus").
             Sticky on mobile so every section stays one tap away at any scroll
-            depth; static on md+ where the site header keeps that slot. bg-page
-            is solid on purpose — content must not ghost through while stuck.
-            (On a branded pool the page tint differs slightly behind it; that
-            is cosmetic and beats a translucent smear.) */}
+            depth; static on md+ where content has room. It stacks BELOW the
+            site header, which is sticky on every page (codex r2/r3): top-[73px]
+            is that header's measured mobile height (px-4 py-3 + h-12 logo +
+            border) — if the header's mobile chrome changes, this offset moves
+            with it. bg-page is solid on purpose — content must not ghost
+            through while stuck. (On a branded pool the page tint differs
+            slightly behind it; cosmetic, and beats a translucent smear.) */}
         <nav
           aria-label="Pool sections"
-          className="sticky top-0 z-40 md:static -mx-4 px-4 md:mx-0 md:px-0 mt-4 bg-page border-b border-line flex overflow-x-auto whitespace-nowrap scrollbar-hide"
+          className="sticky top-[73px] z-40 md:static -mx-4 px-4 md:mx-0 md:px-0 mt-4 bg-page border-b border-line flex overflow-x-auto whitespace-nowrap scrollbar-hide"
         >
           {TAB_STRIP.filter(({ tab }) => tabOffered[tab]).map(({ tab, label }) => (
             <button

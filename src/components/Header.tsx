@@ -101,17 +101,16 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                     )}
                 </div>
             )}
-            {/* Sticky everywhere EXCEPT the mobile pool page, where the pool's
-                own tab strip takes the sticky slot — two stacked sticky bars
-                would eat the viewport the redesign is trying to give back.
-                Every other mobile surface keeps the (now compact, hamburger)
-                bar pinned, or its only nav scrolls off-screen. (codex r2, P2.) */}
-            <header
-                className={cn(
-                    'bg-navy-900 border-b border-[rgba(230,206,150,0.16)] z-50 shadow-lg md:sticky md:top-0',
-                    location.pathname.startsWith('/pool/') ? 'relative' : 'sticky top-0'
-                )}
-            >
+            {/* Sticky everywhere, same as before the redesign — the mobile bar
+                is one compact row now that the button cluster lives behind the
+                hamburger, so keeping it pinned costs ~73px, not half the
+                screen. Surfaces with their own sticky strip (the NFL pool tab
+                strip) stack theirs BELOW this one with a top offset. Two
+                earlier attempts un-stuck this header instead and both
+                regressed some other page's only navigation (codex r2 + r3,
+                both P2): /pool/:id also serves Bracket/Playoff/Squares
+                dashboards that have no replacement strip. */}
+            <header className="bg-navy-900 border-b border-[rgba(230,206,150,0.16)] sticky top-0 z-50 shadow-lg">
                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setMenuOpen(false); navigate('/'); }}>
                         <Logo height="h-12" />
