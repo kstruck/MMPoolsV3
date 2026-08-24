@@ -73,7 +73,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/squares');
     await fillBasicsAndAdvanceToReview(page, 'E2E Squares');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('BRACKET', async ({ page }) => {
@@ -81,7 +81,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/bracket');
     await fillBasicsAndAdvanceToReview(page, 'E2E Bracket');
-    await submitAndExpectPoolCreated(page, /Create draft/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_PLAYOFFS', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/playoff');
     await fillBasicsAndAdvanceToReview(page, 'E2E Playoff');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_PICKEM', async ({ page }) => {
@@ -97,7 +97,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/pickem');
     await fillBasicsAndAdvanceToReview(page, 'E2E Pickem');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_SURVIVOR', async ({ page }) => {
@@ -105,7 +105,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/survivor');
     await fillBasicsAndAdvanceToReview(page, 'E2E Survivor');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_MARGIN', async ({ page }) => {
@@ -113,7 +113,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/margin');
     await fillBasicsAndAdvanceToReview(page, 'E2E Margin');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('PROPS', async ({ page }) => {
@@ -130,6 +130,6 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await page.locator('#q-0-text').fill('Who wins the coin toss?');
     await page.locator('#q-0-opts').fill('Heads, Tails');
     await advanceToReview(page);
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 });
