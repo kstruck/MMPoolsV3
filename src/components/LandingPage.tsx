@@ -131,7 +131,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <div className={cn(heroCardCls, 'rounded-3xl p-2 shadow-panel')}>
               <div className="rounded-xl overflow-hidden relative group bg-navy-950">
                 <img
-                  src="/nfl-pools-hero.png"
+                  src="/nfl-pools-hero.webp"
                   alt="March Melee Pools NFL Survivor and Weekly Pick'em Dashboard"
                   loading="lazy"
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"

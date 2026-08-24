@@ -107,7 +107,8 @@ export const SuperBowlOddsArticle: React.FC = () => {
 
                     <figure>
                         <img
-                            src="/images/squares-digit-frequency.png"
+                            src="/images/squares-digit-frequency.webp"
+                            loading="lazy"
                             alt="Bar chart showing frequency of final score digits in NFL games. 0 and 7 are the highest bars."
                             className="w-full h-auto rounded-xl border border-[rgba(230,206,150,0.16)] shadow-lg"
                         />
