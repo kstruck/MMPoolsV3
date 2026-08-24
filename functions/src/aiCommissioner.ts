@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as crypto from "crypto";
-import { generateAIResponse, COMMISSIONER_SYSTEM_PROMPT, BANTER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
+import { generateAIResponse, AIProviderError, COMMISSIONER_SYSTEM_PROMPT, BANTER_SYSTEM_PROMPT, geminiApiKey } from "./gemini";
 import { writeAuditEvent } from "./audit";
 import { resolveGameSpreads } from "./lib/frozenSpreads";
 import { normalizeBanterMood, banterTextFromAI, isPoolCommissionerUid, banterStandingsRow } from "./lib/banter";
@@ -620,6 +620,19 @@ async function generateBanter(args: {
         console.error('AI Banter generation failed', e);
         // Same shape as every other failure on this trigger: the request carries
         // the verdict so the card can say something specific instead of spinning.
-        await requestRef.update({ status: 'ERROR', error: 'BANTER_FAILED', updatedAt: Date.now() });
+        //
+        // `errorDetail` is NEW and is the whole point of this change: `error`
+        // stays the stable code the UI branches on, and the detail names WHICH
+        // provider failure it was. Without it, a 403 on the API key and a
+        // transient network blip both reached the commissioner as "the AI could
+        // not write that one", which is what turned a config mistake into a
+        // production log pull. Not the provider's full message — that can carry
+        // request text — just the short reason code.
+        await requestRef.update({
+            status: 'ERROR',
+            error: 'BANTER_FAILED',
+            errorDetail: e instanceof AIProviderError ? e.reason : 'UNKNOWN',
+            updatedAt: Date.now(),
+        });
     }
 }

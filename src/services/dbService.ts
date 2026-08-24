@@ -411,12 +411,12 @@ export const dbService = {
      * Filtered by `userId` only and narrowed client-side, exactly as
      * `AICommissioner` does — a compound where() would need a composite index.
      */
-    subscribeToMyBanterRequests: (poolId: string, userId: string, callback: (requests: { id: string; status: string; error?: string; createdAt: number }[]) => void) => {
+    subscribeToMyBanterRequests: (poolId: string, userId: string, callback: (requests: { id: string; status: string; error?: string; errorDetail?: string; createdAt: number }[]) => void) => {
         const q = query(collection(db, `pools/${poolId}/ai_requests`), where('userId', '==', userId));
         return onSnapshot(q, (snap) => {
             callback(
                 snap.docs
-                    .map(d => ({ id: d.id, ...(d.data() as Record<string, unknown>) }) as { id: string; status: string; error?: string; createdAt: number; category?: string })
+                    .map(d => ({ id: d.id, ...(d.data() as Record<string, unknown>) }) as { id: string; status: string; error?: string; errorDetail?: string; createdAt: number; category?: string })
                     .filter(r => r.category === 'BANTER')
                     .sort((a, b) => b.createdAt - a.createdAt),
             );

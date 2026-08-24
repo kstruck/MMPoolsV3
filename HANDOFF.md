@@ -49,6 +49,23 @@
 > (v2 `defineSecret` pins the version at deploy — the live one is version 7), then
 > delete the old key.
 >
+> 🔴 **`nflDeepScoreSweepJob` DEPLOYS ITS CODE BUT FAILS ITS IAM INVOKER
+> BINDING. FIX THAT BEFORE ARMING `nflDeepSweep`, OR THE JOB WILL LOOK ARMED AND
+> NEVER RUN.** Measured on the 2026-08-24 02:38 deploy: the function's own
+> `UpdateFunction` SUCCEEDED, and the deploy then failed with *"Unable to set the
+> invoker for the IAM policy"* for that one function. Without `roles/run.invoker`
+> on its Cloud Run service, Cloud Scheduler gets a 403 and the job silently never
+> fires.
+>
+> **Impact today is ZERO and that is exactly why it is dangerous.** The job is
+> gated on `system/config.nflDeepSweep.enabled === true`
+> (`functions/src/nflSchedule.ts:1392-1402`, default OFF, fail-safe), and that
+> config is unset — so it would log `disabled … nothing to do` regardless. The
+> failure only becomes visible at the moment somebody arms the sweep and
+> concludes the code is broken. Check the Cloud Run service
+> `nfldeepscoresweepjob` → Security, and confirm the scheduler service account
+> holds **Cloud Run Invoker**. Unrelated to any 2026-08-25 PR.
+>
 > ⚠️ **THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED** and was already red at
 > `925c6d7d`. Not run by CI, last touched 2026-07-04.
 >
