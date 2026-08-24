@@ -1104,8 +1104,16 @@ describe("WeekChecklist says nothing until the viewer's own entry is known", () 
     expect(dash).toContain('ownEntryLoaded={ownEntryKnown}');
   });
 
-  it('and the strip renders nothing when it is false', () => {
-    expect(strip2).toContain('if (!entryKnown) return null;');
+  it('and the strip makes no pick CLAIMS when it is false — chips stay, as the only week selector', () => {
+    // 2026-08-23: the header week dropdown died, so the chips became the pool
+    // page's only week navigation and a full `return null` would strand
+    // signed-out and load-failed viewers on one week. The #497 invariant is
+    // about false claims, not about pixels: banners and pick marks gate on
+    // `claimsAllowed`, navigation does not.
+    expect(strip2).toContain('const claimsAllowed = entryKnown &&');
+    expect(strip2).toContain('{claimsAllowed && nextDue && (');
+    expect(strip2).toContain('{claimsAllowed && currentComplete && (');
+    expect(strip2).not.toContain('if (!entryKnown) return null;');
   });
 });
 

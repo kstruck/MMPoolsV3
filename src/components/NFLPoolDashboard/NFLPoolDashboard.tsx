@@ -40,6 +40,7 @@ import { HelpRoutePublisher } from '../../help/publish';
 import { resolveStandingsAlias, type StandingsScope } from '../../utils/nflStandingsScope';
 import { isPinnableMessageId } from '@shared/pinnedMessage';
 import { poolTypeLabel, poolOptionLabels } from '../../utils/poolTypeLabel';
+import { weekValueFor, seasonCompare } from '../../utils/nflResults';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -722,35 +723,39 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     // must stay one short row, and a 24-way survivor "tie" is the normal state.
     const label = (list: { userName?: string }[]) =>
       list.length === 0 ? null : list.length > 2 ? `${name(list[0])} +${list.length - 1}` : list.map(name).join(', ');
-    // The same season comparator the standings card uses.
-    const cmp = (a: any, b: any) => {
-      if (pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    };
-    const sorted = [...entries].sort(cmp);
-    const seasonLeaders = sorted.filter(e => cmp(e, sorted[0]) === 0);
+    // `unscored` rows are a late entrant with no scored week yet — the
+    // standings deliberately rank them LAST, and comparing them here as zero
+    // would crown one in a Margin pool whose real totals are negative.
+    // (codex r1, P2.)
+    const ranked = entries.filter(e => !e.unscored);
+    // `seasonCompare` is the standings table's OWN cascade — a shallower copy
+    // here disagreed with it on every tiebreaker below the first (codex r2,
+    // P2). Rows it calls equal are genuinely tied and share the lead.
+    const sorted = [...ranked].sort((a, b) => seasonCompare(pool.type, a, b));
+    const seasonLeaders = sorted.filter(e => seasonCompare(pool.type, e, sorted[0]) === 0);
     // Week leader: the recap's winner line is the scored truth and wins when
     // it exists; before the week is fully scored, the live projection's
-    // per-week score ranks. Never fabricated — an unscored week shows a dash.
+    // per-week value ranks. `weekValueFor` is the standings' own accessor —
+    // Pick'em publishes `weeklyPoints`, Margin `weeklyScores`, and hand-rolling
+    // the field here read the wrong one for Pick'em (codex r1, P2). Never
+    // fabricated — an unscored week shows a dash.
     const recap = recaps.find(r => r.week === selectedWeek);
     let weekLeaders: { userName?: string }[] = [];
     if (recap?.weeklyWinners?.length) {
       weekLeaders = recap.weeklyWinners;
     } else if (pool.type !== 'NFL_SURVIVOR') {
-      const scored = entries.filter(e => typeof e.weeklyScores?.[selectedWeek] === 'number');
+      const isMargin = pool.type === 'NFL_MARGIN';
+      const scored = ranked.filter(e => weekValueFor(e, selectedWeek, isMargin) !== null);
       if (scored.length) {
-        const top = Math.max(...scored.map(e => e.weeklyScores[selectedWeek]));
-        weekLeaders = scored.filter(e => e.weeklyScores[selectedWeek] === top);
+        const top = Math.max(...scored.map(e => weekValueFor(e, selectedWeek, isMargin) as number));
+        weekLeaders = scored.filter(e => weekValueFor(e, selectedWeek, isMargin) === top);
       }
     }
     // A pool where nothing has been scored has no leader — everyone "ties" at
     // zero and the strip would crown an arbitrary first name. Dash until any
     // entry carries a scored week, a strike, or an elimination.
     const anyScored = entries.some(e =>
+      Object.keys(e.weeklyPoints || {}).length > 0 ||
       Object.keys(e.weeklyScores || {}).length > 0 ||
       Object.keys(e.weeklyResults || {}).length > 0 ||
       (e.strikesUsed || 0) > 0 || e.status === 'ELIMINATED');

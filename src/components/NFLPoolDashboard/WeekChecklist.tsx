@@ -121,18 +121,30 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
     // the assurance whose absence made a tester re-submit a saved pick.
     const currentComplete = currentWeek && currentWeek.status === 'complete' ? currentWeek : null;
 
-    // Survivor members who are eliminated owe nothing — don't nag them
-    if (pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED') return null;
-
-    // …and say nothing at all until this viewer's own entry is KNOWN. See
-    // `entryKnown` — every line below is a claim about picks that may not have
-    // been read yet. A signed-out viewer lands here too, which is right: they
-    // owe no picks and the strip has nothing to tell them.
-    if (!entryKnown) return null;
+    // CLAIMS require a known entry; NAVIGATION does not (2026-08-23).
+    //
+    // The banners and the chip marks below are claims about this viewer's
+    // picks, and `entry` may simply not have been read yet — `onSnapshot`
+    // terminates on error, so an initial failure means nothing ever arrives
+    // and a false "picks not in" would stand for the life of the page (codex
+    // r2 on #497). An eliminated Survivor member owes nothing, so nagging
+    // them is a false claim of a different kind.
+    //
+    // The strip used to return null outright in both cases. It can't any
+    // more: the header week dropdown is gone and these chips are the pool
+    // page's ONLY week selector, so a signed-out visitor or a member whose
+    // entry never loaded would lose week navigation entirely (codex r1 on the
+    // glance strip, P2). Claims are gated; neutral, mark-free chips render
+    // for everyone.
+    const claimsAllowed = entryKnown && !(pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED');
+    // `no-games` is a fact about the schedule, not about picks — it stays in
+    // neutral mode so an empty week still reads as empty.
+    const neutralStyle = (status: WeekStatus) =>
+        status === 'no-games' ? CHIP_STYLES['no-games'] : 'bg-page border-line text-muted';
 
     return (
         <div className="space-y-3">
-            {nextDue && (
+            {claimsAllowed && nextDue && (
                 <div role="status" className="bg-gold-400/10 border border-gold-500/40 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex items-center gap-2 flex-1">
                         <AlertTriangle size={16} className="text-gold-600 dark:text-gold-400 shrink-0" aria-hidden="true" />
@@ -155,7 +167,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
                 </div>
             )}
 
-            {currentComplete && (
+            {claimsAllowed && currentComplete && (
                 <div role="status" className="bg-[#E4F5EC]/60 dark:bg-emerald-500/10 border border-[#BEE7D0] dark:border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
                     <Check size={16} className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" aria-hidden="true" />
                     <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-[#0F7B4A] dark:text-emerald-300">
@@ -169,11 +181,13 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
                     <button
                         key={week}
                         onClick={() => onSelectWeek(week)}
-                        aria-label={`${nflWeekLabel(poolSeasonType(castPool), week)}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`}
+                        aria-label={claimsAllowed
+                            ? `${nflWeekLabel(poolSeasonType(castPool), week)}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`
+                            : `${nflWeekLabel(poolSeasonType(castPool), week)}${status === 'no-games' ? ': no games' : ''}`}
                         aria-current={week === selectedWeek ? 'true' : undefined}
-                        className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-md border inline-flex items-center justify-center gap-1 font-display font-bold uppercase text-[11px] tracking-[0.05em] num transition-all duration-150 ${CHIP_STYLES[status]} ${week === selectedWeek ? 'ring-2 ring-navy-600 dark:ring-gold-500' : 'hover:-translate-y-px'}`}
+                        className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-md border inline-flex items-center justify-center gap-1 font-display font-bold uppercase text-[11px] tracking-[0.05em] num transition-all duration-150 ${claimsAllowed ? CHIP_STYLES[status] : neutralStyle(status)} ${week === selectedWeek ? 'ring-2 ring-navy-600 dark:ring-gold-500' : 'hover:-translate-y-px'}`}
                     >
-                        {nflWeekChip(poolSeasonType(castPool), week)} {CHIP_MARKS[status]}
+                        {nflWeekChip(poolSeasonType(castPool), week)} {claimsAllowed ? CHIP_MARKS[status] : status === 'no-games' ? CHIP_MARKS[status] : null}
                     </button>
                 ))}
             </div>

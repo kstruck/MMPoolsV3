@@ -5,6 +5,7 @@ import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
+import { seasonCompare } from '../../utils/nflResults';
 import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
 import { useTopicShort } from '../../help/scope';
 import type { PoolPicksReveal } from '../../services/dbService';
@@ -128,87 +129,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
       return [...sortByType(scored), ...unscored];
     };
 
-    const sortByType = (copy: any[]) => {
-
-    if (type === 'NFL_PICKEM') {
-      // Sort Pick'em: totalScore desc, then correctCount desc (fallback), then name
-      return copy.sort((a, b) => {
-        if (b.totalScore !== a.totalScore) {
-          return b.totalScore - a.totalScore;
-        }
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-    }
-
-    if (type === 'NFL_SURVIVOR') {
-      // Sort Survivor: ALIVE first, then lowest strikes, then lowest rebuys, then eliminated week desc
-      return copy.sort((a, b) => {
-        const aAlive = a.status === 'ALIVE' ? 1 : 0;
-        const bAlive = b.status === 'ALIVE' ? 1 : 0;
-
-        if (bAlive !== aAlive) {
-          return bAlive - aAlive; // ALIVE first
-        }
-
-        // If both ALIVE, sort by strikes used (lower strikes is better)
-        if (a.status === 'ALIVE') {
-          if (a.strikesUsed !== b.strikesUsed) {
-            return a.strikesUsed - b.strikesUsed;
-          }
-          if (a.rebuysUsed !== b.rebuysUsed) {
-            return a.rebuysUsed - b.rebuysUsed;
-          }
-        } else {
-          // If both ELIMINATED, sort by who lasted longest
-          const aElimWeek = a.eliminatedWeek ?? 0;
-          const bElimWeek = b.eliminatedWeek ?? 0;
-          if (bElimWeek !== aElimWeek) {
-            return bElimWeek - aElimWeek; // Lasted longer is better
-          }
-        }
-
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-    }
-
-    if (type === 'NFL_MARGIN') {
-      // Sort Margin: 5-level tiebreaker cascade
-      return copy.sort((a, b) => {
-        // 1. Season Total (higher is better)
-        const aTotal = a.seasonTotal ?? 0;
-        const bTotal = b.seasonTotal ?? 0;
-        if (bTotal !== aTotal) {
-          return bTotal - aTotal;
-        }
-
-        // 2. Lowest Negative Burden (lower is better)
-        const aBurden = a.negativeBurden ?? 0;
-        const bBurden = b.negativeBurden ?? 0;
-        if (aBurden !== bBurden) {
-          return aBurden - bBurden;
-        }
-
-        // 3. Most Positive Weeks (higher is better)
-        const aPos = a.positiveWeeks ?? 0;
-        const bPos = b.positiveWeeks ?? 0;
-        if (bPos !== aPos) {
-          return bPos - aPos;
-        }
-
-        // 4. Highest Single Week (higher is better)
-        const aBest = a.bestWeek ?? 0;
-        const bBest = b.bestWeek ?? 0;
-        if (bBest !== aBest) {
-          return bBest - aBest;
-        }
-
-        // 5. Deterministic fallback
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-    }
-
-      return copy;
-    };
+    // The cascade itself lives in `seasonCompare` (utils/nflResults) — ONE
+    // definition shared with the header's at-a-glance strip, which used to
+    // re-derive a shallower copy and disagree with this table on ties
+    // (codex, 2026-08-23). The alphabetical fallback stays HERE: it is a
+    // display stabiliser for genuinely tied rows, not a ranking fact.
+    const sortByType = (copy: any[]) =>
+      copy.sort((a, b) => seasonCompare(type, a, b) || (a.userName || '').localeCompare(b.userName || ''));
 
     return rank([...entries]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
