@@ -16,6 +16,7 @@ import {
     writePoolCreationSideEffects,
 } from "./lib/poolCreation";
 import { validated } from "./lib/validated";
+import { bracketSettingsSchema } from "./shared/schemas/bracket";
 import { publishBracketPoolSchema, joinBracketPoolSchema } from "./schemas/bracketPools";
 
 
@@ -28,7 +29,7 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const { name, settings, seasonYear, gender, tournamentType } = request.data;
+    const { name, settings: rawSettings, seasonYear, gender, tournamentType } = request.data;
     const uid = request.auth.uid;
 
     // Debug logs
@@ -49,6 +50,15 @@ export const createBracketPool = onCall(async (request) => {
 
     // Shared validation gate + ban check.
     validateCreateInput('BRACKET', request.data);
+    // AFTER the gate on purpose (codex r4 P2: parsing first surfaced a raw
+    // ZodError as `internal` instead of the gate's `invalid-argument`).
+    // Re-parse and consume the PARSED output (codex r3 P2): the outer schema
+    // is strict, but nested objects (paymentHandles, payouts, tieBreakers)
+    // are stripping z.objects — zod strips unknowns at every level of its
+    // OUTPUT, which makes the unknown-key hardening recursive. `any` because
+    // request.data.settings was already untyped here; the gain is the runtime
+    // strip, not new static types.
+    const settings: any = rawSettings === undefined ? undefined : bracketSettingsSchema.parse(rawSettings);
     const claimRole = request.auth.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
 
@@ -104,7 +114,11 @@ export const createBracketPool = onCall(async (request) => {
                 places: [{ rank: 1, percentage: 100 }],
                 bonuses: []
             },
-            ...settings,
+            // paymentHandles was the one schema'd field the enumeration above
+            // missed — the reason a raw `...settings` spread used to sit here.
+            // The spread is gone (A2): with bracketSettingsSchema now strict,
+            // every accepted field is listed explicitly.
+            ...(settings?.paymentHandles !== undefined ? { paymentHandles: settings.paymentHandles } : {}),
         },
         createdAt: now,
         updatedAt: now,

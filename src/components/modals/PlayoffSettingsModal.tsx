@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useRef } from 'react';
 import { useOverlayOwner } from '../ui/overlayStack';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { X, Lock, Unlock, Save, Loader } from 'lucide-react';
 import type { PlayoffPool } from '../../types';
 import { db } from '../../firebase';
@@ -28,6 +29,7 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
     // on mount — this component stays mounted while closed, and pushing on
     // mount would let it own the stack for the life of the app.
     useOverlayOwner('playoff-settings-modal', { active: isOpen, onEscape: onClose });
+    useFocusTrap(dialogRef, isOpen); // aria-modal promises containment (a11y audit)
     useEffect(() => {
         if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

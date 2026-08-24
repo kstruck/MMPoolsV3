@@ -40,8 +40,10 @@ test('admin_audit is readable after claim sync (no permission error)', async ({ 
   await registerFreshUser(page, email);
   await reachSuperAdmin(page, email);
 
-  // Open the System Status tab, which mounts the AdminAuditViewer.
-  await page.getByRole('button', { name: /System Status/i }).click();
+  // SuperAdmin nav is two-level since the 2026-07 redesign: clicking the
+  // "System" GROUP button auto-selects the system tab and mounts the
+  // AdminAuditViewer directly (no second click).
+  await page.getByRole('button', { name: 'System', exact: true }).click();
 
   // The audit log read must NOT be denied. It's fine (and expected) that it's
   // empty — "No admin actions recorded yet" proves the read succeeded.

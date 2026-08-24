@@ -36,7 +36,11 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router'],
           'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-          'vendor-charts': ['recharts'],
+          // 'vendor-charts' (recharts) removed on purpose (2026-08-23 perf
+          // audit): a top-level manualChunks entry gets a modulepreload in
+          // index.html, shipping 132KB gzip of charts to the landing page.
+          // Every recharts import already lives inside a lazy route, so Vite
+          // splits it into that route's chunk on its own.
         }
       }
     },

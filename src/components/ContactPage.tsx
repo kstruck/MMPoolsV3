@@ -179,10 +179,11 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                         >
                             <div className="grid sm:grid-cols-2 gap-5">
                                 <div>
-                                    <FieldLabel className={labelCls}>
+                                    <FieldLabel className={labelCls} htmlFor="contact-name">
                                         Full Name <span className="text-brandred-500">*</span>
                                     </FieldLabel>
                                     <Input
+                                        id="contact-name"
                                         type="text"
                                         required
                                         value={formData.name}
@@ -191,10 +192,11 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                                     />
                                 </div>
                                 <div>
-                                    <FieldLabel className={labelCls}>
+                                    <FieldLabel className={labelCls} htmlFor="contact-email">
                                         Email Address <span className="text-brandred-500">*</span>
                                     </FieldLabel>
                                     <Input
+                                        id="contact-email"
                                         type="email"
                                         required
                                         value={formData.email}
@@ -205,10 +207,11 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                             </div>
 
                             <div>
-                                <FieldLabel className={labelCls}>
+                                <FieldLabel className={labelCls} htmlFor="contact-subject">
                                     Subject <span className="text-brandred-500">*</span>
                                 </FieldLabel>
                                 <Select
+                                    id="contact-subject"
                                     required
                                     value={formData.subject}
                                     onChange={(e) => setFormData({ ...formData, subject: e.target.value as Subject })}
@@ -221,10 +224,11 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                             </div>
 
                             <div>
-                                <FieldLabel className={labelCls}>
+                                <FieldLabel className={labelCls} htmlFor="contact-message">
                                     Message <span className="text-brandred-500">*</span>
                                 </FieldLabel>
                                 <textarea
+                                    id="contact-message"
                                     required
                                     rows={7}
                                     value={formData.message}

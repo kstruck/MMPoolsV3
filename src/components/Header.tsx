@@ -29,11 +29,20 @@ const NavLink: React.FC<{
     onClick: () => void;
     children: React.ReactNode;
     className?: string;
-}> = ({ active, onClick, children, className }) => (
-    <button
-        onClick={onClick}
+}> = ({ to, active, onClick, children, className }) => (
+    // A real <a> (a11y audit: every header item was a <button> — no URL
+    // preview, no middle-click/open-in-new-tab). Plain left-click stays SPA
+    // navigation via onClick; modified clicks fall through to the browser.
+    // min-h keeps the touch target at the 24px floor (measured 23px before).
+    <a
+        href={to}
+        onClick={(e) => {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            onClick();
+        }}
         className={cn(
-            'relative flex items-center gap-1 font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
+            'relative flex items-center gap-1 min-h-[24px] font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
             active ? 'text-white' : 'text-white/70 hover:text-white',
             'after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:rounded-full after:bg-gold-500',
             active ? 'after:opacity-100' : 'after:opacity-0 hover:after:opacity-40',
@@ -42,7 +51,7 @@ const NavLink: React.FC<{
         )}
     >
         {children}
-    </button>
+    </a>
 );
 
 /* Compact chrome action button (header is always navy — no theme flip here) */
@@ -112,9 +121,12 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                 dashboards that have no replacement strip. */}
             <header className="bg-navy-900 border-b border-[rgba(230,206,150,0.16)] sticky top-0 z-50 shadow-lg">
                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setMenuOpen(false); navigate('/'); }}>
+                    <a href="/" className="flex items-center gap-3 cursor-pointer" onClick={(e) => {
+                        if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                        e.preventDefault(); setMenuOpen(false); navigate('/');
+                    }}>
                         <Logo height="h-12" />
-                    </div>
+                    </a>
                     {/* Mobile: the whole button cluster collapses behind one
                         hamburger. Same DOM either way — CSS decides whether the
                         cluster is an inline row (md+) or an absolute dropdown
