@@ -3,3 +3,21 @@ dist
 .git
 .gitignore
 .env
+
+# 2026-08-23 build audit: `COPY . .` invalidated its layer whenever any of the
+# ~150 repo-root planning docs changed, forcing a full rebuild. None of the
+# below is read by tsc/vite/prerender (the www build), so keep it out of the
+# build context. nginx.conf, src/, public/, shared/, scripts/, index.html and
+# the tsconfigs stay IN.
+*.md
+docs
+functions
+tests
+e2e
+.claude
+.github
+.husky
+graphify-out
+playwright.config.ts
+test-results
+playwright-report
