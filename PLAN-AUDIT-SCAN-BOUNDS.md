@@ -80,7 +80,9 @@ population (one pool per game hosted, forever).
 ### 1.2 syncGameStatus: two in-loop guards (no query change in this phase)
 
 Before the ESPN fetch:
-- `pool.status === 'CLOSED'` → skip (closed pools must not resync scores).
+- terminal status (`CANCELED`/`COMPLETED` — the values the app persists;
+  `CLOSED` is a derived label nothing writes, codex r2) or
+  `closedVia === 'ADMIN_CLOSE'` → skip (closed pools must not resync scores).
 - `gameStatus === 'pre'` AND `startTime` more than 7 days PAST → skip — the
   game never went live; the existing guard only skips 'pre' games far in the
   FUTURE (`scoreUpdates.ts:1136-1141`), so a dead pool with a stale gameId is
@@ -106,7 +108,7 @@ when the window says it should run.
 ### Tests (same PR, per the standing rule)
 
 - Unit-test the extracted window predicate (`playoffSyncWindow(now, cfg)`),
-  the dead-'pre' predicate, and the CLOSED skip.
+  the dead-'pre' predicate, and the terminal/admin-close skip.
 - Invariant test: `reminders.ts` contains no bare
   `collection("pools").get()` (the union helper is the only pool fetch).
 

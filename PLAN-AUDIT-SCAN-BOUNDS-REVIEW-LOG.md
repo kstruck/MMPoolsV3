@@ -32,4 +32,24 @@ RESOLUTION: CONVERGED — round 1 clean, own read agrees, 0 findings, 0 carried.
 
 ## Round 2 — 2026-08-23, after review-log + plan-status docs added
 
-VERDICT + response recorded below after the run.
+VERDICT: REVISE. 1 finding, accepted:
+
+1. (P1) The 1.2 guard checked `status === 'CLOSED'` — a DERIVED lifecycle
+   label the application never persists. Real closes write
+   `status: "COMPLETED"` + `closedVia: "ADMIN_CLOSE"` (`lib/lifecycle.ts`
+   `adminCloseUpdate`), and cancels write `status: "CANCELED"`
+   (`poolExceptions.ts:566`). The guard as written matched nothing.
+
+### Claude's response
+
+Accepted — textbook round-2 defect-in-the-fix. `isDeadSyncPool` now uses the
+canonical helpers (`isTerminalStatus` + `ADMIN_CLOSE` from `lib/lifecycle.ts`)
+instead of a hand-typed status string; tests updated to pin the persisted
+values (`COMPLETED`, `CANCELED`, `closedVia`). Note the CANCELED case is the
+material one: `adminCloseUpdate` also sets `scores.gameStatus: 'post'` (so
+those pools age out of the query), but a cancel does NOT — a CANCELED pool
+with a non-post gameStatus sat in the every-minute query forever.
+
+## Round 3 — final
+
+VERDICT recorded below after the run.

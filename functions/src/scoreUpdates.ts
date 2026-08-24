@@ -1135,12 +1135,12 @@ export const syncGameStatus = onSchedule({
 
             if (!pool.gameId) continue;
 
-            // PLAN-AUDIT-SCAN-BOUNDS 1.2: a CLOSED pool must not resync scores,
-            // and a 'pre' pool whose start time passed >7 days ago is a dead
-            // pool whose game never went live — before this guard each one got
-            // an ESPN fetch attempt every minute, forever. (The guard below
-            // only skips 'pre' games far in the FUTURE.)
-            if (isDeadSyncPool(pool as { status?: string; scores?: { gameStatus?: string; startTime?: string } }, Date.now())) {
+            // PLAN-AUDIT-SCAN-BOUNDS 1.2: a terminal/admin-closed pool must not
+            // resync scores, and a 'pre' pool whose start time passed >7 days
+            // ago is a dead pool whose game never went live — before this guard
+            // each one got an ESPN fetch attempt every minute, forever. (The
+            // guard below only skips 'pre' games far in the FUTURE.)
+            if (isDeadSyncPool(pool as { status?: string; closedVia?: string; scores?: { gameStatus?: string; startTime?: string } }, Date.now())) {
                 skippedDead++;
                 continue;
             }

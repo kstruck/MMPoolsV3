@@ -3,18 +3,24 @@
  * out of the job bodies so they are unit-testable.
  */
 
+import { ADMIN_CLOSE, isTerminalStatus } from "./lifecycle";
+
 const DEAD_PRE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * 1.2: a pool syncGameStatus should stop touching entirely — CLOSED, or a
- * 'pre' game whose start time passed more than 7 days ago (never went live).
- * Missing/unparseable startTime returns false: never skip on absent data.
+ * 1.2: a pool syncGameStatus should stop touching entirely — terminal status
+ * (CANCELED/COMPLETED, the values the app actually persists — codex r2: the
+ * first draft checked a derived "CLOSED" label nothing writes), admin-closed
+ * (closedVia), or a 'pre' game whose start time passed more than 7 days ago
+ * (never went live). Missing/unparseable startTime returns false: never skip
+ * on absent data.
  */
 export function isDeadSyncPool(
-    pool: { status?: string; scores?: { gameStatus?: string; startTime?: string } },
+    pool: { status?: string; closedVia?: string; scores?: { gameStatus?: string; startTime?: string } },
     nowMs: number,
 ): boolean {
-    if (pool.status === "CLOSED") return true;
+    if (isTerminalStatus(pool.status)) return true;
+    if (pool.closedVia === ADMIN_CLOSE) return true;
     if (pool.scores?.gameStatus === "pre" && pool.scores.startTime) {
         const start = new Date(pool.scores.startTime).getTime();
         if (Number.isFinite(start) && start > 0 && nowMs - start > DEAD_PRE_MS) return true;

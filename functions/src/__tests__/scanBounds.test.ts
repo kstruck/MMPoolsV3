@@ -9,9 +9,10 @@ const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.parse("2026-08-23T12:00:00Z");
 
 describe("isDeadSyncPool (1.2)", () => {
-    it("skips CLOSED pools regardless of scores", () => {
-        expect(isDeadSyncPool({ status: "CLOSED" }, NOW)).toBe(true);
-        expect(isDeadSyncPool({ status: "CLOSED", scores: { gameStatus: "in" } }, NOW)).toBe(true);
+    it("skips terminal and admin-closed pools regardless of scores (the values the app persists)", () => {
+        expect(isDeadSyncPool({ status: "COMPLETED" }, NOW)).toBe(true);
+        expect(isDeadSyncPool({ status: "CANCELED" }, NOW)).toBe(true);
+        expect(isDeadSyncPool({ closedVia: "ADMIN_CLOSE", scores: { gameStatus: "in" } }, NOW)).toBe(true);
     });
 
     it("skips a 'pre' pool whose start passed more than 7 days ago", () => {
