@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
-import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle, BarChart3 } from 'lucide-react';
+import { LayoutGrid, Shield, LogOut, User as UserIcon, Trophy, RefreshCw, CheckCircle, AlertCircle, BarChart3, Menu, X } from 'lucide-react';
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool, canAccessPoolCreation } from '../utils/auth';
 import { logger } from '../utils/logger';
@@ -54,6 +54,10 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
     const location = useLocation();
     const [isResending, setIsResending] = useState(false);
     const [resendStatus, setResendStatus] = useState<'idle' | 'sent' | 'error'>('idle');
+    // Mobile drawer (2026-08-23 redesign). The wrapped 8-button cluster ate half
+    // a phone screen and was one of the three stacked menus members complained
+    // about; on mobile it now lives behind one hamburger.
+    const [menuOpen, setMenuOpen] = useState(false);
 
     const isActive = (path: string) => location.pathname === path;
 
@@ -97,12 +101,36 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                     )}
                 </div>
             )}
+            {/* Sticky everywhere, same as before the redesign — the mobile bar
+                is one compact row now that the button cluster lives behind the
+                hamburger, so keeping it pinned costs ~73px, not half the
+                screen. Surfaces with their own sticky strip (the NFL pool tab
+                strip) stack theirs BELOW this one with a top offset. Two
+                earlier attempts un-stuck this header instead and both
+                regressed some other page's only navigation (codex r2 + r3,
+                both P2): /pool/:id also serves Bracket/Playoff/Squares
+                dashboards that have no replacement strip. */}
             <header className="bg-navy-900 border-b border-[rgba(230,206,150,0.16)] sticky top-0 z-50 shadow-lg">
-                <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
+                <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setMenuOpen(false); navigate('/'); }}>
                         <Logo height="h-12" />
                     </div>
-                    <div className="flex items-center gap-5 flex-wrap justify-center">
+                    {/* Mobile: the whole button cluster collapses behind one
+                        hamburger. Same DOM either way — CSS decides whether the
+                        cluster is an inline row (md+) or an absolute dropdown
+                        panel under the bar (mobile, when open). */}
+                    <button
+                        className="md:hidden p-2 text-white/80 hover:text-white"
+                        aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                        aria-expanded={menuOpen}
+                        onClick={() => setMenuOpen(o => !o)}
+                    >
+                        {menuOpen ? <X size={22} /> : <Menu size={22} />}
+                    </button>
+                    <div
+                        className={`${menuOpen ? 'flex' : 'hidden'} md:flex absolute md:static left-0 right-0 top-full bg-navy-900 md:bg-transparent border-b border-[rgba(230,206,150,0.16)] md:border-0 shadow-lg md:shadow-none px-4 py-4 md:p-0 items-center gap-4 md:gap-5 flex-wrap justify-center`}
+                        onClickCapture={() => setMenuOpen(false)}
+                    >
                         {!user ? (
                             <>
                                 <NavLink to="/features" active={isActive('/features')} onClick={() => navigate('/features')}>

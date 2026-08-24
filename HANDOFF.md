@@ -1,6 +1,81 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **FOUR PRs MERGED: T10 (THE LAUNCH BLOCKER), THE POOL FEED + PIN, AND BOTH HALVES OF PER-POOL PREMIUM. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+> ## 🟢 2026-08-25 (latest) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+>
+> Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)**.
+>
+> ✅ **MERGED**, each with all gates and a clean final `codex exec review` round:
+> **#536** (T10 — one scoped Standings tab), **#537** (pool feed + pinned message),
+> **#538** (C1 — super-admin per-pool feature toggle), **#539** (C2 — mid-season
+> add-on purchase), **#540** (docs), **#541** (D1 — branded header band),
+> **#542** (D2 — the `/pricing` add-on surface).
+>
+> **BOTH of Kevin's open decisions are CLOSED and BUILT.** D1 = a branded header
+> band (option ii). D2 = one add-on section on `/pricing` (option a).
+>
+> **17 codex rounds across the effort. 13 findings absorbed, 1 rejected with a
+> measurement, 0 carried.** Root suite 2013 → **2105**; functions 1813 → **1820**.
+>
+> 🛑 **OWED, AND THE ORDER MATTERS.**
+> 1. `npx firebase deploy --only functions` — **#542 changes `shared/` and
+>    `functions/`** (the server-side unsellable-add-on guard). CLAUDE.md §3:
+>    `git -C D:\march-melee-pools pull --ff-only origin main` FIRST, confirm
+>    `main`, then `npm --prefix functions ci`. **Run it from
+>    `D:\march-melee-pools`** — `firebase-tools` is a devDependency of the repo
+>    root, so `npx firebase` from anywhere else fails with "could not determine
+>    executable to run".
+> 2. **Coolify `www` rebuild** — #541 and #542 both have frontend halves.
+>
+> ⚠️ The deploy goes FIRST, same reason as #539: the frontend is what lets a
+> commissioner START an add-on checkout, and the server is what refuses an
+> unsellable one and finalizes the rest.
+>
+> ✅ **NO `firestore.rules` CHANGE IN ANY OF THE SEVEN.** `test:rules` was not
+> run because it does not apply — not because it was skipped.
+>
+> 🟢 **THE AI COMMISSIONER WORKS. Root cause was NOT code.** The Gemini API key
+> carried an HTTP-referrer restriction; Cloud Functions send no `Referer`, so
+> every call had been failing `API_KEY_HTTP_REFERRER_BLOCKED` (403). Kevin set
+> Application restrictions to **None** on 2026-08-25 and the fix was verified in
+> the production logs (`gemini-2.5-flash` selected, response returned). It had
+> never worked before, because no pool had ever held the entitlement until C1's
+> toggle granted one.
+>
+> 🔴 **STILL OWED, KEVIN'S ACTION: ROTATE THE GEMINI KEY.**
+> `CODE_REVIEW_REPORT.md:183` records that it was committed to git history once,
+> and it now has no application restriction. Create a fresh key (Application
+> restrictions **None**, API restrictions **Generative Language API only**),
+> `npx firebase functions:secrets:set GEMINI_API_KEY`, **redeploy functions**
+> (v2 `defineSecret` pins the version at deploy — the live one is version 7), then
+> delete the old key.
+>
+> 🔴 **`nflDeepScoreSweepJob` DEPLOYS ITS CODE BUT FAILS ITS IAM INVOKER
+> BINDING. FIX THAT BEFORE ARMING `nflDeepSweep`, OR THE JOB WILL LOOK ARMED AND
+> NEVER RUN.** Measured on the 2026-08-24 02:38 deploy: the function's own
+> `UpdateFunction` SUCCEEDED, and the deploy then failed with *"Unable to set the
+> invoker for the IAM policy"* for that one function. Without `roles/run.invoker`
+> on its Cloud Run service, Cloud Scheduler gets a 403 and the job silently never
+> fires.
+>
+> **Impact today is ZERO and that is exactly why it is dangerous.** The job is
+> gated on `system/config.nflDeepSweep.enabled === true`
+> (`functions/src/nflSchedule.ts:1392-1402`, default OFF, fail-safe), and that
+> config is unset — so it would log `disabled … nothing to do` regardless. The
+> failure only becomes visible at the moment somebody arms the sweep and
+> concludes the code is broken. Check the Cloud Run service
+> `nfldeepscoresweepjob` → Security, and confirm the scheduler service account
+> holds **Cloud Run Invoker**. Unrelated to any 2026-08-25 PR.
+>
+> ⚠️ **THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED** and was already red at
+> `925c6d7d`. Not run by CI, last touched 2026-07-04.
+>
+> ℹ️ **Two known reporting defects, not yet fixed** (offered, not approved):
+> `AICommissioner.tsx:96` and the NFL manager card report every failure with the
+> same copy — which is why a 403 took a production log pull instead of thirty
+> seconds — and `gemini.ts` fires an extra doomed API call on every failure.
+
+
+> ## 🟢 2026-08-25 (earlier) — **FOUR PRs MERGED: T10 (THE LAUNCH BLOCKER), THE POOL FEED + PIN, AND BOTH HALVES OF PER-POOL PREMIUM. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
 >
 > Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)** — read it before
 > touching this effort. This box is the live state; that file is the reasoning.

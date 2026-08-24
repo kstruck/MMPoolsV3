@@ -2,6 +2,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { defineSecret } from "firebase-functions/params";
 import { recordUsageEvent } from "./lib/usageEvents";
+import { AIProviderError, providerFailureReason } from "./lib/aiProviderError";
+
+// Re-exported so existing importers of `./gemini` keep working; the logic is
+// pure and lives in `lib/` so it can be unit-tested without the provider SDK.
+export { AIProviderError, providerFailureReason };
 
 export const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
@@ -61,11 +66,33 @@ export const generateAIResponse = async (
     // parse failure downstream does not change that answer.
     let providerCallRecorded = false;
     const apiKey = geminiApiKey.value();
+    // Checked BEFORE any network call. It used to sit below model discovery, so a
+    // missing secret produced a fetch with `key=undefined` and a confusing 400
+    // before the honest "not set" error ever fired.
+    if (!apiKey) {
+        // Recorded as `skipped`, matching how `sendCourierSMS` treats a missing
+        // Courier token. No provider call happens, so it costs nothing — but a
+        // misconfigured deployment must be VISIBLE in the rollup rather than
+        // silently producing no telemetry at all, which is indistinguishable
+        // from "the feature was never used". Sits at the EARLY check #545 moved
+        // this to; the old position ran after discovery and fetched with
+        // `key=undefined` first.
+        await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "skipped",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            errorCode: "not_configured",
+        });
+        throw new Error("GEMINI_API_KEY is not set.");
+    }
     let selectedModelName = "gemini-1.5-flash"; // Default fallback
 
     // Dynamic Model Discovery
     try {
-        console.log("DEBUG: Discovering available models...");
+        console.log("[gemini] discovering available models...");
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         if (response.ok) {
             const data = await response.json();
@@ -82,29 +109,11 @@ export const generateAIResponse = async (
                 // or keep it if SDK handles it. SDK usually handles 'models/' prefix fine or needs it.
                 // Let's use the exact name returned by API but strip 'models/' prefix if present just in case the SDK adds it.
                 selectedModelName = bestModel.replace("models/", "");
-                console.log(`DEBUG: Selected Dynamic Model: ${selectedModelName} (from ${bestModel})`);
+                console.log(`[gemini] selected model: ${selectedModelName} (from ${bestModel})`);
             }
         }
     } catch (e) {
-        console.warn("DEBUG: Model discovery failed, using fallback:", e);
-    }
-
-    if (!apiKey) {
-        // Recorded as `skipped`, matching how `sendCourierSMS` treats a missing
-        // Courier token. No provider call happens, so it costs nothing — but a
-        // misconfigured deployment must be VISIBLE in the rollup rather than
-        // silently producing no telemetry at all, which is indistinguishable
-        // from "the feature was never used".
-        await recordUsageEvent({
-            provider: "gemini",
-            feature: usageContext.feature,
-            outcome: "skipped",
-            latencyMs: Date.now() - startedAt,
-            poolId: usageContext.poolId ?? null,
-            userId: usageContext.userId ?? null,
-            errorCode: "not_configured",
-        });
-        throw new Error("GEMINI_API_KEY is not set.");
+        console.warn("[gemini] model discovery failed, using fallback:", e);
     }
 
     const genAI = new GoogleGenAI({ apiKey });
@@ -180,10 +189,25 @@ export const generateAIResponse = async (
             return { raw_response: text };
         }
     } catch (error: any) {
+// 🛑 THE REASON IS EXTRACTED AND CARRIED, not just logged.
+        //
+        // On 2026-08-24 the AI Commissioner had never once worked in production:
+        // the Gemini key carried an HTTP-referrer restriction, Cloud Functions
+        // send no `Referer`, and every call came back 403
+        // API_KEY_HTTP_REFERRER_BLOCKED. Diagnosing that took a production log
+        // pull, because every layer above this reported "could not write that
+        // one" — a config problem and a network blip were indistinguishable.
+        // The reason now rides on the thrown error so the request document, and
+        // therefore the commissioner's own screen, can name it.
+        const reason = providerFailureReason(error);
+
         // An ATTEMPTED call that failed may still be billed, and a spike in
         // errors is itself a cost signal — so failures are recorded too.
-        // `errorCode` is a short class only: the raw provider message can echo
-        // the prompt back, and prompts must never enter telemetry (1.4).
+        // `errorCode` carries #545's SHORT STABLE reason code
+        // (API_KEY_HTTP_REFERRER_BLOCKED / HTTP_403 / UNKNOWN) rather than the
+        // ad-hoc status this used to derive: strictly more diagnostic, and still
+        // safe for telemetry because providerFailureReason never returns raw
+        // provider message text — prompts must never enter telemetry (1.4).
         //
         // Skipped when the provider call already succeeded: reaching here after
         // that means OUR parsing threw, not the provider. Recording a second
@@ -196,22 +220,17 @@ export const generateAIResponse = async (
             poolId: usageContext.poolId ?? null,
             userId: usageContext.userId ?? null,
             model: selectedModelName,
-            errorCode: typeof error?.status === "number" ? `http_${error.status}` : (error?.code ? String(error.code) : "unknown"),
+            errorCode: reason,
         });
 
-        console.error("Gemini API Error Full Details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        console.error(`[gemini] request failed (${reason}):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
 
-        // DEBUG: Try to list models to see if key is valid
-        try {
-            console.log("Attempting to list models via raw fetch...");
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-            const data = await response.json();
-            console.log("Debug: Available Models Response", JSON.stringify(data));
-        } catch (fetchError) {
-            console.error("Debug: Failed to list models", fetchError);
-        }
+        // The "list the models to see if the key is valid" retry that used to
+        // live here is GONE. The key had just been rejected, so it fired a
+        // second doomed request and logged the identical error a second time —
+        // noise that made the real one harder to find, on a paid API.
 
-        throw new Error(`Failed to generate AI response: ${error.message || error}`);
+        throw new AIProviderError(reason, error?.message || String(error));
     }
 };
 

@@ -95,7 +95,12 @@ describe('generateAIResponse — usage accounting', () => {
     ).rejects.toThrow();
     expect(h.events).toHaveLength(1);
     expect(h.events[0].outcome).toBe('error');
-    expect(h.events[0].errorCode).toBe('http_503');
+    // #545's providerFailureReason supplies the code now — a SHORT STABLE
+    // reason (API_KEY_HTTP_REFERRER_BLOCKED / HTTP_403 / UNKNOWN) rather than
+    // the ad-hoc `http_${status}` this used to derive. Strictly more
+    // diagnostic, and still safe for telemetry: it never returns raw provider
+    // message text, which prompts could ride in on (plan 1.4).
+    expect(h.events[0].errorCode).toBe('HTTP_503');
     // No token counts on a failed call — they must not be invented.
     expect(h.events[0].inputTokens ?? null).toBeNull();
   });

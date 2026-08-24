@@ -12,15 +12,10 @@ import { pickCtaFor } from '../../utils/pickCta';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
-import { 
-  LayoutGrid, 
-  CheckCircle2, 
-  Shield, 
-  Zap, 
-  Percent, 
-  Lock, 
-  Settings,
-  ArrowLeft,
+import { seasonCompare } from '../../utils/nflResults';
+import {
+  CheckCircle2,
+  Lock,
   ChevronRight,
   Star
 } from 'lucide-react';
@@ -54,9 +49,6 @@ interface NFLUserBentoDashboardProps {
   earliestGame: NFLGame | null;
   /** Effective pick deadline for the week (hard-lock aware). Falls back to kickoff. */
   weekLockAt?: number | null;
-  onBack: () => void;
-  onOpenAuth: () => void;
-  isManager: boolean;
   onSelectTab: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
   /**
    * The pool feed (T9), subscribed by `NFLPoolDashboard` so ONE reader serves
@@ -160,9 +152,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   isWeekLocked: _isWeekLocked,
   earliestGame: _earliestGame,
   weekLockAt,
-  onBack,
-  onOpenAuth: _onOpenAuth,
-  isManager,
   poolFeed = [],
   poolFeedError = false,
   isPoolMember = false,
@@ -218,7 +207,6 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   const castPool = _pool as any;
   const seasonType = poolSeasonType(castPool);
-  const [sidebarActive, setSidebarActive] = useState('dashboard');
   const [awayLogoErr, setAwayLogoErr] = useState(false);
   const [homeLogoErr, setHomeLogoErr] = useState(false);
 
@@ -227,19 +215,20 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return entries.find(e => e.ownerUid === user.id || e.id === user.id) || null;
   }, [entries, user]);
 
+  // ONE season ordering for every list on this card — `seasonCompare` is the
+  // standings table's cascade (utils/nflResults); the three shallow copies
+  // that lived here could disagree with it on ties (codex, 2026-08-23).
+  const bySeason = React.useCallback(
+    (a: any, b: any) => seasonCompare(_pool.type, a, b) || (a.userName || '').localeCompare(b.userName || ''),
+    [_pool.type],
+  );
+
   const userRank = useMemo(() => {
     if (!user || entries.length === 0) return 'N/A';
-    const sorted = [...entries].sort((a, b) => {
-      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (_pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
+    const sorted = [...entries].sort(bySeason);
     const rankIndex = sorted.findIndex(e => e.ownerUid === user.id || e.id === user.id);
     return rankIndex !== -1 ? `#${rankIndex + 1}` : 'N/A';
-  }, [entries, user, _pool.type]);
+  }, [entries, user, bySeason]);
 
   // Full slate for the selected week (used to list every game, not just the focus game).
   const weeklyGames = useMemo(() => {
@@ -493,14 +482,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   const displayedMembers = useMemo(() => {
     if (entries.length === 0) return [];
-    const sorted = [...entries].sort((a, b) => {
-      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (_pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
+    const sorted = [...entries].sort(bySeason);
     return sorted.slice(0, 3).map(e => ({
       name: e.userName || 'Anonymous',
       week: nflWeekLabel(seasonType, selectedWeek),
@@ -510,7 +492,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
       highlight: e.ownerUid === user?.id
     }));
-  }, [entries, _pool.type, selectedWeek, user, seasonType]);
+  }, [entries, bySeason, _pool.type, selectedWeek, user, seasonType]);
 
   const userStats = useMemo(() => {
     if (!myEntry) {
@@ -550,14 +532,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
   const displayedStandings = useMemo(() => {
     if (entries.length === 0) return [];
-    const sorted = [...entries].sort((a, b) => {
-      if (_pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
-      if (_pool.type === 'NFL_SURVIVOR') {
-        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
-        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
-      }
-      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
-    });
+    const sorted = [...entries].sort(bySeason);
     return sorted.slice(0, 5).map((e, idx) => ({
       rank: idx + 1,
       name: e.userName || 'Anonymous',
@@ -566,7 +541,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       avatar: (e.userName || 'U').substring(0, 2).toUpperCase(),
       highlight: e.ownerUid === user?.id || e.id === user?.id
     }));
-  }, [entries, _pool.type, user]);
+  }, [entries, bySeason, _pool.type, user]);
 
   return (
     <>
@@ -578,85 +553,13 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           nothing when nothing is pinned. */}
       {isPoolMember && <PinnedMessageBand message={pinnedMessage} error={pinnedError} />}
 
-    <div className="grid grid-cols-1 xl:grid-cols-5 gap-8 items-stretch">
-
-      {/* 1. Sleek Left Navigation Sidebar (Bento Grid Block) */}
-      <div className="xl:col-span-1 flex flex-col justify-between bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150">
-        <div className="space-y-8">
-          {/* User Profile Card */}
-          <div className="flex items-center gap-4 bg-page p-4 border border-line rounded-lg">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-xl bg-navy-800 flex items-center justify-center font-display font-bold uppercase text-white text-lg shadow-card">
-                {user?.name?.substring(0, 2).toUpperCase() || 'GS'}
-              </div>
-              <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-gold-500 border-2 border-[color:var(--page)] animate-live-pulse"></span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="font-display font-bold text-[color:var(--text)] text-sm tracking-[0.05em] leading-tight uppercase break-words" title={user?.name || 'Guest Participant'}>
-                {user?.name || 'Guest'}
-              </h4>
-              <p className="text-muted text-[10px] uppercase font-display font-bold tracking-[0.08em] mt-0.5">
-                Rank <span className="text-gold-600 dark:text-gold-400 num">{userRank}</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <div className="space-y-2">
-            {[
-              { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, active: true },
-              // Only the play link for THIS pool's type — a Pick'em pool shows Pick'em, not Survivor/Margin.
-              ...(_pool.type === 'NFL_SURVIVOR'
-                ? [{ id: 'survivor', label: 'Survivor', icon: Shield, tab: 'picks' as const }]
-                : _pool.type === 'NFL_MARGIN'
-                ? [{ id: 'margin', label: 'Margin', icon: Percent, tab: 'picks' as const }]
-                : [{ id: 'picks', label: 'Pick\'em', icon: Zap, tab: 'picks' as const }]),
-              { id: 'rules', label: 'Rules & Settings', icon: Settings, tab: 'rules' as const }
-            ].map(item => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setSidebarActive(item.id);
-                  if (item.tab) onSelectTab(item.tab);
-                }}
-                className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl font-display font-bold uppercase text-[12px] tracking-[0.08em] transition-all duration-150 ${
-                  sidebarActive === item.id
-                    ? 'bg-gold-400/10 text-[color:var(--text)] border-l-4 border-gold-500 shadow-card'
-                    : 'text-muted hover:text-[color:var(--text)] hover:bg-page'
-                }`}
-              >
-                <item.icon size={16} className={sidebarActive === item.id ? 'text-gold-600 dark:text-gold-400' : 'text-muted'} />
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Action Panel / Logo */}
-        <div className="mt-8 pt-6 border-t border-line flex flex-col gap-2">
-          {isManager && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onSelectTab('manager')}
-              className="w-full"
-            >
-              <Settings size={14} /> Commissioner
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onBack}
-            className="w-full"
-          >
-            <ArrowLeft size={14} /> Leave Pool
-          </Button>
-        </div>
-      </div>
-
-      {/* 2. Interactive Main Bento Dashboard Area */}
-      <div className="xl:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+    {/* The bento grid. The old left sidebar card (profile chip + a second
+        Dashboard/Pick'em/Rules menu + a second Commissioner button + Leave
+        Pool) is GONE (2026-08-23 redesign): every one of its targets already
+        lives in the pool tab strip or the header card, and on mobile the whole
+        card rendered ABOVE the content — pure scroll tax in front of the
+        standings people were trying to reach. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         
         {/* CARD A: LIVE WEEKLY PICK'EM — full width so the week slate is readable */}
         <div
@@ -1321,10 +1224,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           </div>
         </div>
 
-      </div>
-
       {/* 3. Floating Bottom Timeline Block */}
-      <div className="xl:col-span-5 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition-all duration-150">
+      <div className="md:col-span-2 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition-all duration-150">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 overflow-x-auto select-none py-2 px-4 whitespace-nowrap">
           
           {/* Timeline Node 1 */}

@@ -43,6 +43,7 @@ import {
     unsellableClampOutcome,
     type PendingBillableSnapshot,
     type PoolQuote,
+    isMidseasonSellableAddon,
 } from "./shared/schemas/quote";
 import {
     validateCouponRules,
@@ -313,6 +314,21 @@ export const createCheckoutSession = validated(
         }
         if (usedCredit || customCreditId) {
             throw new HttpsError("invalid-argument", "Pool credits pay for hosting, not for add-ons.");
+        }
+        // Not every priced add-on can be sold ON ITS OWN. `whatIfSimulator` is
+        // priced and premium in the config, but the feature is rendered only by
+        // the Bracket dashboard AND is ungated there, so buying it separately
+        // delivers nothing to anybody. Enforced HERE, on the server, because a
+        // stale client bundle would keep offering it otherwise — the same
+        // reasoning as INCLUDED_ADDON_KEYS. (codex r4 [P1].)
+        const unsellableSeparately = quote.addonLines
+            .map((l) => l.key)
+            .filter((k) => !isMidseasonSellableAddon(k));
+        if (unsellableSeparately.length > 0) {
+            throw new HttpsError(
+                "invalid-argument",
+                `These features cannot be bought on their own: ${unsellableSeparately.join(", ")}.`,
+            );
         }
         if (couponCode) {
             // See computeAddonUpgradeQuote: a coupon reservation is keyed by

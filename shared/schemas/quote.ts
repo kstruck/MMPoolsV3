@@ -132,6 +132,37 @@ export type AddonKey = (typeof ADDON_KEYS)[number];
  */
 export const INCLUDED_ADDON_KEYS = ['customBranding'] as const;
 
+/**
+ * Add-ons that may be sold ON THEIR OWN, to a pool whose hosting is already
+ * paid for (PLAN-PER-POOL-PREMIUM C2). This is NARROWER than "not included and
+ * not withdrawn", and the difference is the point.
+ *
+ * ⚠️ `whatIfSimulator` is ABSENT, and not because of the pool type. codex
+ * flagged it as bracket-only; measured, it is worse than that:
+ *
+ *   - `WhatIfSimulator.tsx` is rendered ONLY by `BracketPoolDashboard`, so on
+ *     an NFL, Playoff, Props or Squares pool the entitlement buys a feature
+ *     that does not exist anywhere.
+ *   - And on a BRACKET pool it is already FREE: the `whatif` sub-tab is
+ *     unconditional — `whatIfSimulator` appears ZERO times in that dashboard —
+ *     so the flag gates nothing and the buyer gains nothing.
+ *
+ * Filtering the offer to BRACKET, as the review suggested, would therefore
+ * still charge a bracket commissioner for something they already have. Until
+ * the dashboard actually gates that sub-tab on the entitlement, the honest
+ * answer is that it is not for sale.
+ *
+ * The key, the schema field and the `featuresUnlocked` plumbing all stay —
+ * exactly as `customBranding` did — so a pool that bought it in the past keeps
+ * it, and gating the sub-tab later is a one-line change here.
+ */
+export const MIDSEASON_SELLABLE_ADDON_KEYS = ['aiCommissioner'] as const;
+
+/** True when this add-on may be bought separately, mid-season. */
+export function isMidseasonSellableAddon(key: string): boolean {
+  return (MIDSEASON_SELLABLE_ADDON_KEYS as readonly string[]).includes(key);
+}
+
 /** True when this add-on ships with every pool and may never be charged for. */
 export function isIncludedAddon(key: string): boolean {
   return (INCLUDED_ADDON_KEYS as readonly string[]).includes(key);

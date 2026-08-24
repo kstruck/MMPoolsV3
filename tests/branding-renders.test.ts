@@ -41,6 +41,40 @@ describe('the NFL dashboard paints with the pool\u2019s colours', () => {
         expect(checklist).toContain('style={primaryButtonStyle}');
     });
 
+    it('the branded HEADER BAND is painted, and only when there is a colour', () => {
+        // Kevin's 2026-08-24 decision (option ii): the band is what makes
+        // branding visible. It is theme-safe because it owns both of its own
+        // colours — `brand.headerBand` carries backgroundColor AND color.
+        expect(dash).toContain('style={brand.headerBand}');
+        expect(dash).toContain('style={brand.headerBandMuted}');
+        expect(dash).toContain('{brand.themed && (');
+    });
+
+    it('an unbranded pool still gets its logo and name, in the old place', () => {
+        // The band replaces the header's top row rather than sitting above it,
+        // so a pool with no primary needs the original block back or the name
+        // disappears entirely.
+        expect(dash).toContain('{!brand.themed && (');
+    });
+
+    it('BOTH previews render the band, or one of them lies (codex)', () => {
+        // The previews exist to promise the look the pool will actually have.
+        // A bordered header in the preview and a solid band on the pool page is
+        // the exact drift they were built to prevent.
+        const editor = read('src/components/NFLPoolDashboard/NFLBrandingSettings.tsx');
+        for (const src of [step, editor]) {
+            expect(src).toContain('style={brand.headerBand}');
+            expect(src).toContain('{brand.themed && (');
+            // ...and the card has to clip it, same as the real header.
+            expect(src).toContain('overflow-hidden rounded-lg');
+        }
+    });
+
+    it('the card clips the band to its rounded corners', () => {
+        // Without `overflow-hidden` the colour squares off the top corners.
+        expect(dash).toContain('className="bg-card border border-line rounded-xl shadow-card overflow-hidden"');
+    });
+
     it('the active-tab underline still uses the accent', () => {
         expect(dash).toContain('const accentHex = brand.accent;');
         expect(dash).toContain('borderBottomColor: accentHex');

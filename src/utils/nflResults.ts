@@ -25,6 +25,55 @@ export interface ResultsRow {
     weeklyResults?: Record<number, { correct?: number; total?: number; points?: number; mode?: string }>;
     weeklyScores?: Record<number, number>;
     seasonTotal?: number;
+    /* Survivor season ordering */
+    status?: string;
+    strikesUsed?: number;
+    rebuysUsed?: number;
+    eliminatedWeek?: number;
+    /* Margin tiebreaker cascade */
+    negativeBurden?: number;
+    positiveWeeks?: number;
+    bestWeek?: number;
+}
+
+/**
+ * The SEASON ordering — ONE definition (2026-08-23, codex on the glance
+ * strip). `NFLStandings` sorted inline and the header's at-a-glance strip
+ * re-derived a simpler copy that stopped at the first tiebreaker, so the two
+ * could disagree about who leads the season. Both call this now.
+ *
+ * SUBSTANTIVE levels only: the alphabetical fallback the standings table
+ * appends is a display stabiliser, not a ranking fact. Two rows this function
+ * calls equal are genuinely tied — the table then orders them by name, and
+ * the glance strip shows them as a shared lead, which is the same reading the
+ * recap's shared-winner line gives a tied week.
+ */
+export function seasonCompare(type: string | undefined, a: ResultsRow, b: ResultsRow): number {
+    if (type === 'NFL_SURVIVOR') {
+        const aAlive = a.status === 'ALIVE' ? 1 : 0;
+        const bAlive = b.status === 'ALIVE' ? 1 : 0;
+        if (bAlive !== aAlive) return bAlive - aAlive;
+        if (a.status === 'ALIVE') {
+            const strikes = (a.strikesUsed ?? 0) - (b.strikesUsed ?? 0);
+            if (strikes) return strikes;
+            return (a.rebuysUsed ?? 0) - (b.rebuysUsed ?? 0);
+        }
+        // Both eliminated: whoever lasted longer ranks higher.
+        return (b.eliminatedWeek ?? 0) - (a.eliminatedWeek ?? 0);
+    }
+    if (type === 'NFL_MARGIN') {
+        const total = (b.seasonTotal ?? 0) - (a.seasonTotal ?? 0);
+        if (total) return total;
+        const burden = (a.negativeBurden ?? 0) - (b.negativeBurden ?? 0);
+        if (burden) return burden;
+        const positive = (b.positiveWeeks ?? 0) - (a.positiveWeeks ?? 0);
+        if (positive) return positive;
+        return (b.bestWeek ?? 0) - (a.bestWeek ?? 0);
+    }
+    if (type === 'NFL_PICKEM') {
+        return (b.totalScore ?? 0) - (a.totalScore ?? 0);
+    }
+    return 0;
 }
 
 /**
