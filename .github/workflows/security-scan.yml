@@ -19,6 +19,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          # 2026-08-23 build audit: this job ran both npm ci's cold every time.
+          # Cache keyed on BOTH lockfiles so root and functions/ installs hit.
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
 
       # npm 10 — the version bundled with node 22 — audits against
       # /-/npm/v1/security/audits/quick, which the registry has RETIRED. It now
