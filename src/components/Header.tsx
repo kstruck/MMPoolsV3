@@ -101,10 +101,17 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                     )}
                 </div>
             )}
-            {/* Sticky on md+ only. On mobile the pool tab strip takes the sticky
-                slot instead — two stacked sticky bars would eat the viewport the
-                redesign is trying to give back. */}
-            <header className="bg-navy-900 border-b border-[rgba(230,206,150,0.16)] relative z-50 shadow-lg md:sticky md:top-0">
+            {/* Sticky everywhere EXCEPT the mobile pool page, where the pool's
+                own tab strip takes the sticky slot — two stacked sticky bars
+                would eat the viewport the redesign is trying to give back.
+                Every other mobile surface keeps the (now compact, hamburger)
+                bar pinned, or its only nav scrolls off-screen. (codex r2, P2.) */}
+            <header
+                className={cn(
+                    'bg-navy-900 border-b border-[rgba(230,206,150,0.16)] z-50 shadow-lg md:sticky md:top-0',
+                    location.pathname.startsWith('/pool/') ? 'relative' : 'sticky top-0'
+                )}
+            >
                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setMenuOpen(false); navigate('/'); }}>
                         <Logo height="h-12" />
