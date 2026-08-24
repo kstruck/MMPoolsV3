@@ -105,7 +105,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
    * revoked in between, the request is marked ERROR and no post ever arrives.
    * Without this the commissioner waits for something that is not coming.
    */
-  const [lastBanterRequest, setLastBanterRequest] = useState<{ status: string; error?: string } | null>(null);
+  const [lastBanterRequest, setLastBanterRequest] = useState<{ status: string; error?: string; errorDetail?: string } | null>(null);
   useEffect(() => {
     if (!pool?.id || !_user?.id) return;
     return dbService.subscribeToMyBanterRequests(pool.id, _user.id, (reqs) => {
@@ -761,6 +761,16 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 {lastBanterRequest.error === 'BANTER_NOT_COMMISSIONER'
                   ? 'Only a commissioner of this pool can have the AI post to the feed.'
                   : 'The AI could not write that one. Nothing was posted — try again, or post it yourself.'}
+                {/* The provider's own reason, when there is one. A commissioner
+                    cannot act on `API_KEY_HTTP_REFERRER_BLOCKED` — but they can
+                    READ it to you, which is the difference between a screenshot
+                    and a production log pull. Rendered only for a real code, so
+                    an ordinary transient failure still reads as one sentence. */}
+                {lastBanterRequest.errorDetail && lastBanterRequest.errorDetail !== 'UNKNOWN' && (
+                  <span className="block mt-0.5 font-mono text-[10px] text-muted">
+                    Reason: {lastBanterRequest.errorDetail}
+                  </span>
+                )}
               </p>
             )}
             {lastBanterRequest?.status === 'GENERATING' && (
