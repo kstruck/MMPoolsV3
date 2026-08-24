@@ -14,6 +14,11 @@ const page = (title: string, body: string) => `<!doctype html>
 </div></body></html>`;
 
 export const emailUnsubscribe = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, async (req, res) => {
+    // Email-footer links are GETs (no List-Unsubscribe-Post header is sent).
+    if (req.method !== "GET" && req.method !== "HEAD") {
+        res.status(405).send(page("Not allowed", "Unsupported request method."));
+        return;
+    }
     const db = admin.firestore();
     const email = String(req.query.e ?? "").trim().toLowerCase();
     const token = String(req.query.t ?? "");

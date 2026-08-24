@@ -251,7 +251,9 @@ relying): Phase 3.1 functions (`onUserCreated`, `syncAllUsers`,
 `searchUsersByEmail` with the `searchName` lowercase index field) + adminHealth
 deployed; tightened firestore.rules deployed; searchName backfill run;
 `autoClosePools` is LIVE past dry-run (actually closes pools daily). The Gemini
-key was NOT leaked — disregard any doc claiming otherwise.
+key ~~was NOT leaked~~ **WAS leaked — corrected 2026-08-23.** `git show
+3340fff0^:.env` in the public repo shows `VITE_API_KEY` (a Gemini key), exposed
+since 2025-12-13. Rotation is Kevin's owed action (HANDOFF top box).
 
 ---
 

@@ -324,7 +324,7 @@ The checklist (repo root) is the Phase 0-3 deploy runbook for the super-admin co
 | Stripe TEST secret rotation (delete the commented plaintext test key + webhook secret from `functions/.env`, rotate both in Stripe dashboard test mode) | **PENDING — still to do.** Prod secrets are in Secret Manager and fine. |
 | Coolify build-env fix (`VITE_FIREBASE_STORAGE_BUCKET` = a pasted literal, `VITE_FIREBASE_AUTH_DOMAIN` doubled) | UNVERIFIED — checklist Step 6 lists it; owner interview didn't confirm completion. Check Coolify env vars before enabling Storage. |
 
-Doc corrections: the checklist's "Coolify auto-builds main on push" is wrong per owner (manual trigger, §2). Any doc claiming a leaked **Gemini** key is wrong — the Gemini key was NOT leaked (owner, 2026-07-06); the pending secret issue is the Stripe TEST key only.
+Doc corrections: the checklist's "Coolify auto-builds main on push" is wrong per owner (manual trigger, §2). ~~Any doc claiming a leaked **Gemini** key is wrong~~ **CORRECTED 2026-08-23: the Gemini key WAS leaked** — `git show 3340fff0^:.env` in the public repo shows `VITE_API_KEY` (a Gemini key), exposed since 2025-12-13; rotation is Kevin's owed action (HANDOFF top box). The Stripe TEST key issue is separate and also pending.
 
 Money reminder (never violate): Stripe handles **commissioner hosting fees only**; the platform NEVER touches participant entry fees (P2P honor system). Never propose platform-mediated entry-fee handling.
 

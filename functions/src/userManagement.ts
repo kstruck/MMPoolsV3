@@ -248,9 +248,27 @@ export const searchUsersByEmail = validated(
         col.orderBy("searchName").startAt(p).endAt(p + CH).limit(cap).get(),
     ]);
 
+    // Allowlist, not `{ ...d.data() }`: the raw user doc carries fields the
+    // admin search UI never renders (phone, paymentHandles, socialLinks, ...).
+    const pick = (d: FirebaseFirestore.QueryDocumentSnapshot) => {
+        const u = d.data();
+        return {
+            id: d.id,
+            email: u.email ?? null,
+            name: u.name ?? null,
+            role: u.role ?? null,
+            provider: u.provider ?? null,
+            picture: u.picture ?? null,
+            registrationMethod: u.registrationMethod ?? null,
+            createdAt: u.createdAt ?? null,
+            lastLogin: u.lastLogin ?? null,
+            poolCredits: u.poolCredits ?? null,
+            freePoolsAvailable: u.freePoolsAvailable ?? null,
+        };
+    };
     const byId = new Map();
     for (const d of [...emailSnap.docs, ...nameSnap.docs]) {
-        if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() });
+        if (!byId.has(d.id)) byId.set(d.id, pick(d));
     }
     const users = Array.from(byId.values()).slice(0, cap);
     return { users, count: users.length };

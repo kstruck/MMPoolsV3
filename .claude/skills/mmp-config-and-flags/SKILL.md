@@ -42,7 +42,7 @@ kill-switches live there.
 | `VITE_FIREBASE_STORAGE_BUCKET` | `src/firebase.ts:11` | |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | `src/firebase.ts:12` | |
 | `VITE_FIREBASE_APP_ID` | `src/firebase.ts:13` | |
-| `GEMINI_API_KEY` | `.agent/skills/front-end-skill` (nano-banana image-gen agent skill) — NOT the app | The `.env` file carries a stale comment claiming this key was committed to git history; owner ground truth 2026-07-06: the Gemini key was NOT leaked. The comment is wrong — do not open a rotation fire drill from it. |
+| `GEMINI_API_KEY` | `.agent/skills/front-end-skill` (nano-banana image-gen agent skill) — NOT the app | **CORRECTED 2026-08-23: the `.env` comment was RIGHT and the owner denial wrong** — `git show 3340fff0^:.env` in the public repo shows `VITE_API_KEY` (a Gemini key), exposed since 2025-12-13. Rotation is Kevin's owed action (HANDOFF). |
 
 Referenced in `src/` but NOT present in `.env` (as of 2026-07-06):
 

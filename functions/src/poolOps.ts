@@ -466,7 +466,8 @@ export const createPool = validated(
         // Re-throw HttpsErrors as is
         if (error.code && error.details) throw error;
         // Wrap unknown errors
-        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+        // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
+        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
     }
     },
 );

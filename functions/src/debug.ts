@@ -3,6 +3,11 @@ import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 
 export const inspectPoolState = onRequest(async (req, res) => {
+    // Read-only inspector — GET/HEAD only.
+    if (req.method !== "GET" && req.method !== "HEAD") {
+        res.status(405).send("Method Not Allowed");
+        return;
+    }
     // Require Firebase Auth token
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {

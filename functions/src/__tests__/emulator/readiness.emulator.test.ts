@@ -21,8 +21,14 @@ function fakeRes() {
 describe("readiness (emulator)", () => {
     it("responds 200 OK when Firestore is reachable", async () => {
         const res = fakeRes();
-        await (readiness as unknown as (req: unknown, res: unknown) => Promise<void>)({}, res);
+        await (readiness as unknown as (req: unknown, res: unknown) => Promise<void>)({ method: "GET" }, res);
         expect(res.calls.status).toBe(200);
         expect(res.calls.body).toBe("OK");
+    });
+
+    it("rejects non-GET methods with 405", async () => {
+        const res = fakeRes();
+        await (readiness as unknown as (req: unknown, res: unknown) => Promise<void>)({ method: "POST" }, res);
+        expect(res.calls.status).toBe(405);
     });
 });

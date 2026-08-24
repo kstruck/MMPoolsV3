@@ -24,6 +24,11 @@ async function resolvePool(poolId: string): Promise<{ name?: string; type?: stri
 // here. Social crawlers get a per-pool Open Graph preview; humans and search
 // engines get the SPA shell (React Router handles the route; <RouteSEO> noindexes it).
 export const joinPreview = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, async (req, res) => {
+    // Crawlers and browsers only ever GET/HEAD this route.
+    if (req.method !== "GET" && req.method !== "HEAD") {
+        res.status(405).send("Method Not Allowed");
+        return;
+    }
     const poolId = extractPoolId(req.path);
 
     if (isSocialCrawler(req.headers["user-agent"]) && poolId) {

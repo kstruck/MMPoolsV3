@@ -47,11 +47,14 @@ incident where merges silently reverted merged work (Section 4).
 
 ## 0. Corrections that OVERRIDE repo docs (owner-confirmed 2026-07-06)
 
-1. **The Gemini API key was NOT leaked.** Any doc claiming a committed/leaked Gemini key
-   is **DOC-WRONG**: `CODE_REVIEW_REPORT.md:183` ("previously committed to git history…
-   rotate the key"), `AUDIT-REPORT.md:147` ("Previously-committed Gemini key"),
-   `AUDIT-REPORT.md:278`, `CODE_REVIEW_REPORT.md:241` ("Rotate the Gemini + Stripe keys").
-   Do not rotate/scrub for the Gemini key; do not repeat the claim.
+1. **REVERSED 2026-08-23: the Gemini API key WAS leaked.** The 2026-07-06 owner
+   denial was itself the wrong claim. Measured: `git show 3340fff0^:.env` in the
+   PUBLIC repo shows `VITE_API_KEY` (a Gemini key, per the Dockerfile:24 removal
+   note), exposed since 2025-12-13. `CODE_REVIEW_REPORT.md:183`,
+   `AUDIT-REPORT.md:147,278` were right all along. Rotation is Kevin's owed
+   action (HANDOFF top box). Meta-lesson: this correction section spent seven
+   weeks propagating a false correction — an "owner-confirmed" fact that
+   contradicts a runnable command is a hypothesis until the command is run.
    Still true and separate: the plaintext Stripe **TEST** secret in `functions/.env:1-2`
    — rotation is **PENDING** (Kevin's action, `PHASE0-DEPLOY-CHECKLIST.md` Step 5).
 2. **Phase 3.1 IS deployed.** PR #139 merged to main (merge `53d9872`); all 8 changed
@@ -413,7 +416,7 @@ merged in PR #139 (`53d9872`) and **deployed** (Section 0.2).
 | Doc claim | Reality | Evidence |
 |---|---|---|
 | `docs/NFL_POOLS_README.md:78` — Margin tiebreaker level 5 is "Coin Flip (Random)" | Deterministic `ownerUid.localeCompare` | `functions/src/nflScoringEngine.ts:277-302` (`sortMarginLeaderboard`); `README.md` line ~32 ("Deterministic ID comparison") is the correct one |
-| Gemini key "previously committed / rotate immediately" (`CODE_REVIEW_REPORT.md:183`, `AUDIT-REPORT.md:147,278`) | Key was NOT leaked (owner, 2026-07-06) | Section 0.1 |
+| Gemini key "previously committed / rotate immediately" (`CODE_REVIEW_REPORT.md:183`, `AUDIT-REPORT.md:147,278`) | TRUE — confirmed 2026-08-23 via `git show 3340fff0^:.env` (public repo); the 2026-07-06 owner denial was the error | Section 0.1 |
 | `docs/bracket-pool-architecture.md` edge case #4 — seed parsing of prefixed IDs (`E1-Duke`) via regex | Team IDs are full ESPN display names ("Duke Blue Devils"); the old regex does not work | `docs/annual-bracket-setup-runbook.md` Rule 4 + 2026 postmortem; this stale doc section is the ROOT of live bug H4 (client seed drift, 2.9) |
 | `SUPERADMIN-AUDIT-REPORT.md:38` — "root tests 203/203" | 216/216 as of 2026-07-06 | executed `vitest run` (Section 0.3) |
 | ADR-0001:18 / `PHASE-A-INVENTORY.md:108` say the POOL_CREATED activity event "has no writer at all" | Stale (pre-merge). The writer IS on main: `functions/src/lib/poolCreation.ts:110-112`, called by all three create callables — `CONTEXT.md:25` is now correct; do not add a duplicate writer | `grep -rn "POOL_CREATED" functions/src/lib/poolCreation.ts` |
