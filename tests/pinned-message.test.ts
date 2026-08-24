@@ -137,7 +137,9 @@ describe('the band renders below the ticker, for members, and never lies', () =>
   it('sits directly after the score ticker', () => {
     const ticker = bento.indexOf('<NFLGameTicker');
     const pinned = bento.indexOf('<PinnedMessageBand');
-    const grid = bento.indexOf('<div className="grid grid-cols-1 xl:grid-cols-5');
+    // 2026-08-23 mobile redesign: the sidebar column died and the bento's
+    // outer grid became the two-column card grid. Same invariant, new anchor.
+    const grid = bento.indexOf('<div className="grid grid-cols-1 md:grid-cols-2');
     expect(ticker).toBeGreaterThan(-1);
     expect(pinned).toBeGreaterThan(ticker);
     expect(pinned).toBeLessThan(grid);
