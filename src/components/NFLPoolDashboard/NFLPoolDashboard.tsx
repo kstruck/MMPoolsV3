@@ -883,6 +883,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
+              aria-current={activeTab === tab ? 'page' : undefined}
               className={`py-3 px-4 md:px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
                 activeTab === tab
                   ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
