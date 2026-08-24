@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
 import { isPoolManager, isSuperAdmin } from '../../utils/auth';
-import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
+import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { logger } from '../../utils/logger';
@@ -107,6 +107,20 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     payments: !!user, results: showResultsTab, grid: showPicksGridTab,
   };
   const resolvedTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
+  // THE one member-facing nav (2026-08-23 mobile redesign). Rendered from data
+  // so the strip stays a single system — the bento's duplicate sidebar menu is
+  // gone. `manager` is deliberately absent: the Commissioner button in the
+  // header card is its only door. Filtered through `tabOffered`, same authority
+  // that routes a `?tab=` URL.
+  const TAB_STRIP: { tab: TabType; label: string }[] = [
+    { tab: 'dashboard', label: 'Pool Home' },
+    { tab: 'picks', label: 'My Entry' },
+    { tab: 'grid', label: 'Current Picks' },
+    { tab: 'standings', label: 'Standings & Results' },
+    { tab: 'recaps', label: 'Weekly Recaps' },
+    { tab: 'rules', label: 'Rules & Rulesets' },
+    { tab: 'payments', label: 'Payments' },
+  ];
   // T10: `results` collapses into `standings` HERE, once, so the strip, the tab
   // router and Help all see one tab. Everything downstream reads `activeTab`.
   const { tab: activeTab, scope: standingsScope } =
@@ -736,7 +750,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               {branding.logoUrl && (
                 <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
               )}
-              <h1 className="font-display font-extrabold uppercase text-3xl leading-none">{pool.name}</h1>
+              {/* The pool name is the way HOME (2026-08-23 redesign) — the
+                  affordance every site header trains: click the title, land on
+                  the main view. Inherits the band's ink; the button nests
+                  inside the h1, which is valid HTML (the reverse is not). */}
+              <h1 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-none">
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  title="Back to Pool Home"
+                  className="uppercase text-left hover:opacity-80 transition-opacity"
+                >
+                  {pool.name}
+                </button>
+              </h1>
               <span
                 className="font-display font-bold uppercase text-[12px] tracking-[0.08em]"
                 style={brand.headerBandMuted}
@@ -755,7 +781,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 {branding.logoUrl && (
                   <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
                 )}
-                <h1 className="font-display font-extrabold uppercase text-3xl text-[color:var(--text)] leading-none">{pool.name}</h1>
+                <h1 className="font-display font-extrabold uppercase text-2xl md:text-3xl text-[color:var(--text)] leading-none">
+                  <button
+                    onClick={() => setActiveTab('dashboard')}
+                    title="Back to Pool Home"
+                    className="uppercase text-left hover:opacity-80 transition-opacity"
+                  >
+                    {pool.name}
+                  </button>
+                </h1>
               </div>
             )}
             <p className="text-muted font-body text-sm font-semibold mt-1.5 flex items-center gap-2 flex-wrap">
@@ -824,9 +858,42 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 <Settings size={13} /> Commissioner
               </Button>
             )}
+
+            {/* Moved out of the bento sidebar when that menu was deleted
+                (2026-08-23) — navigation back to My Entries, nothing more. */}
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              <ArrowLeft size={13} /> Leave Pool
+            </Button>
           </div>
         </div>
         </div>
+
+        {/* THE pool nav — one strip, directly under the header (2026-08-23
+            mobile redesign: "standings are too far down, too many menus").
+            Sticky on mobile so every section stays one tap away at any scroll
+            depth; static on md+ where the site header keeps that slot. bg-page
+            is solid on purpose — content must not ghost through while stuck.
+            (On a branded pool the page tint differs slightly behind it; that
+            is cosmetic and beats a translucent smear.) */}
+        <nav
+          aria-label="Pool sections"
+          className="sticky top-0 z-40 md:static -mx-4 px-4 md:mx-0 md:px-0 mt-4 bg-page border-b border-line flex overflow-x-auto whitespace-nowrap scrollbar-hide"
+        >
+          {TAB_STRIP.filter(({ tab }) => tabOffered[tab]).map(({ tab, label }) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`py-3 px-4 md:px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
+                activeTab === tab
+                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
+              }`}
+              style={activeTab === tab ? { borderBottomColor: accentHex } : {}}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
 
         {/* Week-by-week pending/done strip + "picks due" call-to-action */}
         {!isLoading && (
@@ -844,93 +911,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </div>
         )}
 
-        {/* Global tab routing headers */}
-        <div className="flex border-b border-line mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'dashboard'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'dashboard' ? { borderBottomColor: accentHex } : {}}
-          >
-            Pool Home
-          </button>
-          <button
-            onClick={() => setActiveTab('picks')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'picks'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'picks' ? { borderBottomColor: accentHex } : {}}
-          >
-            My Entry
-          </button>
-          {showPicksGridTab && (
-            <button
-              onClick={() => setActiveTab('grid')}
-              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-                activeTab === 'grid'
-                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
-              }`}
-              style={activeTab === 'grid' ? { borderBottomColor: accentHex } : {}}
-            >
-              Current Picks
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('standings')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'standings'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'standings' ? { borderBottomColor: accentHex } : {}}
-          >
-            Standings & Results
-          </button>
-          <button
-            onClick={() => setActiveTab('recaps')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'recaps'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'recaps' ? { borderBottomColor: accentHex } : {}}
-          >
-            Weekly Recaps
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'rules'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'rules' ? { borderBottomColor: accentHex } : {}}
-          >
-            Rules & Rulesets
-          </button>
-          {user && (
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-                activeTab === 'payments'
-                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
-              }`}
-              style={activeTab === 'payments' ? { borderBottomColor: accentHex } : {}}
-            >
-              Payments
-            </button>
-          )}
-        </div>
-
         {/* Tab View Routers */}
-        <div className="space-y-6">
+        <div className="space-y-6 mt-6">
           {isLoading ? (
             <div className="text-center py-16">
               <div className="animate-spin w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -952,9 +934,6 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     isWeekLocked={isWeekLocked}
                     earliestGame={earliestGame}
                     weekLockAt={weekLock.deadline}
-                    onBack={onBack}
-                    onOpenAuth={onOpenAuth}
-                    isManager={isManager}
                     onSelectTab={(tab) => setActiveTab(tab)}
                     /* T9's feed and the pinned band render INSIDE the bento now
                        (Kevin, 2026-08-23): the feed beside Pool Standings rather

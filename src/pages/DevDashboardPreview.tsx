@@ -206,9 +206,6 @@ export const DevDashboardPreview: React.FC = () => {
             setSelectedWeek={setWeek}
             isWeekLocked={false}
             earliestGame={mockGames[0]}
-            onBack={noop}
-            onOpenAuth={noop}
-            isManager={true}
             onSelectTab={noop}
           />
         )}
