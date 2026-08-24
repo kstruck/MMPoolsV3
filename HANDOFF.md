@@ -1,6 +1,43 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+> ## 🟢 2026-08-24 (latest) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+>
+> Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](MORNING-2026-08-24-AUDIT-FIXES.md)**.
+> Worked from Kevin's six audits (DB/storage, backend, auth, hosting, cloud,
+> VCS). Two new plan docs: PLAN-AUDIT-SCAN-BOUNDS (Phase 1 built) and
+> PLAN-AUDIT-AUTH-HARDENING (Phase A built; Phase B = pool-password plaintext
+> is a DECISION).
+>
+> ✅ Highlights: maxInstances caps exist for the first time; the reminders
+> full-collection scan (96×pools/day) is bounded; checkPlayoffScores stops
+> fetching ESPN off-season; password resets now email the owner; the three
+> aria-modal dialogs actually trap focus; header crest 935KB→8KB; recharts off
+> the landing page; **Playwright e2e 0/8 → 8/8** (all selector drift, zero
+> product bugs, run green locally in 2.2m).
+>
+> 🔴 **CORRECTED ON THE RECORD: the Gemini key WAS leaked** (public git
+> history since 2025-12-13, count-only check:
+> `git show 3340fff0^:.env | grep -c VITE_API_KEY`). The 2026-07-06 "NOT
+> leaked" owner claim was false; nine skill files corrected in #547. Rotation
+> stays Kevin's #1 owed action — same key, same rotation as the AI-commissioner
+> box below.
+>
+> 🛑 **OWED, order matters:**
+> 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
+>    `git pull --ff-only origin main` + `npm --prefix functions ci` — #547,
+>    #548, #549, #554 all change `functions/` (plus #542's guard if still
+>    undeployed). First deploy after #548 reconfigures EVERY function
+>    (maxInstances) — expect a long run. **No firestore.rules or indexes
+>    change in any overnight PR.**
+> 2. Coolify `www` rebuild — #551/#552/#553/#555 have frontend halves.
+>
+> 🟡 Kevin decisions D1–D7 (pool passwords, auto-deploy, PNG deletion, e2e in
+> CI, history scrub, blocking functions, emailVerified) restated with
+> recommendations in the morning chat message; next-session prompt in
+> [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md).
+
+
+> ## 🟢 2026-08-25 (SUPERSEDED by the 2026-08-24 box above — this box was forward-dated; the audit-remediation session is newer) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME.**
 >
 > Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)**.
 >
@@ -66,8 +103,8 @@
 > `nfldeepscoresweepjob` → Security, and confirm the scheduler service account
 > holds **Cloud Run Invoker**. Unrelated to any 2026-08-25 PR.
 >
-> ⚠️ **THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED** and was already red at
-> `925c6d7d`. Not run by CI, last touched 2026-07-04.
+> ~~⚠️ THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED~~ **FIXED overnight
+> 2026-08-24 (#556): 8/8 GREEN — see the box above.**
 >
 > ℹ️ **Two known reporting defects, not yet fixed** (offered, not approved):
 > `AICommissioner.tsx:96` and the NFL manager card report every failure with the
@@ -192,21 +229,45 @@
 
 > ⚠️ **THE OWED DEPLOYS OVERLAP — AND COST CONTROLS ADDS SURFACES THE OTHER
 > BOXES DO NOT MENTION.** The buy-flow and per-pool-premium efforts above both
-> owe `functions` (+ `firestore.rules`), and so does cost controls, so ONE pass
-> covers all of them. Cost controls additionally needs **`firestore:indexes`**
-> (the `ai_requests.createdAt` field override) — without it 0.5.5's AI-volume
-> check throws `9 FAILED_PRECONDITION` on every run, the `enforceBillingStatus`
-> failure mode — and, once Phase 1 merges, a **Firestore TTL policy**, which no
-> deploy command creates. Order: functions → rules → **indexes**.
+> owe `functions` (+ `firestore.rules`), so ONE pass covers all of them.
+> **Updated 2026-08-24:** cost controls Phase 0.5 no longer owes functions or
+> rules — those went out and are live (see its box below). What it still owes is
+> **`firestore:indexes`** (the `ai_requests.createdAt` field override), which
+> neither of the other two commands ships — without it 0.5.5's AI-volume check
+> throws `9 FAILED_PRECONDITION` on every run, the `enforceBillingStatus`
+> failure mode. Once Phase 1 (#518) merges it adds a functions deploy of its own
+> plus a **Firestore TTL policy**, which no deploy command creates.
+> Order for any future cost-controls deploy: functions → rules → **indexes**.
 
-> ## 🔴 2026-08-22 — **COST CONTROLS PHASE 0.5 IS MERGED AND OWES A THREE-SURFACE DEPLOY. THE UNBOUNDED AI-SPEND HOLE IS CLOSED IN CODE, NOT YET IN PRODUCTION.**
+> ## 🟢 2026-08-22, CORRECTED 2026-08-24 — **COST CONTROLS PHASE 0.5 IS MERGED AND ITS FUNCTIONS + RULES ARE LIVE. THE UNBOUNDED AI-SPEND HOLE IS CLOSED IN PRODUCTION. ONLY THE INDEX SURFACE IS UNVERIFIED.**
+>
+> ⚠️ **This box said "NOT YET IN PRODUCTION" for two days and that was wrong.**
+> Corrected by #557 from the AI-commissioner postmortem
+> (MORNING-2026-08-25.md §1c, production Cloud Function logs). The proof is
+> behavioural: the AI Commissioner had never once run in prod and ran for the
+> first time only after C1's toggle granted a pool the entitlement. Before 0.5
+> the `onAIRequest` path had **no** entitlement check at all, so a pre-0.5
+> deployment would have served any pool without a toggle. The toggle mattering
+> is what proves 0.5's enforcement is live.
 >
 > **Merged on Kevin's "go for merge":** [#513](https://github.com/kstruck/MMPoolsV3/pull/513)
 > (`7c518d72`, the plan + review log + sweeps) and
 > [#516](https://github.com/kstruck/MMPoolsV3/pull/516) (`00408e97`, Phase 0.5
 > implementation). `PLAN-COST-CONTROLS.md` is the plan of record.
 >
-> 🛑 **THE FIX IS INERT UNTIL DEPLOYED, AND IT IS THREE SURFACES IN THIS ORDER:**
+> 🛑 **STILL OWED: THE INDEX, THE ONE SURFACE NEITHER OTHER COMMAND SHIPS.**
+>
+> ```
+> npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
+> ```
+>
+> Nothing in the postmortem evidence touches the health snapshot, so the index
+> is UNVERIFIED rather than done. It is cheap to re-run when already applied —
+> run it rather than reason about it, then check the AI-volume tile. The tell
+> that it is missing is a `9 FAILED_PRECONDITION` on that count.
+>
+> The original three-surface sequence is kept below for the record, and it is
+> still the correct order for any FUTURE cost-controls deploy (Phase 1 owes one):
 >
 > ```
 > npm --prefix functions ci
@@ -224,8 +285,9 @@
 > stayed broken for its whole life. **No Coolify rebuild owed** (no `src/`
 > change beyond a type declaration).
 >
-> ⚠️ **MEMBER SMS STOPS THE MOMENT FUNCTIONS DEPLOY, BY DESIGN.**
-> `system/config.costControls` does not exist yet and the new reader is
+> ⚠️ **MEMBER SMS IS ALMOST CERTAINLY OFF IN PRODUCTION RIGHT NOW, BY DESIGN.**
+> Functions are deployed, so this already happened — it is live state, not a
+> warning about a future deploy. `system/config.costControls` does not exist and the new reader is
 > **fail-CLOSED**, so `costControls.sms.enabled` is absent ⇒ member SMS is off —
 > which is Kevin's decision #3 ("SMS is OFF until further notice"). **Ops paging
 > and the security-alert SMS are UNAFFECTED** (D4): `sendCourierSMS` now takes a
