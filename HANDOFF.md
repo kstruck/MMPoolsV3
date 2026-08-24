@@ -37,7 +37,7 @@
 > [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md).
 
 
-> ## 🟢 2026-08-25 (latest) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+> ## 🟢 2026-08-25 (SUPERSEDED by the 2026-08-24 box above — this box was forward-dated; the audit-remediation session is newer) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME.**
 >
 > Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)**.
 >
@@ -103,8 +103,8 @@
 > `nfldeepscoresweepjob` → Security, and confirm the scheduler service account
 > holds **Cloud Run Invoker**. Unrelated to any 2026-08-25 PR.
 >
-> ⚠️ **THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED** and was already red at
-> `925c6d7d`. Not run by CI, last touched 2026-07-04.
+> ~~⚠️ THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED~~ **FIXED overnight
+> 2026-08-24 (#556): 8/8 GREEN — see the box above.**
 >
 > ℹ️ **Two known reporting defects, not yet fixed** (offered, not approved):
 > `AICommissioner.tsx:96` and the NFL manager card report every failure with the
