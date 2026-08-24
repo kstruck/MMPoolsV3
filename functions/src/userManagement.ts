@@ -271,6 +271,7 @@ export const searchUsersByEmail = validated(
             lastLogin: u.lastLogin ?? null,
             poolCredits: u.poolCredits ?? null,
             freePoolsAvailable: u.freePoolsAvailable ?? null,
+            referralCredits: u.referralCredits ?? null,
         };
     };
     const byId = new Map();
