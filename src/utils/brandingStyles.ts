@@ -68,13 +68,44 @@ export function relativeLuminance(value: unknown): number | undefined {
     return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-/** Black or white, whichever is readable on `value`. Defaults to white. */
+/** WCAG contrast ratio between two relative luminances. Order-independent. */
+export function contrastRatio(a: number, b: number): number {
+    const [hi, lo] = a > b ? [a, b] : [b, a];
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Relative luminance of the two ink colours this module can choose between. */
+const INK_DARK = '#111111';
+const INK_LIGHT = '#ffffff';
+const INK_DARK_LUM = relativeLuminance(INK_DARK)!;
+const INK_LIGHT_LUM = relativeLuminance(INK_LIGHT)!;
+
+/**
+ * Black or white, whichever is readable on `value`. Defaults to white.
+ *
+ * ⚠️ THIS COMPARES ACTUAL CONTRAST RATIOS. It used to switch on a luminance
+ * THRESHOLD of 0.45, which is wrong and wrong in a direction that matters: the
+ * true crossover — where white-on-colour and black-on-colour are equally
+ * legible — is at a relative luminance of about **0.19**, not 0.45. Everything
+ * between those two numbers was given white text when black was the better
+ * choice, sometimes by a lot. `#00a0a0` is white at 3.2:1 (below the WCAG AA
+ * floor of 4.5:1 for body text) where black would be 6.5:1. (codex, on the
+ * header-band PR.)
+ *
+ * It matters more now than it did: the same helper inks a small button label
+ * AND, since 2026-08-24, the always-visible header band carrying the pool name.
+ *
+ * The old comment claimed 0.45 protected "saturated blues and reds", and that
+ * intent survives the fix — `#0000ff` has a luminance of 0.072, far below the
+ * real crossover, so it still gets white text. It was the mid-tones that were
+ * wrong.
+ */
 export function readableTextOn(value: unknown): string {
     const lum = relativeLuminance(value);
-    if (lum === undefined) return '#ffffff';
-    // 0.45 rather than the naive 0.5: the WCAG curve puts mid greys and
-    // saturated blues/reds below it, where white is the better contrast.
-    return lum > 0.45 ? '#111111' : '#ffffff';
+    if (lum === undefined) return INK_LIGHT;
+    return contrastRatio(lum, INK_DARK_LUM) >= contrastRatio(lum, INK_LIGHT_LUM)
+        ? INK_DARK
+        : INK_LIGHT;
 }
 
 export interface PoolBranding {
@@ -84,6 +115,15 @@ export interface PoolBranding {
     /** Legacy: a literal page background some older pools carry. */
     bgColor?: string;
 }
+
+/**
+ * How strong the page tint is. 0.06 was invisible on the dark navy theme —
+ * Kevin, 2026-08-24: "It really does not do anything noticeable to anyone." The
+ * tint is not what makes branding visible (the header band is), but a tint
+ * nobody can see is worse than none: it costs the same and looks like the
+ * feature is broken.
+ */
+export const PAGE_TINT_ALPHA = 0.1;
 
 export interface BrandingStyles {
     /** The pool's chosen primary, or undefined when it has none/an invalid one. */
@@ -96,6 +136,40 @@ export interface BrandingStyles {
     page: { backgroundColor?: string };
     /** Inline style for the pool header card. */
     headerCard: { borderColor?: string; boxShadow?: string; background?: string };
+    /**
+     * THE BRANDED HEADER BAND (Kevin's decision, 2026-08-24 — option (ii)).
+     *
+     * A solid band of the pool's primary colour across the top of the header
+     * card, carrying the logo and the pool name. This is the thing that makes
+     * branding actually visible, and it is theme-safe BY CONSTRUCTION: it paints
+     * BOTH its own background and its own text colour, so it never reads a
+     * theme token and cannot be wrong in light mode or dark mode.
+     *
+     * That is the whole reason a full-page background was rejected. `--card`,
+     * `--surface`, `--line`, `--text` and `--muted` were all chosen against
+     * `--page`; replacing `--page` per pool breaks them for roughly half of all
+     * colour picks, and it fails SILENTLY — a member who cannot read the page
+     * is the only signal.
+     *
+     * Empty when the pool has no usable primary, in which case the header
+     * renders exactly as it did before.
+     */
+    headerBand: { backgroundColor?: string; color?: string };
+    /**
+     * Secondary text ON the band — the pool-type label.
+     *
+     * The SAME ink as `headerBand`, FULLY OPAQUE. Not `text-muted` (that token
+     * is tuned against `--card`, which is not what is behind this text), and
+     * deliberately not a dimmed version of the ink either: `opacity` composites
+     * the ink back toward the primary colour and destroys the contrast choice
+     * `readableTextOn` just made. On a colour near the crossover — `#007f7f` —
+     * white at 75% drops the 12px label below a readable ratio. (codex, r3.)
+     *
+     * There is no `opacity` field on purpose, so it cannot be reintroduced by
+     * habit. The label is distinguished by SIZE, WEIGHT and TRACKING instead,
+     * which cost no contrast at all.
+     */
+    headerBandMuted: { color?: string };
     /** Inline style for a primary action button. */
     primaryButton: { backgroundColor?: string; color?: string; borderColor?: string };
     /** Inline style for the ACTIVE tab underline. */
@@ -110,8 +184,12 @@ export interface BrandingStyles {
  *    an unrelated gold one.
  *  - page    ← legacy `bgColor` if present (those pools already look that way
  *    and changing it under them is not this ticket), else a very light tint of
- *    the primary. The tint is 6% so it reads as "this pool has a colour",
+ *    the primary (`PAGE_TINT_ALPHA`) so it reads as "this pool has a colour",
  *    never as a background that fights the card surfaces or the dark theme.
+ *  - band    ← a SOLID bar of the primary with automatically readable text.
+ *    The one branded element a member cannot miss, and the only one that owns
+ *    both of its own colours — which is what keeps it out of the light/dark
+ *    token system entirely.
  *  - header  ← primary border plus a soft glow of the same colour.
  *  - button  ← solid primary with automatically readable text.
  *
@@ -131,10 +209,16 @@ export function brandingStyles(branding: PoolBranding | null | undefined): Brand
         accent,
         themed: !!primary,
         page: {
-            backgroundColor: legacyBg || (primary ? hexToRgba(primary, 0.06) : undefined),
+            backgroundColor: legacyBg || (primary ? hexToRgba(primary, PAGE_TINT_ALPHA) : undefined),
         },
         headerCard: primary
             ? { borderColor: hexToRgba(primary, 0.55), boxShadow: `0 1px 24px ${hexToRgba(primary, 0.14)}` }
+            : {},
+        headerBand: primary
+            ? { backgroundColor: primary, color: readableTextOn(primary) }
+            : {},
+        headerBandMuted: primary
+            ? { color: readableTextOn(primary) }
             : {},
         primaryButton: primary
             ? { backgroundColor: primary, color: readableTextOn(primary), borderColor: primary }

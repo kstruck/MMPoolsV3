@@ -714,16 +714,50 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       {/* Pool Header Bar */}
       <div className="max-w-7xl mx-auto px-4 pt-6">
         <div
-          className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 border border-line rounded-xl shadow-card"
+          className="bg-card border border-line rounded-xl shadow-card overflow-hidden"
           style={brand.headerCard}
         >
-          <div>
-            <div className="flex items-center gap-3 mb-1">
+          {/* THE BRANDED HEADER BAND (Kevin, 2026-08-24, option (ii)).
+
+              A solid bar of the pool's primary colour carrying the logo, the
+              pool name and the format. It is the one branded element a member
+              cannot miss, and it is theme-safe BY CONSTRUCTION: it paints both
+              its own background and its own text colour (`readableTextOn`), so
+              it reads no theme token and cannot be wrong in light or dark mode.
+
+              ⚠️ Rendered ONLY when the pool set a usable primary. Without one,
+              `brand.themed` is false and the fallback block below renders the
+              header exactly as it did before — no empty bar, no layout shift.
+
+              `overflow-hidden` on the card is what makes the band reach the
+              rounded corners; without it the colour squares them off. */}
+          {brand.themed && (
+            <div className="px-6 py-4 flex items-center gap-3 flex-wrap" style={brand.headerBand}>
               {branding.logoUrl && (
                 <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
               )}
-              <h1 className="font-display font-extrabold uppercase text-3xl text-[color:var(--text)] leading-none">{pool.name}</h1>
+              <h1 className="font-display font-extrabold uppercase text-3xl leading-none">{pool.name}</h1>
+              <span
+                className="font-display font-bold uppercase text-[12px] tracking-[0.08em]"
+                style={brand.headerBandMuted}
+              >
+                {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
+                 pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
+              </span>
             </div>
+          )}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6">
+          <div>
+            {/* The unbranded header, unchanged. A pool with no primary colour
+                still gets its logo and name here rather than nowhere. */}
+            {!brand.themed && (
+              <div className="flex items-center gap-3 mb-1">
+                {branding.logoUrl && (
+                  <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
+                )}
+                <h1 className="font-display font-extrabold uppercase text-3xl text-[color:var(--text)] leading-none">{pool.name}</h1>
+              </div>
+            )}
             <p className="text-muted font-body text-sm font-semibold mt-1.5 flex items-center gap-2 flex-wrap">
               <span className="flex items-center gap-1.5 flex-wrap">
                 Host: <strong className="text-[color:var(--text)] font-bold">{pool.managerName || 'Host'}</strong>
@@ -750,11 +784,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   </span>
                 )}
               </span>
-              <span className="text-faint">•</span>
-              <span className="text-navy-700 dark:text-gold-400 uppercase font-display font-bold text-[12px] tracking-[0.08em]">
-                {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
-                 pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
-              </span>
+              {/* The format label moved INTO the band when there is one, so it
+                  is not printed twice. */}
+              {!brand.themed && (
+                <>
+                  <span className="text-faint">•</span>
+                  <span className="text-navy-700 dark:text-gold-400 uppercase font-display font-bold text-[12px] tracking-[0.08em]">
+                    {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
+                     pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
@@ -785,6 +825,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               </Button>
             )}
           </div>
+        </div>
         </div>
 
         {/* Week-by-week pending/done strip + "picks due" call-to-action */}

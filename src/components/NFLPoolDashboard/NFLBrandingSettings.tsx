@@ -167,10 +167,20 @@ export const NFLBrandingSettings: React.FC<NFLBrandingSettingsProps> = ({ pool }
                 <div>
                     <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-muted mb-1.5">Preview</p>
                     <div className="rounded-lg border border-line p-3" style={brand.page}>
-                        <div className="rounded-lg border border-line bg-card p-3" style={brand.headerCard}>
+                        <div className="overflow-hidden rounded-lg border border-line bg-card" style={brand.headerCard}>
+                            {/* Same header band the pool page paints. Both previews
+                                render it, or one of them starts lying. (codex.) */}
+                            {brand.themed && (
+                                <div className="px-3 py-2.5 text-sm font-bold" style={brand.headerBand}>
+                                    {pool.name}
+                                </div>
+                            )}
+                            <div className="p-3">
                             <div className="flex items-center justify-between gap-3">
-                                <span className="truncate text-sm font-bold text-[color:var(--text)]">{pool.name}</span>
-                                <span className="rounded-md border px-3 py-1 text-xs font-bold" style={brand.primaryButton}>
+                                {!brand.themed && (
+                                    <span className="truncate text-sm font-bold text-[color:var(--text)]">{pool.name}</span>
+                                )}
+                                <span className="ml-auto rounded-md border px-3 py-1 text-xs font-bold" style={brand.primaryButton}>
                                     Make Picks
                                 </span>
                             </div>
@@ -180,6 +190,7 @@ export const NFLBrandingSettings: React.FC<NFLBrandingSettingsProps> = ({ pool }
                                 </span>
                                 <span className="border-b-2 border-transparent pb-1">Standings</span>
                                 <span className="border-b-2 border-transparent pb-1">Rules</span>
+                            </div>
                             </div>
                         </div>
                     </div>

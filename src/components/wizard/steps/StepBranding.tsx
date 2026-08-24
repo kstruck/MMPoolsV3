@@ -67,13 +67,25 @@ export function StepBranding({ themedDashboard = false }: StepBrandingProps = {}
       <div className="mb-4">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Preview</p>
         <div className="rounded-lg border border-slate-700 p-3" style={brand.page}>
-          <div className="rounded-lg border border-slate-700 bg-slate-900 p-3" style={brand.headerCard}>
-            <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-sm font-bold text-white">
+          <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-900" style={brand.headerCard}>
+            {/* THE HEADER BAND. The pool page opens with a solid bar of the
+                primary colour (Kevin, 2026-08-24), so a preview without one
+                promises a look the pool will not have — which is the exact
+                thing this preview exists to prevent. (codex, on that PR.) */}
+            {brand.themed && (
+              <div className="px-3 py-2.5 text-sm font-bold" style={brand.headerBand}>
                 {String(watch('name') || 'Your pool')}
-              </span>
+              </div>
+            )}
+            <div className="p-3">
+            <div className="flex items-center justify-between gap-3">
+              {!brand.themed && (
+                <span className="truncate text-sm font-bold text-white">
+                  {String(watch('name') || 'Your pool')}
+                </span>
+              )}
               <span
-                className="rounded-md border px-3 py-1 text-xs font-bold text-white"
+                className="ml-auto rounded-md border px-3 py-1 text-xs font-bold text-white"
                 style={brand.primaryButton}
               >
                 Make Picks
@@ -85,6 +97,7 @@ export function StepBranding({ themedDashboard = false }: StepBrandingProps = {}
               </span>
               <span className="border-b-2 border-transparent pb-1">Standings</span>
               <span className="border-b-2 border-transparent pb-1">Rules</span>
+            </div>
             </div>
           </div>
         </div>
