@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { playoffSyncInWindow } from "./lib/scanBounds";
 import { PlayoffPool, PlayoffEntry } from "./types";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
@@ -385,6 +386,23 @@ export const updateGlobalPlayoffResults = validated(
 
 // Scheduled Function: Check ESPN Scores
 export const checkPlayoffScores = onSchedule("every 30 minutes", withHeartbeat('checkPlayoffScores', async () => {
+    // PLAN-AUDIT-SCAN-BOUNDS 1.3: the NFL postseason lives in Jan–early Feb;
+    // this job used to fetch ESPN every 30 minutes YEAR-ROUND (~17,500
+    // fetches/yr for ~3 useful weeks). Off-window it returns healthy with an
+    // explicit detail so monitors don't cry wolf. The config read is fail-open
+    // to the window: in-window, a config error still syncs.
+    let forceActive: boolean | undefined;
+    try {
+        const cfg = await admin.firestore().doc("system/config").get();
+        forceActive = (cfg.data() as { playoffSync?: { forceActive?: boolean } } | undefined)?.playoffSync?.forceActive;
+    } catch {
+        forceActive = undefined;
+    }
+    if (!playoffSyncInWindow(new Date(), forceActive)) {
+        logger.info("checkPlayoffScores: off-season skip (window Jan 1 – Feb 20 UTC; override system/config.playoffSync.forceActive)");
+        return { ok: true, detail: { offSeasonSkip: true } };
+    }
+
     logger.info("Checking ESPN Playoff Scores...");
 
     try {
