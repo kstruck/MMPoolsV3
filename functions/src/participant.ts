@@ -22,7 +22,8 @@ interface ClaimCode {
 }
 
 // 1. onUserCreated: Create participant profile
-export const onUserCreated = v1.auth.user().onCreate(async (user: UserRecord) => {
+// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
+export const onUserCreated = v1.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
     const db = admin.firestore();
     const { uid, email, displayName, photoURL } = user;
 

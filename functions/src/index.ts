@@ -1,3 +1,6 @@
+// FIRST import on purpose: setGlobalOptions only affects v2 functions defined
+// after it runs, and modules evaluate in import order.
+import "./lib/globalOptions";
 import * as admin from "firebase-admin";
 
 if (!admin.apps.length) {
