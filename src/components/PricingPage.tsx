@@ -21,6 +21,7 @@ import { addonSeed } from './billing/addonSeed';
 import { PaymentSuccessBanner } from './billing/PaymentSuccessBanner';
 import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
 import { addonablePools, purchasableAddons, ADDON_LABELS, type AddonablePool, type AddonFeatureConfig } from './billing/addonablePools';
+import { BillingConfigSchema } from '@shared/schemas/billingConfig';
 import { AddonUpgradeButton } from './billing/AddonUpgradeButton';
 
 interface PricingPageProps {
@@ -188,12 +189,32 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         const docRef = doc(db, 'settings', 'billing_config');
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
-                const data = docSnap.data() as BillingConfig;
-                setConfig(data);
-                setLiveAddonFeatures((data as { features?: AddonFeatureConfig }).features ?? null);
+                const raw = docSnap.data();
+                setConfig(raw as BillingConfig);
+                /**
+                 * ⚠️ THE WHOLE DOCUMENT IS PARSED, not just `features` (codex r3).
+                 * The server's `loadBillingConfig` runs `BillingConfigSchema`
+                 * over the ENTIRE doc and falls back to `addonPrice: 0` for
+                 * every add-on if ANY field fails — a broken `pricing` block
+                 * included. Reading `features` raw would offer buttons off a
+                 * document the server has already rejected wholesale.
+                 *
+                 * Same schema, so the two cannot disagree about what "valid"
+                 * means. `setConfig` keeps its existing raw behaviour: the
+                 * calculator's display is not this finding's business.
+                 */
+                const parsed = BillingConfigSchema.safeParse(raw);
+                setLiveAddonFeatures(parsed.success ? parsed.data.features : null);
+            } else {
+                // A DELETED config must not leave the last-known features
+                // standing — the server would be back to $0 add-ons. (codex r3.)
+                setLiveAddonFeatures(null);
             }
         }, (err) => {
             console.warn('[PricingPage] Using default pricing config:', err);
+            // Unreadable is not "unchanged": offer nothing rather than offer
+            // from a snapshot we can no longer confirm.
+            setLiveAddonFeatures(null);
         });
         return () => unsubscribe();
     }, []);

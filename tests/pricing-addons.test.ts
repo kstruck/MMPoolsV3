@@ -164,8 +164,25 @@ describe('codex r2 [P2]: no CTA until a REAL config has been read', () => {
     // `addonPrice: 0` for every add-on. Offering from the client default when
     // no config doc exists puts up buttons the server is certain to refuse.
     expect(page).toContain('const [liveAddonFeatures, setLiveAddonFeatures] = useState<AddonFeatureConfig | null>(null);');
-    expect(page).toContain('setLiveAddonFeatures((data as { features?: AddonFeatureConfig }).features ?? null);');
+    expect(page).toContain('setLiveAddonFeatures(parsed.success ? parsed.data.features : null);');
     expect(page).not.toContain('config?.features');
+  });
+
+  it('parses the WHOLE document with the SAME schema the server uses (r3)', () => {
+    // `loadBillingConfig` runs BillingConfigSchema over the ENTIRE doc and
+    // falls back to $0 add-ons if ANY field fails — a broken `pricing` block
+    // included. Reading `features` raw would offer from a document the server
+    // has already rejected wholesale.
+    expect(page).toContain("import { BillingConfigSchema } from '@shared/schemas/billingConfig';");
+    expect(page).toContain('const parsed = BillingConfigSchema.safeParse(raw);');
+  });
+
+  it('clears the offer when the config is DELETED or unreadable (r3)', () => {
+    // A deleted config must not leave the last-known features standing: the
+    // server would be back to $0 add-ons.
+    const afterParse = page.slice(page.indexOf('BillingConfigSchema.safeParse(raw)'));
+    expect(afterParse).toContain('} else {');
+    expect((page.match(/setLiveAddonFeatures\(null\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
   it('a malformed config offers nothing, because the fields it needs are missing', () => {
