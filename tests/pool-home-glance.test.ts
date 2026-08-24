@@ -57,6 +57,18 @@ describe('the at-a-glance strip', () => {
     expect(dash()).toContain('recap?.weeklyWinners');
   });
 
+  it('the live fallback reads the standings’ own accessor, per pool type', () => {
+    // Pick'em publishes weeklyPoints, Margin weeklyScores; hand-rolling the
+    // field read the wrong one for Pick'em (codex r1, P2).
+    expect(dash()).toContain('weekValueFor(e, selectedWeek, isMargin)');
+  });
+
+  it('unscored late entrants never rank', () => {
+    // The standings sort them last on purpose; comparing them as zero would
+    // crown one in an all-negative Margin pool (codex r1, P2).
+    expect(dash()).toContain('entries.filter(e => !e.unscored)');
+  });
+
   it('an unscored pool crowns nobody', () => {
     // Everyone "ties" at zero before scoring; the strip must dash, not pick
     // an arbitrary first name.
