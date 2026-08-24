@@ -30,15 +30,6 @@ export const createBracketPool = onCall(async (request) => {
     }
 
     const { name, settings: rawSettings, seasonYear, gender, tournamentType } = request.data;
-    // Re-parse through the schema and use the PARSED output (codex r3 P2):
-    // the outer schema is strict, but nested objects (paymentHandles, payouts,
-    // tieBreakers) are stripping z.objects — consuming the parse output makes
-    // the unknown-key hardening recursive, since zod strips unknowns at every
-    // level of its OUTPUT. validateCreateInput already proved it parses.
-    // `any` on purpose: request.data.settings was already untyped here; the
-    // gain is the RUNTIME strip, not new static types (the zod output type
-    // fights BracketPool's legacy settings shape, e.g. UPSET scoring).
-    const settings: any = rawSettings === undefined ? undefined : bracketSettingsSchema.parse(rawSettings);
     const uid = request.auth.uid;
 
     // Debug logs
@@ -59,6 +50,15 @@ export const createBracketPool = onCall(async (request) => {
 
     // Shared validation gate + ban check.
     validateCreateInput('BRACKET', request.data);
+    // AFTER the gate on purpose (codex r4 P2: parsing first surfaced a raw
+    // ZodError as `internal` instead of the gate's `invalid-argument`).
+    // Re-parse and consume the PARSED output (codex r3 P2): the outer schema
+    // is strict, but nested objects (paymentHandles, payouts, tieBreakers)
+    // are stripping z.objects — zod strips unknowns at every level of its
+    // OUTPUT, which makes the unknown-key hardening recursive. `any` because
+    // request.data.settings was already untyped here; the gain is the runtime
+    // strip, not new static types.
+    const settings: any = rawSettings === undefined ? undefined : bracketSettingsSchema.parse(rawSettings);
     const claimRole = request.auth.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
 

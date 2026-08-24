@@ -37,14 +37,18 @@ export function noticeAllowed(lastSentAtMs: number | undefined, nowMs: number): 
     return lastSentAtMs === undefined || nowMs - lastSentAtMs >= NOTICE_COOLDOWN_MS;
 }
 
+// Copy is hedged on purpose (codex r4: the trigger is a client callback, so a
+// spoofed call must not make this email assert a false fact) and the action it
+// asks for is protective either way — a needless reset costs minutes; a missed
+// takeover costs the account.
 const NOTICE_HTML = `
-<p>The password for your March Melee Pools account was just reset using the
-"forgot password" email flow.</p>
-<p><strong>If this was you</strong>, no action is needed.</p>
-<p><strong>If this was NOT you</strong>, someone may have access to your email
-inbox. Go to marchmeleepools.com, use "Forgot password" to set a new password,
-and secure your email account. This message intentionally contains no links or
-buttons.</p>`;
+<p>Our website just completed a "forgot password" reset for your March Melee
+Pools account, or received a report of one.</p>
+<p><strong>If you did this</strong>, no action is needed.</p>
+<p><strong>If you did NOT do this</strong>, someone may have access to your
+email inbox. Go to marchmeleepools.com, use "Forgot password" to set a new
+password, and secure your email account. This message intentionally contains
+no links or buttons.</p>`;
 
 /** Global send cap: at most this many notices across ALL addresses per hour
  *  bucket (codex r2 P2: the per-email cooldown alone still allowed a broad
