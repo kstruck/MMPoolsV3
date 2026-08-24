@@ -500,7 +500,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                         checked={formData.smsOptIn || false}
                                         onChange={(e) => setFormData({ ...formData, smsOptIn: e.target.checked })}
                                     />
-                                    <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
+                                    <div className="w-11 h-6 bg-line peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-gold-500 peer-focus-visible:ring-offset-1 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] transition-colors">Opt-in to SMS Notifications</span>

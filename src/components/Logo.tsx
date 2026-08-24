@@ -10,9 +10,12 @@ interface LogoProps {
 
 /* Crest + live-text wordmark (white "MARCH MELEE" / gold "POOLS") per brand
    handoff — on dark chrome the navy raster wordmark is illegible, so the
-   wordmark is real text. */
+   wordmark is real text.
+   Renders a SPAN, not an <a>: both call sites (Header, Footer) wrap it in
+   their own link, and nested anchors are invalid HTML (a11y audit follow-up —
+   the Header link owns SPA navigation + menu-close). */
 export const Logo: React.FC<LogoProps> = ({ className = "", height = "h-12", withWordmark = true }) => (
-  <a href="/" className={`flex items-center gap-2.5 ${className}`}>
+  <span className={`flex items-center gap-2.5 ${className}`}>
     <img
       src="/mmp-crest-small.webp"
       alt="March Melee Pools crest"
@@ -24,5 +27,5 @@ export const Logo: React.FC<LogoProps> = ({ className = "", height = "h-12", wit
         <span className="text-gold-500 font-extrabold tracking-[0.18em] text-[15px]">Pools</span>
       </span>
     )}
-  </a>
+  </span>
 );

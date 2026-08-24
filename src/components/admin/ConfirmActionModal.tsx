@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useOverlayOwner } from '../ui/overlayStack';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { AlertTriangle, X } from 'lucide-react';
 
 /**
@@ -35,6 +36,8 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
 }) => {
   const [typed, setTyped] = useState('');
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (open) setTyped('');
   }, [open]);
@@ -42,6 +45,7 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   // PLAN-HELP-SYSTEM T2: own the screen while open, so the `?` shortcut stays
   // quiet and Escape closes exactly one overlay. On `open`, not on mount.
   useOverlayOwner('confirm-action-modal', { active: open, onEscape: onCancel });
+  useFocusTrap(dialogRef, open); // aria-modal promises containment (a11y audit)
 
   if (!open) return null;
 
@@ -49,6 +53,7 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
 
   return (
     <div data-overlay-root=""
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={title}

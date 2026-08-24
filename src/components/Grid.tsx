@@ -1028,7 +1028,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   {/* --- SECTION 2: GRID HEADER (TEAMS) --- */}
                   <div className="w-full max-w-[80vh] mx-auto bg-navy-900 p-4 rounded-t-xl border border-[rgba(230,206,150,0.16)] flex flex-wrap justify-between items-center gap-4 shadow-panel relative z-10">
                      <div className="flex items-center gap-3 bg-gradient-to-r from-navy-700/60 to-navy-900 px-4 py-2 rounded-lg border border-gold-500/25 shadow-inner">
-                        {awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain drop-shadow" />}
+                        {awayLogo && <img src={awayLogo} alt="" className="w-8 h-8 object-contain drop-shadow" />}
                         <div className="flex flex-col">
                            <span className="text-[10px] text-gold-400 uppercase font-display font-bold flex items-center gap-1 tracking-wider">
                               <ArrowDown size={10} /> Rows (Left)
@@ -1062,7 +1062,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               {gameState.homeTeam}
                            </span>
                         </div>
-                        {homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain drop-shadow" />}
+                        {homeLogo && <img src={homeLogo} alt="" className="w-8 h-8 object-contain drop-shadow" />}
                      </div>
                   </div>
 

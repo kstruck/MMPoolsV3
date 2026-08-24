@@ -655,7 +655,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             </thead>
                             <tbody className="divide-y divide-[rgba(230,206,150,0.12)]">
                                 <tr>
-                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{awayLogo ? <img src={awayLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{awayLogo ? <img src={awayLogo} alt="" className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q1?.away ?? '-'}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.away - squaresPool.scores.q1.away) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q1.away) : '-')}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.away - squaresPool.scores.half.away) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.half.away) : '-')}</td>
@@ -663,7 +663,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                     <td className="py-4 px-4 font-display font-bold text-gold-400 text-lg bg-navy-950/50 num">{squaresPool.scores.current?.away ?? 0}</td>
                                 </tr>
                                 <tr>
-                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{homeLogo ? <img src={homeLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{homeLogo ? <img src={homeLogo} alt="" className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q1?.home ?? '-'}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.home - squaresPool.scores.q1.home) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q1.home) : '-')}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.home - squaresPool.scores.half.home) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.half.home) : '-')}</td>
@@ -682,7 +682,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 <div className="flex items-center gap-4 w-full justify-center">
                     <div className="hidden md:flex flex-col items-center gap-2">
                         <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-gold-500 shadow-[0_0_20px_rgba(217,188,128,0.3)] bg-white p-1">
-                            {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-gold-600 font-display font-bold text-xl">{squaresPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
+                            {awayLogo ? <img src={awayLogo} alt="" className="w-full h-full object-contain" /> : <span className="text-gold-600 font-display font-bold text-xl">{squaresPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
                         </div>
                     </div>
                     <div className="flex-1 overflow-x-auto">
@@ -702,7 +702,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     </div>
                     <div className="hidden md:flex flex-col items-center gap-2">
                         <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-brandred-500 shadow-[0_0_20px_rgba(196,52,46,0.3)] bg-white p-1">
-                            {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-brandred-500 font-display font-bold text-xl">{squaresPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
+                            {homeLogo ? <img src={homeLogo} alt="" className="w-full h-full object-contain" /> : <span className="text-brandred-500 font-display font-bold text-xl">{squaresPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
                         </div>
                     </div>
                 </div>
