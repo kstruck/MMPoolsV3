@@ -232,7 +232,8 @@ export const createNFLPool = validated(
   } catch (error: any) {
     console.error("createNFLPool Failure:", error);
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+    // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
+    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
   }
   },
 );

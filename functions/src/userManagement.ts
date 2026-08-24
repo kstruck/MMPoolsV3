@@ -185,6 +185,13 @@ export const sendSecuritySMSAlert = validated(
  * Test Endpoint for SMS
  */
 export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToken] }, async (req, res) => {
+    // Hand-run admin test tool, historically driven by curl GET with query
+    // params (PLAN-SECURITY-OBSERVABILITY-SWEEPS #108) — keep GET alongside
+    // POST rather than breaking that muscle memory; reject everything else.
+    if (req.method !== "GET" && req.method !== "POST") {
+        res.status(405).send("Method Not Allowed");
+        return;
+    }
     // Security: Require Firebase Auth Bearer token with SUPER_ADMIN role
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
@@ -248,9 +255,28 @@ export const searchUsersByEmail = validated(
         col.orderBy("searchName").startAt(p).endAt(p + CH).limit(cap).get(),
     ]);
 
+    // Allowlist, not `{ ...d.data() }`: the raw user doc carries fields the
+    // admin search UI never renders (phone, paymentHandles, socialLinks, ...).
+    const pick = (d: FirebaseFirestore.QueryDocumentSnapshot) => {
+        const u = d.data();
+        return {
+            id: d.id,
+            email: u.email ?? null,
+            name: u.name ?? null,
+            role: u.role ?? null,
+            provider: u.provider ?? null,
+            picture: u.picture ?? null,
+            registrationMethod: u.registrationMethod ?? null,
+            createdAt: u.createdAt ?? null,
+            lastLogin: u.lastLogin ?? null,
+            poolCredits: u.poolCredits ?? null,
+            freePoolsAvailable: u.freePoolsAvailable ?? null,
+            referralCredits: u.referralCredits ?? null,
+        };
+    };
     const byId = new Map();
     for (const d of [...emailSnap.docs, ...nameSnap.docs]) {
-        if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() });
+        if (!byId.has(d.id)) byId.set(d.id, pick(d));
     }
     const users = Array.from(byId.values()).slice(0, cap);
     return { users, count: users.length };

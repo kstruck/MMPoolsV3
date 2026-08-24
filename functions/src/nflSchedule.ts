@@ -1476,6 +1476,8 @@ export const importNFLSchedule = validated(
     return { success: true, importedCount: res.importedCount, leaseBusyWeeks: res.leaseBusyWeeks };
   } catch (err: any) {
     console.error("importNFLSchedule Failure:", err);
-    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`, err);
+    // No 3rd arg: HttpsError's `details` is serialized to the client, and a raw
+    // error object can carry stack traces and internal paths.
+    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`);
   }
 });
