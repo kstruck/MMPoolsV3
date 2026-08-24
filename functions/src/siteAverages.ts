@@ -4,6 +4,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isReservedSubjectId } from "./shared/profile";
 import { withHeartbeat } from "./lib/heartbeat";
+import { assertCallerRole } from "./lib/assertRole";
 
 /**
  * Site-wide weekly averages for the Performance Chart's "league average" line
@@ -84,10 +85,8 @@ export const siteAveragesJob = onSchedule(
   }
 }));
 
-/** On-demand refresh (SUPER_ADMIN). */
+/** On-demand refresh (SUPER_ADMIN — claim+doc agreement, PLAN-AUDIT-AUTH-HARDENING A1). */
 export const refreshSiteAverages = onCall(async (request) => {
-  if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
-    throw new HttpsError('permission-denied', 'Super Admin only.');
-  }
+  await assertCallerRole(request, 'SUPER_ADMIN');
   return recomputeSiteAverages(admin.firestore());
 });

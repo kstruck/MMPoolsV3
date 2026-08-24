@@ -104,7 +104,11 @@ export const createBracketPool = onCall(async (request) => {
                 places: [{ rank: 1, percentage: 100 }],
                 bonuses: []
             },
-            ...settings,
+            // paymentHandles was the one schema'd field the enumeration above
+            // missed — the reason a raw `...settings` spread used to sit here.
+            // The spread is gone (A2): with bracketSettingsSchema now strict,
+            // every accepted field is listed explicitly.
+            ...(settings?.paymentHandles !== undefined ? { paymentHandles: settings.paymentHandles } : {}),
         },
         createdAt: now,
         updatedAt: now,

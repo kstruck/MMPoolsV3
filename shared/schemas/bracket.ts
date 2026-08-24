@@ -13,7 +13,11 @@ export const bracketScoringSystemSchema = z.enum(['CLASSIC', 'ESPN', 'FIBONACCI'
 
 // All settings sub-fields are optional: createBracketPool applies defaults for
 // any that are missing (bracketPools.ts:70-87).
-export const bracketSettingsSchema = z.object({
+// strictObject (PLAN-AUDIT-AUTH-HARDENING A2): zod only CHECKS here — the
+// handler consumes the original payload — so unknown settings keys must be
+// rejected, not merely absent from the parse output, or they ride the
+// handler's field spread onto a money-pool document.
+export const bracketSettingsSchema = z.strictObject({
   maxEntriesTotal: z.number().int().optional(),
   maxEntriesPerUser: z.number().int().optional(),
   entryFee: z.number().min(0).optional(),

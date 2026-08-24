@@ -6,7 +6,8 @@ import {
     checkActionCode,
     applyActionCode
 } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 import { Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -110,6 +111,12 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
         setLoading(true);
         try {
             await confirmPasswordReset(auth, oobCode, newPassword);
+            // Security notice to the account owner (PLAN-AUDIT-AUTH-HARDENING
+            // A3). Fire-and-forget: a notification failure must never block
+            // the reset UX.
+            if (resetEmail) {
+                httpsCallable(functions, 'notifyPasswordReset')({ email: resetEmail }).catch(() => { /* best-effort */ });
+            }
             setMessage('Password has been reset successfully. You can now log in.');
             setResetEmail(null); // Hide the form
         } catch (err: unknown) {
