@@ -1,4 +1,4 @@
-import { ADDON_KEYS, INCLUDED_ADDON_KEYS, UNSELLABLE_ADDON_KEYS, type AddonKey } from '@shared/schemas/quote';
+import { ADDON_KEYS, INCLUDED_ADDON_KEYS, UNSELLABLE_ADDON_KEYS, MIDSEASON_SELLABLE_ADDON_KEYS, type AddonKey } from '@shared/schemas/quote';
 import { canCheckoutPool, type UpgradeablePool } from './upgradeablePools';
 import type { BillingStatus } from '../../types';
 
@@ -22,6 +22,13 @@ import type { BillingStatus } from '../../types';
  * Add-on keys a pool may still be SOLD, before the live config is consulted:
  * not free with every pool, not withdrawn from sale.
  *
+ * Derived from `MIDSEASON_SELLABLE_ADDON_KEYS` in `shared/`, which the SERVER
+ * enforces too — a stale bundle cannot offer what the checkout will refuse.
+ * That list is narrower than "not included and not withdrawn": `whatIfSimulator`
+ * is priced in the config but is rendered only by the Bracket dashboard and is
+ * UNGATED there, so buying it separately delivers nothing to anybody. See the
+ * reasoning at its definition. (codex r4 [P1].)
+ *
  * ⚠️ NOT SUFFICIENT ON ITS OWN. `computeAddonLines` also drops any add-on whose
  * `billing_config` entry is `isPremium: false` or `addonPrice: 0`, so a static
  * list alone can offer a button that opens a checkout the server prices at $0
@@ -29,7 +36,8 @@ import type { BillingStatus } from '../../types';
  * one config save. `sellableAddonKeys(config)` applies that half. (codex.)
  */
 export const PURCHASABLE_ADDON_KEYS: readonly AddonKey[] = ADDON_KEYS.filter(
-    (k) => !(INCLUDED_ADDON_KEYS as readonly string[]).includes(k)
+    (k) => (MIDSEASON_SELLABLE_ADDON_KEYS as readonly string[]).includes(k)
+        && !(INCLUDED_ADDON_KEYS as readonly string[]).includes(k)
         && !(UNSELLABLE_ADDON_KEYS as readonly string[]).includes(k),
 );
 

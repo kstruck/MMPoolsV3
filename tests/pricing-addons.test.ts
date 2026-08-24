@@ -12,7 +12,7 @@ import {
   type AddonFeatureConfig,
 } from '../src/components/billing/addonablePools';
 import { upgradeablePools } from '../src/components/billing/upgradeablePools';
-import { ADDON_KEYS } from '../shared/schemas/quote';
+import { ADDON_KEYS, isMidseasonSellableAddon } from '../shared/schemas/quote';
 
 /**
  * D2 (Kevin, 2026-08-24, option (a)) — the surface for C2's mid-season add-on
@@ -36,11 +36,22 @@ const pool = (over: Partial<AddonablePool> = {}): AddonablePool => ({
 });
 
 describe('what can still be sold', () => {
-  it('excludes add-ons that are free with every pool, and ones nothing sells', () => {
-    // customBranding ships free (T4/D1); smsNotifications is clamped unsellable.
-    // Offering either would open a checkout the server prices at $0 and then
-    // refuses as "nothing to buy".
-    expect(PURCHASABLE_ADDON_KEYS).toEqual(['aiCommissioner', 'whatIfSimulator']);
+  it('sells only what can actually be delivered on its own', () => {
+    // customBranding ships free (T4/D1); smsNotifications is clamped unsellable;
+    // and whatIfSimulator is rendered ONLY by the Bracket dashboard and is
+    // UNGATED there, so buying it separately delivers nothing to anybody
+    // (codex r4 [P1] — filtering to BRACKET would still charge a bracket
+    // commissioner for something they already have free).
+    expect(PURCHASABLE_ADDON_KEYS).toEqual(['aiCommissioner']);
+    expect(PURCHASABLE_ADDON_KEYS).not.toContain('whatIfSimulator');
+  });
+
+  it('the offer list is DERIVED from the shared authority the server enforces', () => {
+    // A stale client bundle must not be able to offer what checkout refuses.
+    for (const k of PURCHASABLE_ADDON_KEYS) expect(isMidseasonSellableAddon(k)).toBe(true);
+    expect(isMidseasonSellableAddon('whatIfSimulator')).toBe(false);
+    expect(isMidseasonSellableAddon('customBranding')).toBe(false);
+    expect(isMidseasonSellableAddon('smsNotifications')).toBe(false);
   });
 
   it('names every key the schema has, so a new one cannot ship unlabelled', () => {
@@ -62,10 +73,10 @@ describe('what can still be sold', () => {
   });
 
   it('offers only what the pool is missing', () => {
-    expect(purchasableAddons(pool())).toEqual(['aiCommissioner', 'whatIfSimulator']);
+    expect(purchasableAddons(pool())).toEqual(['aiCommissioner']);
     expect(purchasableAddons(pool({
       billing: { status: 'active', featuresUnlocked: { aiCommissioner: true } },
-    }))).toEqual(['whatIfSimulator']);
+    }))).toEqual([]);
   });
 });
 
@@ -92,7 +103,7 @@ describe('which pools are listed', () => {
 
   it('drops a pool that already owns everything, rather than showing an empty row', () => {
     expect(addonablePools([pool({
-      billing: { status: 'active', featuresUnlocked: { aiCommissioner: true, whatIfSimulator: true } },
+      billing: { status: 'active', featuresUnlocked: { aiCommissioner: true } },
     })], OWNER)).toEqual([]);
   });
 
@@ -115,11 +126,11 @@ describe('codex [P2]: the CONFIG decides what is sellable, not a static list', (
   };
 
   it('offers only what the config will price', () => {
-    expect(sellableAddonKeys(priced)).toEqual(['aiCommissioner', 'whatIfSimulator']);
-    expect(sellableAddonKeys({ ...priced, whatIfSimulator: { isPremium: false, addonPrice: 9 } }))
-      .toEqual(['aiCommissioner']);
-    expect(sellableAddonKeys({ ...priced, whatIfSimulator: { isPremium: true, addonPrice: 0 } }))
-      .toEqual(['aiCommissioner']);
+    expect(sellableAddonKeys(priced)).toEqual(['aiCommissioner']);
+    expect(sellableAddonKeys({ ...priced, aiCommissioner: { isPremium: false, addonPrice: 19 } }))
+      .toEqual([]);
+    expect(sellableAddonKeys({ ...priced, aiCommissioner: { isPremium: true, addonPrice: 0 } }))
+      .toEqual([]);
   });
 
   it('offers NOTHING before the config has loaded', () => {
@@ -130,14 +141,14 @@ describe('codex [P2]: the CONFIG decides what is sellable, not a static list', (
   });
 
   it('a pool whose only remaining add-on was switched off drops off the list', () => {
-    const p = pool({ billing: { status: 'active', featuresUnlocked: { aiCommissioner: true } } });
+    const p = pool({ billing: { status: 'active' } });
     expect(addonablePools([p], OWNER, priced)).toHaveLength(1);
-    expect(addonablePools([p], OWNER, { ...priced, whatIfSimulator: { isPremium: false, addonPrice: 9 } }))
+    expect(addonablePools([p], OWNER, { ...priced, aiCommissioner: { isPremium: false, addonPrice: 19 } }))
       .toEqual([]);
   });
 
   it('omitting the config keeps the old static behaviour, for callers without one', () => {
-    expect(purchasableAddons(pool())).toEqual(['aiCommissioner', 'whatIfSimulator']);
+    expect(purchasableAddons(pool())).toEqual(['aiCommissioner']);
   });
 });
 

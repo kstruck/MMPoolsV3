@@ -67,6 +67,15 @@ describe('checkout: the add-on path has its own preconditions', () => {
     expect(stripe).toContain('quote.addonLines.length === 0 || serverPrice <= 0');
   });
 
+  it('refuses an add-on that cannot be delivered on its own (codex r4 [P1])', () => {
+    // `whatIfSimulator` is priced and premium in the config, but the feature is
+    // rendered only by the Bracket dashboard AND is ungated there, so buying it
+    // separately delivers nothing to anybody. Enforced server-side because a
+    // stale client bundle would keep offering it.
+    expect(stripe).toContain('.filter((k) => !isMidseasonSellableAddon(k));');
+    expect(stripe).toContain('These features cannot be bought on their own:');
+  });
+
   it('refuses credits and coupons on this path, rather than ignoring them', () => {
     expect(stripe).toContain('Pool credits pay for hosting, not for add-ons.');
     expect(stripe).toContain("Coupons apply to a pool's hosting purchase, not to add-ons bought later.");
