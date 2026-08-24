@@ -48,7 +48,7 @@ incident where merges silently reverted merged work (Section 4).
 ## 0. Corrections that OVERRIDE repo docs (owner-confirmed 2026-07-06)
 
 1. **REVERSED 2026-08-23: the Gemini API key WAS leaked.** The 2026-07-06 owner
-   denial was itself the wrong claim. Measured: `git show 3340fff0^:.env` in the
+   denial was itself the wrong claim. Measured: `git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only — never reprint the value) in the
    PUBLIC repo shows `VITE_API_KEY` (a Gemini key, per the Dockerfile:24 removal
    note), exposed since 2025-12-13. `CODE_REVIEW_REPORT.md:183`,
    `AUDIT-REPORT.md:147,278` were right all along. Rotation is Kevin's owed
@@ -416,7 +416,7 @@ merged in PR #139 (`53d9872`) and **deployed** (Section 0.2).
 | Doc claim | Reality | Evidence |
 |---|---|---|
 | `docs/NFL_POOLS_README.md:78` — Margin tiebreaker level 5 is "Coin Flip (Random)" | Deterministic `ownerUid.localeCompare` | `functions/src/nflScoringEngine.ts:277-302` (`sortMarginLeaderboard`); `README.md` line ~32 ("Deterministic ID comparison") is the correct one |
-| Gemini key "previously committed / rotate immediately" (`CODE_REVIEW_REPORT.md:183`, `AUDIT-REPORT.md:147,278`) | TRUE — confirmed 2026-08-23 via `git show 3340fff0^:.env` (public repo); the 2026-07-06 owner denial was the error | Section 0.1 |
+| Gemini key "previously committed / rotate immediately" (`CODE_REVIEW_REPORT.md:183`, `AUDIT-REPORT.md:147,278`) | TRUE — confirmed 2026-08-23 via `git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only — never reprint the value) (public repo); the 2026-07-06 owner denial was the error | Section 0.1 |
 | `docs/bracket-pool-architecture.md` edge case #4 — seed parsing of prefixed IDs (`E1-Duke`) via regex | Team IDs are full ESPN display names ("Duke Blue Devils"); the old regex does not work | `docs/annual-bracket-setup-runbook.md` Rule 4 + 2026 postmortem; this stale doc section is the ROOT of live bug H4 (client seed drift, 2.9) |
 | `SUPERADMIN-AUDIT-REPORT.md:38` — "root tests 203/203" | 216/216 as of 2026-07-06 | executed `vitest run` (Section 0.3) |
 | ADR-0001:18 / `PHASE-A-INVENTORY.md:108` say the POOL_CREATED activity event "has no writer at all" | Stale (pre-merge). The writer IS on main: `functions/src/lib/poolCreation.ts:110-112`, called by all three create callables — `CONTEXT.md:25` is now correct; do not add a duplicate writer | `grep -rn "POOL_CREATED" functions/src/lib/poolCreation.ts` |
