@@ -62,6 +62,9 @@ export const notifyPasswordReset = onCall(async (request) => {
     });
     if (!allowed) return done;
 
-    await sendEmail(db, email, "Your March Melee Pools password was reset", NOTICE_HTML, { category: "security" });
+    // transactional: true (codex r1 P1) — a security notice must bypass the
+    // marketing opt-out, or exactly the users who opted out get silent
+    // takeovers.
+    await sendEmail(db, email, "Your March Melee Pools password was reset", NOTICE_HTML, { category: "security", transactional: true });
     return done;
 });

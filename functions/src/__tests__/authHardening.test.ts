@@ -55,6 +55,11 @@ describe("A3: password-reset notice rate limit", () => {
     it("a notice after the cooldown is allowed", () => {
         expect(noticeAllowed(NOW - NOTICE_COOLDOWN_MS, NOW)).toBe(true);
     });
+    it("the notice send is transactional (bypasses marketing opt-out — codex r1 P1)", () => {
+        const text = readFileSync(join(SRC, "securityNotices.ts"), "utf8");
+        expect(text).toMatch(/sendEmail\([^;]*transactional: true/);
+    });
+
     it("the notice copy contains no links", () => {
         const text = readFileSync(join(SRC, "securityNotices.ts"), "utf8");
         const html = text.slice(text.indexOf("NOTICE_HTML"), text.indexOf("notifyPasswordReset ="));
