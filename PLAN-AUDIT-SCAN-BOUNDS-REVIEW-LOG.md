@@ -28,7 +28,7 @@ rule):
   them) — same outcome as today at negligible cost, rather than encoding the
   PROPS quirk into the query.
 
-RESOLUTION: CONVERGED — round 1 clean, own read agrees, 0 findings, 0 carried.
+(Round-1 close was premature — round 2 found a P1 in the fix. Kept for the record.)
 
 ## Round 2 — 2026-08-23, after review-log + plan-status docs added
 
@@ -52,4 +52,9 @@ with a non-post gameStatus sat in the every-minute query forever.
 
 ## Round 3 — final
 
-VERDICT recorded below after the run.
+VERDICT: CLEAN. "The bounded reminder union preserves every dispatched pool
+type and flag-gated path, while the score and playoff guards are scoped to
+stale or off-season cases. No actionable regressions were identified."
+
+RESOLUTION: CONVERGED. 3 rounds, 1 finding (P1, accepted, fixed same round),
+0 rejected, 0 carried. Own read of the final diff agrees.
