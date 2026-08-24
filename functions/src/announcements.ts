@@ -9,7 +9,8 @@ import { sendEmail } from './reminders';
  * Triggered when a new announcement is added to a pool.
  * Sends an email to all participants.
  */
-export const onAnnouncementCreated = functions.firestore
+// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
+export const onAnnouncementCreated = functions.runWith({ maxInstances: 10 }).firestore
     .document('pools/{poolId}/announcements/{announcementId}')
     .onCreate(async (snap: functions.firestore.QueryDocumentSnapshot, context: functions.EventContext) => {
         const poolId = context.params.poolId;

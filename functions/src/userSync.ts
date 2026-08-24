@@ -10,7 +10,8 @@ import { syncAllUsersSchema } from "./schemas/noInputAdmin";
 
 
 
-export const onUserCreated = functions.auth.user().onCreate(async (user: UserRecord) => {
+// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
+export const onUserCreated = functions.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
     const db = admin.firestore();
     const { uid, email, displayName, photoURL } = user;
 
