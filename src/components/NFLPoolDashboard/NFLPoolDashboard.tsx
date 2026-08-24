@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
 import { isPoolManager, isSuperAdmin } from '../../utils/auth';
-import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft } from 'lucide-react';
+import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft, Users, Crown } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { logger } from '../../utils/logger';
@@ -39,6 +39,7 @@ import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
 import { HelpRoutePublisher } from '../../help/publish';
 import { resolveStandingsAlias, type StandingsScope } from '../../utils/nflStandingsScope';
 import { isPinnableMessageId } from '@shared/pinnedMessage';
+import { poolTypeLabel, poolOptionLabels } from '../../utils/poolTypeLabel';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -114,9 +115,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // that routes a `?tab=` URL.
   const TAB_STRIP: { tab: TabType; label: string }[] = [
     { tab: 'dashboard', label: 'Pool Home' },
+    // Right of Pool Home (Kevin, 2026-08-23): "arguably the most important
+    // tab", and the whole mobile redesign started from people hunting for it.
+    { tab: 'standings', label: 'Standings & Results' },
     { tab: 'picks', label: 'My Entry' },
     { tab: 'grid', label: 'Current Picks' },
-    { tab: 'standings', label: 'Standings & Results' },
     { tab: 'recaps', label: 'Weekly Recaps' },
     { tab: 'rules', label: 'Rules & Rulesets' },
     { tab: 'payments', label: 'Payments' },
@@ -701,6 +704,63 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const brand = brandingStyles(branding);
   const accentHex = brand.accent;
 
+  // ── The at-a-glance strip (testers, 2026-08-23) ────────────────────────────
+  // The pool-card identity chips plus the three numbers people open the page
+  // to check: players, who leads the week, who leads the season. All derived
+  // from data already on this page — no new reads.
+  const typeLabel = poolTypeLabel(castPool);
+  const optionLabels = poolOptionLabels(castPool);
+  // `participantIds` is the world-readable, server-owned roster signal (K9),
+  // so the count works for signed-out visitors too; `members` needs a read
+  // that non-members are denied.
+  const participantCount = Array.isArray(castPool.participantIds)
+    ? castPool.participantIds.length
+    : members.length;
+  const glance = useMemo(() => {
+    const name = (e: { userName?: string }) => e.userName || 'Anonymous';
+    // Two names print; a bigger tie prints the first plus a count — this strip
+    // must stay one short row, and a 24-way survivor "tie" is the normal state.
+    const label = (list: { userName?: string }[]) =>
+      list.length === 0 ? null : list.length > 2 ? `${name(list[0])} +${list.length - 1}` : list.map(name).join(', ');
+    // The same season comparator the standings card uses.
+    const cmp = (a: any, b: any) => {
+      if (pool.type === 'NFL_PICKEM') return (b.totalScore || 0) - (a.totalScore || 0);
+      if (pool.type === 'NFL_SURVIVOR') {
+        if (a.status !== b.status) return a.status === 'ALIVE' ? -1 : 1;
+        return (a.strikesUsed || 0) - (b.strikesUsed || 0);
+      }
+      return (b.seasonTotal || 0) - (a.seasonTotal || 0);
+    };
+    const sorted = [...entries].sort(cmp);
+    const seasonLeaders = sorted.filter(e => cmp(e, sorted[0]) === 0);
+    // Week leader: the recap's winner line is the scored truth and wins when
+    // it exists; before the week is fully scored, the live projection's
+    // per-week score ranks. Never fabricated — an unscored week shows a dash.
+    const recap = recaps.find(r => r.week === selectedWeek);
+    let weekLeaders: { userName?: string }[] = [];
+    if (recap?.weeklyWinners?.length) {
+      weekLeaders = recap.weeklyWinners;
+    } else if (pool.type !== 'NFL_SURVIVOR') {
+      const scored = entries.filter(e => typeof e.weeklyScores?.[selectedWeek] === 'number');
+      if (scored.length) {
+        const top = Math.max(...scored.map(e => e.weeklyScores[selectedWeek]));
+        weekLeaders = scored.filter(e => e.weeklyScores[selectedWeek] === top);
+      }
+    }
+    // A pool where nothing has been scored has no leader — everyone "ties" at
+    // zero and the strip would crown an arbitrary first name. Dash until any
+    // entry carries a scored week, a strike, or an elimination.
+    const anyScored = entries.some(e =>
+      Object.keys(e.weeklyScores || {}).length > 0 ||
+      Object.keys(e.weeklyResults || {}).length > 0 ||
+      (e.strikesUsed || 0) > 0 || e.status === 'ELIMINATED');
+    return {
+      seasonLeader: anyScored ? label(seasonLeaders) : null,
+      weekLeader: label(weekLeaders),
+      alive: entries.filter(e => e.status !== 'ELIMINATED').length,
+    };
+  }, [entries, recaps, selectedWeek, pool.type]);
+
   // Billing is C9: owner-only, never a co-commissioner — so the gate reads the
   // STRICT helper, not the NFL-widened `isManager` prop (codex r8 on PR-B).
   return (
@@ -833,22 +893,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </div>
 
           <div className="flex gap-2.5 items-center flex-wrap">
-            {/* Week Selector */}
-            <div className="flex items-center gap-2 bg-page border-[1.5px] border-line rounded-md px-3 py-1.5">
-              <Calendar size={16} className="text-muted" />
-              <select
-                value={selectedWeek}
-                onChange={e => setSelectedWeek(parseInt(e.target.value))}
-                className="bg-transparent focus:outline-none font-body text-sm text-[color:var(--text)] font-bold cursor-pointer"
-              >
-                {Array.from({ length: seasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
-                  <option key={w} value={w} className="bg-card text-[color:var(--text)]">
-                    {nflWeekLabel(seasonType, w)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+            {/* The week dropdown lived here until 2026-08-23. It duplicated
+                the week checklist strip right below the header — two controls
+                for the same URL param — and "repetitive" was Kevin's word.
+                The chips are now the one week selector. */}
             <Button variant="ghost" size="sm" onClick={handleShare}>
               <Share2 size={13} /> Invite Link
             </Button>
@@ -865,6 +913,45 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               <ArrowLeft size={13} /> Leave Pool
             </Button>
           </div>
+        </div>
+
+        {/* At-a-glance strip: what kind of pool this is + who's in it + who
+            leads. One compact row on the header card's bottom edge. */}
+        <div
+          data-testid="pool-home-glance"
+          className="px-6 py-2.5 border-t border-line flex flex-wrap items-center gap-x-6 gap-y-1.5"
+        >
+          <span className="flex items-center gap-1.5 flex-wrap" data-testid="pool-home-type">
+            <span className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full border border-[#E4DFD3] bg-cream text-navy-800">{typeLabel}</span>
+            {optionLabels.map(o => (
+              <span key={o} className="text-[11px] font-body text-muted">{o}</span>
+            ))}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Users size={12} className="text-muted" aria-hidden="true" />
+            <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">Players</span>
+            <span className="text-[13px] font-display font-bold num text-[color:var(--text)]">{participantCount}</span>
+          </span>
+          {pool.type === 'NFL_SURVIVOR' ? (
+            <span className="flex items-center gap-1.5">
+              <Flame size={12} className="text-brandred-600" aria-hidden="true" />
+              <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">Alive</span>
+              <span className="text-[13px] font-display font-bold num text-[color:var(--text)]">
+                {entries.length ? `${glance.alive} of ${entries.length}` : '—'}
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <Trophy size={12} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
+              <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">{nflWeekLabel(seasonType, selectedWeek)} Leader</span>
+              <span className="text-[13px] font-display font-bold text-[color:var(--text)]">{glance.weekLeader ?? '—'}</span>
+            </span>
+          )}
+          <span className="flex items-center gap-1.5">
+            <Crown size={12} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
+            <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">Season Leader</span>
+            <span className="text-[13px] font-display font-bold text-[color:var(--text)]">{glance.seasonLeader ?? '—'}</span>
+          </span>
         </div>
         </div>
 
