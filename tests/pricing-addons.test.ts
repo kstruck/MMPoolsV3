@@ -152,8 +152,26 @@ describe('codex [P2]: the list follows the CURRENT user, never a stale snapshot'
 
   it('the page derives it rather than storing it', () => {
     expect(page).toContain('const addonPools = useMemo(');
-    expect(page).toContain('addonablePools(rawPools, user?.id, config?.features)');
+    expect(page).toContain('addonablePools(rawPools, user?.id, liveAddonFeatures)');
     expect(page).not.toContain('setAddonPools(');
+  });
+});
+
+describe('codex r2 [P2]: no CTA until a REAL config has been read', () => {
+  it('offers from the STORED features, never the client fallback', () => {
+    // `config` falls back to DEFAULT_BILLING_CONFIG, whose add-on prices are
+    // NON-ZERO, while the server's `loadBillingConfig` falls back to
+    // `addonPrice: 0` for every add-on. Offering from the client default when
+    // no config doc exists puts up buttons the server is certain to refuse.
+    expect(page).toContain('const [liveAddonFeatures, setLiveAddonFeatures] = useState<AddonFeatureConfig | null>(null);');
+    expect(page).toContain('setLiveAddonFeatures((data as { features?: AddonFeatureConfig }).features ?? null);');
+    expect(page).not.toContain('config?.features');
+  });
+
+  it('a malformed config offers nothing, because the fields it needs are missing', () => {
+    expect(sellableAddonKeys({} as AddonFeatureConfig)).toEqual([]);
+    expect(sellableAddonKeys({ aiCommissioner: {} } as AddonFeatureConfig)).toEqual([]);
+    expect(sellableAddonKeys({ aiCommissioner: { isPremium: true } } as AddonFeatureConfig)).toEqual([]);
   });
 });
 
@@ -161,7 +179,7 @@ describe('the page renders it', () => {
   it('lists the pools and a button per missing add-on', () => {
     expect(page).toContain('Add-ons for your active pools');
     expect(page).toContain('{addonPools.map((pool: AddonablePool) => (');
-    expect(page).toContain('{purchasableAddons(pool, config?.features).map((addon) => (');
+    expect(page).toContain('{purchasableAddons(pool, liveAddonFeatures).map((addon) => (');
     expect(page).toContain('<AddonUpgradeButton');
   });
 

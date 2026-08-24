@@ -20,7 +20,7 @@ import { setPostAuthIntent } from '../utils/postAuthIntent';
 import { addonSeed } from './billing/addonSeed';
 import { PaymentSuccessBanner } from './billing/PaymentSuccessBanner';
 import { upgradeablePools, isUpgradeableStatus, canCheckoutPool, upgradeStatusLabel } from './billing/upgradeablePools';
-import { addonablePools, purchasableAddons, ADDON_LABELS, type AddonablePool } from './billing/addonablePools';
+import { addonablePools, purchasableAddons, ADDON_LABELS, type AddonablePool, type AddonFeatureConfig } from './billing/addonablePools';
 import { AddonUpgradeButton } from './billing/AddonUpgradeButton';
 
 interface PricingPageProps {
@@ -96,6 +96,19 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
     // State Variables
     const [config, setConfig] = useState<BillingConfig>(DEFAULT_BILLING_CONFIG);
+    /**
+     * The STORED `billing_config.features`, or null until one has actually been
+     * read. Deliberately NOT `config.features` (codex): `config` falls back to
+     * DEFAULT_BILLING_CONFIG, whose add-on prices are non-zero, while the
+     * SERVER's `loadBillingConfig` falls back to `addonPrice: 0` for every
+     * add-on. Offering from the client default when no config doc exists would
+     * put up buttons the server is certain to refuse as "nothing to buy".
+     *
+     * Raw and unparsed on purpose: a malformed doc leaves the fields `sellable
+     * AddonKeys` requires missing, so it offers nothing — which is the right
+     * answer for a config nobody can price from.
+     */
+    const [liveAddonFeatures, setLiveAddonFeatures] = useState<AddonFeatureConfig | null>(null);
     const [userPools, setUserPools] = useState<Pool[]>([]);
     const [selectedPoolId, setSelectedPoolId] = useState<string | null>(targetPoolId);
     /**
@@ -175,7 +188,9 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         const docRef = doc(db, 'settings', 'billing_config');
         const unsubscribe = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
-                setConfig(docSnap.data() as BillingConfig);
+                const data = docSnap.data() as BillingConfig;
+                setConfig(data);
+                setLiveAddonFeatures((data as { features?: AddonFeatureConfig }).features ?? null);
             }
         }, (err) => {
             console.warn('[PricingPage] Using default pricing config:', err);
@@ -207,8 +222,8 @@ export const PricingPage: React.FC<PricingPageProps> = ({
      * add-on the server would price at $0 and then refuse.
      */
     const addonPools = useMemo(
-        () => addonablePools(rawPools, user?.id, config?.features),
-        [rawPools, user?.id, config],
+        () => addonablePools(rawPools, user?.id, liveAddonFeatures),
+        [rawPools, user?.id, liveAddonFeatures],
     );
 
     // Keep selection in sync when the ?poolId= deep link changes after mount.
@@ -414,7 +429,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                 </span>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                {purchasableAddons(pool, config?.features).map((addon) => (
+                                                {purchasableAddons(pool, liveAddonFeatures).map((addon) => (
                                                     <AddonUpgradeButton
                                                         key={addon}
                                                         pool={pool as never}
