@@ -16,6 +16,7 @@ import {
     writePoolCreationSideEffects,
 } from "./lib/poolCreation";
 import { validated } from "./lib/validated";
+import { bracketSettingsSchema } from "./shared/schemas/bracket";
 import { publishBracketPoolSchema, joinBracketPoolSchema } from "./schemas/bracketPools";
 
 
@@ -28,7 +29,16 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const { name, settings, seasonYear, gender, tournamentType } = request.data;
+    const { name, settings: rawSettings, seasonYear, gender, tournamentType } = request.data;
+    // Re-parse through the schema and use the PARSED output (codex r3 P2):
+    // the outer schema is strict, but nested objects (paymentHandles, payouts,
+    // tieBreakers) are stripping z.objects — consuming the parse output makes
+    // the unknown-key hardening recursive, since zod strips unknowns at every
+    // level of its OUTPUT. validateCreateInput already proved it parses.
+    // `any` on purpose: request.data.settings was already untyped here; the
+    // gain is the RUNTIME strip, not new static types (the zod output type
+    // fights BracketPool's legacy settings shape, e.g. UPSET scoring).
+    const settings: any = rawSettings === undefined ? undefined : bracketSettingsSchema.parse(rawSettings);
     const uid = request.auth.uid;
 
     // Debug logs

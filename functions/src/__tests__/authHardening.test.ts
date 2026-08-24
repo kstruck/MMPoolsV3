@@ -57,7 +57,7 @@ describe("A3: password-reset notice rate limit", () => {
     });
     it("a global hourly cap exists and hour buckets roll over (codex r2 P2)", () => {
         expect(GLOBAL_HOURLY_CAP).toBeGreaterThan(0);
-        const NOW = 1_000_000_000_000;
+        const NOW = 277_778 * NOTICE_COOLDOWN_MS; // bucket-aligned
         expect(hourBucket(NOW)).toBe(hourBucket(NOW + NOTICE_COOLDOWN_MS - 1));
         expect(hourBucket(NOW)).not.toBe(hourBucket(NOW + NOTICE_COOLDOWN_MS));
     });

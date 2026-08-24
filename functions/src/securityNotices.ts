@@ -12,9 +12,17 @@ import { sendEmail } from "./reminders";
  *
  * Deliberately PUBLIC: the reset flow is unauthenticated by nature (the user
  * proves control via the emailed oobCode; the client calls this after
- * confirmPasswordReset succeeds). Firebase Auth exposes no password-change
- * server event without Identity Platform blocking functions, so the client
- * ping is the available trust anchor. Defenses, unit-tested:
+ * confirmPasswordReset succeeds).
+ *
+ * KNOWN LIMIT (codex r3, accepted and documented rather than fixed): this is
+ * a CLIENT callback, not an audit hook. An attacker who redeems the oobCode
+ * directly against the Auth REST API never calls this, so the notice covers
+ * the cooperative/common path (our UI), not a determined attacker. Firebase
+ * Auth exposes no server-side password-change event without upgrading the
+ * project to Identity Platform blocking functions — that upgrade is the real
+ * fix and is on Kevin's decision list. Best-effort > nothing: the email-change
+ * alert this mirrors (userManagement.ts) has the same client-initiated shape.
+ * Defenses, unit-tested:
  *  - Only addresses WITH an existing account get mail; the response is
  *    identical either way (no account-enumeration oracle).
  *  - One notice per email per hour (`security_notices/{emailHash}`,
@@ -79,10 +87,14 @@ export const notifyPasswordReset = onCall(async (request) => {
         const bucket = hourBucket(now);
         const count = meta?.bucket === bucket ? (meta.count ?? 0) : 0;
         if (!noticeAllowed(last, now) || count >= GLOBAL_HOURLY_CAP) return false;
-        // Reserve even when the account does not exist: same writes, same
-        // latency, and repeated probes of ANY address burn the same limits.
+        // Per-email reservation for ALL addresses (probing any address burns
+        // its per-email slot and does the same transaction work), but the
+        // GLOBAL slot is only charged for existing accounts — codex r3 P1:
+        // 20 made-up addresses must not exhaust the cap and DoS the control.
         t.set(ref, { kind: "PASSWORD_RESET", lastSentAt: now, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-        t.set(metaRef, { bucket, count: count + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        if (accountExists) {
+            t.set(metaRef, { bucket, count: count + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        }
         return true;
     });
     if (!allowed || !accountExists) return done;
