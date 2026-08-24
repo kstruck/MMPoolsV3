@@ -156,8 +156,28 @@ export const runReminders = functions.scheduler.onSchedule(
     let failedPools = 0;
     const delivery = newDeliveryTally();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
-    const poolsSnapshot = await db.collection("pools").get();
-    console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
+    // PLAN-AUDIT-SCAN-BOUNDS 1.1: bounded union instead of a full-collection
+    // scan (was 96 × total-pools-ever reads/day). Sweep S1 proves the union
+    // covers every pool the loop does anything with:
+    //  - q1: NFL/bracket/playoff pools are fetched WHOLESALE — NFL reminders
+    //    default ON with no config, the bracket 'locked' trigger is flag-free,
+    //    and checkNFLNonPickerReminders also writes the hard-lock freeze. Do
+    //    NOT narrow q1 to reminder flags.
+    //  - q2/q3: squares/legacy sends each require the explicit enabled flag
+    //    the query matches. A .limit() was rejected: it drops pools silently.
+    const [typePools, paymentPools, lockPools] = await Promise.all([
+        db.collection("pools").where("type", "in",
+            ["NFL_PICKEM", "NFL_SURVIVOR", "NFL_MARGIN", "NFL_PLAYOFFS", "BRACKET"]).get(),
+        db.collection("pools").where("reminders.payment.enabled", "==", true).get(),
+        db.collection("pools").where("reminders.lock.enabled", "==", true).get(),
+    ]);
+    const poolDocsById = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    for (const d of [...typePools.docs, ...paymentPools.docs, ...lockPools.docs]) {
+        if (!poolDocsById.has(d.id)) poolDocsById.set(d.id, d);
+    }
+    const poolsSnapshot = { size: poolDocsById.size, docs: Array.from(poolDocsById.values()) };
+    console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check ` +
+        `(types:${typePools.size} payment:${paymentPools.size} lock:${lockPools.size})`);
 
     // ONE week lookup per (season, seasonType) for the whole run, instead of one
     // per NFL pool. Scoped to this run on purpose — see WeekContextCache.

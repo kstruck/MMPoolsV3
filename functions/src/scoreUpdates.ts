@@ -9,6 +9,7 @@ import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { validated } from "./lib/validated";
 import { fixPoolScoresSchema } from "./schemas/scoreUpdates";
 import { withHeartbeat } from "./lib/heartbeat";
+import { isDeadSyncPool } from "./lib/scanBounds";
 import { assertNotBannedLive } from "./lib/systemGuards";
 
 // Helper to generate random digits
@@ -1128,10 +1129,21 @@ export const syncGameStatus = onSchedule({
         console.log(`[Sync] Processing ${allPools.length} pools (${activePoolsSnap.size} active, ${completedPoolsSnap.size} recently completed)`);
 
         // 2. Process Each Pool
+        let skippedDead = 0;
         for (const doc of allPools) {
             const pool = doc.data() as GameState;
 
             if (!pool.gameId) continue;
+
+            // PLAN-AUDIT-SCAN-BOUNDS 1.2: a terminal/admin-closed pool must not
+            // resync scores, and a 'pre' pool whose start time passed >7 days
+            // ago is a dead pool whose game never went live — before this guard
+            // each one got an ESPN fetch attempt every minute, forever. (The
+            // guard below only skips 'pre' games far in the FUTURE.)
+            if (isDeadSyncPool(pool as { status?: string; closedVia?: string; scores?: { gameStatus?: string; startTime?: string } }, Date.now())) {
+                skippedDead++;
+                continue;
+            }
 
             // Optimization: Skip if game hasn't started yet and start time is > 2 hours away
             if (!pool.isLocked && pool.scores?.gameStatus === 'pre') {
@@ -1237,6 +1249,7 @@ export const syncGameStatus = onSchedule({
                 completedPools: completedPoolsSnap.size,
                 totalPoolsFound: allPools.length,
                 poolsProcessed: processedCount,
+                skippedDead,
                 errors: errorCount
             },
             durationMs: Date.now() - startTime
