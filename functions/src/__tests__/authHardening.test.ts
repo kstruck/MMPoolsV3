@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { bracketSettingsSchema, bracketCreateInputSchema } from "../shared/schemas/bracket";
-import { noticeAllowed, NOTICE_COOLDOWN_MS } from "../securityNotices";
+import { noticeAllowed, NOTICE_COOLDOWN_MS, GLOBAL_HOURLY_CAP, hourBucket } from "../securityNotices";
 
 /** PLAN-AUDIT-AUTH-HARDENING Phase A pins. */
 const SRC = join(__dirname, "..");
@@ -55,6 +55,19 @@ describe("A3: password-reset notice rate limit", () => {
     it("a notice after the cooldown is allowed", () => {
         expect(noticeAllowed(NOW - NOTICE_COOLDOWN_MS, NOW)).toBe(true);
     });
+    it("a global hourly cap exists and hour buckets roll over (codex r2 P2)", () => {
+        expect(GLOBAL_HOURLY_CAP).toBeGreaterThan(0);
+        const NOW = 1_000_000_000_000;
+        expect(hourBucket(NOW)).toBe(hourBucket(NOW + NOTICE_COOLDOWN_MS - 1));
+        expect(hourBucket(NOW)).not.toBe(hourBucket(NOW + NOTICE_COOLDOWN_MS));
+    });
+
+    it("a failed queue releases the per-email cooldown (codex r2 P2)", () => {
+        const text = readFileSync(join(SRC, "securityNotices.ts"), "utf8");
+        expect(text).toMatch(/outcome !== "queued"/);
+        expect(text).toMatch(/ref\.delete\(\)/);
+    });
+
     it("the notice send is transactional (bypasses marketing opt-out — codex r1 P1)", () => {
         const text = readFileSync(join(SRC, "securityNotices.ts"), "utf8");
         expect(text).toMatch(/sendEmail\([^;]*transactional: true/);

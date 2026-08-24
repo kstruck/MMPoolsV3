@@ -38,33 +38,64 @@ inbox. Go to marchmeleepools.com, use "Forgot password" to set a new password,
 and secure your email account. This message intentionally contains no links or
 buttons.</p>`;
 
+/** Global send cap: at most this many notices across ALL addresses per hour
+ *  bucket (codex r2 P2: the per-email cooldown alone still allowed a broad
+ *  targeting campaign). 20/hr covers any legitimate reset volume this app
+ *  will see while capping an abuse campaign at 20 truthful-toned emails/hr.
+ *  App Check enforce would be the stronger gate; it is BLOCKED repo-wide
+ *  (2026-07-30 outage, HANDOFF STOP POINT) — revisit when that lands. */
+export const GLOBAL_HOURLY_CAP = 20;
+
+export function hourBucket(nowMs: number): number {
+    return Math.floor(nowMs / NOTICE_COOLDOWN_MS);
+}
+
 export const notifyPasswordReset = onCall(async (request) => {
     const email = String(request.data?.email ?? "").trim().toLowerCase();
     // The single, constant response for every path below.
     const done = { ok: true };
     if (!email || !email.includes("@") || email.length > 320) return done;
 
+    const db = admin.firestore();
+    const ref = db.collection("security_notices").doc(emailHash(email));
+    const metaRef = db.collection("security_notices").doc("_meta");
+    const now = Date.now();
+
+    // Account lookup FIRST, reservation second — but the reservation
+    // transaction runs for existing and missing accounts alike, so the two
+    // paths do comparable work (blunts the user-enumeration timing oracle,
+    // codex r2 P2).
+    let accountExists = true;
     try {
         await admin.auth().getUserByEmail(email);
     } catch {
-        return done; // No account — same response, no mail.
+        accountExists = false;
     }
 
-    const db = admin.firestore();
-    const ref = db.collection("security_notices").doc(emailHash(email));
-    const now = Date.now();
     const allowed = await db.runTransaction(async (t) => {
-        const snap = await t.get(ref);
+        const [snap, metaSnap] = await Promise.all([t.get(ref), t.get(metaRef)]);
         const last = snap.data()?.lastSentAt as number | undefined;
-        if (!noticeAllowed(last, now)) return false;
+        const meta = metaSnap.data() as { bucket?: number; count?: number } | undefined;
+        const bucket = hourBucket(now);
+        const count = meta?.bucket === bucket ? (meta.count ?? 0) : 0;
+        if (!noticeAllowed(last, now) || count >= GLOBAL_HOURLY_CAP) return false;
+        // Reserve even when the account does not exist: same writes, same
+        // latency, and repeated probes of ANY address burn the same limits.
         t.set(ref, { kind: "PASSWORD_RESET", lastSentAt: now, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        t.set(metaRef, { bucket, count: count + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         return true;
     });
-    if (!allowed) return done;
+    if (!allowed || !accountExists) return done;
 
     // transactional: true (codex r1 P1) — a security notice must bypass the
     // marketing opt-out, or exactly the users who opted out get silent
     // takeovers.
-    await sendEmail(db, email, "Your March Melee Pools password was reset", NOTICE_HTML, { category: "security", transactional: true });
+    const outcome = await sendEmail(db, email, "Your March Melee Pools password was reset", NOTICE_HTML, { category: "security", transactional: true });
+    if (outcome !== "queued") {
+        // Release the per-email cooldown so a transient queue failure does not
+        // suppress the NEXT genuine notice for an hour (codex r2 P2). The
+        // global counter deliberately keeps its slot — failures still spent work.
+        await ref.delete().catch(() => { /* best-effort */ });
+    }
     return done;
 });
