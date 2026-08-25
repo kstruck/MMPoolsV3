@@ -145,13 +145,30 @@ describe('<EntrySwitcher>', () => {
     cleanup();
   });
 
-  it('the entry-#1 draft collects NO name', () => {
-    // `defaultEntryName` returns undefined for index 1 and the sheets only send
-    // `entryName` for an extra entry, so a field here would collect something
-    // the first save discards. (codex r1/r3.)
+  it('🛑 the entry-#1 draft DOES collect a name, and says it is optional', () => {
+    // Kevin, 2026-08-25, first live use: "users must be able to name each
+    // entry, not just the ones after the 1st one." An earlier version of this
+    // test asserted the OPPOSITE — that entry #1 collected no name — on the
+    // reasoning that `defaultEntryName` returns undefined for index 1. That
+    // confused a DEFAULT with a RULE: the server applies a requested name with
+    // no index condition (`nflPools.ts:562`), so the restriction was ours.
     render(<EntrySwitcher {...baseProps} ownEntries={[]} draft={{ entryIndex: 1, entryName: '' }} />);
-    expect(screen.queryByLabelText('Name this entry')).toBeNull();
-    expect(screen.getByText(/shows your player name/i)).toBeTruthy();
+    const input = screen.getByLabelText('Name this entry') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    // Blank is a real choice and must stay the easy one: the placeholder is the
+    // player's own name, which is what an empty field yields.
+    expect(input.placeholder).toBe('Kevin');
+    expect(screen.getByText(/Leave the name blank to use your player name/i)).toBeTruthy();
+    cleanup();
+  });
+
+  it('an EXTRA entry still gets its generated default as the placeholder', () => {
+    render(<EntrySwitcher {...baseProps} ownEntries={[e('kevin', 1)]} draft={{ entryIndex: 2, entryName: '' }} />);
+    const input = screen.getByLabelText('Name this entry') as HTMLInputElement;
+    expect(input.placeholder).toBe('Kevin #2');
+    // ...and the optional marker is NOT shown, because an extra entry always
+    // ends up with a name whether or not the member types one.
+    expect(screen.queryByText(/\(optional\)/i)).toBeNull();
     cleanup();
   });
 

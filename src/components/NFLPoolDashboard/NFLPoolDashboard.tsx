@@ -1187,7 +1187,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                           onSelectPrimarySlot={() => setEntryDraft({
                             poolId: pool.id,
                             uid: user?.id || '',
-                            // Entry #1 takes no name — see EntrySwitcher.
+                            // Entry #1 starts BLANK rather than pre-filled: an
+                            // empty name means "use my player name", which is
+                            // exactly today's behaviour, so opening the slot
+                            // changes nothing unless the member types.
                             draft: { entryIndex: 1, entryName: '' },
                           })}
                           onSelect={(entryId) => {

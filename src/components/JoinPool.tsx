@@ -10,6 +10,7 @@ import { getUserMessage } from '../utils/errorMessages';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
+import { effectiveMaxEntriesPerUser } from '@shared/multiEntry';
 import { PayoutsPanel } from './PayoutsPanel';
 import { Button } from './ui';
 
@@ -33,6 +34,9 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
   const toast = useToast();
   const autoJoinFiredRef = useRef(false);
   const castPool = pool as any;
+  // Absent ⇒ 1 (`effectiveMaxEntriesPerUser`), which is every pool created
+  // before multi-entry — so nothing below renders on an existing invite.
+  const maxEntriesPerUser = effectiveMaxEntriesPerUser(castPool?.settings);
 
   const pendingJoinKey = `pendingJoin:${poolId}`;
 
@@ -198,6 +202,15 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                    pool.type === 'NFL_SURVIVOR' ? 'Survivor' :
                    pool.type === 'NFL_MARGIN' ? 'Margin' : 'Squares'}
                 </span>
+                {/* Kevin, 2026-08-25: "On the invite that is sent I want to add
+                    the fact that it is a multi-entry pool." Absent on a
+                    single-entry pool, so every invite sent before today looks
+                    exactly as it did. */}
+                {maxEntriesPerUser > 1 && (
+                  <span className="mt-1 inline-block px-2 py-0.5 rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-700 dark:text-gold-400 font-display font-bold uppercase text-[9px] tracking-[0.08em]">
+                    Multi-Entry
+                  </span>
+                )}
               </div>
             </div>
 
@@ -214,6 +227,32 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             {/* Rules preview list */}
             <div className="space-y-4 mb-8 border-b border-line pb-8">
               <h4 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em] mb-2">Pool Rules Configuration</h4>
+
+              {/*
+                ONE line, ABOVE the per-type lists, so it shows on Pick'em,
+                Survivor and Margin without being written three times and
+                drifting apart.
+
+                🛑 IT NAMES THE MONEY, and that is the point rather than a
+                flourish. Kevin hit the confusion himself on the payments page
+                the same day: two entries, a $25 entry fee, and $50 owed reads
+                as a bug unless somebody said up front that the fee is PER
+                ENTRY. This is the last screen before a member commits.
+              */}
+              {maxEntriesPerUser > 1 && (
+                <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body mb-2.5">
+                  <li className="flex items-start gap-2">
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
+                    <span>
+                      <strong className="text-[color:var(--text)] font-bold">Multiple entries allowed</strong>
+                      {` — up to ${maxEntriesPerUser} per player, each with its own picks and its own place in the standings`}
+                      {(castPool?.settings?.entryFee ?? 0) > 0
+                        ? `. The $${castPool?.settings?.entryFee} entry fee is charged PER ENTRY, so two entries cost $${(castPool?.settings?.entryFee ?? 0) * 2}.`
+                        : '.'}
+                    </span>
+                  </li>
+                </ul>
+              )}
 
               {pool.type === 'NFL_PICKEM' && (() => {
                 const s = castPool?.settings || {};
