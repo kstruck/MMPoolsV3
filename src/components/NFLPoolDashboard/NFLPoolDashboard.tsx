@@ -1105,6 +1105,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     pool={pool}
                     user={user}
                     activeEntryId={ownEntry?.id ?? null}
+                    pendingEntryLabel={draft ? (draft.entryName.trim() || `Entry ${draft.entryIndex}`) : undefined}
                     games={games}
                     entries={entries}
                     recaps={recaps}

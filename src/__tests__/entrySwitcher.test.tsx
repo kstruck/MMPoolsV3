@@ -111,6 +111,9 @@ describe('<EntrySwitcher>', () => {
     const slot = screen.getByTestId('implicit-entry-1');
     expect(slot.textContent).toBe('Entry 1');
     expect(slot.getAttribute('aria-pressed')).toBe('true');
+    // ...and an EXTRA is not offered until entry #1 exists, so the normal UI
+    // cannot manufacture an owner of entry #2 with no entry #1 (codex r4).
+    expect(screen.queryByText('Add entry')).toBeNull();
     cleanup();
   });
 
@@ -130,6 +133,8 @@ describe('<EntrySwitcher>', () => {
     expect(slot.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(slot);
     expect(onSelectPrimarySlot).toHaveBeenCalled();
+    // Adding a THIRD is withheld until #1 exists, for the same reason.
+    expect(screen.queryByText('Add entry')).toBeNull();
     cleanup();
   });
 

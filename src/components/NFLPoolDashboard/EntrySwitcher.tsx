@@ -100,7 +100,11 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
    */
   const hasPrimary = sorted.some(e => entryIndexOf(e) === 1);
   const primarySlotActive = !hasPrimary && activeEntryIndex === 1;
-  const canAdd = !draft && sorted.length < maxEntries
+  // ...and an EXTRA is only offered once entry #1 actually exists. Now that the
+  // primary is always reachable through the slot above, this gate strands
+  // nobody — it just stops the normal UI from manufacturing a member who owns
+  // an entry #2 and no entry #1. (codex r4 on the T5 PR.)
+  const canAdd = !draft && hasPrimary && sorted.length < maxEntries
     && nextAddableEntryIndex(sorted, maxEntries) !== null;
 
   const handleName = (value: string) => {

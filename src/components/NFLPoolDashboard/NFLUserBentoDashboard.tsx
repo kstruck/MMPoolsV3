@@ -49,6 +49,17 @@ interface NFLUserBentoDashboardProps {
    * so a single-entry pool renders identically.
    */
   activeEntryId?: string | null;
+  /**
+   * The member is part-way through STARTING an entry — it has a name and an
+   * index but no document yet (PLAN-MULTI-ENTRY T5).
+   *
+   * 🛑 WHEN THIS IS SET THE CARD CLAIMS NO RECORD AT ALL. `activeEntryId` is
+   * null during a draft, and falling back to the first row would show entry
+   * #1's picks, score and rank on a card whose "Make Picks" button opens the
+   * empty entry-#2 sheet — the card describing one entry and the button
+   * opening another. (codex r4 on the T5 PR.)
+   */
+  pendingEntryLabel?: string;
   recaps: WeeklyRecap[];
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
@@ -154,6 +165,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   games: _games,
   entries,
   activeEntryId,
+  pendingEntryLabel,
   recaps: _recaps,
   selectedWeek,
   setSelectedWeek: _setSelectedWeek,
@@ -231,10 +243,10 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
    * there.
    */
   const myEntry = useMemo(() => {
-    if (!user) return null;
+    if (!user || pendingEntryLabel) return null;
     const mine = entries.filter(e => e.ownerUid === user.id || e.id === user.id);
     return (activeEntryId ? mine.find(e => e.id === activeEntryId) : undefined) ?? mine[0] ?? null;
-  }, [entries, user, activeEntryId]);
+  }, [entries, user, activeEntryId, pendingEntryLabel]);
 
   // ONE season ordering for every list on this card — `seasonCompare` is the
   // standings table's cascade (utils/nflResults); the three shallow copies
@@ -381,9 +393,10 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
    * row — a single-entry member sees the unchanged label.
    */
   const myEntryCount = user ? entries.filter(e => e.ownerUid === user.id || e.id === user.id).length : 0;
-  const activeEntryLabel = myEntryCount > 1
-    ? (typeof myEntry?.entryName === 'string' && myEntry.entryName ? myEntry.entryName : `Entry ${typeof myEntry?.entryIndex === 'number' ? myEntry.entryIndex : 1}`)
-    : null;
+  const activeEntryLabel = pendingEntryLabel
+    ?? (myEntryCount > 1
+      ? (typeof myEntry?.entryName === 'string' && myEntry.entryName ? myEntry.entryName : `Entry ${typeof myEntry?.entryIndex === 'number' ? myEntry.entryIndex : 1}`)
+      : null);
 
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
