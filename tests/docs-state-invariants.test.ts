@@ -272,6 +272,14 @@ describe('operator docs agree on what is deployed', () => {
   // A hex-shaped typo copied into BOTH docs passes every check above: the format
   // test calls it valid and the agreement test sees one distinct value. The docs
   // would then agree on a commit that does not exist. Only git can tell.
+  // TIMEOUT: this is the only test in the repo that shells out to git once per
+  // claim, and process spawn is ~1s on Windows against ~10ms on the Linux
+  // runner — measured 2026-08-25: `git rev-parse --is-shallow-repository` alone
+  // took 1.14s here. Two setup spawns plus one `merge-base` per claim clears
+  // vitest's 5s default on a Windows checkout while CI finishes in well under a
+  // second, so this failed locally for every developer and never in CI. The
+  // budget below is for PROCESS SPAWN, not for the assertions, which are
+  // unchanged.
   it('every claimed SHA is a real commit ON origin/main', () => {
     const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
       cwd: REPO_ROOT, encoding: 'utf8',
@@ -303,7 +311,7 @@ describe('operator docs agree on what is deployed', () => {
         'is still valid hex, or a SHA taken from an unmerged branch. Both make ' +
         'the docs agree on something that was never deployed',
     ).toEqual([]);
-  });
+  }, 60_000);
 
   it('never states two different deployed SHAs', () => {
     const distinct = [...new Set(claims.map((c) => c.sha))];
