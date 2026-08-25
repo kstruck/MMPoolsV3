@@ -75,6 +75,52 @@ export async function readPoolSecret(
 }
 
 /**
+ * What `publishBracketPool` should do with the pool's password.
+ *
+ * `keep` writes NOTHING to the access doc — it is the "leave it alone" branch,
+ * and it exists because publish must never delete a password (codex r2 P1).
+ */
+export type PublishPasswordPlan =
+    | { source: "supplied"; plaintext: string; willBeProtected: true }
+    | { source: "legacy-plaintext"; plaintext: string; willBeProtected: true }
+    | { source: "legacy-hash"; hash: string; willBeProtected: true }
+    | { source: "keep"; willBeProtected: boolean };
+
+/**
+ * PURE decision for the publish path, so its four branches are testable without
+ * a transaction.
+ *
+ * ⚠️ PUBLISH NEVER CLEARS. The old code was
+ * `passwordHash: passwordHash || FieldValue.delete()`, which was harmless while
+ * publish was the ONLY writer — a DRAFT could not hold a stored hash. Phase B
+ * adds `setPoolPassword`, which a commissioner CAN call on a draft, so an
+ * omitted `password` on publish would have deleted it and opened the pool. An
+ * omitted password now means "leave it alone", the same
+ * empty-is-not-a-clear rule the client seam and the rules predicate follow.
+ * Removing a password is one explicit act: `setPoolPassword(poolId, null)`.
+ *
+ * The legacy branches matter for a draft written by the PRE-Phase-B dashboard,
+ * which could put a plaintext `accessControl.password` on the public doc. The
+ * scrub deletes that field on publish either way, so without adopting it here
+ * the publish would destroy the commissioner's setting rather than migrate it.
+ */
+export function publishPasswordPlan(
+    supplied: string | null | undefined,
+    hasExistingSecret: boolean,
+    poolData: Record<string, unknown> | undefined,
+): PublishPasswordPlan {
+    if (typeof supplied === "string" && supplied.length > 0) {
+        return { source: "supplied", plaintext: supplied, willBeProtected: true };
+    }
+    if (hasExistingSecret) return { source: "keep", willBeProtected: true };
+    const legacyPlain = legacyPlaintextOf(poolData);
+    if (legacyPlain) return { source: "legacy-plaintext", plaintext: legacyPlain, willBeProtected: true };
+    const legacy = legacyHashOf(poolData);
+    if (legacy) return { source: "legacy-hash", hash: legacy, willBeProtected: true };
+    return { source: "keep", willBeProtected: false };
+}
+
+/**
  * The patch that scrubs every legacy password field off the PUBLIC pool doc and
  * sets the non-secret marker. Exported so the migration and the runtime paths
  * provably write the same thing (and so a dry run can print it).

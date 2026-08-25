@@ -14,7 +14,7 @@ import {
     safeEqual,
     verifyPoolPassword,
 } from '../lib/poolPassword';
-import { legacyHashOf, legacyPlaintextOf } from '../lib/poolAccess';
+import { legacyHashOf, legacyPlaintextOf, publishPasswordPlan } from '../lib/poolAccess';
 import { planForPool } from '../migrations/migratePoolPasswords';
 import { createPoolPermissiveSchema, updatePoolSettingsSchema, stripPoolPasswordFields } from '../schemas/poolCore';
 import { setPoolPasswordSchema, migratePoolPasswordsSchema, verifyPoolAccessSchema } from '../schemas/poolPassword';
@@ -224,6 +224,47 @@ describe('callable schemas', () => {
     it('the migration defaults to DRY RUN at the schema layer (Rule 1)', () => {
         expect(migratePoolPasswordsSchema.parse({}).dryRun).toBe(true);
         expect(migratePoolPasswordsSchema.parse({ dryRun: false }).dryRun).toBe(false);
+    });
+});
+
+describe('publish password plan (codex r2 P1 — publish must never clear)', () => {
+    it('uses the supplied password when publish sends one', () => {
+        expect(publishPasswordPlan('pw', false, {})).toEqual({
+            source: 'supplied', plaintext: 'pw', willBeProtected: true,
+        });
+        // …even when a secret already exists: this is a deliberate replace.
+        expect(publishPasswordPlan('pw', true, {}).source).toBe('supplied');
+    });
+
+    it('KEEPS an existing private secret when publish omits the password', () => {
+        // The regression codex caught: a commissioner sets a password on a DRAFT
+        // through setPoolPassword, then publishes with the field blank. The old
+        // `passwordHash || FieldValue.delete()` deleted it and opened the pool.
+        for (const omitted of [undefined, null, '']) {
+            expect(publishPasswordPlan(omitted, true, {})).toEqual({
+                source: 'keep', willBeProtected: true,
+            });
+        }
+    });
+
+    it('adopts legacy material a pre-Phase-B draft is still carrying', () => {
+        // The scrub deletes these fields on publish either way, so NOT adopting
+        // them would destroy the commissioner's setting rather than migrate it.
+        expect(publishPasswordPlan(undefined, false, { accessControl: { password: 'old' } }))
+            .toEqual({ source: 'legacy-plaintext', plaintext: 'old', willBeProtected: true });
+        expect(publishPasswordPlan(undefined, false, { passwordHash: 'salt:hash' }))
+            .toEqual({ source: 'legacy-hash', hash: 'salt:hash', willBeProtected: true });
+    });
+
+    it('leaves an unprotected pool unprotected', () => {
+        expect(publishPasswordPlan(undefined, false, {})).toEqual({
+            source: 'keep', willBeProtected: false,
+        });
+    });
+
+    it('prefers the PRIVATE secret over legacy public material', () => {
+        expect(publishPasswordPlan(undefined, true, { gridPassword: 'stale' }))
+            .toEqual({ source: 'keep', willBeProtected: true });
     });
 });
 

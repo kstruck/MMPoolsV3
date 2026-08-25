@@ -6,7 +6,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
 import { hashPoolPassword, hasSecret, verifyPoolPassword } from "./lib/poolPassword";
-import { accessDocRef, readPoolSecret, rehashOnVerify, scrubPatch } from "./lib/poolAccess";
+import { accessDocRef, publishPasswordPlan, readPoolSecret, rehashOnVerify, scrubPatch } from "./lib/poolAccess";
 import { computeLaunchMode, estimatedPlayersFromPayload } from "./poolOps";
 import { normalizeAddonSelection } from "./lib/launchFields";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
@@ -236,17 +236,9 @@ export const publishBracketPool = validated(
             throw new HttpsError("already-exists", "Slug is already taken.");
         }
 
-        // Hash password if provided (PBKDF2) — PLAN-AUDIT-AUTH-HARDENING Phase B.
-        //
-        // The hash NO LONGER LANDS ON THE POOL DOCUMENT. `pools/{id}` is
-        // `allow get: if true`, so a PBKDF2 record stored there was
-        // offline-crackable material handed to anyone with a share link; it now
-        // goes to `pools/{id}/private/access`, which rules close outright. The
-        // public doc keeps only the non-secret boolean marker.
-        //
-        // Written inside the SAME transaction as the slug reservation, so a pool
-        // can never be published with a marker and no secret behind it.
-        const passwordHash = password ? hashPoolPassword(password) : null;
+        // ALL READS BEFORE ANY WRITE (Firestore transaction rule).
+        const accessRef = accessDocRef(db, poolId);
+        const accessDoc = await transaction.get(accessRef);
 
         // Find Season Lock Time (Fetch from Tournament doc)
         const tournamentRef = db.collection("tournaments").doc(poolData.tournamentId || `mens-${poolData.seasonYear}`);
@@ -256,16 +248,41 @@ export const publishBracketPool = validated(
             lockAt = tournamentDoc.data()?.lockAt || 0;
         }
 
+        // Password — PLAN-AUDIT-AUTH-HARDENING Phase B.
+        //
+        // The hash NO LONGER LANDS ON THE POOL DOCUMENT. `pools/{id}` is
+        // `allow get: if true`, so a PBKDF2 record stored there was
+        // offline-crackable material handed to anyone with a share link; it now
+        // goes to `pools/{id}/private/access`, which rules close outright. The
+        // public doc keeps only the non-secret boolean marker. Written inside
+        // the SAME transaction as the slug reservation, so a pool can never be
+        // published with a marker and no secret behind it.
+        //
+        // ⚠️ PUBLISH NEVER DELETES A PASSWORD (codex r2, P1). The decision and
+        // the reasoning live in `publishPasswordPlan`, which is unit-tested;
+        // this handler only turns the plan into writes.
+        const existingHash = accessDoc.exists ? accessDoc.data()?.passwordHash : undefined;
+        const hasExisting = typeof existingHash === "string" && existingHash.length > 0;
+        const plan = publishPasswordPlan(
+            password, hasExisting, poolData as unknown as Record<string, unknown>,
+        );
+        const newHash = plan.source === "supplied" || plan.source === "legacy-plaintext"
+            ? hashPoolPassword(plan.plaintext)
+            : plan.source === "legacy-hash" ? plan.hash : null;
+        const willBeProtected = plan.willBeProtected;
+
         transaction.set(slugRef, {
             poolId,
             createdAt: Timestamp.now().toMillis(),
         });
 
-        transaction.set(
-            accessDocRef(db, poolId),
-            { passwordHash: passwordHash ?? FieldValue.delete(), updatedAt: Timestamp.now().toMillis() },
-            { merge: true },
-        );
+        if (newHash) {
+            transaction.set(
+                accessRef,
+                { passwordHash: newHash, updatedAt: Timestamp.now().toMillis() },
+                { merge: true },
+            );
+        }
 
         transaction.update(poolRef, {
             slug: slugLower,
@@ -274,7 +291,7 @@ export const publishBracketPool = validated(
             isPublic: !!isListedPublic, // Sync for firestore rules
             // Legacy public copies are removed on the way past, so publishing a
             // pool that was drafted before Phase B also evacuates it.
-            ...scrubPatch(Boolean(passwordHash)),
+            ...scrubPatch(willBeProtected),
             status: "OPEN",
             lockAt: lockAt,
             updatedAt: Timestamp.now().toMillis(),

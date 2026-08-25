@@ -63,3 +63,78 @@ partially accepted (limitation documented + copy hedged; removal rejected
 with reasoning in rounds 3-4), 0 carried. Own read of the final diff agrees.
 The canonical statement of the residual limits lives at the top of
 `functions/src/securityNotices.ts`.
+
+---
+
+# Review log — PLAN-AUDIT-AUTH-HARDENING (Phase B: pool passwords)
+
+Reviewer: `codex exec review --base origin/main`. CLAUDE.md §2c; qodo DORMANT —
+the stopping rule is TWO conditions, a clean codex round AND my own read of the
+diff agreeing.
+
+## Round 1 — 2026-08-25
+
+VERDICT: CLEAN. *"No discrete, actionable regressions were identified in the
+changes relative to the specified merge base."*
+
+Not treated as the review (§2c: round 1 finds defects in the code, rounds 2+
+find defects in the fixes, and a clean round 1 is not a stopping condition on
+its own). Own read of the diff found four things:
+
+1. **A literal NUL byte had shipped in `poolPassword.ts`** — the `attemptKey`
+   separator. Functionally correct and it type-checked, but a raw NUL makes git
+   and most diff/grep tooling treat the file as binary. Now written as an escape,
+   with the reason recorded. It surfaced from codex's own hexdump of the file,
+   not from any assertion — worth noting, because nothing in the gate set would
+   have caught it.
+2. **That separator was load-bearing, not cosmetic.** A Firestore document id
+   may contain a space, so the space separator I had intended put
+   `("pool a","b")` and `("pool","a b")` in the SAME throttle bucket — two
+   principals sharing one cap. NUL is the one byte an id cannot contain. Pinned
+   by a test.
+3. **The gate blamed the wrong subsystem.** A caller who was rate-limited or
+   offline was told "Incorrect password." `verifyPoolAccess` now returns a
+   reason and PoolRoute renders three distinct messages (with `role="alert"`);
+   an empty box no longer costs an attempt. This is the exact failure §2c cites
+   from #322.
+4. **`createNFLPool` did not split the payload.** Not a live leak — NFL pools
+   have no password UI — but both create wrappers hand the WHOLE payload to
+   `handleError` as context, and both ride the same permissive envelope.
+   Splitting one and not the other is how the next password-bearing pool type
+   ends up in `system_logs`.
+
+Also added an emulator assertion for a question I had been ANSWERING FROM
+BELIEF: that `scrubPatch`'s dotted delete of `accessControl.password` applies
+cleanly to a pool with no `accessControl` map. `publishBracketPool` applies that
+patch inside the slug transaction, so a rejection there would have broken
+publishing outright. Measured now, not assumed.
+
+## Round 2
+
+VERDICT: REVISE. 1 finding (P1), ACCEPTED in full:
+
+1. **(P1) Publishing a draft could silently delete its password.**
+   `publishBracketPool` wrote `passwordHash: passwordHash || FieldValue.delete()`.
+   That was harmless while publish was the ONLY writer — a DRAFT could not hold
+   a stored hash. Phase B adds `setPoolPassword`, which a commissioner CAN call
+   on a draft, so publishing with the field blank would have deleted the secret
+   and cleared the marker: the pool opens, silently, in the fail-OPEN direction
+   this whole phase exists to close.
+
+   I had looked at this line during my own round-1 read and talked myself out of
+   it — "it matches the prior behaviour" — which was true of the LINE and false
+   of the SITUATION. That is precisely the blind spot §2c says self-review does
+   not catch.
+
+   Fix: an omitted `password` now means LEAVE IT ALONE, the same
+   empty-is-not-a-clear rule the client seam, the schema and the rules predicate
+   already follow. The decision moved into a pure `publishPasswordPlan()` with
+   five unit tests, including the legacy branches — a pre-Phase-B draft carrying
+   a plaintext `accessControl.password` is now ADOPTED on publish rather than
+   destroyed by the scrub. Removing a password is one explicit act:
+   `setPoolPassword(poolId, null)`.
+
+   Codex also reported `tsc -p functions/tsconfig.test.json` failing with
+   `TS5107 moduleResolution=node10 deprecated`. NOT a finding on this diff — it
+   is what the raw invocation does; the repo's own `npm --prefix functions run
+   typecheck` passes. No action.

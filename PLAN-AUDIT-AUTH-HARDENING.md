@@ -166,6 +166,16 @@ visitors are still served the old client, and those pools would render ungated.
 
 ### Known limitations carried
 
+- 🛑 **THE GATE IS STILL A UI GATE.** `verifyPoolAccess` decides what the app
+  RENDERS; it does not decide what Firestore serves. `pools/{id}` is
+  `allow get: if true` (guest share links depend on it), so a determined visitor
+  can still read a "private" squares pool's document directly. **What this phase
+  fixes is the password, not the pool**: the password itself is no longer
+  readable, no longer comparable in the browser, and no longer a credential the
+  member has reused elsewhere and just handed to every link-holder. Making the
+  pool DATA private is a different, larger change — the `get` rule, every
+  read path, and the guest-link product decision — and is not attempted here.
+  Say so plainly rather than letting the phase read as more than it is.
 - **A squares commissioner cannot CLEAR a password from the wizard.** The
   wizard cannot distinguish "unchanged" from "cleared" (see above), so it only
   ever SETS. Bracket has an explicit removal control; squares does not yet. The
