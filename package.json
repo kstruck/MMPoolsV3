@@ -14,7 +14,7 @@
     "build:static": "npm run build && npm run prerender",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node functions/scripts/copy-shared.mjs && vitest run",
     "deploy:backend": "npx firebase deploy --only functions,firestore:rules,firestore:indexes --project gridiron-gamble-uzuqo",
     "deploy:hosting": "npm run build:static && npx firebase deploy --only hosting",
     "prepare": "husky"

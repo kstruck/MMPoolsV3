@@ -9,7 +9,21 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   // Don't lint build output or operational scripts (node .mjs/.cjs one-offs that
   // carry TS-eslint disable comments this JS config doesn't define).
-  globalIgnores(['dist', '**/*.cjs', '**/*.mjs', '.claude/**', 'functions/lib/**']),
+  //
+  // `functions/src/shared/**` is a GENERATED MIRROR of repo-root `shared/`,
+  // written by functions/scripts/copy-shared.mjs and gitignored. Linting it
+  // double-reports every warning already reported against the real source, and
+  // the duplicate is unfixable in place because any edit there is overwritten
+  // on the next copy. It only appears once functions has been built or tested,
+  // which is why the report length used to depend on what you had run before.
+  globalIgnores([
+    'dist',
+    '**/*.cjs',
+    '**/*.mjs',
+    '.claude/**',
+    'functions/lib/**',
+    'functions/src/shared/**',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
