@@ -700,8 +700,17 @@ export async function importNFLSeason(
  */
 // `secrets` is required for the ops-alert SMS path used by the stat-correction
 // page (A5) — dispatchOpsAlert reads COURIER_AUTH_TOKEN at call time.
+//
+// SIZING (item 14, PLAN-AUDIT-BACKEND-RESIDUE §1): 270s/512MiB, copied from
+// nflAutoScoreJob — the ONLY other `*/5` job in the repo — rather than picked.
+// Its comment carries the invariant that governs both: timeoutSeconds must stay
+// under the cadence so two runs can never overlap, and 270s was the value chosen
+// for a 5-minute gap. Before this the job ran on the Gen-2 default 60s/256MiB,
+// which is a wall a multi-slate ESPN fetch can reach.
+// `maxInstances` is deliberately absent: lib/globalOptions.ts caps every v2
+// function at 10 (#548), and naming a key inline is what overrides it.
 export const syncNFLScoresJob = onSchedule(
-  { schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] },
+  { schedule: '*/5 * * * *', timeoutSeconds: 270, memory: '512MiB', secrets: [opsCourierAuthToken] },
   withHeartbeat('syncNFLScoresJob', async () => {
     const db = admin.firestore();
     const now = Date.now();
@@ -1380,8 +1389,13 @@ export function scoreSyncHeartbeat(r: ScoreSyncResult): {
  * DETECTS and REPORTS corrections — it only suppresses the nfl_games write — so
  * the alarm can be observed for a week before the writes are armed.
  */
+// SIZING (item 14, PLAN-AUDIT-BACKEND-RESIDUE §1): 540s/512MiB, matching the
+// repo's other daily sweeps — nflFinalizeSweepJob and recomputeGlobalStatsDaily.
+// This is strictly the heaviest caller of syncScoresWindow (a 7-day window where
+// syncNFLScoresJob takes 24h), so it gets the daily jobs' ceiling, not the
+// 5-minute job's 270s. Was running on the Gen-2 default 60s/256MiB.
 export const nflDeepScoreSweepJob = onSchedule(
-  { schedule: '30 11 * * *', timeZone: 'America/New_York', secrets: [opsCourierAuthToken] },
+  { schedule: '30 11 * * *', timeZone: 'America/New_York', timeoutSeconds: 540, memory: '512MiB', secrets: [opsCourierAuthToken] },
   withHeartbeat('nflDeepScoreSweepJob', async () => {
     const db = admin.firestore();
 
@@ -1476,6 +1490,8 @@ export const importNFLSchedule = validated(
     return { success: true, importedCount: res.importedCount, leaseBusyWeeks: res.leaseBusyWeeks };
   } catch (err: any) {
     console.error("importNFLSchedule Failure:", err);
-    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`, err);
+    // No 3rd arg: HttpsError's `details` is serialized to the client, and a raw
+    // error object can carry stack traces and internal paths.
+    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`);
   }
 });

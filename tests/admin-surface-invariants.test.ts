@@ -302,12 +302,23 @@ describe('T7 — Operations tab is wired', () => {
 
 describe('T6 — role-management UI is present', () => {
   const admin = read('src/components/SuperAdmin.tsx');
+  // The Members tab's MARKUP moved to admin/MembersTab.tsx (SuperAdmin.tsx split,
+  // phase 1) while its state and handlers stayed behind. So the role SELECTOR is
+  // now asserted against the panel and the CALLABLE against SuperAdmin.tsx —
+  // deliberately split rather than relaxed to a single "somewhere in src" search,
+  // because a search that broad would pass on a file nothing renders.
+  const members = read('src/components/admin/MembersTab.tsx');
   it('imports the canonical role model', () => {
     expect(admin).toMatch(/from\s*'\.\.\/utils\/roles'/);
+    expect(members).toMatch(/from\s*'\.\.\/\.\.\/utils\/roles'/);
   });
   it('renders a role selector backed by setUserRole', () => {
-    expect(admin).toContain('CANONICAL_ROLES.map');
+    expect(members).toContain('CANONICAL_ROLES.map');
     expect(admin).toContain('dbService.setUserRole');
+  });
+  it('keeps the selector MOUNTED — the panel is rendered, not merely present', () => {
+    expect(admin).toContain('<MembersUsersPanel');
+    expect(admin).toMatch(/import\s*\{[^}]*MembersUsersPanel[^}]*\}\s*from\s*'\.\/admin\/MembersTab'/);
   });
 });
 
@@ -320,6 +331,10 @@ describe('functions export surface', () => {
     'adminSaveBillingConfig',
     'adminManageCoupon',
     'adminUpdatePoolBilling',
+    // C1 (2026-08-23): the NARROW per-pool feature toggle. `adminUpdatePoolBilling`
+    // could already do this via `override`, but its audit row cannot say which
+    // feature moved or which way.
+    'adminSetPoolFeature',
     'adminAdjustUserCredits',
     'searchUsersByEmail',
     'closePool',

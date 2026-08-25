@@ -725,9 +725,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               type="checkbox"
                               checked={liabilityAccepted}
                               onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                              className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-line bg-page transition-all checked:border-gold-500 checked:bg-gold-500 hover:border-gold-400"
+                              className="peer h-6 w-6 cursor-pointer appearance-none rounded border border-line bg-page transition-all checked:border-gold-500 checked:bg-gold-500 hover:border-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                            />
-                           <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-navy-950 opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                           <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-navy-950 opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                         </div>
                         <p className="text-xs text-muted leading-relaxed group-hover:text-[color:var(--text)] transition-colors duration-150">
                            By checking this box and selecting Reserve Squares, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.
@@ -1028,7 +1028,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   {/* --- SECTION 2: GRID HEADER (TEAMS) --- */}
                   <div className="w-full max-w-[80vh] mx-auto bg-navy-900 p-4 rounded-t-xl border border-[rgba(230,206,150,0.16)] flex flex-wrap justify-between items-center gap-4 shadow-panel relative z-10">
                      <div className="flex items-center gap-3 bg-gradient-to-r from-navy-700/60 to-navy-900 px-4 py-2 rounded-lg border border-gold-500/25 shadow-inner">
-                        {awayLogo && <img src={awayLogo} className="w-8 h-8 object-contain drop-shadow" />}
+                        {awayLogo && <img src={awayLogo} alt="" className="w-8 h-8 object-contain drop-shadow" />}
                         <div className="flex flex-col">
                            <span className="text-[10px] text-gold-400 uppercase font-display font-bold flex items-center gap-1 tracking-wider">
                               <ArrowDown size={10} /> Rows (Left)
@@ -1062,7 +1062,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               {gameState.homeTeam}
                            </span>
                         </div>
-                        {homeLogo && <img src={homeLogo} className="w-8 h-8 object-contain drop-shadow" />}
+                        {homeLogo && <img src={homeLogo} alt="" className="w-8 h-8 object-contain drop-shadow" />}
                      </div>
                   </div>
 

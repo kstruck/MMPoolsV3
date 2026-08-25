@@ -272,6 +272,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={awayTeam?.team.logo || '/placeholder-team.png'}
                                                 alt={awayTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-9 h-9 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -296,6 +297,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={homeTeam?.team.logo || '/placeholder-team.png'}
                                                 alt={homeTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-9 h-9 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -366,6 +368,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={awayTeam?.team.logo || getTeamLogo(awayTeam?.team.displayName || '') || '/placeholder-team.png'}
                                                 alt={awayTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-8 h-8 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -385,6 +388,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={homeTeam?.team.logo || getTeamLogo(homeTeam?.team.displayName || '') || '/placeholder-team.png'}
                                                 alt={homeTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-8 h-8 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />

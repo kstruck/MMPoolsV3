@@ -38,6 +38,16 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   const billing = pool.billing;
   const status: BillingStatus = billing?.status ?? 'free';
 
+  /**
+   * Every commissioner CTA here carries the pool it is about
+   * (PLAN-WIZARD-BUYFLOW-FIXES T3). A bare `/pricing` made the commissioner
+   * re-find and re-select their own pool on the upgrade page — and the free /
+   * grace / locked banners are the moments where that dead end costs the most.
+   * `PricingPage` has read `?poolId=` since it shipped; nothing ever sent it.
+   */
+  const poolId = typeof pool?.id === 'string' ? pool.id : '';
+  const pricingHref = poolId ? `/pricing?poolId=${encodeURIComponent(poolId)}` : '/pricing';
+
   const trialDaysLeft = useMemo(
     () => getDaysRemaining(billing?.trialEndsAt),
     [billing?.trialEndsAt]
@@ -359,7 +369,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -460,14 +470,25 @@ export const BillingGate: React.FC<BillingGateProps> = ({
                   fontWeight: 700,
                 }}
               >
-                Upgrade to keep full access after your trial period.
+                {/* T7 — "upgrade to keep full access" told the commissioner
+                    nothing about WHEN, or whether a card was about to be
+                    charged. Nothing charges automatically: there is no card on
+                    file, which is the fact that stops a trial banner reading
+                    like a countdown to a debit. */}
+                {/* Addressed by ROLE, like the grace and locked banners already
+                    are (codex [P2]). This banner renders for everyone but the
+                    pay CTA is commissioner-only, so second-person "you pay"
+                    told a member to take an action they cannot take. */}
+                {isCommissioner
+                  ? 'Nothing is charged automatically. When the trial ends you get a short grace period to pay; after that the pool locks until you do.'
+                  : 'Your picks and standings are safe. When the trial ends the commissioner has a short grace period to pay; after that the pool pauses until they do.'}
               </p>
             </div>
           </div>
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -573,7 +594,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -704,7 +725,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             {/* CTA */}
             {isCommissioner ? (
               <a
-                href="/pricing"
+                href={pricingHref}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

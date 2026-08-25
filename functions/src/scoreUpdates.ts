@@ -9,7 +9,9 @@ import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { validated } from "./lib/validated";
 import { fixPoolScoresSchema } from "./schemas/scoreUpdates";
 import { withHeartbeat } from "./lib/heartbeat";
+import { isDeadSyncPool } from "./lib/scanBounds";
 import { assertNotBannedLive } from "./lib/systemGuards";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -1128,10 +1130,21 @@ export const syncGameStatus = onSchedule({
         console.log(`[Sync] Processing ${allPools.length} pools (${activePoolsSnap.size} active, ${completedPoolsSnap.size} recently completed)`);
 
         // 2. Process Each Pool
+        let skippedDead = 0;
         for (const doc of allPools) {
             const pool = doc.data() as GameState;
 
             if (!pool.gameId) continue;
+
+            // PLAN-AUDIT-SCAN-BOUNDS 1.2: a terminal/admin-closed pool must not
+            // resync scores, and a 'pre' pool whose start time passed >7 days
+            // ago is a dead pool whose game never went live — before this guard
+            // each one got an ESPN fetch attempt every minute, forever. (The
+            // guard below only skips 'pre' games far in the FUTURE.)
+            if (isDeadSyncPool(pool as { status?: string; closedVia?: string; scores?: { gameStatus?: string; startTime?: string } }, Date.now())) {
+                skippedDead++;
+                continue;
+            }
 
             // Optimization: Skip if game hasn't started yet and start time is > 2 hours away
             if (!pool.isLocked && pool.scores?.gameStatus === 'pre') {
@@ -1237,6 +1250,7 @@ export const syncGameStatus = onSchedule({
                 completedPools: completedPoolsSnap.size,
                 totalPoolsFound: allPools.length,
                 poolsProcessed: processedCount,
+                skippedDead,
                 errors: errorCount
             },
             durationMs: Date.now() - startTime
@@ -1304,6 +1318,14 @@ export const simulateGameUpdate = onCall({
     // it also means a banned caller never opens a transaction at all.
     await assertNotBannedLive(uid);
 
+    // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d), and resolved HERE rather than
+    // inside the transaction for the same reason assertNotBannedLive is hoisted
+    // above: it reads users/{uid} with a plain get(), and a non-transactional
+    // read inside runTransaction() is re-executed on every retry without the
+    // transaction's consistency guarantees. No read happens at all unless the
+    // claim already says SUPER_ADMIN.
+    const isSuperAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
+
     const db = admin.firestore();
     const poolRef = db.collection('pools').doc(poolId);
 
@@ -1319,7 +1341,6 @@ export const simulateGameUpdate = onCall({
             // simulate scores. Without this, any authenticated user could set
             // arbitrary scores (and thus winners) on any real-money pool.
             const authPool = doc.data() as any;
-            const isSuperAdmin = request.auth?.token.role === 'SUPER_ADMIN';
             // `coManagers` is NOT consulted here (PLAN-CO-COMMISSIONERS D3: the
             // sim tools narrow to owner / managerUid / SUPER_ADMIN; a forged
             // array must reach nothing while the field is being locked).

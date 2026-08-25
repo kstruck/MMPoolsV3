@@ -10,6 +10,7 @@ import { PoolTimer } from '../PoolTimer';
 import { Grid } from '../Grid';
 import { AuditLog } from '../AuditLog';
 import { AICommissioner } from '../AICommissioner';
+import { PaymentSuccessBanner } from '../billing/PaymentSuccessBanner';
 
 
 import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
@@ -27,7 +28,7 @@ import { isSuperAdmin, isPoolManager, isNFLPoolCommissioner } from '../../utils/
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
 import { Button, Badge } from '../ui';
-import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner } from '../../types';
+import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStatus } from '../../types';
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
 
@@ -137,8 +138,18 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     // Password Gate (Local) moved to top
     const [enteredPassword, setEnteredPassword] = useState('');
-    const [passwordError, setPasswordError] = useState(false);
-    const [isUnlocked, setIsUnlocked] = useState(false);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    /**
+     * WHICH POOL was unlocked, not WHETHER one was (codex r9, P1).
+     *
+     * This route stays MOUNTED across pool navigation — the `key` note on the
+     * NFL branch below exists for exactly that reason — so a boolean survived
+     * into the next pool, and unlocking one protected pool then opened every
+     * other protected pool the user navigated to, gate and all. Storing the id
+     * makes the unlock a statement about a specific pool.
+     */
+    const [unlockedPoolId, setUnlockedPoolId] = useState<string | null>(null);
+    const [checkingPassword, setCheckingPassword] = useState(false);
 
     // Quarterly Payouts (Moved to top)
     const quarterlyPayouts = useMemo(() => {
@@ -186,6 +197,18 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
             // new identity on every render (`PublishedRoute.settings`).
             settings={(pool as { settings?: Record<string, unknown> }).settings}
         >
+            {/* G5 — acknowledge a return from checkout. Mounted HERE, in the one
+                wrapper every pool-type branch returns through, rather than
+                repeated in each of the five branches below. */}
+            {/* ⚠️ `key` is load-bearing (codex r1 [P2]). This route stays MOUNTED
+                across pool navigation — see the long note on the NFL branch's
+                `key` below — so without it the banner's once-per-mount read of
+                `payment=success` would persist onto the NEXT pool and announce
+                a payment that pool never received. */}
+            <PaymentSuccessBanner
+                key={pool.id}
+                status={(pool as { billing?: { status?: BillingStatus } }).billing?.status}
+            />
             {node}
         </HelpScopeProvider>
     );
@@ -196,6 +219,91 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         setShareUrl(url);
         setShowShareModal(true);
     };
+
+    /**
+     * PLAN-AUDIT-AUTH-HARDENING Phase B (audit item 1).
+     *
+     * This used to be `enteredPassword === squaresPool.gridPassword` — a compare
+     * in the BROWSER against a field on a document that is `allow get: if true`,
+     * so anyone holding the share link could read the password out of the
+     * network tab and never see this box at all. The check now runs in the
+     * `verifyPoolAccess` callable against a PBKDF2 record in
+     * `pools/{id}/private/access`, which rules close to every client.
+     *
+     * The callable is the authority in BOTH directions: a throttled or failed
+     * call returns false, so the gate fails CLOSED.
+     */
+    const handlePasswordSubmit = async () => {
+        if (checkingPassword) return;
+        // An empty box is not worth a round trip, and it would burn one of the
+        // caller's ten attempts against the throttle.
+        if (!enteredPassword) { setPasswordError('Enter the pool password.'); return; }
+        setCheckingPassword(true);
+        try {
+            const { ok, reason } = await dbService.verifyPoolAccess(gated.id, enteredPassword);
+            setUnlockedPoolId(ok ? gated.id : null);
+            setPasswordError(ok ? null
+                : reason === 'throttled' ? 'Too many attempts. Wait a few minutes and try again.'
+                : reason === 'error' ? 'Could not check the password right now. Try again.'
+                : 'Incorrect password.');
+        } finally {
+            setCheckingPassword(false);
+        }
+    };
+
+    /**
+     * Whether the gate renders. `hasPoolPassword` is the non-secret marker the
+     * server sets; `gridPassword` is the legacy plaintext, still present on pools
+     * the migration sweep has not reached — reading it here keeps those pools
+     * gated during the rollout without the value being trusted for anything.
+     *
+     * ⚠️ SQUARES **AND PROPS** (codex r7, P1). This gate used to live BELOW the
+     * per-type branches, so it was only ever reached for SQUARES — while the
+     * Props wizard has always offered an "Entry Password" field and the create
+     * path has always stored it. A Props commissioner set a password, was told
+     * the pool was protected, and every visitor walked straight in: the
+     * exposed-and-unenforced shape of audit item 13a, in a second place. It is
+     * hoisted above every branch now, so adding a pool type cannot silently
+     * opt out of it.
+     *
+     * BRACKET is deliberately NOT here: its password gates JOINING, not viewing,
+     * and that is enforced server-side in `joinBracketPool`. The NFL types have
+     * no password at all.
+     */
+    const PASSWORD_VIEW_GATED_TYPES = ['SQUARES', 'PROPS'];
+    const gated = pool as unknown as {
+        id: string; ownerId?: string; gridPassword?: string; hasPoolPassword?: boolean;
+    };
+    const isPasswordProtected = PASSWORD_VIEW_GATED_TYPES.includes(pool.type)
+        && Boolean(gated.hasPoolPassword || gated.gridPassword);
+
+
+    // Actually it was mainly for debug in header.
+
+    const renderPasswordGate = () => (
+        <div className="min-h-screen bg-page flex items-center justify-center p-4">
+            <div className="bg-card border border-line rounded-xl p-8 max-w-md w-full text-center shadow-card">
+                <div className="w-16 h-16 bg-page rounded-full flex items-center justify-center mx-auto mb-6 border border-line"><Lock size={32} className="text-gold-500" /></div>
+                <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Password Protected</h2>
+                <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
+                {passwordError && <div role="alert" className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">{passwordError}</div>}
+                <div className="flex gap-2">
+                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => { if (e.key === 'Enter') void handlePasswordSubmit(); }} />
+                    <Button variant="primary" disabled={checkingPassword} onClick={() => { void handlePasswordSubmit(); }}>{checkingPassword ? 'Checking…' : 'Unlock'}</Button>
+                </div>
+                <div className="mt-6 pt-6 border-t border-line"><p className="text-xs text-faint font-body">Contact the pool manager for access.</p></div>
+            </div>
+        </div>
+    );
+
+    // `isManager`, not `ownerId` (codex r9, P2). A pool whose `managerUid`
+    // differs from `ownerId` has a designated manager who can administer the
+    // password server-side but would otherwise be shown the gate and locked out
+    // of their own dashboard; `isPoolManager` is the predicate the rest of this
+    // file already trusts for exactly that question, and it admits SUPER_ADMIN.
+    if (isPasswordProtected && unlockedPoolId !== gated.id && !isManager) {
+        return withHelp(renderPasswordGate());
+    }
 
     if (pool.type === 'BRACKET') {
         return withHelp(
@@ -385,37 +493,6 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         }
     };
 
-    const handlePasswordSubmit = () => {
-        if (enteredPassword === squaresPool.gridPassword) {
-            setIsUnlocked(true);
-            setPasswordError(false);
-        } else {
-            setPasswordError(true);
-        }
-    };
-
-
-    // Actually it was mainly for debug in header.
-
-    const renderPasswordGate = () => (
-        <div className="min-h-screen bg-page flex items-center justify-center p-4">
-            <div className="bg-card border border-line rounded-xl p-8 max-w-md w-full text-center shadow-card">
-                <div className="w-16 h-16 bg-page rounded-full flex items-center justify-center mx-auto mb-6 border border-line"><Lock size={32} className="text-gold-500" /></div>
-                <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Password Protected</h2>
-                <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
-                {passwordError && <div className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">Incorrect password.</div>}
-                <div className="flex gap-2">
-                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} />
-                    <Button variant="primary" onClick={handlePasswordSubmit}>Unlock</Button>
-                </div>
-                <div className="mt-6 pt-6 border-t border-line"><p className="text-xs text-faint font-body">Contact the pool manager for access.</p></div>
-            </div>
-        </div>
-    );
-
-    if (squaresPool.gridPassword && !isUnlocked && user?.id !== squaresPool.ownerId) {
-        return withHelp(renderPasswordGate());
-    }
 
     const homeLogo = squaresPool.homeTeamLogo || getTeamLogo(squaresPool.homeTeam);
     const awayLogo = squaresPool.awayTeamLogo || getTeamLogo(squaresPool.awayTeam);
@@ -642,7 +719,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             </thead>
                             <tbody className="divide-y divide-[rgba(230,206,150,0.12)]">
                                 <tr>
-                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{awayLogo ? <img src={awayLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{awayLogo ? <img src={awayLogo} alt="" className="w-6 h-6 object-contain" /> : null} {squaresPool.awayTeam}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q1?.away ?? '-'}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.away - squaresPool.scores.q1.away) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.q1.away) : '-')}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.away - squaresPool.scores.half.away) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.away ?? 0) - squaresPool.scores.half.away) : '-')}</td>
@@ -650,7 +727,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                     <td className="py-4 px-4 font-display font-bold text-gold-400 text-lg bg-navy-950/50 num">{squaresPool.scores.current?.away ?? 0}</td>
                                 </tr>
                                 <tr>
-                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{homeLogo ? <img src={homeLogo} className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
+                                    <td className="py-4 px-4 font-bold text-white text-left flex items-center gap-2 font-body">{homeLogo ? <img src={homeLogo} alt="" className="w-6 h-6 object-contain" /> : null} {squaresPool.homeTeam}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q1?.home ?? '-'}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.half && squaresPool.scores.q1 ? (squaresPool.scores.half.home - squaresPool.scores.q1.home) : (squaresPool.scores.period && squaresPool.scores.period >= 2 && squaresPool.scores.q1 ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.q1.home) : '-')}</td>
                                     <td className="py-4 px-4 num text-[#9FB0CC]">{squaresPool.scores.q3 && squaresPool.scores.half ? (squaresPool.scores.q3.home - squaresPool.scores.half.home) : (squaresPool.scores.period && squaresPool.scores.period >= 3 && squaresPool.scores.half ? ((squaresPool.scores.current?.home ?? 0) - squaresPool.scores.half.home) : '-')}</td>
@@ -669,7 +746,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 <div className="flex items-center gap-4 w-full justify-center">
                     <div className="hidden md:flex flex-col items-center gap-2">
                         <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-gold-500 shadow-[0_0_20px_rgba(217,188,128,0.3)] bg-white p-1">
-                            {awayLogo ? <img src={awayLogo} className="w-full h-full object-contain" /> : <span className="text-gold-600 font-display font-bold text-xl">{squaresPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
+                            {awayLogo ? <img src={awayLogo} alt="" className="w-full h-full object-contain" /> : <span className="text-gold-600 font-display font-bold text-xl">{squaresPool.awayTeam.substring(0, 2).toUpperCase()}</span>}
                         </div>
                     </div>
                     <div className="flex-1 overflow-x-auto">
@@ -689,7 +766,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     </div>
                     <div className="hidden md:flex flex-col items-center gap-2">
                         <div className="w-16 h-16 rounded-full flex items-center justify-center border-2 border-brandred-500 shadow-[0_0_20px_rgba(196,52,46,0.3)] bg-white p-1">
-                            {homeLogo ? <img src={homeLogo} className="w-full h-full object-contain" /> : <span className="text-brandred-500 font-display font-bold text-xl">{squaresPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
+                            {homeLogo ? <img src={homeLogo} alt="" className="w-full h-full object-contain" /> : <span className="text-brandred-500 font-display font-bold text-xl">{squaresPool.homeTeam.substring(0, 2).toUpperCase()}</span>}
                         </div>
                     </div>
                 </div>

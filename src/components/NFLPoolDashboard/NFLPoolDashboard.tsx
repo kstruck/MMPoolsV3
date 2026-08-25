@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { BillingGate } from '../billing';
-import { isPoolManager } from '../../utils/auth';
-import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame } from 'lucide-react';
+import { isPoolManager, isSuperAdmin } from '../../utils/auth';
+import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft, Users, Crown } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { logger } from '../../utils/logger';
-import type { User, Pool, NFLGame, WeeklyRecap } from '../../types';
+import type { User, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { formatSharpScore, recapHasHighlights, weeklyWinnerLabel } from '../../utils/recapHighlight';
 import { WeeklyWinnersList } from './WeeklyWinnersList';
@@ -16,7 +16,10 @@ import { CountdownTo } from '../common/CountdownTo';
 import { PickemPickEntry } from './PickemPickEntry';
 import { SurvivorPickEntry } from './SurvivorPickEntry';
 import { MarginPickEntry } from './MarginPickEntry';
-import { NFLStandings } from './NFLStandings';
+import { EntrySwitcher, type EntryDraft } from './EntrySwitcher';
+import { sortOwnEntries, nextAddableEntryIndex } from '../../utils/entrySelection';
+import { effectiveMaxEntriesPerUser, defaultEntryName } from '@shared/multiEntry';
+import { NFLStandingsTab } from './NFLStandingsTab';
 import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
@@ -28,15 +31,19 @@ import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { buildMemberStandings } from '../../utils/memberStandings';
+import { brandingStyles } from '../../utils/brandingStyles';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
 import { WeekChecklist } from './WeekChecklist';
 import { PaymentsPanel } from '../PaymentsPanel';
 // New imports go at the END of this block — #420 and #421 both appended here and
 // conflicted when they didn't (measured).
-import { NFLResults } from './NFLResults';
 import { NFLPicksGrid } from './NFLPicksGrid';
 import { NFLWeeklyPicksGrid } from './NFLWeeklyPicksGrid';
 import { HelpRoutePublisher } from '../../help/publish';
+import { resolveStandingsAlias, type StandingsScope } from '../../utils/nflStandingsScope';
+import { isPinnableMessageId } from '@shared/pinnedMessage';
+import { poolTypeLabel, poolOptionLabels } from '../../utils/poolTypeLabel';
+import { weekValueFor, seasonCompare } from '../../utils/nflResults';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -60,13 +67,17 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Tab lives in the URL so the browser Back button steps through tabs (and refresh
   // restores the view) instead of leaving the pool. Tab changes push a history entry.
   const [searchParams, setSearchParams] = useSearchParams();
-  // `results` sits next to `standings`: Standings answers "who is winning the
-  // season", Results answers "what happened in a week / across the weeks".
-  // Survivor has no per-week score to tabulate, so the tab is hidden for it
-  // (see the strip below) — but the value stays VALID for every pool type on
-  // purpose: a stale `?tab=results` link into a Survivor pool must fall back to
-  // the dashboard rather than crash, and dropping it from this list is what
-  // makes that fallback happen.
+  // 🛑 T10: `results` IS NO LONGER A TAB. It is a URL ALIAS for the Standings
+  // tab's "This Week" segment (Kevin, 2026-08-23: one Standings tab on every
+  // NFL pool type, the shape Survivor already had). It stays VALID here for two
+  // separate reasons:
+  //   1. a shared `?tab=results` link, a Help link or browser history from
+  //      before the merge must LAND on the week view rather than fall to the
+  //      dashboard — `resolveStandingsAlias` does that mapping; and
+  //   2. on a SURVIVOR pool there is no week view to land on, and dropping the
+  //      value from this list is exactly what makes it fall back to the
+  //      dashboard rather than render an empty content area.
+  // `tabOffered.results` below is still what separates those two cases.
   type TabType = 'dashboard' | 'picks' | 'grid' | 'standings' | 'results' | 'recaps' | 'rules' | 'payments' | 'manager';
   const VALID_TABS: TabType[] = ['dashboard', 'picks', 'grid', 'standings', 'results', 'recaps', 'rules', 'payments', 'manager'];
   const showResultsTab = pool.type !== 'NFL_SURVIVOR';
@@ -100,7 +111,27 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     dashboard: true, picks: true, standings: true, recaps: true, rules: true, manager: isManager,
     payments: !!user, results: showResultsTab, grid: showPicksGridTab,
   };
-  const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
+  const resolvedTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';
+  // THE one member-facing nav (2026-08-23 mobile redesign). Rendered from data
+  // so the strip stays a single system — the bento's duplicate sidebar menu is
+  // gone. `manager` is deliberately absent: the Commissioner button in the
+  // header card is its only door. Filtered through `tabOffered`, same authority
+  // that routes a `?tab=` URL.
+  const TAB_STRIP: { tab: TabType; label: string }[] = [
+    { tab: 'dashboard', label: 'Pool Home' },
+    // Right of Pool Home (Kevin, 2026-08-23): "arguably the most important
+    // tab", and the whole mobile redesign started from people hunting for it.
+    { tab: 'standings', label: 'Standings & Results' },
+    { tab: 'picks', label: 'My Entry' },
+    { tab: 'grid', label: 'Current Picks' },
+    { tab: 'recaps', label: 'Weekly Recaps' },
+    { tab: 'rules', label: 'Rules & Rulesets' },
+    { tab: 'payments', label: 'Payments' },
+  ];
+  // T10: `results` collapses into `standings` HERE, once, so the strip, the tab
+  // router and Help all see one tab. Everything downstream reads `activeTab`.
+  const { tab: activeTab, scope: standingsScope } =
+    resolveStandingsAlias(resolvedTab) as { tab: TabType; scope: StandingsScope };
   // `section` = which commissioner sub-tab the manager view opens on (only
   // `?tab=manager&section=members` is used today — the member Payments tab's
   // "Open Payment Ledger"). Cleared on every other tab change so a later click
@@ -185,7 +216,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // the reveal-safe standings projection, the Member Records, and their OWN entry
   // document.
   //
-  // ⚠️ `subscribeToMyNFLEntry` is now load-bearing for the commissioner, not just
+  // ⚠️ `subscribeToMyNFLEntries` is now load-bearing for the commissioner, not just
   // the member. A commissioner is usually also a player, and their own entry is
   // what the three pick-entry forms render and edit — dropping the raw read
   // without this would make their own saved picks vanish while `getPoolPicks`
@@ -197,14 +228,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // an account switch, so a snapshot outlives the pool and the uid that asked for
   // it.
   //
-  // This used to be cleared by accident: `subscribeToMyNFLEntry` reported a read
+  // This used to be cleared by accident: the own-entry subscription reported a read
   // FAILURE by calling back with `null`, which happened to wipe the previous
   // pool's entry on the way past. That error contract is gone (it was telling a
   // member with a full sheet that they had not picked), so the guard that was
   // implicit has to become explicit — otherwise a new listener that errors before
   // its first snapshot leaves the PREVIOUS pool's, or the previous account's,
   // picks on screen and prefilled into this pool's pick sheet. (codex r1, P1.)
-  const [ownEntryState, setOwnEntryState] = useState<{ poolId: string; uid: string; entry: any | null } | null>(null);
+  //
+  // PLAN-MULTI-ENTRY T4 — an ARRAY, because a member may hold several entries in
+  // one pool. Empty means "this viewer owns none", which is a different fact
+  // from `null` ("no snapshot has landed"); the two are still distinguished by
+  // `ownEntryKnown` below, exactly as they were for the single entry.
+  const [ownEntryState, setOwnEntryState] = useState<{ poolId: string; uid: string; entries: any[] } | null>(null);
   /**
    * Has a SUCCESSFUL snapshot for THIS pool and THIS viewer actually landed?
    *
@@ -224,7 +260,68 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     && ownEntryState !== null
     && ownEntryState.poolId === pool.id
     && ownEntryState.uid === user.id;
-  const ownEntry = ownEntryKnown ? ownEntryState!.entry : null;
+  const ownEntries = ownEntryKnown ? ownEntryState!.entries : [];
+  const maxEntriesPerUser = effectiveMaxEntriesPerUser(castPool.settings);
+
+  /**
+   * WHICH of the viewer's entries every own-entry surface is about (T5/D7).
+   *
+   * 🛑 STAMPED WITH THE POOL, LIKE EVERY OTHER PIECE OF DERIVED VIEWER STATE
+   * HERE. `PoolRoute` reuses this component across pool navigation and across an
+   * account switch, so a selection made in one pool would otherwise name an
+   * entry id that does not exist in the next — and the fallback below would
+   * silently hand the member a DIFFERENT entry's pick sheet while the tab strip
+   * showed their choice. Same rule `reveal` and `ownEntryState` already follow.
+   *
+   * `null` means "no explicit choice", which resolves to the primary entry.
+   */
+  const [activeEntrySel, setActiveEntrySel] = useState<{ poolId: string; uid: string; entryId: string } | null>(null);
+  /** The draft entry the member is naming, before its first pick creates it. */
+  const [entryDraft, setEntryDraft] = useState<{ poolId: string; uid: string; draft: EntryDraft } | null>(null);
+  const pendingDraft = entryDraft && entryDraft.poolId === pool.id && entryDraft.uid === (user?.id || '')
+    ? entryDraft.draft : null;
+
+  const sortedOwnEntries = useMemo(() => sortOwnEntries(ownEntries), [ownEntries]);
+
+  /**
+   * 🛑 A DRAFT IS OVER THE MOMENT ITS ENTRY EXISTS (codex r2 P2 on the T5 PR).
+   *
+   * The draft's first successful submit CREATES the entry, and the entries
+   * subscription delivers the new document a beat later. Without this the draft
+   * would still be "live" — and `draft` forces `ownEntry` and `myEntry` to
+   * `null`, so the sheet would keep behaving as an unsaved draft and HIDE the
+   * saved state of the entry the member just created, until they happened to
+   * click its tab.
+   *
+   * Derived rather than cleared in an effect: an effect would set state during
+   * a snapshot-driven render and reintroduce exactly the one-paint lag the
+   * `entries` memo above was rewritten to remove.
+   */
+  const fulfilledDraftEntry = pendingDraft
+    ? sortedOwnEntries.find(e => (typeof e?.entryIndex === 'number' ? e.entryIndex : 1) === pendingDraft.entryIndex)
+    : undefined;
+  const draft = fulfilledDraftEntry ? null : pendingDraft;
+  /**
+   * The ACTIVE entry: the member's explicit choice when it still names an entry
+   * they hold, otherwise their primary (lowest `entryIndex`).
+   *
+   * ⚠️ THE "STILL HOLD" CHECK IS NOT DEFENSIVE PADDING. A selection can name an
+   * entry that has gone — a commissioner removing and re-adding a member deletes
+   * their entries — and a dangling id would resolve to `undefined`, which every
+   * pick surface reads as "you have not entered your picks".
+   */
+  const ownEntry = draft
+    ? null
+    : (fulfilledDraftEntry
+        // The entry the member has just created stays selected — anything else
+        // would bounce them back to entry #1 the instant their pick saved.
+        ?? sortedOwnEntries.find(e => e.id === (activeEntrySel && activeEntrySel.poolId === pool.id && activeEntrySel.uid === (user?.id || '') ? activeEntrySel.entryId : null))
+        ?? sortedOwnEntries[0]
+        ?? null);
+  /** The index the pick sheet submits under: the draft's, or the active entry's. */
+  const activeEntryIndex: number = draft
+    ? draft.entryIndex
+    : (typeof ownEntry?.entryIndex === 'number' ? ownEntry.entryIndex : 1);
   // Stamped with the pool it came from, and keyed BY WEEK.
   //
   // `PoolRoute` reuses this component across pool navigation, so a response
@@ -250,8 +347,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
     const unsubOwn = user
-      ? dbService.subscribeToMyNFLEntry(pool.id, user.id, (entry) =>
-          setOwnEntryState({ poolId: pool.id, uid: user.id, entry }))
+      ? dbService.subscribeToMyNFLEntries(pool.id, user.id, (entries) =>
+          setOwnEntryState({ poolId: pool.id, uid: user.id, entries }))
       : undefined;
     return () => { unsubStandings(); unsubOwn?.(); };
   }, [pool.id, user?.id]);
@@ -483,7 +580,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // doc should not re-run this. (qodo.)
   const entries = useMemo(
     () => buildMemberStandings({
-      pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal,
+      pool: castPool, members, standingsRows, ownEntries, reveal: weekReveal,
       // Survivor and Margin draw many weeks at once, so their rows need every
       // cached week's revealed picks — not just the selected week's, which
       // would render every earlier column as "made no pick". The per-column
@@ -491,7 +588,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       weeklyReveals: pool.type === 'NFL_PICKEM' ? undefined : Object.values(revealsForPool),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds, pool.type, revealsForPool],
+    [standingsRows, ownEntries, members, weekReveal, castPool.participantIds, pool.type, revealsForPool],
   );
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
@@ -530,8 +627,36 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // lookup stays as a fallback for the moment before the snapshot lands.
   const myEntry = useMemo(() => {
     if (!user) return null;
-    return ownEntry || entries.find(e => e.ownerUid === user.id) || null;
-  }, [ownEntry, entries, user]);
+    // PLAN-MULTI-ENTRY §0b.3 — `.filter`, never `.find`. Where a SINGLE entry is
+    // genuinely needed (the pick sheet, the CTA) it is the ACTIVE one (T5/D7);
+    // taking the first match by uid would silently pick whichever row the fold
+    // emitted first, which under multi-entry is not the member's choice.
+    //
+    // ⚠️ A DRAFT ENTRY HAS NO DOCUMENT AND MUST RESOLVE TO `null`, NOT TO
+    // ANOTHER ENTRY. `ownEntry` is null while a draft is selected, and falling
+    // through to the folded rows here would hand the empty new sheet the
+    // PRIMARY entry's saved picks — pre-filled, and one click from overwriting
+    // the wrong entry.
+    if (draft) return null;
+    if (ownEntry) return ownEntry;
+    //
+    // 🛑 AND ON A MULTI-ENTRY POOL, NEVER GUESS (codex r6, P1).
+    //
+    // Below this line the own-entry snapshot has NOT landed, and the only rows
+    // in hand are the FOLD's — which carry no `entryIndex`, so they cannot be
+    // matched to the active one. `mine[0]` is whichever the fold emitted first,
+    // and the fold is ordered by the standings cascade: on a two-entry member
+    // that can be entry #2 while `activeEntryIndex` is still 1. The sheet would
+    // then DISPLAY entry #2's picks and SUBMIT them as entry #1 — a save that
+    // copies one entry's sheet onto another, which is precisely the corruption
+    // this plan exists to prevent.
+    //
+    // A single-entry pool keeps the fallback exactly as it was, because there
+    // `mine[0]` is not a guess: it is the member's only entry.
+    if (maxEntriesPerUser > 1) return null;
+    const mine = entries.filter(e => e.ownerUid === user.id);
+    return mine[0] || null;
+  }, [ownEntry, draft, entries, user, maxEntriesPerUser]);
 
   // Check if the current selected week is locked (earliest game kicked off).
   // Server-corrected clock — device time can drift and lie about the deadline.
@@ -600,8 +725,143 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     toast.success('Invite link copied to clipboard!');
   };
 
+  // T1 — the pool's own colours, resolved and VALIDATED in one place.
+  // `primaryColor` previously had no renderer at all and `bgColor` (which no
+  // wizard collects) was the only thing driving the page, so a commissioner's
+  // colour choices appeared to do nothing. See src/utils/brandingStyles.ts.
+  /**
+   * The pool feed (T9). Subscribed HERE rather than inside `BanterFeed` so the
+   * manager card and the member Overview render the same data from one reader,
+   * and so a failed read is distinguishable from an empty feed - `onSnapshot`
+   * TERMINATES a listener on error, and "nothing posted yet" for a permission
+   * failure is the silence-as-success defect this repo keeps finding.
+   */
+  const [poolFeed, setPoolFeed] = useState<BanterMessage[]>([]);
+  const [poolFeedError, setPoolFeedError] = useState(false);
+  /**
+   * Membership, read the same way the Firestore rule reads it — ALL FOUR of
+   * `isPoolParticipant()`'s branches, not just participantIds (codex r4 [P2]).
+   * An owner or legacy manager absent from that array, and a super admin, are
+   * authorized to read the feed; a narrower client gate would hide it from
+   * exactly the people the backend lets in.
+   *
+   * Subscribing as a non-member terminates the listener on a permission error,
+   * so this gate is also what keeps a public-pool visitor from seeing a
+   * permanent feed error.
+   */
+  const isPoolMember = !!user?.id && (
+    castPool.ownerId === user.id ||
+    castPool.managerUid === user.id ||
+    (Array.isArray(castPool.participantIds) && castPool.participantIds.includes(user.id)) ||
+    isSuperAdmin(user)
+  );
+
+  useEffect(() => {
+    if (!pool?.id || !isPoolMember) return;
+    return dbService.subscribeToPoolFeed(
+      pool.id,
+      (messages) => { setPoolFeedError(false); setPoolFeed(messages); },
+      () => setPoolFeedError(true),
+    );
+  }, [pool?.id, isPoolMember]);
+
+  /**
+   * The pinned post (Kevin, 2026-08-23), watched as its OWN document rather
+   * than looked up in `poolFeed`: that array is the last 50 messages, so a pin
+   * set early in a chatty pool would silently stop rendering once it aged out.
+   *
+   * The id it belongs to is carried in state ALONGSIDE the message, so a
+   * snapshot that arrives for a pin the commissioner has since changed cannot
+   * be rendered under the new id — and so clearing the band when the pin is
+   * removed needs no setState in an effect body (a cascading render, and a lint
+   * error in this repo).
+   */
+  // Validated on the way IN as well as on the way out (codex r1 [P2]). The
+  // callable refuses to store a value that is not a safe document id, but a
+  // pool document predating that check — or written by the Admin SDK, which
+  // never sees it — must not be able to throw `doc()` inside the effect below
+  // and take the pool home page down for every member.
+  const rawPinnedId = castPool.pinnedMessageId as unknown;
+  const pinnedMessageId = isPinnableMessageId(rawPinnedId) ? rawPinnedId : '';
+  const [pinned, setPinned] = useState<{ id: string; message: BanterMessage | null; error: boolean }>(
+    { id: '', message: null, error: false },
+  );
+  useEffect(() => {
+    if (!pool?.id || !isPoolMember || !pinnedMessageId) return;
+    return dbService.subscribeToPinnedMessage(
+      pool.id,
+      pinnedMessageId,
+      (message) => setPinned({ id: pinnedMessageId, message, error: false }),
+      () => setPinned({ id: pinnedMessageId, message: null, error: true }),
+    );
+  }, [pool?.id, isPoolMember, pinnedMessageId]);
+  const pinnedMessage = pinned.id === pinnedMessageId ? pinned.message : null;
+  const pinnedError = pinned.id === pinnedMessageId && pinned.error;
+
   const branding = castPool.branding || {};
-  const accentHex = branding.secondaryColor || '#C9A867';
+  const brand = brandingStyles(branding);
+  const accentHex = brand.accent;
+
+  // ── The at-a-glance strip (testers, 2026-08-23) ────────────────────────────
+  // The pool-card identity chips plus the three numbers people open the page
+  // to check: players, who leads the week, who leads the season. All derived
+  // from data already on this page — no new reads.
+  const typeLabel = poolTypeLabel(castPool);
+  const optionLabels = poolOptionLabels(castPool);
+  // `participantIds` is the world-readable, server-owned roster signal (K9),
+  // so the count works for signed-out visitors too; `members` needs a read
+  // that non-members are denied.
+  const participantCount = Array.isArray(castPool.participantIds)
+    ? castPool.participantIds.length
+    : members.length;
+  const glance = useMemo(() => {
+    const name = (e: { userName?: string }) => e.userName || 'Anonymous';
+    // Two names print; a bigger tie prints the first plus a count — this strip
+    // must stay one short row, and a 24-way survivor "tie" is the normal state.
+    const label = (list: { userName?: string }[]) =>
+      list.length === 0 ? null : list.length > 2 ? `${name(list[0])} +${list.length - 1}` : list.map(name).join(', ');
+    // `unscored` rows are a late entrant with no scored week yet — the
+    // standings deliberately rank them LAST, and comparing them here as zero
+    // would crown one in a Margin pool whose real totals are negative.
+    // (codex r1, P2.)
+    const ranked = entries.filter(e => !e.unscored);
+    // `seasonCompare` is the standings table's OWN cascade — a shallower copy
+    // here disagreed with it on every tiebreaker below the first (codex r2,
+    // P2). Rows it calls equal are genuinely tied and share the lead.
+    const sorted = [...ranked].sort((a, b) => seasonCompare(pool.type, a, b));
+    const seasonLeaders = sorted.filter(e => seasonCompare(pool.type, e, sorted[0]) === 0);
+    // Week leader: the recap's winner line is the scored truth and wins when
+    // it exists; before the week is fully scored, the live projection's
+    // per-week value ranks. `weekValueFor` is the standings' own accessor —
+    // Pick'em publishes `weeklyPoints`, Margin `weeklyScores`, and hand-rolling
+    // the field here read the wrong one for Pick'em (codex r1, P2). Never
+    // fabricated — an unscored week shows a dash.
+    const recap = recaps.find(r => r.week === selectedWeek);
+    let weekLeaders: { userName?: string }[] = [];
+    if (recap?.weeklyWinners?.length) {
+      weekLeaders = recap.weeklyWinners;
+    } else if (pool.type !== 'NFL_SURVIVOR') {
+      const isMargin = pool.type === 'NFL_MARGIN';
+      const scored = ranked.filter(e => weekValueFor(e, selectedWeek, isMargin) !== null);
+      if (scored.length) {
+        const top = Math.max(...scored.map(e => weekValueFor(e, selectedWeek, isMargin) as number));
+        weekLeaders = scored.filter(e => weekValueFor(e, selectedWeek, isMargin) === top);
+      }
+    }
+    // A pool where nothing has been scored has no leader — everyone "ties" at
+    // zero and the strip would crown an arbitrary first name. Dash until any
+    // entry carries a scored week, a strike, or an elimination.
+    const anyScored = entries.some(e =>
+      Object.keys(e.weeklyPoints || {}).length > 0 ||
+      Object.keys(e.weeklyScores || {}).length > 0 ||
+      Object.keys(e.weeklyResults || {}).length > 0 ||
+      (e.strikesUsed || 0) > 0 || e.status === 'ELIMINATED');
+    return {
+      seasonLeader: anyScored ? label(seasonLeaders) : null,
+      weekLeader: label(weekLeaders),
+      alive: entries.filter(e => e.status !== 'ELIMINATED').length,
+    };
+  }, [entries, recaps, selectedWeek, pool.type]);
 
   // Billing is C9: owner-only, never a co-commissioner — so the gate reads the
   // STRICT helper, not the NFL-widened `isManager` prop (codex r8 on PR-B).
@@ -618,22 +878,82 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     <HelpRoutePublisher
       tab={activeTab}
       isManager={isManager}
-      offeredTabs={VALID_TABS.filter(t => tabOffered[t])}
+      /* T10: `results` is filtered OUT even where it is still "offered" as a
+         URL. It is an alias, not a screen, and publishing it would let Help
+         list a tab this pool's strip does not have. */
+      offeredTabs={VALID_TABS.filter(t => t !== 'results' && tabOffered[t])}
     />
     <div
       className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 relative transition-colors duration-500"
-      style={{ backgroundColor: branding.bgColor || undefined }}
+      style={brand.page}
     >
       {/* Pool Header Bar */}
       <div className="max-w-7xl mx-auto px-4 pt-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 border border-line rounded-xl shadow-card">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
+        <div
+          className="bg-card border border-line rounded-xl shadow-card overflow-hidden"
+          style={brand.headerCard}
+        >
+          {/* THE BRANDED HEADER BAND (Kevin, 2026-08-24, option (ii)).
+
+              A solid bar of the pool's primary colour carrying the logo, the
+              pool name and the format. It is the one branded element a member
+              cannot miss, and it is theme-safe BY CONSTRUCTION: it paints both
+              its own background and its own text colour (`readableTextOn`), so
+              it reads no theme token and cannot be wrong in light or dark mode.
+
+              ⚠️ Rendered ONLY when the pool set a usable primary. Without one,
+              `brand.themed` is false and the fallback block below renders the
+              header exactly as it did before — no empty bar, no layout shift.
+
+              `overflow-hidden` on the card is what makes the band reach the
+              rounded corners; without it the colour squares them off. */}
+          {brand.themed && (
+            <div className="px-6 py-4 flex items-center gap-3 flex-wrap" style={brand.headerBand}>
               {branding.logoUrl && (
                 <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
               )}
-              <h1 className="font-display font-extrabold uppercase text-3xl text-[color:var(--text)] leading-none">{pool.name}</h1>
+              {/* The pool name is the way HOME (2026-08-23 redesign) — the
+                  affordance every site header trains: click the title, land on
+                  the main view. Inherits the band's ink; the button nests
+                  inside the h1, which is valid HTML (the reverse is not). */}
+              <h1 className="font-display font-extrabold uppercase text-2xl md:text-3xl leading-none">
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  title="Back to Pool Home"
+                  className="uppercase text-left hover:opacity-80 transition-opacity"
+                >
+                  {pool.name}
+                </button>
+              </h1>
+              <span
+                className="font-display font-bold uppercase text-[12px] tracking-[0.08em]"
+                style={brand.headerBandMuted}
+              >
+                {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
+                 pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
+              </span>
             </div>
+          )}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-6">
+          <div>
+            {/* The unbranded header, unchanged. A pool with no primary colour
+                still gets its logo and name here rather than nowhere. */}
+            {!brand.themed && (
+              <div className="flex items-center gap-3 mb-1">
+                {branding.logoUrl && (
+                  <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
+                )}
+                <h1 className="font-display font-extrabold uppercase text-2xl md:text-3xl text-[color:var(--text)] leading-none">
+                  <button
+                    onClick={() => setActiveTab('dashboard')}
+                    title="Back to Pool Home"
+                    className="uppercase text-left hover:opacity-80 transition-opacity"
+                  >
+                    {pool.name}
+                  </button>
+                </h1>
+              </div>
+            )}
             <p className="text-muted font-body text-sm font-semibold mt-1.5 flex items-center gap-2 flex-wrap">
               <span className="flex items-center gap-1.5 flex-wrap">
                 Host: <strong className="text-[color:var(--text)] font-bold">{pool.managerName || 'Host'}</strong>
@@ -660,47 +980,119 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   </span>
                 )}
               </span>
-              <span className="text-faint">•</span>
-              <span className="text-navy-700 dark:text-gold-400 uppercase font-display font-bold text-[12px] tracking-[0.08em]">
-                {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
-                 pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
-              </span>
+              {/* The format label moved INTO the band when there is one, so it
+                  is not printed twice. */}
+              {!brand.themed && (
+                <>
+                  <span className="text-faint">•</span>
+                  <span className="text-navy-700 dark:text-gold-400 uppercase font-display font-bold text-[12px] tracking-[0.08em]">
+                    {pool.type === 'NFL_PICKEM' ? 'Weekly Pick\'em' :
+                     pool.type === 'NFL_SURVIVOR' ? 'Survivor Pool' : 'Margin Pool'}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
           <div className="flex gap-2.5 items-center flex-wrap">
-            {/* Week Selector */}
-            <div className="flex items-center gap-2 bg-page border-[1.5px] border-line rounded-md px-3 py-1.5">
-              <Calendar size={16} className="text-muted" />
-              <select
-                value={selectedWeek}
-                onChange={e => setSelectedWeek(parseInt(e.target.value))}
-                className="bg-transparent focus:outline-none font-body text-sm text-[color:var(--text)] font-bold cursor-pointer"
-              >
-                {Array.from({ length: seasonType === 1 ? 4 : 18 }, (_, i) => i + 1).map(w => (
-                  <option key={w} value={w} className="bg-card text-[color:var(--text)]">
-                    {nflWeekLabel(seasonType, w)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
+            {/* The week dropdown lived here until 2026-08-23. It duplicated
+                the week checklist strip right below the header — two controls
+                for the same URL param — and "repetitive" was Kevin's word.
+                The chips are now the one week selector. */}
             <Button variant="ghost" size="sm" onClick={handleShare}>
               <Share2 size={13} /> Invite Link
             </Button>
 
             {isManager && (
-              <Button variant="secondary" size="sm" onClick={() => setActiveTab('manager')}>
+              <Button variant="secondary" size="sm" style={brand.primaryButton} onClick={() => setActiveTab('manager')}>
                 <Settings size={13} /> Commissioner
               </Button>
             )}
+
+            {/* Moved out of the bento sidebar when that menu was deleted
+                (2026-08-23) — navigation back to My Entries, nothing more. */}
+            <Button variant="ghost" size="sm" onClick={onBack}>
+              <ArrowLeft size={13} /> Leave Pool
+            </Button>
           </div>
         </div>
+
+        {/* At-a-glance strip: what kind of pool this is + who's in it + who
+            leads. One compact row on the header card's bottom edge. */}
+        <div
+          data-testid="pool-home-glance"
+          className="px-6 py-2.5 border-t border-line flex flex-wrap items-center gap-x-6 gap-y-1.5"
+        >
+          <span className="flex items-center gap-1.5 flex-wrap" data-testid="pool-home-type">
+            <span className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full border border-[#E4DFD3] bg-cream text-navy-800">{typeLabel}</span>
+            {optionLabels.map(o => (
+              <span key={o} className="text-[11px] font-body text-muted">{o}</span>
+            ))}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Users size={12} className="text-muted" aria-hidden="true" />
+            <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">Players</span>
+            <span className="text-[13px] font-display font-bold num text-[color:var(--text)]">{participantCount}</span>
+          </span>
+          {pool.type === 'NFL_SURVIVOR' ? (
+            <span className="flex items-center gap-1.5">
+              <Flame size={12} className="text-brandred-600" aria-hidden="true" />
+              <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">Alive</span>
+              <span className="text-[13px] font-display font-bold num text-[color:var(--text)]">
+                {entries.length ? `${glance.alive} of ${entries.length}` : '—'}
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5">
+              <Trophy size={12} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
+              <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">{nflWeekLabel(seasonType, selectedWeek)} Leader</span>
+              <span className="text-[13px] font-display font-bold text-[color:var(--text)]">{glance.weekLeader ?? '—'}</span>
+            </span>
+          )}
+          <span className="flex items-center gap-1.5">
+            <Crown size={12} className="text-gold-600 dark:text-gold-400" aria-hidden="true" />
+            <span className="text-[10px] font-display font-bold uppercase tracking-[0.08em] text-muted">Season Leader</span>
+            <span className="text-[13px] font-display font-bold text-[color:var(--text)]">{glance.seasonLeader ?? '—'}</span>
+          </span>
+        </div>
+        </div>
+
+        {/* THE pool nav — one strip, directly under the header (2026-08-23
+            mobile redesign: "standings are too far down, too many menus").
+            Sticky on mobile so every section stays one tap away at any scroll
+            depth; static on md+ where content has room. It stacks BELOW the
+            site header, which is sticky on every page (codex r2/r3): top-[73px]
+            is that header's measured mobile height (px-4 py-3 + h-12 logo +
+            border) — if the header's mobile chrome changes, this offset moves
+            with it. bg-page is solid on purpose — content must not ghost
+            through while stuck. (On a branded pool the page tint differs
+            slightly behind it; cosmetic, and beats a translucent smear.) */}
+        <nav
+          aria-label="Pool sections"
+          className="sticky top-[73px] z-40 md:static -mx-4 px-4 md:mx-0 md:px-0 mt-4 bg-page border-b border-line flex overflow-x-auto whitespace-nowrap scrollbar-hide"
+        >
+          {TAB_STRIP.filter(({ tab }) => tabOffered[tab]).map(({ tab, label }) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              aria-current={activeTab === tab ? 'page' : undefined}
+              className={`py-3 px-4 md:px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
+                activeTab === tab
+                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
+                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
+              }`}
+              style={activeTab === tab ? { borderBottomColor: accentHex } : {}}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
 
         {/* Week-by-week pending/done strip + "picks due" call-to-action */}
         {!isLoading && (
           <div className="mt-6">
             <WeekChecklist
+              primaryButtonStyle={brand.primaryButton}
               pool={pool}
               entryKnown={ownEntryKnown}
               entry={myEntry}
@@ -712,106 +1104,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           </div>
         )}
 
-        {/* Global tab routing headers */}
-        <div className="flex border-b border-line mt-8 mb-6 overflow-x-auto whitespace-nowrap scrollbar-hide">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'dashboard'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'dashboard' ? { borderBottomColor: accentHex } : {}}
-          >
-            Pool Home
-          </button>
-          <button
-            onClick={() => setActiveTab('picks')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'picks'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'picks' ? { borderBottomColor: accentHex } : {}}
-          >
-            My Entry
-          </button>
-          {showPicksGridTab && (
-            <button
-              onClick={() => setActiveTab('grid')}
-              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-                activeTab === 'grid'
-                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
-              }`}
-              style={activeTab === 'grid' ? { borderBottomColor: accentHex } : {}}
-            >
-              Current Picks
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('standings')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'standings'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'standings' ? { borderBottomColor: accentHex } : {}}
-          >
-            Standings & Leaderboard
-          </button>
-          {showResultsTab && (
-            <button
-              onClick={() => setActiveTab('results')}
-              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-                activeTab === 'results'
-                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
-              }`}
-              style={activeTab === 'results' ? { borderBottomColor: accentHex } : {}}
-            >
-              Results
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('recaps')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'recaps'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'recaps' ? { borderBottomColor: accentHex } : {}}
-          >
-            Weekly Recaps
-          </button>
-          <button
-            onClick={() => setActiveTab('rules')}
-            className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-              activeTab === 'rules'
-                ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                : 'text-muted hover:text-[color:var(--text)] border-transparent'
-            }`}
-            style={activeTab === 'rules' ? { borderBottomColor: accentHex } : {}}
-          >
-            Rules & Rulesets
-          </button>
-          {user && (
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`py-3 px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
-                activeTab === 'payments'
-                  ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
-                  : 'text-muted hover:text-[color:var(--text)] border-transparent'
-              }`}
-              style={activeTab === 'payments' ? { borderBottomColor: accentHex } : {}}
-            >
-              Payments
-            </button>
-          )}
-        </div>
-
         {/* Tab View Routers */}
-        <div className="space-y-6">
+        <div className="space-y-6 mt-6">
           {isLoading ? (
             <div className="text-center py-16">
               <div className="animate-spin w-10 h-10 border-4 border-gold-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -825,6 +1119,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   <NFLUserBentoDashboard
                     pool={pool}
                     user={user}
+                    activeEntryId={ownEntry?.id ?? null}
+                    pendingEntryLabel={draft ? (draft.entryName.trim() || `Entry ${draft.entryIndex}`) : undefined}
                     games={games}
                     entries={entries}
                     recaps={recaps}
@@ -833,10 +1129,22 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     isWeekLocked={isWeekLocked}
                     earliestGame={earliestGame}
                     weekLockAt={weekLock.deadline}
-                    onBack={onBack}
-                    onOpenAuth={onOpenAuth}
-                    isManager={isManager}
                     onSelectTab={(tab) => setActiveTab(tab)}
+                    /* T9's feed and the pinned band render INSIDE the bento now
+                       (Kevin, 2026-08-23): the feed beside Pool Standings rather
+                       than at the bottom of the page - "The bottom of the page
+                       is useless" - and the pin directly under the score ticker,
+                       which is the ticker's own component.
+
+                       Still subscribed HERE, for the reason T9 gave: one reader
+                       feeds both the member view and the commissioner card, so
+                       they cannot drift, and a failed read stays distinguishable
+                       from an empty feed. */
+                    poolFeed={poolFeed}
+                    poolFeedError={poolFeedError}
+                    isPoolMember={isPoolMember}
+                    pinnedMessage={pinnedMessage}
+                    pinnedError={pinnedError}
                   />
                   {castPool.billing?.featuresUnlocked?.aiCommissioner && (
                     <div className="max-w-4xl mx-auto mt-6">
@@ -864,6 +1172,45 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                       {/* Left/Center columns: Matchups/Picks list */}
                       <div className="lg:col-span-2 space-y-6">
+                        {/*
+                          My Entries (T5/D7). Renders nothing when the pool
+                          allows one entry each, which is every pool until
+                          `MULTI_ENTRY_WIZARD_ENABLED` flips — so a single-entry
+                          pool's pick tab is unchanged, pixel for pixel.
+                        */}
+                        <EntrySwitcher
+                          ownEntries={ownEntries}
+                          maxEntries={maxEntriesPerUser}
+                          userName={user?.name || 'Entry'}
+                          activeEntryId={ownEntry?.id ?? null}
+                          activeEntryIndex={activeEntryIndex}
+                          onSelectPrimarySlot={() => setEntryDraft({
+                            poolId: pool.id,
+                            uid: user?.id || '',
+                            // Entry #1 takes no name — see EntrySwitcher.
+                            draft: { entryIndex: 1, entryName: '' },
+                          })}
+                          onSelect={(entryId) => {
+                            setEntryDraft(null);
+                            setActiveEntrySel({ poolId: pool.id, uid: user?.id || '', entryId });
+                          }}
+                          draft={draft}
+                          onStartDraft={() => {
+                            const next = nextAddableEntryIndex(ownEntries, maxEntriesPerUser);
+                            if (next === null) return;
+                            setEntryDraft({
+                              poolId: pool.id,
+                              uid: user?.id || '',
+                              draft: { entryIndex: next, entryName: defaultEntryName(user?.name || 'Entry', next) ?? '' },
+                            });
+                          }}
+                          onDraftNameChange={(entryName) => setEntryDraft(prev => prev
+                            ? { ...prev, draft: { ...prev.draft, entryName } }
+                            : prev)}
+                          onCancelDraft={() => setEntryDraft(null)}
+                          isWeekLocked={isWeekLocked}
+                        />
+
                         {pool.type === 'NFL_PICKEM' && (
                           <PickemPickEntry
                             pool={pool}
@@ -872,6 +1219,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             seasonGames={games}
                             entry={myEntry}
+                            entryIndex={activeEntryIndex}
+                            entryName={draft?.entryName}
                             isWeekLocked={isWeekLocked}
                           />
                         )}
@@ -884,6 +1233,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             seasonGames={games}
                             entry={myEntry}
+                            entryIndex={activeEntryIndex}
+                            entryName={draft?.entryName}
                             isWeekLocked={isWeekLocked}
                           />
                         )}
@@ -896,6 +1247,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             seasonGames={games}
                             entry={myEntry}
+                            entryIndex={activeEntryIndex}
+                            entryName={draft?.entryName}
                             isWeekLocked={isWeekLocked}
                           />
                         )}
@@ -997,9 +1350,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                 )
               )}
 
-              {/* TAB 2: STANDINGS */}
+              {/* TAB 2: STANDINGS — season / week / summary in ONE tab (T10).
+                  The weekly and season tables are the same tested components
+                  that used to sit on two tabs; only the parent changed. */}
               {activeTab === 'standings' && (
-                <NFLStandings
+                <NFLStandingsTab
                   pool={pool}
                   entries={entries}
                   games={games}
@@ -1008,22 +1363,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   pickCounts={weekReveal?.counts}
                   reveal={weekReveal}
                   ownEntryLoaded={ownEntryKnown}
-                />
-              )}
-
-              {/* TAB 2b: RESULTS — weekly + season tables over the SAME scored
-                  projection the standings render. `activeTab` is already
-                  normalized above, so this can only be true on a pool that
-                  offers the tab. */}
-              {activeTab === 'results' && (
-                <NFLResults
-                  pool={pool}
-                  entries={entries}
-                  games={games}
-                  week={selectedWeek}
-                  viewerUid={user?.id}
-                  reveal={weekReveal}
-                  ownEntryLoaded={ownEntryKnown}
+                  scope={standingsScope}
                 />
               )}
 

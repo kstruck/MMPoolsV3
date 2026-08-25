@@ -9,6 +9,8 @@ import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIds
 import { writeAdminAudit } from "./lib/adminAudit";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
+import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
+import { normalizeAddonSelection } from './lib/launchFields';
 import {
     validateCreateInput,
     assertNotBanned,
@@ -16,7 +18,8 @@ import {
     type LaunchBillingMode,
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
-import { loadBillingConfig } from './billing';
+import { loadBillingConfig, resolveCouponForQuote } from './billing';
+import { validLaunchCouponCode } from './lib/launchCoupon';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
@@ -26,6 +29,7 @@ import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from 
 import { entryCountWrite } from './lib/multiEntry';
 import { memberLiableEntries } from './shared/memberRecord';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
+import { confirmedAdminClaim } from './lib/confirmedRole';
 
 /**
  * Is `uid` the pool's owner or its legacy designated manager?
@@ -117,6 +121,12 @@ const PRIVILEGED_POOL_FIELDS = [
     // the tiebreak target, or the weeks divisor of every weekly prize. (qodo #10
     // on #452.) `hardLockByWeek` rides along for the same reason.
     'frozenTiebreakTargets', 'weeksInSeason', 'hardLockByWeek',
+    // The wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3). It is READ from the
+    // raw request before this strip and re-stamped under `billing.couponCode`
+    // only after the server validates it. Listed here so the permissive create
+    // envelope cannot write an unvalidated `couponCode` to the pool's top level,
+    // where nothing would ever check it but a reader might trust it.
+    'couponCode',
 ];
 
 // Sim harness trust anchor (PLAN-TEST-SUITE 8f): simRunId is stripped from
@@ -170,12 +180,14 @@ export const stripPrivilegedPoolFields = <T extends Record<string, any>>(data: T
 // The paid add-on flags a create payload can carry. Any one of these set truthy
 // disqualifies a launch from the free plan (the server prices them; the pending
 // snapshot / billing.paid.addons is the authority once paid).
-const PAID_ADDON_KEYS = [
-    'aiCommissioner',
-    'smsNotifications',
-    'whatIfSimulator',
-    'customBranding',
-] as const;
+//
+// ⚠️ DERIVED, not listed (T4/D1, codex r2 [P1]). An INCLUDED add-on costs
+// nothing, so it must not push a launch off the free plan either: a stale
+// wizard bundle still sending `customBranding: true` would otherwise create a
+// ≤10-player pool as a 14-day TRIAL — which eventually locks — while the quote
+// on screen said free. Pricing and launch mode have to agree about what is
+// paid, and `INCLUDED_ADDON_KEYS` is the one place that says so.
+const PAID_ADDON_KEYS = ADDON_KEYS.filter((k) => !isIncludedAddon(k));
 
 /** True if the create payload requests any paid add-on. Add-ons may arrive as a
  *  top-level `addons` object or as sibling flags; we accept both shapes so a
@@ -240,7 +252,9 @@ export function assertPaidParticipantCeiling(
     if (currentParticipantCount >= paid.maxPlayersAllowed) {
         throw new HttpsError(
             'failed-precondition',
-            'This pool has reached its paid participant ceiling. Upgrade to add more.',
+            // G9 — the same audience problem: this reaches a JOINING MEMBER,
+            // for whom "upgrade" is not an action they can take.
+            'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.',
         );
     }
 }
@@ -356,6 +370,12 @@ export const createPool = validated(
         // free threshold AND no paid add-on; trial otherwise. Config read fails
         // open to defaults inside loadBillingConfig, so this never stalls create.
         const billingConfig = await loadBillingConfig(db);
+        // Remember the wizard's coupon (T3). Read from the RAW request: the
+        // strip above deliberately removes it from the persisted envelope.
+        const launchCouponCode = await validLaunchCouponCode(
+            (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now: now.toMillis() }),
+            (request.data as Record<string, unknown> | undefined)?.couponCode,
+        );
         const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
 
         const newPool: any = {
@@ -370,7 +390,12 @@ export const createPool = validated(
             isLocked: false,
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
             // free or trial per server-computed launch mode (server-authoritative)
-            billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
+            billing: {
+                // T5/D2 — a trial unlocks the selected add-ons (see billingForLaunch).
+                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis(), normalizeAddonSelection(data)),
+                // Remembered wizard coupon — validated above, never redeemed here (T3).
+                ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+            },
         };
 
         // simRunId computed above the creation guard; stamped here.
@@ -442,7 +467,8 @@ export const createPool = validated(
         // Re-throw HttpsErrors as is
         if (error.code && error.details) throw error;
         // Wrap unknown errors
-        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+        // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
+        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
     }
     },
 );
@@ -753,8 +779,11 @@ export const toggleWinnerPaid = validated(
     // The helper is defined above: assertPoolOwnerOrSuperAdmin(pool: any, uid: string, userRole?: string)
     // We can fetch user role optionally or assume owner check is enough for most.
 
-    // Fetch user role if we want to support SuperAdmin override properly
-    const userRole = request.auth!.token.role || 'USER';
+    // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): the SuperAdmin override below
+    // used to ride on the JWT claim alone. confirmedAdminClaim strips an
+    // UNCONFIRMED SUPER_ADMIN claim to undefined; any other claim passes through
+    // unchanged, and assertPoolOwnerOrSuperAdmin branches on SUPER_ADMIN alone.
+    const userRole = await confirmedAdminClaim(request);
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);

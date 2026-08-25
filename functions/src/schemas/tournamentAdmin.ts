@@ -28,8 +28,19 @@ const roundWinners = z.array(z.string().trim().min(1).max(50)).max(40);
 /**
  * updateGlobalPlayoffResults — the exact shape PlayoffResultsManager sends
  * (all four rounds always present; save and reset both send the full object).
- * Non-strict object: a legacy key echoed back from the stored doc is stripped,
- * not rejected — only the canonical rounds are persisted.
+ *
+ * The ENVELOPE is strict: `results` is the only accepted top-level key.
+ *
+ * The INNER `results` object is deliberately non-strict, and that is the whole
+ * point of the split — PlayoffResultsManager echoes back what it read from the
+ * stored doc, so a legacy round key that exists in production data is STRIPPED
+ * rather than rejected, and only the four canonical rounds are persisted.
+ * Tightening it would refuse a save on exactly the historical documents it
+ * exists to let through. Pinned by tournamentAdminSchema / backendResidue tests.
+ *
+ * (This comment previously read "Non-strict object: …" directly above a
+ * `z.strictObject` declaration, describing the inner object while appearing to
+ * describe the outer one — PLAN-AUDIT-BACKEND-RESIDUE 17e.)
  */
 export const updateGlobalPlayoffResultsSchema = z.strictObject({
     results: z.object({

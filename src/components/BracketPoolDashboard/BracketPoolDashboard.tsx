@@ -32,6 +32,7 @@ import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
 import { AICommissioner } from '../AICommissioner';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { BanterBoard } from './BanterBoard';
 import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
@@ -150,8 +151,21 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         auto24h: true, auto1h: true, autoLock: true, announceWinner: true, recipientFilter: 'all' as const
     });
 
-    // Access Control
-    const [editPassword, setEditPassword] = useState(pool.accessControl?.password || '');
+    // Access Control (PLAN-AUDIT-AUTH-HARDENING Phase B, audit item 13a).
+    //
+    // This used to seed itself from `pool.accessControl?.password` and save the
+    // value back with a direct client `updateDoc` — plaintext, onto a document
+    // that is `allow get: if true`, and `joinBracketPool` never even read that
+    // field. It is now write-only: the stored value is a PBKDF2 record in
+    // `pools/{id}/private/access` that no client can read, so the box starts
+    // EMPTY and an empty box means "leave the password as it is". Removing one
+    // is an explicit action (`clearPassword`), never an empty save.
+    const [editPassword, setEditPassword] = useState('');
+    const [clearPassword, setClearPassword] = useState(false);
+    const poolHasPassword = Boolean(
+        (pool as unknown as { hasPoolPassword?: boolean }).hasPoolPassword
+        || pool.accessControl?.password,
+    );
 
     // Collapsible section toggles
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({ details: true, rules: true });
@@ -159,6 +173,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const toggleSection = (key: string) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     const isManager = isPoolManager(user, pool);
+    /**
+     * The pool's billing, read ONCE and typed — the AI Commissioner gate and the
+     * mid-season add-on offer both need it, and `(pool as any)` would be two new
+     * lint warnings for a shape this file can name.
+     */
+    const aiPoolBilling = (pool as unknown as {
+        billing?: { status?: string; featuresUnlocked?: Record<string, boolean> };
+    }).billing;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser && (pool.status === 'OPEN' || pool.status === 'DRAFT');
@@ -367,14 +389,26 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 branding: editBranding,
                 // Reminders
                 reminders: editReminders,
-                // Access Control
-                'accessControl.password': editPassword || null,
+                // Access Control: NOT written here any more. The password goes
+                // through the setPoolPassword callable below — see the state
+                // declaration for why a direct write was both a leak and a no-op.
                 // Dates
                 registrationDeadline: editRegDeadline || null,
                 submissionDeadline: editSubDeadline || null,
                 lockAt: editLockAt || pool.lockAt,
             };
             await dbService.updateBracketPool(pool.id, updates);
+            // Password last, and only when the commissioner actually asked for a
+            // change: a set (non-empty box) or an explicit removal. An untouched
+            // box leaves the stored value alone — the field cannot be read back,
+            // so "empty" carries no information about what is stored.
+            if (clearPassword) {
+                await dbService.setPoolPassword(pool.id, null);
+            } else if (editPassword) {
+                await dbService.setPoolPassword(pool.id, editPassword);
+            }
+            setEditPassword('');
+            setClearPassword(false);
             setSettingsSaved(true);
             setEditingSettings(false);
             setTimeout(() => setSettingsSaved(false), 2000);
@@ -387,7 +421,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     }, [pool.id, pool.lockAt, editPoolName, editManagerName, editContactEmail, editIsPublic,
         editVenmo, editZelle, editCashapp, editPaypal, editPaymentInstructions,
         editEntryFee, editMaxTotal, editMaxPerUser, editScoring, editCustomScoring, editTiebreaker,
-        editPayouts, editBranding, editReminders, editPassword,
+        editPayouts, editBranding, editReminders, editPassword, clearPassword,
         editRegDeadline, editSubDeadline, editLockAt, editUpsetBonusEnabled, editUpsetMultiplier]);
 
     // CSV Export
@@ -839,10 +873,25 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                 </div>
 
-                                {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                                {aiPoolBilling?.featuresUnlocked?.aiCommissioner ? (
                                     <div className="mt-8 pt-8 border-t border-line">
                                         <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType="BRACKET" />
                                     </div>
+                                ) : (
+                                    /* C2 / codex r1 [P1]: the add-on checkout is pool-type
+                                       agnostic on the server, so a Bracket commissioner gets
+                                       the same mid-season path the NFL one does. Commissioner
+                                       only, and only on an ACTIVE pool — the server refuses an
+                                       add-on checkout for a pool with no hosting purchase. */
+                                    isManager && aiPoolBilling?.status === 'active' && (
+                                        <div className="mt-8 pt-8 border-t border-line">
+                                            <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">AI Commissioner</h3>
+                                            <p className="mt-1 font-body text-[13px] text-muted">
+                                                Written recaps and banter for this pool, generated from its own results. Not switched on yet.
+                                            </p>
+                                            <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                                        </div>
+                                    )
                                 )}
 
                                 {/* User's existing entries */}
@@ -1724,10 +1773,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         {openSections.access && (
                                             <div className="p-4 bg-card space-y-3">
                                                 <div>
-                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Pool Password</label>
-                                                    <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Leave blank for no password"
-                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
-                                                    <p className="text-[10px] text-faint mt-1">Participants must enter this to join. Leave empty for open access.</p>
+                                                    <label htmlFor="bracket-pool-password" className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Pool Password</label>
+                                                    <input id="bracket-pool-password" type="password" autoComplete="new-password"
+                                                        value={editPassword} onChange={e => setEditPassword(e.target.value)} disabled={clearPassword}
+                                                        placeholder={poolHasPassword ? 'Enter a new password to change it' : 'Leave blank for no password'}
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm disabled:opacity-50" />
+                                                    <p className="text-[10px] text-faint mt-1">
+                                                        {poolHasPassword
+                                                            ? 'This pool has a password. It is stored encrypted and cannot be shown again — leave this blank to keep it unchanged.'
+                                                            : 'Participants must enter this to join. Leave empty for open access.'}
+                                                    </p>
+                                                    {poolHasPassword && (
+                                                        <label className="mt-2 flex items-center gap-2 text-[11px] text-muted font-body">
+                                                            <input type="checkbox" checked={clearPassword} onChange={e => setClearPassword(e.target.checked)} />
+                                                            Remove the password (anyone with the link can join)
+                                                        </label>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

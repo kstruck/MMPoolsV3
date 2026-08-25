@@ -5,7 +5,9 @@ import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
-import { loadBillingConfig } from "./billing";
+import { loadBillingConfig, resolveCouponForQuote } from "./billing";
+import { validLaunchCouponCode } from "./lib/launchCoupon";
+import { normalizeAddonSelection } from "./lib/launchFields";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
@@ -67,6 +69,7 @@ import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -134,6 +137,13 @@ export const createNFLPool = validated(
     // player cap, so with no paid add-on this resolves to 'free' (unchanged
     // behavior); a selected paid add-on forces 'trial'. Config read fails open.
     const billingConfig = await loadBillingConfig(db);
+    // Remember the wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3). Read from the
+    // RAW request: stripPrivilegedPoolFields deliberately removes `couponCode`
+    // from the persisted envelope, so only a server-validated code is stamped.
+    const launchCouponCode = await validLaunchCouponCode(
+      (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now }),
+      (request.data as Record<string, unknown> | undefined)?.couponCode,
+    );
     const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
 
     const newPool: any = {
@@ -160,7 +170,14 @@ export const createNFLPool = validated(
       // The seeded host owes nothing until they play, so it starts at 0.
       entryCount: 0,
       // free or trial per server-computed launch mode (server-authoritative)
-      billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
+      billing: {
+        // T5/D2 — a trial unlocks the add-ons the commissioner selected, so the
+        // trial can actually demo what it is selling. `normalizeAddonSelection`
+        // reads only explicit `true`s off the create payload.
+        ...billingForLaunch(launchMode, billingConfig.trialDays, now, normalizeAddonSelection(data)),
+        // Remembered wizard coupon — validated above, never redeemed here (T3).
+        ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+      },
     };
 
     // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp,
@@ -216,7 +233,8 @@ export const createNFLPool = validated(
   } catch (error: any) {
     console.error("createNFLPool Failure:", error);
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+    // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
+    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
   }
   },
 );
@@ -295,7 +313,13 @@ export async function joinNFLPoolInternal(
 
     const billingStatus = poolData.billing?.status ?? 'free';
     if (billingStatus === 'free' && participantIds.length >= 10) {
-      throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+      // G9 — MEMBER-appropriate copy. This is the message the 11th INVITEE
+      // sees, and it used to explain the platform's billing tiers to someone
+      // who has no billing relationship with us: "Free Plan", "upgrade to
+      // premium", "pool manager". Nothing in it told them what to do, and it
+      // read as though they had done something wrong. Say what happened, whose
+      // move it is, and nothing about our pricing.
+      throw new HttpsError('failed-precondition', 'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.');
     }
     // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
     // its purchased participant ceiling. No-op for free/trial pools.
@@ -1246,6 +1270,15 @@ export function weeklyPlacesPublication(
  * serialize, so no caller can forget to. A pass that finds the lease held returns
  * `leaseBusy: true` having read and written NOTHING.
  */
+/**
+ * The label a recap callout shows for one entry (PLAN-MULTI-ENTRY §0b.4).
+ * `entryName ?? userName` — the same rule every row surface uses, so "Sharp of
+ * the Week" names the entry that earned it rather than a player who holds two.
+ */
+function entryLabel(entry: { userName?: string; entryName?: string }): string {
+  return (typeof entry.entryName === 'string' && entry.entryName) ? entry.entryName : (entry.userName ?? '');
+}
+
 export async function scoreNFLWeekInternal(
   db: admin.firestore.Firestore,
   poolId: string,
@@ -1474,9 +1507,15 @@ async function scoreWeekPass(
   };
 
   // Recaps highlighting metrics
-  let sharpUser: { uid: string; name: string; val: number } | null = null;
+  // PLAN-MULTI-ENTRY D4 — the recap callouts name an ENTRY, not a player.
+  // `uid` stays the owner (it is the payee side of the recap and every reader
+  // treats it as a person), `entryId` identifies the row, and `name` is
+  // `entryName ?? userName` so a two-entry player's two rows are told apart on
+  // the card. Without the name change a recap reading "Kevin" would be true of
+  // both his entries and identify neither.
+  let sharpUser: { uid: string; entryId: string; name: string; val: number } | null = null;
   const biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
-  let closestTie: { uid: string; name: string; diff: number } | null = null;
+  let closestTie: { uid: string; entryId: string; name: string; diff: number } | null = null;
 
   // WEEKLY WINNER candidates (PLAN-WEEKLY-TIEBREAKERS §8). One per SCORED entry
   // for the types that have a weekly score — Pick'em and Margin. Survivor has
@@ -1547,7 +1586,7 @@ async function scoreWeekPass(
 
       // Sharp calculation
       if (!sharpUser || points > sharpUser.val) {
-        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: points };
+        sharpUser = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), val: points };
       }
 
       // Tiebreaker
@@ -1555,7 +1594,7 @@ async function scoreWeekPass(
         const prediction = entry.weeklyTiebreakers?.[week] ?? 0;
         const diff = Math.abs(prediction - mnfTotalScore);
         if (!closestTie || diff < closestTie.diff) {
-          closestTie = { uid: entry.ownerUid, name: entry.userName, diff };
+          closestTie = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), diff };
         }
       }
 
@@ -1723,7 +1762,7 @@ async function scoreWeekPass(
       // `attritionCount` only for NFL_SURVIVOR — so `buildWeeklyRecap` emitted a
       // recap with no fields and the client rendered an empty card.
       if (pick && (!sharpUser || weekScore > sharpUser.val)) {
-        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: weekScore };
+        sharpUser = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), val: weekScore };
       }
 
       // Weekly-winner candidate, gated on `pick` for the same reason the sharp
@@ -1761,7 +1800,12 @@ async function scoreWeekPass(
     // Write standings back
     for (let index = 0; index < ranked.length; index++) {
       const r = ranked[index];
-      const docRef = poolRef.collection('entries').doc(r.ownerUid);
+      // 🛑 `r.id`, NEVER `r.ownerUid` (PLAN-MULTI-ENTRY D4, sweeps S1a).
+      // `entries/{ownerUid}` is entry #1's document, so a player's second entry
+      // would write ITS rank over entry #1's and leave its own doc rankless —
+      // the silent-merge failure R1 names. `readScoredEntries` stamps `id` from
+      // the document id on both the live and dry-run paths.
+      const docRef = poolRef.collection('entries').doc(r.id);
       await stage(docRef, { rank: index + 1 });
     }
   }
@@ -1992,8 +2036,14 @@ export const scoreNFLWeek = validated(
 
     const pool = poolSnap.data() as any;
 
-    // RBAC checks
-    const userRole = request.auth!.token.role || 'USER';
+    // RBAC checks. CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d):
+    // assertPoolOwnerOrSuperAdmin short-circuits on `userRole === 'SUPER_ADMIN'`,
+    // so feeding it the raw claim let a demoted admin score any pool's week.
+    // confirmedAdminClaim strips an UNCONFIRMED SUPER_ADMIN claim to undefined
+    // and passes every other value through untouched — the helper branches on
+    // SUPER_ADMIN and nothing else, so 'USER' vs undefined is not a distinction
+    // it can see.
+    const userRole = await confirmedAdminClaim(request);
     try {
       assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
     } catch {
@@ -2015,7 +2065,15 @@ export const scoreNFLWeek = validated(
       throw new HttpsError('failed-precondition', `No games found to score for ${weekLabelFor(pool, week)}.`);
     }
 
-    // Confirm all games are final
+    // Confirm all games are final.
+    //
+    // ⚠️ SECOND CONSUMER of `userRole`, and it is a SCORING bypass, not just an
+    // authorization one — exempting SUPER_ADMIN here lets the button score
+    // mid-week, applying Survivor strikes and Margin -14s while pick windows are
+    // still open (see the `provisional` note below). 17d's claim+doc resolution
+    // therefore reaches this gate too, which is the intended direction: a
+    // SUPER_ADMIN claim the users doc does not back no longer gets the bypass.
+    // Strictly more restrictive; no principal gains anything.
     const activeGamesCount = games.filter(g => g.status !== 'FINAL' && g.status !== 'CANCELLED').length;
     if (activeGamesCount > 0 && userRole !== 'SUPER_ADMIN') {
       throw new HttpsError('failed-precondition', `ACTIVE_GAMES: Cannot score the week while ${activeGamesCount} games are still active.`);

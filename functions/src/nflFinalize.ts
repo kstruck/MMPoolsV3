@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import type { Firestore } from "firebase-admin/firestore";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { isSimPool } from "./shared/testPool";
+import { seasonHistoryDocIdFor } from "./shared/multiEntry";
 import { sortMarginLeaderboard } from "./nflScoringEngine";
 import { recomputeUserProfile } from "./userProfile";
 import { writeAdminAudit } from "./lib/adminAudit";
@@ -312,6 +313,19 @@ export function seasonPlacesPublication(
   }
 }
 
+/**
+ * Thin wrapper over `seasonHistoryDocIdFor` that reads the index off the entry
+ * document (PLAN-MULTI-ENTRY D9). `entryIndex` is absent on every
+ * pre-multi-entry entry, which is exactly entry #1 — the `?? 1` default is the
+ * legacy answer, not a guess.
+ */
+export function seasonHistoryDocId(
+  poolId: string,
+  entry: { entryIndex?: unknown },
+): string {
+  return seasonHistoryDocIdFor(poolId, typeof entry.entryIndex === 'number' ? entry.entryIndex : undefined);
+}
+
 export async function maybeFinalizeNFLPool(
   db: Firestore,
   poolId: string,
@@ -370,9 +384,13 @@ export async function maybeFinalizeNFLPool(
   for (const { entry, rank, record, points } of ranked) {
     if (!entry.ownerUid) continue;
     staged.push([
-      db.collection('users').doc(entry.ownerUid).collection('seasonHistory').doc(poolId),
+      db.collection('users').doc(entry.ownerUid).collection('seasonHistory').doc(seasonHistoryDocId(poolId, entry)),
       {
         poolId,
+        // 🛑 THE ENTRY THIS HISTORY ROW IS ABOUT (PLAN-MULTI-ENTRY D9).
+        // Readers query by FIELD, never by parsing the document id — the id is
+        // a uniqueness device, this is the fact.
+        entryId: String(entry.id ?? entry.ownerUid),
         poolName: pool.name || '',
         poolType: pool.type,
         season,
@@ -414,12 +432,18 @@ export async function maybeFinalizeNFLPool(
 
   // Refresh each member's public profile projection (bounded by pool size;
   // best-effort per member so one bad profile never blocks the rest).
-  for (const { entry } of ranked) {
-    if (!entry.ownerUid) continue;
+  //
+  // DEDUPED BY OWNER (PLAN-MULTI-ENTRY D9): the profile is a per-PERSON
+  // aggregate across every entry they hold, so a two-entry player would
+  // otherwise be recomputed twice from identical inputs — the same document
+  // written twice, and on a pool where several members hold several entries the
+  // cost is multiplied for no changed byte.
+  const owners = [...new Set(ranked.map(r => r.entry?.ownerUid).filter((u): u is string => !!u))];
+  for (const ownerUid of owners) {
     try {
-      await recomputeUserProfile(db, entry.ownerUid);
+      await recomputeUserProfile(db, ownerUid);
     } catch (e) {
-      console.warn(`[finalizeNFLPool] profile recompute failed for ${entry.ownerUid}:`, e);
+      console.warn(`[finalizeNFLPool] profile recompute failed for ${ownerUid}:`, e);
     }
   }
 

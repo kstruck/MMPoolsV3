@@ -91,7 +91,16 @@ describe('the reminder pass threads the tally through EVERY send', () => {
     // reminder it tries to send silently is not sent. It went unnoticed for the
     // life of the job because sendCourierSMS's boolean had no reader. Deleting
     // the binding restores that exact silence, and nothing else in CI notices.
-    expect(src).toContain('{ schedule: "every 15 minutes", secrets: [courierAuthToken] }');
+    //
+    // Matched against the job's OPTIONS OBJECT rather than a verbatim literal
+    // (item 14 / PLAN-AUDIT-BACKEND-RESIDUE §1 added timeoutSeconds + memory to
+    // it, and the old exact-string assertion failed on a change that has nothing
+    // to do with what this test guards). The regex still fails if the binding is
+    // deleted, which is the only thing it is here to catch.
+    const opts = src.slice(src.indexOf('functions.scheduler.onSchedule('));
+    expect(opts.slice(0, opts.indexOf('}') + 1)).toMatch(
+      /\{[^}]*schedule:\s*"every 15 minutes"[^}]*secrets:\s*\[courierAuthToken\][^}]*\}/,
+    );
   });
 
   it('the post-send audit write has its OWN catch, so it cannot fake a lost reminder', () => {

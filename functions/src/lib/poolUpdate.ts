@@ -9,6 +9,7 @@ import {
   isGroupEditable,
 } from '../shared/editability';
 import { writePaymentHandles, CLEAR, LEGACY_TOP_LEVEL_HANDLE_KEYS } from '../shared/paymentHandles';
+import { isPinnableMessageId } from '../shared/pinnedMessage';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
 import { MAX_TEAM_USES } from '../shared/survivorReuse';
 import { MAX_ENTRIES_PER_USER_CAP } from '../shared/multiEntry';
@@ -42,6 +43,15 @@ export function buildPoolSettingsUpdate(
     }
     if (!isGroupEditable(phase, group)) {
       rejected.push(`${key} (${group} is locked while the pool is ${phase})`);
+      continue;
+    }
+    // The matrix decides which KEYS may be written; it says nothing about their
+    // values. `pinnedMessageId` is the one key here whose value becomes a
+    // Firestore PATH SEGMENT on the client, and an id containing `/` (or a
+    // non-string) makes `doc()` throw inside the effect every member runs.
+    // (codex r1 [P2].)
+    if (key === 'pinnedMessageId' && !isPinnableMessageId(value)) {
+      rejected.push(`${key} (not a valid message id)`);
       continue;
     }
     set[key] = value;

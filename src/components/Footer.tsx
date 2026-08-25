@@ -51,7 +51,7 @@ export const Footer: React.FC = () => {
 
                 <div className="border-t border-[rgba(230,206,150,0.16)] pt-8 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="flex items-center gap-2">
-                        <Logo height="h-10" />
+                        <a href="/" aria-label="March Melee Pools home"><Logo height="h-10" /></a>
                     </div>
                     <div className="text-sm text-[#7C8BA6] font-body">
                         © 2026 March Melee Pools. All rights reserved.

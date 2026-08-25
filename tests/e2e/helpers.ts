@@ -112,6 +112,14 @@ export async function advanceToReview(page: Page): Promise<void> {
     if (!(await next.isVisible().catch(() => false))) break;
     await next.click();
   }
+  // The Launch step disables its submit until the player estimate is set
+  // (LaunchStep.tsx `estimateSet`; every wizard defaults estimatedPlayers: 0).
+  // Diagnosed 2026-08-24: all 7 create-pool tests timed out on a [disabled]
+  // "Launch free pool" button with the estimate spinner still at 0.
+  const estimate = page.getByRole('spinbutton', { name: /Expected number of players/i });
+  if (await estimate.isVisible().catch(() => false)) {
+    await estimate.fill('10');
+  }
   await tosLabel.locator('input[type="checkbox"]').check();
 }
 

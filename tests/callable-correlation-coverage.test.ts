@@ -65,11 +65,20 @@ const LOOKAHEAD = 12;
  * qodo on PR #397.
  *
  * Replaced with spaces rather than removed so line indices stay exact.
+ *
+ * WARNING: THE BLOCK-COMMENT BRANCH KEEPS ITS NEWLINES, and that is a fix, not
+ * a flourish. Blanking a multi-line block comment to a run of spaces collapsed
+ * it into ONE line, so every line below it shifted UP -- and the LOOKAHEAD
+ * window then reached past the wrapper it belongs to and into the NEXT one.
+ * Measured 2026-08-23: adding a correlated wrapper below
+ * `adminUpdatePoolBilling`, with a doc comment between them, made the ratchet
+ * report `adminUpdatePoolBilling` as fixed. A guard that credits one callable
+ * for its neighbour's correlation id is worse than no guard.
  * The `(?<!:)` keeps `https://` from being read as a line comment.
  */
 function blankComments(s: string): string {
   return s
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => ' '.repeat(m.length))
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
     .replace(/(?<!:)\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
 }
 

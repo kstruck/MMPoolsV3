@@ -107,6 +107,67 @@ export const ADDON_KEYS = [
 ] as const;
 export type AddonKey = (typeof ADDON_KEYS)[number];
 
+/**
+ * Add-ons that are INCLUDED with every pool and must never be priced
+ * (PLAN-WIZARD-BUYFLOW-FIXES T4, Kevin's ruling D1).
+ *
+ * `customBranding` was priced at $29 and stamped into
+ * `billing.featuresUnlocked.customBranding` on activation, but NOTHING gated
+ * it — no server path passed it to `checkBillingAccess`, no render path read
+ * the flag — while the wizard asked every commissioner for a logo and two
+ * colours anyway.
+ *
+ * ⚠️ This lives in `shared/` and is enforced in `computeAddonLines`, on the
+ * SERVER, deliberately. Removing the toggles from the UI is not enough: this
+ * is a single-page app served from a CDN, so a browser holding a stale bundle
+ * would keep sending `customBranding: true` and keep being quoted and CHARGED
+ * for it (codex r1 [P1] on T4). Nor can the guarantee rest on the
+ * `settings/billing_config` `isPremium:false` save — that is a human action on
+ * a document, and a money guarantee should not be one config edit away from
+ * being wrong.
+ *
+ * The key, the schema field and the `featuresUnlocked` plumbing all stay,
+ * dormant, for a future genuinely-premium branding tier. Delete the key from
+ * THIS list to start selling it again.
+ */
+export const INCLUDED_ADDON_KEYS = ['customBranding'] as const;
+
+/**
+ * Add-ons that may be sold ON THEIR OWN, to a pool whose hosting is already
+ * paid for (PLAN-PER-POOL-PREMIUM C2). This is NARROWER than "not included and
+ * not withdrawn", and the difference is the point.
+ *
+ * ⚠️ `whatIfSimulator` is ABSENT, and not because of the pool type. codex
+ * flagged it as bracket-only; measured, it is worse than that:
+ *
+ *   - `WhatIfSimulator.tsx` is rendered ONLY by `BracketPoolDashboard`, so on
+ *     an NFL, Playoff, Props or Squares pool the entitlement buys a feature
+ *     that does not exist anywhere.
+ *   - And on a BRACKET pool it is already FREE: the `whatif` sub-tab is
+ *     unconditional — `whatIfSimulator` appears ZERO times in that dashboard —
+ *     so the flag gates nothing and the buyer gains nothing.
+ *
+ * Filtering the offer to BRACKET, as the review suggested, would therefore
+ * still charge a bracket commissioner for something they already have. Until
+ * the dashboard actually gates that sub-tab on the entitlement, the honest
+ * answer is that it is not for sale.
+ *
+ * The key, the schema field and the `featuresUnlocked` plumbing all stay —
+ * exactly as `customBranding` did — so a pool that bought it in the past keeps
+ * it, and gating the sub-tab later is a one-line change here.
+ */
+export const MIDSEASON_SELLABLE_ADDON_KEYS = ['aiCommissioner'] as const;
+
+/** True when this add-on may be bought separately, mid-season. */
+export function isMidseasonSellableAddon(key: string): boolean {
+  return (MIDSEASON_SELLABLE_ADDON_KEYS as readonly string[]).includes(key);
+}
+
+/** True when this add-on ships with every pool and may never be charged for. */
+export function isIncludedAddon(key: string): boolean {
+  return (INCLUDED_ADDON_KEYS as readonly string[]).includes(key);
+}
+
 // --- getPoolQuote input -------------------------------------------------------
 export const poolQuoteInputSchema = z.object({
   // Accept any of the seven live pool formats. Unmapped formats are rejected by
@@ -171,6 +232,26 @@ export interface PoolQuote {
 // from an allowlisted origin + fixed route templates (open-redirect fix). Any
 // client-supplied redirect URL is ignored. Add-on booleans are validated here
 // and PRICED SERVER-SIDE — the client price is never trusted.
+/**
+ * What this checkout is BUYING (PLAN-PER-POOL-PREMIUM C2, Kevin 2026-08-23:
+ * "a pool manager must be able to buy a premium feature anytime during the
+ * season").
+ *
+ *  - `pool`  — hosting for a pool that is not yet active. The original and only
+ *    shape until now, so it is the DEFAULT and every existing client is
+ *    unchanged by this field appearing.
+ *  - `addon` — one or more add-ons for a pool that IS already active. No base
+ *    price, no tier change, no credits and no coupons; the pool keeps
+ *    everything it already owns.
+ *
+ * The distinction is not cosmetic. `finalizePoolPayment` treats ANY session
+ * arriving for an active pool as a double charge — it no-ops the whole
+ * finalization and files a DOUBLE_CHARGE_REVIEW alert — so without a purchase
+ * kind a mid-season add-on payment would take the money and grant nothing.
+ */
+export const PURCHASE_KINDS = ['pool', 'addon'] as const;
+export type PurchaseKind = (typeof PURCHASE_KINDS)[number];
+
 export const checkoutPoolInputSchema = z.object({
   poolId: z.string().min(1),
   poolName: z.string().min(1),
@@ -180,6 +261,7 @@ export const checkoutPoolInputSchema = z.object({
   couponCode: z.string().trim().min(1).optional(),
   usedCredit: z.boolean().optional().default(false),
   customCreditId: z.string().trim().min(1).optional(),
+  purchaseKind: z.enum(PURCHASE_KINDS).optional().default('pool'),
 });
 export type CheckoutPoolInput = z.infer<typeof checkoutPoolInputSchema>;
 

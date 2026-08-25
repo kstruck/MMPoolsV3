@@ -152,7 +152,10 @@ describe('wiring — no surface re-derives the rule or hard-codes the copy', () 
     // rendering, contradicting the rules page. (codex R8.1.)
     const src = read('src/components/NFLPoolDashboard/NFLStandings.tsx');
     expect(src).toContain('showTiebreakerColumn');
-    expect(src).toContain('{showTiebreakerColumn && <th');
+    // No leading `{`: T10 put `!seasonOnly &&` in front of it, because the
+    // column is week-scoped and the Season segment does not carry it. What this
+    // guards is the RULE gate, which is still the last condition on the `<th>`.
+    expect(src).toContain('showTiebreakerColumn && <th');
   });
 
   it('the create schema carries the field, or the wizard choice is stripped at create', () => {

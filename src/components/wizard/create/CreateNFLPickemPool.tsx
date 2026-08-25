@@ -5,7 +5,7 @@ import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { pickemCreateInputSchema } from '@shared/schemas';
 import {
-  WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep,
+  WizardShell, StepBasics, StepFeeAndPayment, StepBrandingThemed, LaunchStep,
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
 import { ReadOnlyField, SelectField, CheckboxField } from '../fields';
@@ -155,7 +155,7 @@ export function CreateNFLPickemPool(props: { user: User; onComplete: (poolId: st
     { id: 'rules', title: "Pick'em rules", Component: StepPickemRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
-    { id: 'branding', title: 'Branding', Component: StepBranding },
+    { id: 'branding', title: 'Branding', Component: StepBrandingThemed },
     {
       id: 'launch', title: 'Launch', ownsSubmit: true,
       Component: () => (

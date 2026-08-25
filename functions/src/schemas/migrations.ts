@@ -95,6 +95,34 @@ export const reconcilePaymentTruthSchema = z.strictObject({
 });
 
 /**
+ * backfillProfileData - SUPER_ADMIN prod batch migration (ADR 0005 /
+ * PLAN-PLAYER-PROFILES Phase 8, Operations tab). PLAN-AUDIT-BACKEND-RESIDUE 17b:
+ * the callable was a raw onCall with NO schema at all, so `request.data` reached
+ * the handler unvalidated and untyped.
+ *
+ * dryRun defaults TRUE at the schema layer, house Rule 1 and the #183 lesson the
+ * three schemas above record: a handler-side truthy check runs LIVE when the
+ * flag is omitted. The handler's own `!== false` already failed safe; declaring
+ * it here makes the default explicit and machine-checked.
+ *
+ * afterPoolId is the resume cursor, compared against FieldPath.documentId() - a
+ * document id, so it is NOT trimmed (altering it would silently skip or repeat a
+ * page). It takes NULL as first-page for the same reason its three siblings do:
+ * the Firebase JS SDK's callable serializer encodes an explicit-undefined
+ * property as null on the wire, which a plain .optional() rejects (found in prod
+ * on the D25 run, 2026-07-27). No client sends it today - OperationsPanel sends
+ * `{ dryRun }` alone - but the handler implements the cursor, so the schema
+ * describes the handler rather than the current caller.
+ */
+export const backfillProfileDataSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    afterPoolId: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
+});
+
+/**
  * backfillFrozenSpreads - SUPER_ADMIN prod one-off (PLAN-NFL-SPREAD-FREEZE
  * Revision 1, "Cutover: backfill first, or the fallback is a hole").
  *

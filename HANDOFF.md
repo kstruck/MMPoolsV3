@@ -1,5 +1,456 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE IN PRODUCTION. FUNCTIONS, RULES AND THE FRONTEND ARE ALL DEPLOYED AND EACH VERIFIED SEPARATELY. THE PASSWORD SWEEP IS CLOSED. ONE ITEM LEFT: A SECOND COOLIFY REBUILD AFTER #529.**
+>
+> Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
+>
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `809384d4`.**
+> ⚠️ Updated 2026-08-25 (the previous tagged claim, `c37bbd37`, had been carried
+> since 2026-08-12 and was stale by four deploys — it is now
+> `<!-- deploy-state:ignore -->`). **RULES ARE *NOT* AT THIS COMMIT** and that is
+> deliberate: `firestore.rules` has not changed since #579, whose rules deploy is
+> still owed as step 2 of the 2026-08-25 audit box below. Do not read "functions
+> are at `809384d4`" as "everything is".
+>
+> ✅ **THE AUDIT BOX'S STEP 1 IS DONE, AS A SIDE EFFECT OF THIS DEPLOY.** One
+> `npx firebase deploy --only functions` covered both. Verified by NAME rather
+> than by `Deploy complete!` (CLAUDE.md §3 — an absent function is the tell, and
+> an absence is easy to miss):
+> `setPoolPassword`, `verifyPoolAccess`, `migratePoolPasswords`, `cspReport`,
+> `authBackupJob`, `runAuthBackup` (the six the audit owed) plus `scoreNFLWeek`,
+> `getPoolPicks`, `submitNFLPicks`, `getProfilePoolDetail`, `recomputeMyProfile`,
+> `nflAutoScoreJob`, `nflFinalizeSweepJob` — **13 of 13 PRESENT**.
+>
+> ✅ **COOLIFY REBUILD DONE 2026-08-25 — AND VERIFIED BY CONTENT, NOT BY THE
+> BUNDLE HASH.** Live bundle moved `index-BRP5Lf-B.js` → **`index-CtqdBjX0.js`**.
+>
+> ⚠️ **A HASH CHANGE PROVES A BUILD RAN, NOT WHAT IT BUILT**, and the entry chunk
+> alone does not settle it either: this app code-splits, so the multi-entry
+> strings are NOT in `index-*.js`. All 109 referenced chunks were fetched and
+> searched. Found:
+>
+> | String | Chunk |
+> |---|---|
+> | `Allow more than one entry per player` (the wizard toggle) | `buildNFLPayload-DbSxJbA6.js` |
+> | `Entry 1 is created when you save its first pick` (the switcher's draft copy) | `PoolRoute-DJtanu6e.js` |
+> | `You already have an entry with that name` | `PoolRoute-DJtanu6e.js` |
+>
+> **Do not "verify" a future rebuild by the index hash alone** — a per-chunk
+> content check is what actually answers the question.
+>
+> 🛑 **THE OWED LIST — ONE ITEM LEFT AS OF 2026-08-25 EVENING:**
+> 1. ~~`npx firebase deploy --only firestore:rules`~~ ✅ **DONE 2026-08-25**
+>    (Kevin ran it). #579's rules are live.
+> 2. ~~The pool-password migration sweep~~ ✅ **CLOSED 2026-08-25 — 23 pools
+>    scanned, 0 changed, NO live pass run or needed.** Kill-switch disarmed
+>    (`{enabled: false, dryRun: true}`, confirmed in the console).
+>
+>    The zero was **checked rather than accepted**, because "found nothing" and
+>    "looked in the wrong place" report identically: the scan is unfiltered
+>    (`collection("pools").orderBy(documentId())`, no `where`) and `nextCursor`
+>    came back null, so 23 IS the whole collection; and the planner reads all
+>    four legacy shapes including the exotic literal-dotted field.
+>
+>    ⚠️ **WHAT IT PROVES IS BOUNDED, AND THE BOUND MATTERS.** It proves that AT
+>    SCAN TIME no pool carried legacy public password material. It does **not**
+>    prove no pool ever had a password: a pool whose plaintext was cleared
+>    earlier, and a pool already holding a correct `private/access` secret, both
+>    produce the same empty result. So this closes the MIGRATION; it does not
+>    retire the historic-exposure question, and no claim here should be read as
+>    doing so. It also follows that `setPoolPassword` / `verifyPoolAccess` have
+>    never been exercised against production — the first commissioner to set a
+>    pool password is the first real test.
+> 3. **A SECOND COOLIFY REBUILD, AFTER #529 MERGES.** `POOLS_OPEN` is a frontend
+>    flag, so merging #529 changes nothing in production until another rebuild
+>    runs. The rebuild above happened BEFORE that merge, so it does not carry it.
+>
+> ---
+>
+> 🟢 **WHAT SHIPPED: `MULTI_ENTRY_WIZARD_ENABLED = true` (#591).** A commissioner
+> can now allow up to 10 entries per player on **all three** NFL season types
+> (Kevin's ruling, 2026-08-25 — no per-type gate). Each entry is an independent
+> contestant: its own picks, its own row, its own score, its own Survivor life,
+> strikes and used-teams, its own season-history record, and its own share of the
+> dues.
+>
+> | PR | Ticket | What |
+> |---|---|---|
+> | #587 | **T3** | scoring, reveal, finalize and profiles key by **entry id**, not uid |
+> | #588 | **T4** | `buildMemberStandings` renders one row per **entry**; plural own-entries subscription |
+> | #589 | **T5** | the "My Entries" switcher; all three pick sheets send `entryIndex` + `entryName` |
+> | #590 | **T6a** | every NFL row surface displays `entryName ?? userName` |
+> | #591 | **FLIP** | the flag, plus a wizard→standings emulator arc and a source guard |
+>
+> ⚠️ **NOTHING CHANGES ON ANY EXISTING POOL UNTIL A COMMISSIONER OPTS IN.** No
+> pool carries `maxEntriesPerUser`, which reads as **1**; `updatePoolSettings` is
+> raise-only and only while the pool accepts entries; the server refuses
+> `entryIndex: 2` with `ENTRY_INDEX_EXCEEDS_MAX` on a max-1 pool. Entry #1's id
+> **is** the owner's uid (D1), so every re-key above returns the same string it
+> returned before on a single-entry pool — that is why this is deployable into a
+> live scorer without a migration.
+>
+> 🔴 **THIS WENT INTO A LIVE SCORER.** `system/config.nflAutoScore` is
+> `{enabled: true, dryRun: false}` and `nflAutoScoreJob` runs `*/5`. #587 changed
+> `scoreNFLWeek`, `getPoolPicks`, `maybeFinalizeNFLPool` and the profile
+> recompute — every one on a path that job executes. The safety argument is the
+> id equality above, plus the full emulator suite (524 passed / 2 expected fail /
+> 10 skipped) run against the merged tree.
+>
+> 🟡 **TURNING IT BACK OFF IS ONE LINE AND IS SAFE.**
+> `shared/multiEntry.ts:MULTI_ENTRY_WIZARD_ENABLED = false` hides the OFFER
+> (wizard field + manager raise control) without stranding a pool that already
+> took it — the manager control still renders when `currentMaxEntries > 1`, and
+> the server keeps honouring entries that already exist. It needs a Coolify
+> rebuild to take effect, like any frontend change.
+>
+> 🟡 **CARRIED, NAMED, NOT SILENT — the rest of T6 and T7–T11.**
+> `RecordPayoutsCard` still keys its rows by uid, so a commissioner recording a
+> payout in a multi-entry pool cannot say WHICH entry won. That is season-end
+> machinery and was not on the flip's critical path. Also open: T7 (extend the
+> reveal-rule guard to `NFLWeeklyPicksGrid`), T8 (reminders), T9 (fixtures ≥ 48).
+> Both remaining T6 items still carry their `tests/nfl-surface-invariants.test.ts`
+> allow-list entries, so the guard keeps naming them until they land.
+>
+> ✅ **T10 (one scoped Standings tab) NEEDED NOTHING** — it shipped as #536 on
+> 2026-08-23 and was verified against the spec this session, not re-derived:
+> `src/utils/nflStandingsScope.ts` exists, `results` is filtered out of
+> `offeredTabs` and aliased to the week segment, and `tests/nfl-standings-scope.test.ts`
+> is green. The plan doc it came from (`PLAN-WIZARD-BUYFLOW-FIXES.md`) only ever
+> existed on an unmerged branch, which is why it is not in the tree.
+
+
+> ## 📌 2026-08-25 — **RULESET GOVERNANCE: ANY REVIEW REQUIREMENT ON `main` MUST KEEP "Repository admin" IN THE RULESET'S BYPASS LIST.**
+>
+> Measured on PR #585: the audit session's main ruleset required 1 approving
+> review with NO bypass actors. Every PR here is authored by the `kstruck`
+> account (sessions commit as Kevin), GitHub never lets an author approve their
+> own PR, and every session's tooling authenticates as that same account — so
+> the rule was **unsatisfiable and deadlocked every PR in the repo**, with all
+> 9 checks green. Kevin added Repository admin to the bypass list on
+> 2026-08-25 and bypass-merged #585/#583/#584. **Any future ruleset edit that
+> drops that bypass entry recreates the deadlock.** The required status checks
+> (secrets-scan, build-and-test, e2e-playwright, emulator-tests, lint) are the
+> hard gates; the review rule is a speed bump whose sign-off is Kevin's own
+> bypass-merge click.
+
+> ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED. POOL-PASSWORD HASHING IS BUILT BUT EXISTING POOLS ARE STILL PLAINTEXT UNTIL THE SWEEP RUNS. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
+>
+> Full detail: **[MORNING-2026-08-25-AUDIT-2.md](MORNING-2026-08-25-AUDIT-2.md)**.
+> Worked [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md) items 1–24 plus a
+> triaged codex external-findings program. Run as 15 parallel worktree streams with
+> sequential merges; `codex exec review` on every PR (~60 rounds, ~45 findings
+> absorbed, 4 rejected with measurements, 0 carried).
+>
+> 🔴 **THE STRIPE P0 WAS REAL AND IS CLOSED (#570).** `getStripe()` returned null on a
+> missing or `placeholder`-prefixed key with **no environment condition** — no
+> production file under `functions/src/` referenced `FUNCTIONS_EMULATOR` at all. Pool
+> checkout's `if (!stripe)` branch called `finalizePoolPayment(...)`, the same function
+> the verified webhook calls (billing active, ledger row, `?payment=success`). Bundle
+> checkout called `grantBundle(...)` **with no ownership gate at all**. Both now return
+> `failed-precondition` with zero mutations in deployed environments.
+>
+> 🔴 **POOL-PASSWORD HASHING IS BUILT (#579, Kevin's D1 Option 2) — BUT THE EXPOSURE IS
+> NOT REMEDIATED YET.** NEWLY SET passwords go to PBKDF2 in `pools/{id}/private/access`
+> (`allow read: if false`) and joins run through a callable. **EXISTING pools still
+> expose their password material on the publicly readable parent document** until the
+> migration sweep runs: `gridPassword` and `accessControl.password` are PLAINTEXT, and
+> `passwordHash` is a legacy hash the sweep moves verbatim — not plaintext, but
+> publicly readable and offline-crackable. The sweep is
+> deliberately kill-switched OFF and dry-run by default, and HAS NOT BEEN RUN. Step 4
+> of the deploy order below is what actually closes this. Do not treat #579 alone as
+> the fix. **10 codex rounds, 17 findings, 16 of them fail-OPEN.**
+> Stated ceiling even after the sweep: this fixes the PASSWORD, not the POOL —
+> `pools/{id}` stays `allow get: if true` for guest links, so the gate governs what the
+> app renders, not what Firestore serves.
+>
+> 🛑 **OWED, AND THE ORDER IS LOAD-BEARING. FOUR STEPS, NOT TWO.**
+> 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
+>    `git pull --ff-only origin main` + `npm --prefix functions ci`. Changed by
+>    #569, #570, #572, #573, #575, #579. **Verify EVERY new function by name** —
+>    `npx firebase functions:list | Select-String "<name>"` in PowerShell. The six
+>    exact export names, read from `functions/src/index.ts`, are: `setPoolPassword`,
+>    `verifyPoolAccess`, `migratePoolPasswords` (line 30), `cspReport` (155),
+>    `authBackupJob` and `runAuthBackup` (158). An absent name is the tell that the
+>    deploy shipped a stale checkout (CLAUDE.md §3).
+> 2. `npx firebase deploy --only firestore:rules` — **#579 is the only PR that
+>    touched rules (+97 lines).** No index change in any PR.
+> 3. Coolify `www` rebuild (manual trigger). Changed by #564, #566, #568, #571,
+>    #577, #578, #579.
+> 4. **ONLY THEN** the pool-password migration sweep
+>    ([PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md](PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md)).
+>    Before step 3 it would leave swept pools rendering UNGATED on the old bundle.
+>
+> 🟡 **TWO THINGS SHIPPED BUT INERT UNTIL KEVIN ACTS.** Sentry stays dead until
+> `VITE_SENTRY_DSN` is set as a Coolify **build** variable (#573). The new
+> transition-only health paging sends nothing if `system/config.opsAlerts.emailRecipients`
+> is empty. The Auth backup (#575) does nothing until the GCS bucket exists and
+> `system/config.authBackup` is armed.
+>
+> 🛑 **DO NOT RUN `git reset --hard` IN `D:\march-melee-pools`.** That checkout carries
+> **351 uncommitted changes** from an earlier session (a context-hygiene/archive pass:
+> the whole `skills/` tree deleted, 10 root `.md` deleted, `docs/archive/legacy-*`
+> added). Verified to contain **zero** changes under `src/`, `functions/`,
+> `firestore.rules`, `firebase.json`, `nginx.conf` or `Dockerfile`, so the deploy above
+> is not at risk from it — but #576's `.gitattributes` renormalise step
+> (`git rm --cached -r . && git reset --hard`) WOULD DESTROY IT. Decide what that work
+> is first. This is also why the repo markdown cleanup was HELD rather than built.
+>
+> ✅ **Item 19 VERIFIED:** ruleset 11714546 now carries `required_status_checks` with
+> `build-and-test`, `emulator-tests`, `security-audit`, `nginx-validate`, main-scoped,
+> enforcement active. **Remaining hole:** `bypass_actors` = Repository admin,
+> `bypass_mode: "always"` — every merge here uses an admin token, so the checks
+> currently bind nobody.
+
+
+> ## 🟢 2026-08-24 (superseded by the 2026-08-25 box above) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+>
+> Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](MORNING-2026-08-24-AUDIT-FIXES.md)**.
+>
+> 🆘 **Site down? Start at [RUNBOOK-SITE-DOWN.md](RUNBOOK-SITE-DOWN.md)** — one page: uptime alert → bundle-hash curl → debugging-playbook S7b → Coolify Rollback (§2b) → `/readiness` → `functions:log` → functions rollback (§1d).
+> Worked from Kevin's six audits (DB/storage, backend, auth, hosting, cloud,
+> VCS). Two new plan docs: PLAN-AUDIT-SCAN-BOUNDS (Phase 1 built) and
+> PLAN-AUDIT-AUTH-HARDENING (Phase A built; Phase B = pool-password plaintext
+> is a DECISION).
+>
+> ✅ Highlights: maxInstances caps exist for the first time; the reminders
+> full-collection scan (96×pools/day) is bounded; checkPlayoffScores stops
+> fetching ESPN off-season; password resets now email the owner; the three
+> aria-modal dialogs actually trap focus; header crest 935KB→8KB; recharts off
+> the landing page; **Playwright e2e 0/8 → 8/8** (all selector drift, zero
+> product bugs, run green locally in 2.2m).
+>
+> 🔴 **CORRECTED ON THE RECORD: the Gemini key WAS leaked** (public git
+> history since 2025-12-13, count-only check:
+> `git show 3340fff0^:.env | grep -c VITE_API_KEY`). The 2026-07-06 "NOT
+> leaked" owner claim was false; nine skill files corrected in #547.
+> **ROTATION CLOSED 2026-08-24 (Kevin ruling, morning session):** the leaked
+> value returns `API_KEY_INVALID` when tested live, and full `.env` history
+> holds no other private key — the live key ("New MarchMeleePoolsAPI2",
+> Jan 2026) was never in git. Kevin had already rotated; the "STILL OWED:
+> rotate" lines in the boxes below are SUPERSEDED. History scrub (D5) drops
+> to cosmetic — the exposed value is dead.
+>
+> ✅ **ALL DEPLOYS DONE + VERIFIED, 2026-08-24 evening (Kevin ran the
+> runbook):** functions deployed (`notifyPasswordReset` in functions:list;
+> prod `readiness` now 405s POST — #547 live), Coolify rebuilt (bundle
+> `index-BRP5Lf-B.js`; `mmp-crest-small.webp` serving). GCP budget set
+> ($100/mo, alerts 50/80/100). ~~GitHub required checks ON~~ **CORRECTED by
+> the 2026-08-24 re-audit: the required-checks config NEVER SAVED** (ruleset
+> 11714546 unchanged since January; classic protection 404s). Kevin is
+> redoing it as a main-scoped ruleset — verify via
+> `gh api repos/kstruck/MMPoolsV3/rulesets` before trusting it
+> (NEXT-SESSION item 19). Decisions D1–D7 all
+> answered — recorded in NEXT-SESSION-AUDIT-FIXES.md (headline: D1 = full
+> pool-password fix, D3 = mmp-logo-full becomes the site+email logo).
+> The owed-list below is KEPT for the record but is COMPLETE:
+>
+> ~~🛑 OWED, order matters~~ **✅ BOTH STEPS BELOW EXECUTED AND VERIFIED
+> 2026-08-24 — do NOT re-run them; historical record only:**
+> 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
+>    `git pull --ff-only origin main` + `npm --prefix functions ci` — #547,
+>    #548, #549, #554 all change `functions/` (plus #542's guard if still
+>    undeployed). First deploy after #548 reconfigures EVERY function
+>    (maxInstances) — expect a long run. **No firestore.rules or indexes
+>    change in any overnight PR.**
+> 2. Coolify `www` rebuild — #551/#552/#553/#555 have frontend halves.
+>
+> 🟡 Kevin decisions D1–D7 (pool passwords, auto-deploy, PNG deletion, e2e in
+> CI, history scrub, blocking functions, emailVerified) restated with
+> recommendations in the morning chat message; next-session prompt in
+> [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md).
+
+
+> ## 🟢 2026-08-25 (SUPERSEDED by the 2026-08-24 box above — this box was forward-dated; the audit-remediation session is newer) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME.**
+>
+> Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)**.
+>
+> ✅ **MERGED**, each with all gates and a clean final `codex exec review` round:
+> **#536** (T10 — one scoped Standings tab), **#537** (pool feed + pinned message),
+> **#538** (C1 — super-admin per-pool feature toggle), **#539** (C2 — mid-season
+> add-on purchase), **#540** (docs), **#541** (D1 — branded header band),
+> **#542** (D2 — the `/pricing` add-on surface).
+>
+> **BOTH of Kevin's open decisions are CLOSED and BUILT.** D1 = a branded header
+> band (option ii). D2 = one add-on section on `/pricing` (option a).
+>
+> **17 codex rounds across the effort. 13 findings absorbed, 1 rejected with a
+> measurement, 0 carried.** Root suite 2013 → **2105**; functions 1813 → **1820**.
+>
+> 🛑 **OWED, AND THE ORDER MATTERS.**
+> 1. `npx firebase deploy --only functions` — **#542 changes `shared/` and
+>    `functions/`** (the server-side unsellable-add-on guard). CLAUDE.md §3:
+>    `git -C D:\march-melee-pools pull --ff-only origin main` FIRST, confirm
+>    `main`, then `npm --prefix functions ci`. **Run it from
+>    `D:\march-melee-pools`** — `firebase-tools` is a devDependency of the repo
+>    root, so `npx firebase` from anywhere else fails with "could not determine
+>    executable to run".
+> 2. **Coolify `www` rebuild** — #541 and #542 both have frontend halves.
+>
+> ⚠️ The deploy goes FIRST, same reason as #539: the frontend is what lets a
+> commissioner START an add-on checkout, and the server is what refuses an
+> unsellable one and finalizes the rest.
+>
+> ✅ **NO `firestore.rules` CHANGE IN ANY OF THE SEVEN.** `test:rules` was not
+> run because it does not apply — not because it was skipped.
+>
+> 🟢 **THE AI COMMISSIONER WORKS. Root cause was NOT code.** The Gemini API key
+> carried an HTTP-referrer restriction; Cloud Functions send no `Referer`, so
+> every call had been failing `API_KEY_HTTP_REFERRER_BLOCKED` (403). Kevin set
+> Application restrictions to **None** on 2026-08-25 and the fix was verified in
+> the production logs (`gemini-2.5-flash` selected, response returned). It had
+> never worked before, because no pool had ever held the entitlement until C1's
+> toggle granted one.
+>
+> ~~🔴 STILL OWED, KEVIN'S ACTION: ROTATE THE GEMINI KEY.~~ **SUPERSEDED —
+> rotation CLOSED with evidence 2026-08-24, see the top box.**
+> `CODE_REVIEW_REPORT.md:183` records that it was committed to git history once,
+> and it now has no application restriction. Create a fresh key (Application
+> restrictions **None**, API restrictions **Generative Language API only**),
+> `npx firebase functions:secrets:set GEMINI_API_KEY`, **redeploy functions**
+> (v2 `defineSecret` pins the version at deploy — the live one is version 7), then
+> delete the old key.
+>
+> 🔴 **`nflDeepScoreSweepJob` DEPLOYS ITS CODE BUT FAILS ITS IAM INVOKER
+> BINDING. FIX THAT BEFORE ARMING `nflDeepSweep`, OR THE JOB WILL LOOK ARMED AND
+> NEVER RUN.** Measured on the 2026-08-24 02:38 deploy: the function's own
+> `UpdateFunction` SUCCEEDED, and the deploy then failed with *"Unable to set the
+> invoker for the IAM policy"* for that one function. Without `roles/run.invoker`
+> on its Cloud Run service, Cloud Scheduler gets a 403 and the job silently never
+> fires.
+>
+> **Impact today is ZERO and that is exactly why it is dangerous.** The job is
+> gated on `system/config.nflDeepSweep.enabled === true`
+> (`functions/src/nflSchedule.ts:1392-1402`, default OFF, fail-safe), and that
+> config is unset — so it would log `disabled … nothing to do` regardless. The
+> failure only becomes visible at the moment somebody arms the sweep and
+> concludes the code is broken. Check the Cloud Run service
+> `nfldeepscoresweepjob` → Security, and confirm the scheduler service account
+> holds **Cloud Run Invoker**. Unrelated to any 2026-08-25 PR.
+>
+> ~~⚠️ THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED~~ **FIXED overnight
+> 2026-08-24 (#556): 8/8 GREEN — see the box above.**
+>
+> ℹ️ **Two known reporting defects, not yet fixed** (offered, not approved):
+> `AICommissioner.tsx:96` and the NFL manager card report every failure with the
+> same copy — which is why a 403 took a production log pull instead of thirty
+> seconds — and `gemini.ts` fires an extra doomed API call on every failure.
+
+
+> ## 🟢 2026-08-25 (earlier) — **FOUR PRs MERGED: T10 (THE LAUNCH BLOCKER), THE POOL FEED + PIN, AND BOTH HALVES OF PER-POOL PREMIUM. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+>
+> Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)** — read it before
+> touching this effort. This box is the live state; that file is the reasoning.
+>
+> ✅ **MERGED overnight 2026-08-24→25**, each with all gates and a clean final
+> `codex exec review` round: **#536** (T10 — one scoped Standings tab on every NFL
+> pool type; the last unbuilt PLAN-WIZARD-BUYFLOW-FIXES ticket), **#537** (pool
+> feed beside Pool Standings + a commissioner-pinned message under the ticker),
+> **#538** (C1 — super-admin per-pool feature toggle), **#539** (C2 — commissioner
+> buys an add-on mid-season and it turns itself on).
+>
+> **8 codex rounds. 5 findings absorbed, 1 rejected with a measurement, 1
+> CARRIED unresolved** (see the decisions below). Root suite 2013 → **2063**;
+> functions 1813 → **1820**.
+>
+> 🛑 **NOTHING IS LIVE UNTIL BOTH OF THESE RUN, AND THE ORDER MATTERS.**
+> 1. `npx firebase deploy --only functions` — **#537, #538 and #539 all change
+>    `functions/`.** CLAUDE.md §3 exactly: `git -C D:\march-melee-pools pull
+>    --ff-only origin main` FIRST, confirm the checkout is on `main`, then
+>    `npm --prefix functions ci`.
+> 2. **Coolify `www` rebuild** — every PR has a frontend half.
+>
+> ⚠️ **THE DEPLOY MUST GO FIRST, and #539 is why.** The frontend half is what
+> lets a commissioner START an add-on checkout. If the rebuild lands before the
+> functions deploy, a completed Stripe session finalizes against the OLD handler,
+> which sees an active pool, files it as a DOUBLE CHARGE and grants nothing — the
+> money is taken and the feature is not delivered.
+>
+> ✅ **NO `firestore.rules` CHANGE IN ANY OF THE FOUR.** The pinned message
+> deliberately avoided needing one: it lives on the pool document
+> (`pinnedMessageId`) and is written through the `updatePoolSettings` callable,
+> so `pools/{id}/messages` keeps `allow update: if false`. `test:rules` was not
+> run because it does not apply — not because it was skipped.
+>
+> 🛑 **TWO DECISIONS ARE WAITING ON KEVIN**, both written out in full in the
+> morning doc §2 with a recommendation each:
+> 1. **Branding is too weak.** Recommendation: a full-width `primaryColor`
+>    HEADER BAND with automatically readable text (theme-safe by construction,
+>    ~40 lines) — NOT a full page background, whose failure mode is a member who
+>    cannot read the page. Logo customization is kept in every option.
+> 2. **Where do PLAYOFF and PROPS commissioners buy an add-on?** The server path
+>    already works for every pool type; only the BUTTON is NFL + Bracket.
+>    Recommendation: one add-on section on `/pricing` rather than a CTA wedged
+>    into two tab strips. This is codex's carried finding on #539.
+>
+> ⚠️ **THE PLAYWRIGHT E2E SUITE IS STILL 8/8 RED** and was already red at
+> `925c6d7d`. Not run by CI, last touched 2026-07-04. Still the only automated
+> coverage of the flow real users walk.
+>
+> ℹ️ **Nothing in these four PRs was verified in a browser.** The feed, the pin
+> band and the Super-Admin toggle all need an authenticated session against a
+> real pool. Every claim rests on the suites, the type checks and the diffs.
+
+
+> ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
+>
+> Full detail: **[MORNING-2026-08-24.md](MORNING-2026-08-24.md)**. Read that before
+> touching this effort — this box is the live state, that file is the reasoning.
+>
+> ✅ **MERGED overnight 2026-08-23→24**, each with all five gates and a clean
+> `codex exec review` round: #522 (T2 coupon/Activate), #523 (T3 + G3 upgrade
+> carries the selection), #524 (T6a blockers G2/G4/G5), #525 (T4 branding is
+> free — enforced server-side), #526 (T1 branding colours actually theme the
+> pool), #527 (T5 trial unlocks the selected add-ons), #528 (G2 second pass —
+> six more public create CTAs), #530 (T9 AI Commissioner, **10 codex rounds**),
+> #531 (T6b friction), #532 (T7 trial copy), **#534 (T8 post-wizard branding editor)**.
+>
+> **38 codex findings, 37 absorbed, 0 rejected.** Root suite 1762 → **2013**
+> tests. Emulator rules **11/11** files (one new: `banterMessages.rules.test.mjs`).
+>
+> 🛑 **TWO DEPLOYS ARE OWED AND NOTHING IS LIVE UNTIL THEY RUN.**
+> 1. `npx firebase deploy` — **functions AND `firestore.rules`** (T3, T4, T5,
+>    T6b touch `functions/`; T9 touches BOTH). Follow CLAUDE.md §3 exactly:
+>    `git -C D:\march-melee-pools pull --ff-only origin main` FIRST, then
+>    `npm --prefix functions ci`, functions before rules.
+>    ⚠️ **T9's rules and functions must go out together** — the rules alone let
+>    a client post but never let the AI reply; the functions alone write AI
+>    messages a client is still allowed to impersonate.
+> 2. **Coolify `www` rebuild** — every ticket has a frontend half.
+>
+> 🛑 **[#529](https://github.com/kstruck/MMPoolsV3/pull/529) IS THE LAUNCH ACT AND
+> ONLY KEVIN MERGES IT** (D6). `POOLS_OPEN = true` is a BUILD-TIME constant:
+> merging it changes nothing until the Coolify rebuild, and rollback is another
+> commit plus another rebuild. Its hard prerequisite (G2, in #524 and #528) is
+> merged, and `tests/pools-open.test.ts` asserts that prerequisite still holds —
+> **if those assertions fail, do not merge the flip.**
+>
+> ⚠️ **NOT BUILT: T10 only** (Standings/Results tab merge). It should not be
+> attempted before Monday: it touches the published `offeredTabs` list (K13)
+> and the help registry, and a half-finished tab merge is worse than none.
+> **T8 SHIPPED after the first draft of this box** — #534. Its stated blocker
+> turned out not to exist: `shared/editability.ts` allows `branding` in draft,
+> open, LOCKED and archived, so the editor sits OUTSIDE the season-locked
+> settings form and a commissioner can fix their logo in week 3.
+>
+> ⚠️ **THE PLAYWRIGHT E2E SUITE IS 8/8 RED, AND WAS ALREADY RED AT `925c6d7d`**
+> (verified by running it in a scratch worktree at the pre-session commit). Last
+> touched 2026-07-04 and **not run by CI**, so nothing has kept it honest for
+> seven weeks. Two visible causes: `admin-claims` cannot find "System Status",
+> and every create-pool spec times out on `Launch pool`. It is the only
+> automated coverage of the flow Monday's invitees walk. **Fix it Sunday.**
+>
+> ⚠️ **THE T4 LEDGER AUDIT WAS NOT RUN** — no ADC, no `gcloud`, no
+> service-account key on this machine. `scripts/auditCustomBrandingPaid.mjs` is
+> committed and read-only; commands are in the morning doc. Note the ledger
+> CANNOT answer it alone: `billing_charges` rows carry no add-on breakdown, so
+> the script reads `billing.paid.addons` off the pool documents.
+>
+> ℹ️ **`settings/billing_config` → customBranding `isPremium:false` is still
+> Kevin's to save**, but NOTHING WAITS ON IT: #525 stops pricing the add-on in
+> `computeAddonLines`, server-side, so a stale cached bundle cannot be charged
+> either.
+
+
 > ## 🟢 2026-08-22 (latest) — **§2c IS NOW CLOSED ON THE SIX MERGED PRs. THE HELP `?` IS VISIBLE (#514, MERGED). COOLIFY REBUILD OWED, NO FUNCTIONS DEPLOY.**
 >
 > ✅ **§2c ON #504–#509 IS MET.** The box below said "still unmet"; it is
@@ -1033,12 +1484,14 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > is empty across #416, #418 and #417 — all three are docs or `src/**`.
 
 
-*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules are live from `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules were live from <!-- deploy-state:ignore --> `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## ✅ DEPLOY STATE 2026-08-12 — **functions + rules at `c37bbd37` (still current); its frontend claim is SUPERSEDED — frontend at `d6bae3f4` since 2026-08-13, per the box above**
+> ## ✅ DEPLOY STATE 2026-08-12 — **HISTORY. functions + rules were at <!-- deploy-state:ignore --> `main` @ `c37bbd37`; SUPERSEDED — functions moved to `809384d4` on 2026-08-25 (top box) and the frontend to `d6bae3f4` on 2026-08-13**
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`,
-> and so are the rules.** The frontend WAS at this commit when this box was
+> **Functions are deployed from <!-- deploy-state:ignore --> `main` @ `c37bbd37`,
+> and so are the rules.** ⚠️ SUPERSEDED 2026-08-25 — functions moved to
+> `809384d4` (top box), and the `deploy-state:current` tag moved with them.
+> This line is history. The frontend WAS at this commit when this box was
 > written and has since moved to `d6bae3f4` (2026-08-13, box above). Deployed the morning of 2026-08-12, in
 > the order the change required: **functions → Coolify rebuild → rules.** That order is not cosmetic — see the
 > box below for why the obvious order would have taken commissioner standings

@@ -10,16 +10,35 @@ export const MAX_ENTRIES_PER_USER_CAP = 10;
 /**
  * Whether the wizard (and the manager settings form) OFFERS multi-entry.
  *
- * STILL FALSE after T2. T2 made the SERVER honour `entryIndex` (submit, proxy,
- * rebuy, dues, entryCount), but a member has no UI to address entry #2 until
- * T5 (`PickemPickEntry`/`SurvivorPickEntry`/`MarginPickEntry` send no
- * `entryIndex`), and standings/reveal/finalize still key by uid until T3/T4.
- * Offering the toggle now would let a commissioner advertise entries nobody
- * can play — the same lie T1 hid it for (qodo #3 on #449; codex r1+r2 on the
- * T2 PR). The T3/T4/T5 PR that closes the read side flips this to true.
- * The submit path is exercised end-to-end regardless (emulator suite).
+ * 🟢 TRUE since 2026-08-25, and the rule it was false for is the reason it is
+ * true now: **never advertise entries nobody can play.** It stayed hidden
+ * through T1 (the setting) and T2 (the server), because a commissioner could
+ * have set a cap while the read side still merged a player's rows by uid and no
+ * member had any UI to address entry #2. That is closed, in order:
+ *
+ *   T3 (#587) — scoring, reveal, finalize and profiles key by ENTRY id.
+ *   T4 (#588) — `buildMemberStandings` renders one row per entry.
+ *   T5 (#589) — the "My Entries" switcher; the three pick sheets send
+ *               `entryIndex` + `entryName`; Survivor's rebuy names its entry.
+ *   T6a       — every row surface displays `entryName ?? userName`, so two
+ *               entries of one player are not indistinguishable duplicates.
+ *
+ * ⚠️ THE FLAG IS NOT THE FEATURE'S ONLY GATE, AND FLIPPING IT BACK IS SAFE.
+ * It governs only whether the CONTROLS are rendered
+ * (`wizard/create/MultiEntryFields.tsx`, `NFLManagerView`'s raise control).
+ * Every pool keeps `effectiveMaxEntriesPerUser` = 1 unless a commissioner
+ * raises it, `updatePoolSettings` is raise-only, and the server refuses
+ * `entryIndex: 2` with `ENTRY_INDEX_EXCEEDS_MAX` on a max-1 pool. So setting
+ * this back to `false` hides the offer without stranding a pool that already
+ * took it — the manager control deliberately still renders when
+ * `currentMaxEntries > 1`.
+ *
+ * The arc this asserts is a test, not a claim: see the FLIP block in
+ * `functions/src/__tests__/emulator/multiEntry.emulator.test.ts` (wizard create
+ * payload → two entries → the standings projection) and the "one row per ENTRY"
+ * block in `src/utils/memberStandings.test.ts` (those artifacts → two rows).
  */
-export const MULTI_ENTRY_WIZARD_ENABLED = false;
+export const MULTI_ENTRY_WIZARD_ENABLED = true;
 
 /** K5 — `entryName` on `submitNFLPicks`, trimmed, ≤ 30 chars. */
 export const ENTRY_NAME_MAX = 30;
@@ -42,6 +61,26 @@ export function effectiveMaxEntriesPerUser(settings: { maxEntriesPerUser?: unkno
  */
 export function entryIdFor(uid: string, entryIndex: number): string {
   return entryIndex <= 1 ? uid : `e${entryIndex}:${uid}`;
+}
+
+/**
+ * D9 — which `users/{uid}/seasonHistory/{docId}` document ONE ENTRY's season
+ * record lands in.
+ *
+ * Entry #1 keeps `{poolId}` — byte-for-byte what every existing document
+ * already is, so nothing migrates and every existing reader keeps working.
+ * Extra entries get `{poolId}__e{n}`.
+ *
+ * 🛑 A DOUBLE UNDERSCORE, AND ONLY BECAUSE OF THE COLLISION A SINGLE ONE HAS.
+ * Auto-generated pool ids never contain `_`, but a hand-made or imported one
+ * can — and `{poolId}_2` would then be ambiguous between "entry 2 of pool X"
+ * and "entry 1 of the pool literally named X_2". `__e` is not a shape a pool id
+ * has ever taken here. It is still only a uniqueness device: the document
+ * carries `poolId` and `entryId` as FIELDS and no reader parses the id.
+ */
+export function seasonHistoryDocIdFor(poolId: string, entryIndex: number | undefined): string {
+  const idx = typeof entryIndex === 'number' && Number.isInteger(entryIndex) ? entryIndex : 1;
+  return idx <= 1 ? poolId : `${poolId}__e${idx}`;
 }
 
 /** Default display name for an extra entry (K5): `"Kevin #2"`. Entry #1 has none — it shows `userName`. */

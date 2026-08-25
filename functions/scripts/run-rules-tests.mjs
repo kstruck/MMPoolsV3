@@ -35,8 +35,11 @@ const repoRoot = path.resolve(here, '..', '..');
 process.chdir(repoRoot);
 
 // Bump this when a rules test is ADDED. Lower it only with a written reason.
-// 10 as of PLAN-COST-CONTROLS 0.5.1 (aiRequests.rules.test.mjs).
-const MIN_FILES = 10;
+// 13 as of PLAN-MEMBER-REMOVAL-HARDENING (memberRemoval.rules.test.mjs), on top
+// of the 12 from PLAN-AUDIT-AUTH-HARDENING Phase B (poolPrivateAccess.rules.test.mjs).
+// It had drifted to one BELOW the file count before Phase B — the empty-pass guard
+// only does its job when it tracks the real number.
+const MIN_FILES = 13;
 // Every test file initialises rules-unit-testing with this project id.
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 const host = process.env.FIRESTORE_EMULATOR_HOST;

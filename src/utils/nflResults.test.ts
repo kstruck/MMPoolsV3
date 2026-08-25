@@ -5,6 +5,7 @@ import {
     rankByWeek,
     rankBySeason,
     scoredWeekCount,
+    seasonCompare,
     unwinnableGameIds,
     resultsFootnote,
     type ResultsRow,
@@ -372,5 +373,52 @@ describe('scoredWeekCount', () => {
 
     it('counts nothing for a member the scorer has never published', () => {
         expect(scoredWeekCount(row({ id: 'a' }), [1, 2, 3], true)).toBe(0);
+    });
+});
+
+describe('seasonCompare — one season ordering for the table, the bento card and the glance strip', () => {
+    const by = (type: string, rows: ResultsRow[]) =>
+        [...rows].sort((a, b) => seasonCompare(type, a, b)).map(r => r.id);
+
+    it("Pick'em ranks by season total and calls equal totals a genuine tie", () => {
+        expect(by('NFL_PICKEM', [row({ id: 'a', totalScore: 3 }), row({ id: 'b', totalScore: 9 })])).toEqual(['b', 'a']);
+        expect(seasonCompare('NFL_PICKEM', row({ id: 'a', totalScore: 9 }), row({ id: 'b', totalScore: 9 }))).toBe(0);
+    });
+
+    it('Margin runs the full 4-level cascade, not just the total', () => {
+        // Equal totals: the lower negative burden wins — the level the glance
+        // strip's first draft dropped (codex r2). Burden is the SUM OF |negative
+        // weeks| (functions/src/nflPools.ts), so it is always >= 0.
+        const a = row({ id: 'a', seasonTotal: 10, negativeBurden: 3 });
+        const b = row({ id: 'b', seasonTotal: 10, negativeBurden: 9 });
+        expect(seasonCompare('NFL_MARGIN', a, b)).toBeLessThan(0);
+        // Then most positive weeks, then best week.
+        const c = row({ id: 'c', seasonTotal: 10, negativeBurden: 3, positiveWeeks: 4 });
+        const d = row({ id: 'd', seasonTotal: 10, negativeBurden: 3, positiveWeeks: 2 });
+        expect(seasonCompare('NFL_MARGIN', c, d)).toBeLessThan(0);
+        const e = row({ id: 'e', seasonTotal: 10, negativeBurden: 3, positiveWeeks: 4, bestWeek: 21 });
+        const f = row({ id: 'f', seasonTotal: 10, negativeBurden: 3, positiveWeeks: 4, bestWeek: 14 });
+        expect(seasonCompare('NFL_MARGIN', e, f)).toBeLessThan(0);
+    });
+
+    it('Survivor: alive first, then strikes, then rebuys; eliminated rank by who lasted', () => {
+        const alive = row({ id: 'alive', status: 'ALIVE', strikesUsed: 2 });
+        const dead = row({ id: 'dead', status: 'ELIMINATED', eliminatedWeek: 9 });
+        expect(seasonCompare('NFL_SURVIVOR', alive, dead)).toBeLessThan(0);
+        const clean = row({ id: 'clean', status: 'ALIVE', strikesUsed: 0, rebuysUsed: 1 });
+        const cleaner = row({ id: 'cleaner', status: 'ALIVE', strikesUsed: 0, rebuysUsed: 0 });
+        expect(seasonCompare('NFL_SURVIVOR', cleaner, clean)).toBeLessThan(0);
+        const early = row({ id: 'early', status: 'ELIMINATED', eliminatedWeek: 2 });
+        const late = row({ id: 'late', status: 'ELIMINATED', eliminatedWeek: 8 });
+        expect(seasonCompare('NFL_SURVIVOR', late, early)).toBeLessThan(0);
+    });
+
+    it('has no alphabetical level — names are the CALLER\'s display fallback', () => {
+        // A name-ordering inside the comparator would turn every genuine tie
+        // into a fake ranking, and the glance strip reads 0 as "shared lead".
+        const a = row({ id: 'aaa', totalScore: 5 });
+        const z = row({ id: 'zzz', totalScore: 5 });
+        expect(seasonCompare('NFL_PICKEM', a, z)).toBe(0);
+        expect(seasonCompare('NFL_PICKEM', z, a)).toBe(0);
     });
 });

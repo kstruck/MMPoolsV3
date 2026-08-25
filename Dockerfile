@@ -30,12 +30,35 @@ ARG VITE_FIREBASE_STORAGE_BUCKET
 ARG VITE_FIREBASE_MESSAGING_SENDER_ID
 ARG VITE_FIREBASE_APP_ID
 
+# Sentry (client error tracking).
+#
+# WITHOUT THESE, src/sentry.ts IS DEAD CODE IN EVERY PRODUCTION IMAGE. Vite
+# inlines `import.meta.env.VITE_*` at BUILD time from the build environment, and
+# a variable set in Coolify but never declared as a build ARG never reaches
+# `npx vite build` below — so `loadSentry()` sees an empty DSN, returns null, and
+# initSentry()/captureSentryException() no-op forever. The error-tracking audit
+# scored this 2/6 for exactly that reason.
+#
+# BOTH are declared on purpose. src/sentry.ts documents
+# VITE_SENTRY_REPLAY_SAMPLE_RATE as "a one-flag flip once masking is verified —
+# no code change needed"; with the DSN wired and the rate not, replay would be
+# pinned at the prod default of 0 with no way to turn it on, which is the same
+# dead-config failure one layer down.
+#
+# Both are OPTIONAL: unset means empty, and an empty DSN ships the app with
+# client error tracking off rather than failing the build. Neither is a secret —
+# a Sentry DSN is a public ingest endpoint and is meant to sit in the bundle.
+ARG VITE_SENTRY_DSN
+ARG VITE_SENTRY_REPLAY_SAMPLE_RATE
+
 ENV VITE_FIREBASE_API_KEY=$VITE_FIREBASE_API_KEY
 ENV VITE_FIREBASE_AUTH_DOMAIN=$VITE_FIREBASE_AUTH_DOMAIN
 ENV VITE_FIREBASE_PROJECT_ID=$VITE_FIREBASE_PROJECT_ID
 ENV VITE_FIREBASE_STORAGE_BUCKET=$VITE_FIREBASE_STORAGE_BUCKET
 ENV VITE_FIREBASE_MESSAGING_SENDER_ID=$VITE_FIREBASE_MESSAGING_SENDER_ID
 ENV VITE_FIREBASE_APP_ID=$VITE_FIREBASE_APP_ID
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ENV VITE_SENTRY_REPLAY_SAMPLE_RATE=$VITE_SENTRY_REPLAY_SAMPLE_RATE
 
 # Build in THREE steps rather than one `npm run build:static`, so a failure
 # names itself.

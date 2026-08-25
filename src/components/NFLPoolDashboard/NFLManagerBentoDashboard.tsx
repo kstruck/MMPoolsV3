@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import type { User as UserType, Pool, NFLGame } from '../../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { User as UserType, Pool, NFLGame, BanterMessage } from '../../types';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { useToast } from '../ui/Toast';
@@ -11,7 +11,7 @@ import {
   CheckCircle,
   AlertCircle,
   PartyPopper,
-  Megaphone
+  Sparkles
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -28,6 +28,8 @@ import { gamesForPoolWeek, weekDeadline, poolSeasonType } from '../../utils/nflP
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
 import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
+import { BanterFeed } from './BanterFeed';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -66,17 +68,50 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   const toast = useToast();
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
-  // Starts EMPTY. It used to be seeded with invented commissioner analysis: a
-  // claim that the current leader had a history of collapsing late in the
-  // season, where the top-player fallback on an empty pool was a mock name
-  // lifted from DevDashboardPreview — so a one-player pool that had never
-  // played a week was shown a scouting report on a rival. Nothing posted here
-  // is persisted (HANDOFF item 8), so an empty feed is the honest start.
+  const [banterBusy, setBanterBusy] = useState<null | 'post' | 'ai'>(null);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
+  const pinnedMessageId = (castPool.pinnedMessageId as string | undefined) ?? '';
+  const [feedError, setFeedError] = useState(false);
+  const aiUnlocked = castPool.billing?.featuresUnlocked?.aiCommissioner === true;
+  // The feed is PERSISTED now (T9). It used to be `useState<string[]>` seeded
+  // with invented commissioner analysis — a claim that the current leader had a
+  // history of collapsing late in the season, where the top-player fallback on
+  // an empty pool was a mock name lifted from DevDashboardPreview, so a
+  // one-player pool that had never played a week was shown a scouting report on
+  // a rival. That is gone twice over: the seed, and the whole local-only store.
+  //
+  // Posts live in `pools/{id}/messages` and every member reads the same feed on
+  // the Overview tab, which is what Kevin asked for ("where are these messages
+  // shown to members?").
   //
   // tests/admin-surface-invariants.test.ts asserts the removed strings are
   // absent from this FILE, comments included. Paraphrase them; never quote them
   // back in, or the guard fails on the explanation of its own defect.
-  const [banterFeed, setBanterFeed] = useState<string[]>([]);
+  const [banterFeed, setBanterFeed] = useState<BanterMessage[]>([]);
+
+  useEffect(() => {
+    if (!pool?.id) return;
+    return dbService.subscribeToPoolFeed(
+      pool.id,
+      (messages) => { setFeedError(false); setBanterFeed(messages); },
+      () => setFeedError(true),
+    );
+  }, [pool?.id]);
+
+  /**
+   * Generation is ASYNCHRONOUS (codex r5 [P2]). "Asked the AI" is an optimistic
+   * toast; if the provider fails, the model returns nothing, or authority was
+   * revoked in between, the request is marked ERROR and no post ever arrives.
+   * Without this the commissioner waits for something that is not coming.
+   */
+  const [lastBanterRequest, setLastBanterRequest] = useState<{ status: string; error?: string; errorDetail?: string } | null>(null);
+  useEffect(() => {
+    if (!pool?.id || !_user?.id) return;
+    return dbService.subscribeToMyBanterRequests(pool.id, _user.id, (reqs) => {
+      setLastBanterRequest(reqs[0] ?? null);
+    });
+  }, [pool?.id, _user?.id]);
 
   const [isNudging, setIsNudging] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -279,19 +314,89 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     }
   };
 
-  const handleSendBanter = (e: React.FormEvent) => {
+  /** Post the commissioner's OWN words, verbatim, under their name. No AI. */
+  const handlePostBanter = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!banterText.trim()) return;
+    const text = banterText.trim();
+    if (!text || banterBusy) return;
+    if (!_user?.id) { toast.error('Sign in to post to your pool.'); return; }
+    setBanterBusy('post');
+    try {
+      await dbService.sendBanterMessage(pool.id, {
+        authorUid: _user.id,
+        authorName: _user.name || 'Commissioner',
+        text,
+        kind: 'COMMISSIONER',
+        timestamp: Date.now(),
+      });
+      setBanterText('');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setBanterBusy(null);
+    }
+  };
 
-    let Prefix = "COMMISSIONER [Savage Mode]: ";
-    if (aiMood === 'professional') Prefix = "COMMISSIONER [Professional]: ";
-    if (aiMood === 'analyst') Prefix = "COMMISSIONER [Data Analyst]: ";
+  /**
+   * Ask the AI to write the post. This goes through the REAL pipeline —
+   * `ai_requests` → `onAIRequest` → Gemini → the same feed — not a local
+   * string. The result arrives through the subscription above, so there is
+   * nothing to await here beyond the request landing.
+   */
+  const handleAskAI = async () => {
+    const prompt = banterText.trim();
+    if (!prompt || banterBusy) return;
+    if (!_user?.id) { toast.error('Sign in to post to your pool.'); return; }
+    setBanterBusy('ai');
+    try {
+      await dbService.requestAIBanter(pool.id, _user.id, prompt, aiMood);
+      setBanterText('');
+      toast.success('Asked the AI Commissioner — the post appears in the feed in a few seconds.');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setBanterBusy(null);
+    }
+  };
 
-    setBanterFeed(prev => [
-      `${Prefix}${banterText}`,
-      ...prev
-    ]);
-    setBanterText('');
+  /**
+   * Pin / unpin, from the same card the commissioner posts and deletes from.
+   *
+   * ⚠️ WRITTEN THROUGH `updatePoolSettings`, NOT a direct `updateDoc`. The pool
+   * document's client update rule carries `poolIsEditable()`, which allows a
+   * manager write only while the pool is DRAFT or OPEN — so a direct write would
+   * fail exactly when pinning is wanted, in the middle of a locked season. The
+   * callable applies `shared/editability.ts` instead, where `announcement` is
+   * editable in every phase.
+   *
+   * `messageId` is '' to unpin. One field means one pinned post: pinning a
+   * second necessarily unpins the first, with nothing to enforce.
+   */
+  const handleTogglePin = async (messageId: string) => {
+    // While unpinning, the row being acted on is the CURRENTLY pinned one — its
+    // id, not the empty string, is what has to show a busy state.
+    setPinningId(messageId || pinnedMessageId || null);
+    try {
+      await dbService.updatePoolSettings(pool.id, { pinnedMessageId: messageId });
+      toast.success(messageId
+        ? 'Pinned to the top of your pool home page.'
+        : 'Unpinned. Nothing sits at the top of the pool home page now.');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setPinningId(null);
+    }
+  };
+
+  const handleDeleteBanter = async (messageId: string) => {
+    setDeletingMessageId(messageId);
+    try {
+      await dbService.deletePoolMessage(pool.id, messageId);
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setDeletingMessageId(null);
+    }
   };
 
   // Submission Health PieChart Data (Recharts)
@@ -577,27 +682,41 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
         className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
       >
         <div>
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <div>
-              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">AI Commissioner Chat</h3>
-              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Generate custom trash talk banter</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Feed &amp; AI Commissioner</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Everyone in your pool sees this</p>
             </div>
             <Volume2 size={18} className="text-gold-600 dark:text-gold-400" />
           </div>
 
-          {/* AI Commissioner Mood configurations */}
-          <div className="grid grid-cols-3 gap-2.5 mb-5">
+          {/* T9 - the card explains itself. It used to be three unlabelled mood
+              buttons and one box, under a footer that admitted the whole thing
+              was a local draft nothing kept: a commissioner had no way to know
+              what any of it did, and in fact it did nothing. */}
+          <p className="mb-4 font-body text-xs text-muted leading-relaxed">
+            Write a note to your pool, or describe what you want and let the AI Commissioner write it.
+            Posts appear on every member&rsquo;s pool page. You can delete any post, including the AI&rsquo;s.
+          </p>
+
+          {/* Mood - only affects what the AI writes, so say that. */}
+          <p className="mb-2 font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint">
+            AI tone
+          </p>
+          <div className="grid grid-cols-3 gap-2.5 mb-4">
             {[
-              { id: 'savage', label: 'Savage', desc: 'Rants & burns', color: 'border-gold-500/50 text-gold-600' },
-              { id: 'professional', label: 'Pro', desc: 'Firm & direct', color: 'border-navy-600/50 text-navy-700' },
-              { id: 'analyst', label: 'Analyst', desc: 'Data & stats', color: 'border-gold-500/50 text-gold-600' }
+              { id: 'savage', label: 'Savage', desc: 'Jokes & roasts' },
+              { id: 'professional', label: 'Pro', desc: 'Firm & direct' },
+              { id: 'analyst', label: 'Analyst', desc: 'Data & stats' }
             ].map(mood => (
               <button
                 key={mood.id}
-                onClick={() => setAiMood(mood.id as any)}
+                type="button"
+                aria-pressed={aiMood === mood.id}
+                onClick={() => setAiMood(mood.id as 'savage' | 'professional' | 'analyst')}
                 className={`text-left p-3.5 rounded-lg border transition-all duration-150 ${
                   aiMood === mood.id
-                    ? `bg-card border-gold-500 shadow-card scale-[1.02]`
+                    ? 'bg-card border-gold-500 shadow-card scale-[1.02]'
                     : 'bg-page border-line opacity-60 hover:opacity-100'
                 }`}
               >
@@ -607,48 +726,106 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             ))}
           </div>
 
-          {/* Live Banter entry feed */}
-          <form onSubmit={handleSendBanter} className="flex gap-2 mb-5">
+          <form onSubmit={handlePostBanter} className="mb-4">
             <input
               type="text"
-              placeholder={`Type a comment or prompt the AI as a ${aiMood} commissioner...`}
+              aria-label="Message or AI prompt"
+              placeholder="Type your own message, or describe what the AI should write..."
               value={banterText}
               onChange={e => setBanterText(e.target.value)}
-              className="flex-1 bg-page border border-line rounded-md px-4 py-3 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
+              maxLength={500}
+              className="w-full bg-page border border-line rounded-md px-4 py-3 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
             />
-            <button
-              type="submit"
-              className="bg-brandred-600 hover:bg-brandred-500 text-white p-3 rounded-md transition-all duration-150 hover:-translate-y-px shadow-red-cta active:scale-95"
-            >
-              <Send size={15} />
-            </button>
+            <div className="flex gap-2 mt-2">
+              {/* Two BUTTONS, not one, because they do different things and the
+                  old single Send button hid that entirely. */}
+              <button
+                type="submit"
+                disabled={!banterText.trim() || banterBusy !== null}
+                className="flex items-center justify-center gap-1.5 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={13} aria-hidden="true" /> {banterBusy === 'post' ? 'Posting...' : 'Post as me'}
+              </button>
+              <button
+                type="button"
+                onClick={handleAskAI}
+                disabled={!banterText.trim() || banterBusy !== null || !aiUnlocked}
+                title={aiUnlocked ? 'The AI writes the post in the selected tone' : 'AI Commissioner is not unlocked on this pool'}
+                className="flex items-center justify-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={13} aria-hidden="true" /> {banterBusy === 'ai' ? 'Asking...' : 'Let AI write it'}
+              </button>
+            </div>
+            {lastBanterRequest?.status === 'ERROR' && (
+              <p className="mt-2 font-body text-[11px] text-brandred-600" role="alert">
+                {lastBanterRequest.error === 'BANTER_NOT_COMMISSIONER'
+                  ? 'Only a commissioner of this pool can have the AI post to the feed.'
+                  : 'The AI could not write that one. Nothing was posted — try again, or post it yourself.'}
+                {/* The provider's own reason, when there is one. A commissioner
+                    cannot act on `API_KEY_HTTP_REFERRER_BLOCKED` — but they can
+                    READ it to you, which is the difference between a screenshot
+                    and a production log pull. Rendered only for a real code, so
+                    an ordinary transient failure still reads as one sentence. */}
+                {lastBanterRequest.errorDetail && lastBanterRequest.errorDetail !== 'UNKNOWN' && (
+                  <span className="block mt-0.5 font-mono text-[10px] text-muted">
+                    Reason: {lastBanterRequest.errorDetail}
+                  </span>
+                )}
+              </p>
+            )}
+            {lastBanterRequest?.status === 'GENERATING' && (
+              <p className="mt-2 font-body text-[11px] text-muted">The AI Commissioner is writing…</p>
+            )}
+            {!aiUnlocked && (
+              /* Honest, and specific: T5 makes a TRIAL unlock the add-ons the
+                 wizard selected, so this now means "not selected / not bought",
+                 not "wait until you pay". */
+              <>
+                <p className="mt-2 font-body text-[11px] text-muted">
+                  AI Commissioner is not switched on for this pool - your own posts still work.
+                </p>
+                {/* C2: the commissioner can buy it here, mid-season, and it
+                    switches on by itself when Stripe confirms - no admin step.
+                    Offered only on an ACTIVE pool: a trial or free pool has no
+                    hosting purchase yet, and the server refuses an add-on
+                    checkout for one. */}
+                {castPool.billing?.status === 'active' && (
+                  <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                )}
+              </>
+            )}
           </form>
 
-          {/* Scrolling Feed of Recent Banters */}
-          <div className="space-y-3 max-h-40 overflow-y-auto pr-1">
-            <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Live banter feed</span>
-            {banterFeed.length === 0 && (
-              <div className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-muted leading-relaxed">
-                Nothing posted yet. Anything you post here is local to this browser tab and is not saved.
-              </div>
-            )}
-            {banterFeed.map((item, idx) => (
-              <div key={idx} className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-[color:var(--text)] leading-relaxed font-semibold flex items-start gap-2">
-                <Megaphone size={13} className="text-brandred-600 shrink-0 mt-0.5" aria-hidden="true" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
+          <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-2">Pool feed</span>
+          <BanterFeed
+            messages={banterFeed}
+            error={feedError}
+            canDelete
+            onDelete={handleDeleteBanter}
+            deletingId={deletingMessageId}
+            canPin
+            pinnedId={pinnedMessageId}
+            onTogglePin={handleTogglePin}
+            pinningId={pinningId}
+            emptyText="Nothing posted yet. Anything you post here appears on every member's pool page."
+            maxHeightClass="max-h-56"
+          />
+          <p className="mt-2 font-body text-[11px] text-muted">
+            Pin one post to put it at the top of the pool home page, right under the score ticker. Pinning another moves it; the pin button unpins.
+          </p>
         </div>
 
         <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
-          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Banter engine status</span>
-          {/* This used to claim an active AI moderation capability. There is no AI
-              and no moderation here yet — nothing is sent anywhere (HANDOFF item
-              8). PLAN-BANTER-PANEL makes it real; until then the label says
-              what it actually does. */}
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Pool feed</span>
+          {/* This used to admit the card kept nothing — the honest label of an
+              unbuilt feature: nothing was persisted and no member ever saw it
+              (HANDOFF item 8). T9 built it, so the label states what is true
+              now. Paraphrased on purpose: tests/ai-commissioner-feed.test.ts
+              asserts the old string is absent from this FILE, comments
+              included, so quoting it back would fail the guard on the
+              explanation of its own fix. */}
           <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">
-            Draft only — not saved
+            {banterFeed.length === 0 ? 'Visible to all members' : `${banterFeed.length} post${banterFeed.length === 1 ? '' : 's'} - visible to all members`}
           </span>
         </div>
       </div>

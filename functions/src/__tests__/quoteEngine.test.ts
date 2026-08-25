@@ -15,6 +15,7 @@ import {
   applyCouponDiscount,
   discountLabel,
   computeQuote,
+  computeAddonUpgradeQuote,
 } from '../lib/quoteEngine';
 import { BillingConfigSchema, type BillingConfig } from '../shared/schemas/billingConfig';
 
@@ -114,7 +115,26 @@ describe('computeAddonLines — SMS is priced (the pre-overhaul bug)', () => {
     expect(byKey.aiCommissioner).toBe(19);
     expect(byKey.smsNotifications).toBe(5); // <-- SMS included
     expect(byKey.whatIfSimulator).toBe(9);
-    expect(byKey.customBranding).toBe(29);
+    // customBranding is NOT here: it is an INCLUDED add-on (T4/D1) — see below.
+    expect(byKey.customBranding).toBeUndefined();
+  });
+
+  it('NEVER prices an INCLUDED add-on, whatever the config says (T4/D1)', () => {
+    // codex r1 [P1] on T4: removing the toggles from the UI is not enough. This
+    // is a single-page app served from a CDN, so a browser on a stale bundle
+    // keeps sending `customBranding: true`. Priced here, that browser is
+    // CHARGED $29 for a feature nothing gates. The config's `isPremium: false`
+    // save would also fix it, but that is a human edit to a document and a
+    // money guarantee must not be one config change away from being wrong.
+    expect(CONFIG.features.customBranding.isPremium).toBe(true);
+    expect(CONFIG.features.customBranding.addonPrice).toBe(29);
+    const lines = computeAddonLines(CONFIG, { ...NO_ADDONS, customBranding: true });
+    expect(lines).toHaveLength(0);
+  });
+
+  it('the included add-on does not disturb the others', () => {
+    const lines = computeAddonLines(CONFIG, { ...NO_ADDONS, aiCommissioner: true, customBranding: true });
+    expect(lines.map((l) => l.key)).toEqual(['aiCommissioner']);
   });
 
   it('adds no line for an unselected add-on', () => {
@@ -226,5 +246,70 @@ describe('computeQuote — itemized, coupon-inclusive, free-tier eligibility', (
     expect(() =>
       computeQuote({ config: CONFIG, poolType: 'BOGUS', estimatedPlayers: 40, addons: NO_ADDONS })
     ).toThrow(/No pricing tier mapping/);
+  });
+});
+
+describe('computeAddonUpgradeQuote — buying an add-on mid-season (C2)', () => {
+  const owned: string[] = [];
+  const base = {
+    config: CONFIG,
+    poolType: 'NFL_PICKEM',
+    estimatedPlayers: 25,
+    currentTier: 'standard_tier' as const,
+    owned,
+  };
+
+  it('charges NO base price - the pool hosting is already paid for', () => {
+    const q = computeAddonUpgradeQuote({ ...base, addons: { ...NO_ADDONS, aiCommissioner: true } });
+    expect(q.basePrice).toBe(0);
+    expect(q.total).toBe(19);
+    expect(q.subtotal).toBe(19);
+  });
+
+  it('drops an add-on the pool ALREADY owns rather than selling it twice', () => {
+    const q = computeAddonUpgradeQuote({
+      ...base,
+      owned: ['aiCommissioner'],
+      addons: { ...NO_ADDONS, aiCommissioner: true, whatIfSimulator: true },
+    });
+    expect(q.addonLines.map((l) => l.key)).toEqual(['whatIfSimulator']);
+    expect(q.total).toBe(9);
+  });
+
+  it('quotes $0 with no lines when the pool owns everything asked for', () => {
+    // The caller refuses this rather than opening a $0 Stripe session.
+    const q = computeAddonUpgradeQuote({
+      ...base,
+      owned: ['aiCommissioner'],
+      addons: { ...NO_ADDONS, aiCommissioner: true },
+    });
+    expect(q.addonLines).toEqual([]);
+    expect(q.total).toBe(0);
+  });
+
+  it('never prices an INCLUDED add-on, same choke point as every other quote', () => {
+    const q = computeAddonUpgradeQuote({ ...base, addons: { ...NO_ADDONS, customBranding: true } });
+    expect(q.addonLines).toEqual([]);
+    expect(q.total).toBe(0);
+  });
+
+  it('carries the existing tier through — an add-on does not re-tier the pool', () => {
+    const q = computeAddonUpgradeQuote({
+      ...base,
+      currentTier: 'free_tier',
+      addons: { ...NO_ADDONS, aiCommissioner: true },
+    });
+    expect(q.tier).toBe('free_tier');
+  });
+
+  it('is never a free-tier activation', () => {
+    const q = computeAddonUpgradeQuote({ ...base, estimatedPlayers: 5, addons: { ...NO_ADDONS } });
+    expect(q.freeTierEligible).toBe(false);
+  });
+
+  it('applies no coupon — there is no coupon input on this path', () => {
+    const q = computeAddonUpgradeQuote({ ...base, addons: { ...NO_ADDONS, aiCommissioner: true } });
+    expect(q.discount).toBe(0);
+    expect(q.couponState).toBeUndefined();
   });
 });

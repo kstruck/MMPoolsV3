@@ -17,6 +17,7 @@ import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords
 import { confidenceValueOwners, isConfidenceValueTaken } from '../../utils/confidenceWeights';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
+import { pickemOutcome, pickOutcomeCardClass, pickOutcomeLabel } from './pickSheet/pickOutcome';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
@@ -46,6 +47,17 @@ interface PickemPickEntryProps {
    * document on their own copies of this prop.)
    */
   seasonGames?: NFLGame[];
+  /**
+   * WHICH of the viewer's entries this sheet is for (PLAN-MULTI-ENTRY T5/D7).
+   * Absent ⇒ 1, which is what every single-entry pool sends and what the
+   * server defaults to — so nothing changes for a pool with one entry each.
+   */
+  entryIndex?: number;
+  /**
+   * The name to give a NEW entry on its first submit. Ignored by the server for
+   * an entry that already exists, so it is only ever the draft's name.
+   */
+  entryName?: string;
   entry: any; // NFLPickemEntry or null
   isWeekLocked: boolean;
 }
@@ -55,6 +67,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   week,
   games,
   seasonGames,
+  entryIndex,
+  entryName,
   entry,
   isWeekLocked
 }) => {
@@ -83,7 +97,16 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // change the sheet ignored it, so an approved extension never reopened
   // anything for the member it was granted for.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, week);
-  const draftKey = `pickem:${pool.id}:${week}`;
+  // 🛑 THE ENTRY IS PART OF THE DRAFT'S IDENTITY (PLAN-MULTI-ENTRY T5,
+  // codex r1 P1). A local draft is restored into the sheet and then SUBMITTED
+  // under whatever `entryIndex` is active — so a key of pool+week alone would
+  // restore unsaved picks made on entry #1 into entry #2's empty sheet and save
+  // them there. One entry's picks written onto another is the multi-entry
+  // failure this whole plan exists to prevent, arriving through localStorage.
+  //
+  // Entry #1 keeps the ORIGINAL key, so a draft saved before this shipped is
+  // still restored for the entry it was made on.
+  const draftKey = `pickem:${pool.id}:${week}${entryIndex && entryIndex > 1 ? `:e${entryIndex}` : ''}`;
 
   // Re-evaluate lock state every 30s so the UI flips to locked in place at T-0
   // instead of accepting taps the server will reject
@@ -112,7 +135,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     // (gated on !validationError). Margin/Survivor clear theirs in the load
     // effect; Pick'em never did (qodo, on this PR).
     setValidationError(null);
-  }, [week]);
+    // ⚠️ AND ON THE ENTRY (PLAN-MULTI-ENTRY T5). The receipt says "saved just
+    // now" about ONE entry's sheet, so carrying it across an entry switch would
+    // tell a member their brand-new entry #2 is already saved. `entryIndex` is
+    // a number, not the snapshot, so this still does not fire on the
+    // post-submit entry refresh the comment above is about.
+  }, [week, entryIndex]);
 
   useEffect(() => {
     dirtyRef.current = false;
@@ -416,6 +444,17 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       tiebreakerPrediction: showTiebreaker ? tiebreakerPrediction : undefined,
       // The target the sheet DISPLAYED — the server compares, never stores it.
       displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined,
+      // Sent only for an extra entry: `undefined` keeps the payload — and the
+      // server's own default — byte-for-byte what a single-entry pool sends.
+      ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}),
+      // ⚠️ A BLANK NAME IS NOT A NAME, AND `''` AND `'   '` MUST MEAN THE SAME
+      // THING (codex r3 on the T5 PR). A whitespace-only string is truthy, so
+      // it used to reach the server and come back ENTRY_NAME_EMPTY, while an
+      // empty one was dropped and silently took the generated default — two
+      // answers to one act. Both now take the default: the switcher PRE-FILLS
+      // a name, so clearing it reads as "whatever you suggested", not as a
+      // request to be refused.
+      ...(entryIndex && entryIndex > 1 && entryName?.trim() ? { entryName: entryName.trim() } : {}),
       requestId: crypto.randomUUID()
     };
 
@@ -610,11 +649,27 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             // that covered but lost outright rendered RED while the server
             // recorded a WIN. Unreachable until the wizard gained an ATS
             // control; exposing the mode is what made it live.
-            const result = gradePick(game, savedForGame ?? myPick, castPool.settings?.pickMode);
-            const isCorrect = result === 'W';
-            // A PUSH is neither a win nor a loss — colouring it red would call
-            // a refunded pick wrong.
-            const isGraded = result === 'W' || result === 'L';
+            // ⚠️ `savedForGame` ONLY — never `savedForGame ?? myPick`, which is
+            // what this line used to read (codex, round 2 of this change).
+            //
+            // `picks` is seeded from a LOCAL DRAFT as well as from the entry, so
+            // on a game that went FINAL with an unsubmitted draft still in the
+            // browser, `myPick` is populated while the server holds nothing. The
+            // old expression graded that draft and this change would then have
+            // replaced the honest "Unsaved" marker with a green tick — telling a
+            // member they won a game they never entered a pick for.
+            //
+            // Grading the server's copy is also what Survivor and Margin already
+            // do (`savedPick`), so all three sheets now answer the same question:
+            // how did the pick the pool actually holds turn out?
+            const result = gradePick(game, savedForGame, castPool.settings?.pickMode);
+            // A PUSH or a VOID is neither a win nor a loss — `pickemOutcome`
+            // maps both to `null`, so neither the card nor the badge claims the
+            // refunded pick was wrong. It is also handed the GAME: that guard
+            // is now belt-and-braces — `gradePick` carries the scoreless-FINAL
+            // gate itself, so the grid tab agrees with this sheet — and the
+            // reasoning for keeping it is in `pickOutcome.ts`.
+            const outcome = pickemOutcome(game, result);
 
             const homeAbbrev = game.homeTeam.abbreviation;
             const awayAbbrev = game.awayTeam.abbreviation;
@@ -623,14 +678,18 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${
-                  isGraded
-                    ? isCorrect
-                      ? 'border-[#BEE7D0] bg-[#0F7B4A]/5'
-                      : 'border-brandred-600/30 bg-brandred-600/5'
-                    : 'border-line'
-                }`}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
               >
+                {/* The card colour is (d) in Kevin's request, and on its own it
+                    is colour-only signalling. This line is the text half: one
+                    sentence naming the matchup and the verdict, read out where
+                    the highlight is merely seen. It renders only on a graded
+                    game, so a pending slate announces nothing extra. */}
+                {outcome && (
+                  <span className="sr-only">
+                    {`${game.awayTeam.abbreviation} at ${game.homeTeam.abbreviation}: ${pickOutcomeLabel(outcome)}`}
+                  </span>
+                )}
                 {/* Day, kickoff, TV listing, the line, and the lock badge — the
                     CBS row. The old hand-rolled lock pill and the ATS-only
                     "Spread: -6.5" chip are both GONE: GameMeta renders the lock
@@ -649,6 +708,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     consensusPct={split?.awayPct}
                     selected={awayPicked}
                     saved={awaySaved}
+                    outcome={savedForGame === awayAbbrev ? outcome : null}
                     disabled={locked}
                     title={pickHighlightLabel(awayPicked, awaySaved) || undefined}
                     onSelect={() => handlePickSelect(game.id, awayAbbrev)}
@@ -687,6 +747,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     consensusPct={split?.homePct}
                     selected={homePicked}
                     saved={homeSaved}
+                    outcome={savedForGame === homeAbbrev ? outcome : null}
                     disabled={locked}
                     title={pickHighlightLabel(homePicked, homeSaved) || undefined}
                     onSelect={() => handlePickSelect(game.id, homeAbbrev)}

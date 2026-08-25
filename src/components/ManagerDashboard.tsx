@@ -737,13 +737,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     <div className="bg-surface rounded-2xl p-3.5 border border-line mb-4 relative z-10">
                                                         <div className="flex items-center justify-between mb-2">
                                                             <div className="flex items-center gap-2">
-                                                                {awayLogo && <img src={awayLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                                {awayLogo && <img src={awayLogo} alt="" className="w-6 h-6 object-contain opacity-80" />}
                                                                 <span className="text-xs font-display font-bold text-[color:var(--text)] uppercase">{awayTeam}</span>
                                                             </div>
                                                             <span className="text-[9px] text-faint font-display font-bold uppercase">VS</span>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-xs font-display font-bold text-[color:var(--text)] uppercase">{homeTeam}</span>
-                                                                {homeLogo && <img src={homeLogo} className="w-6 h-6 object-contain opacity-80" />}
+                                                                {homeLogo && <img src={homeLogo} alt="" className="w-6 h-6 object-contain opacity-80" />}
                                                             </div>
                                                         </div>
                                                         <div className="text-center mt-2 pt-2 border-t border-line">

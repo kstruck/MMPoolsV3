@@ -24,15 +24,120 @@ import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 import { withCorrelationId } from "../utils/correlationId";
 
+/**
+ * Report returned by `migratePoolPasswords`
+ * (functions/src/migrations/migratePoolPasswords.ts).
+ *
+ * Every field but `dryRun` is OPTIONAL on purpose: the kill-switch refusal is a
+ * DIFFERENT, much shorter object — `{ skipped, dryRun, poolsScanned,
+ * poolsChanged }` with no `nextCursor` and no `plannedWrites` — and typing the
+ * full report as required would make the UI read `report.nextCursor` off a
+ * shape that does not have it. `skipped` present IS the refusal.
+ */
+export interface MigratePoolPasswordsReport {
+    /** Present ONLY when `system/config.poolPasswordMigration.enabled !== true`. */
+    skipped?: string;
+    dryRun: boolean;
+    poolsScanned: number;
+    poolsChanged: number;
+    hashedPlaintext?: number;
+    movedHash?: number;
+    scrubbedOnly?: number;
+    dottedFieldsRemoved?: number;
+    /** Per-pool verb list — the dry run's evidence. Never carries password material. */
+    plannedWrites?: Array<{ poolId: string; action: string }>;
+    failures?: Array<{ poolId: string; error: string }>;
+    /** Non-null = more pools remain; call again with `startAfter` set to it. */
+    nextCursor?: string | null;
+}
+
 // Mirrors functions/src/schemas/coCommissioners.ts (discriminated on `op`; `revision` only on add).
 export type SetPoolCoCommissionerInput =
     | { poolId: string; uid: string; op: 'add'; revision: number }
     | { poolId: string; uid: string; op: 'remove' };
 import { stripEmptyCallableFields } from "./callableParams";
+import { splitPoolPassword } from "./poolPasswordPayload";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
+
+/**
+ * Set a just-created pool's password — or make sure no unprotected pool is left
+ * behind (codex r7/r8, P1).
+ *
+ * ## The problem
+ *
+ * The password no longer rides the create payload onto the pool document, so
+ * creation is TWO calls: `createPool`, then `setPoolPassword`. If the second
+ * fails, the pool EXISTS, is reachable by anyone with its link, and the
+ * commissioner has been told creation failed — a fail-OPEN outcome created by
+ * the very change meant to close one. A retry and a clear message make that
+ * VISIBLE; they do not make it SAFE, which is what codex said when it re-raised
+ * the finding after the first mitigation.
+ *
+ * ## What this does, in order
+ *
+ * 1. Try, then retry once. The realistic failure is a transient callable error.
+ * 2. **Re-read the marker before concluding anything.** A lost RESPONSE looks
+ *    exactly like a lost WRITE from here, and deleting a pool whose password
+ *    actually landed would be a worse bug than the one being fixed. The
+ *    server-set `hasPoolPassword` is the authority, not our error object.
+ * 3. Only if the marker really is absent, DELETE the pool through the product's
+ *    own delete path, and say so. Nothing else has touched it — it is seconds
+ *    old, has no members, and the alternative is leaving a pool the commissioner
+ *    believes does not exist, unprotected, on a public link.
+ * 4. If even the delete fails, throw the loud message naming the consequence.
+ *
+ * The genuinely atomic fix is to write the private secret inside the create
+ * callable's own transaction (`functions/src/poolOps.ts`, `nflPools.ts`). Those
+ * files are outside this PR's scope in a parallel-stream session; this
+ * compensation closes the exposure without reaching into them.
+ */
+async function applyPasswordAfterCreate(poolId: string, password?: string): Promise<void> {
+    if (!password) return;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            await dbService.setPoolPassword(poolId, password);
+            return;
+        } catch (err) {
+            logger.warn(`[dbService] setPoolPassword attempt ${attempt} failed for ${poolId}`, err);
+        }
+    }
+
+    // Step 2 — did it actually land? A dropped response is indistinguishable
+    // from a dropped write on this side, and only the marker knows.
+    try {
+        const snap = await getDoc(doc(db, 'pools', poolId));
+        if (snap.exists() && (snap.data() as { hasPoolPassword?: boolean }).hasPoolPassword === true) {
+            logger.warn(`[dbService] setPoolPassword reported failure but the marker is set for ${poolId}`);
+            return;
+        }
+    } catch (err) {
+        logger.warn(`[dbService] could not confirm the password marker for ${poolId}`, err);
+    }
+
+    // Step 3 — compensate. An unprotected pool must not outlive a create the
+    // commissioner is about to be told failed.
+    let deleted = false;
+    try {
+        await dbService.deletePool(poolId);
+        deleted = true;
+    } catch (err) {
+        await errorHandler.handleError(err, {
+            severity: ErrorSeverity.HIGH,
+            context: { operation: 'applyPasswordAfterCreate.compensate', poolId },
+        });
+    }
+    throw new Error(
+        deleted
+            ? 'Your pool could not be created: the password could not be saved, so the '
+              + 'half-created pool was removed. Please try again.'
+            : 'Your pool was created, but the password could not be saved, so the pool is '
+              + 'currently OPEN to anyone with the link. Open the pool’s settings and set '
+              + 'the password there, or delete the pool.',
+    );
+}
 
 /**
  * What `getPoolPicks` hands a commissioner (PLAN-COMMISSIONER-BLIND-PICKS T2).
@@ -236,28 +341,127 @@ export const dbService = {
     },
 
     createPool: async (pool: Record<string, unknown>): Promise<string> => {
+        // PLAN-AUDIT-AUTH-HARDENING Phase B. The pool password is pulled OUT of
+        // the create payload here and set afterwards through `setPoolPassword`,
+        // which is the only path that can write `pools/{id}/private/access`.
+        //
+        // The server strips these fields too (schemas/poolCore.ts) — that is the
+        // authoritative half. This client-side strip exists for a second reason
+        // the server cannot help with: the catch block below hands the WHOLE
+        // payload to `errorHandler.handleError` as context, which persists it
+        // through `logClientError`. A create that failed for an unrelated reason
+        // would otherwise write the commissioner's chosen password into
+        // `system_logs` — the same class of leak as the `request.data` dump this
+        // phase deleted from bracketPools.ts (item 21d).
+        const { payload, password } = splitPoolPassword(pool);
         try {
             const createPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createPool');
-            const result = await createPoolFn(pool);
+            const result = await createPoolFn(payload);
             const { poolId } = result.data;
+            await applyPasswordAfterCreate(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
-                context: { operation: 'createPool', pool }
+                context: { operation: 'createPool', pool: payload }
             });
             throw error;
         }
     },
 
     updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, unknown>) => {
+        // Same split as createPool. The wizards send a full-object update in
+        // EDIT mode, so `gridPassword` rides along on every settings save.
+        //
+        // ⚠️ AN EMPTY VALUE IS A NO-OP, NOT A CLEAR. After the migration the
+        // field is gone from the document, so the wizard reloads it as `''` —
+        // and treating that as "clear the password" would silently un-gate a
+        // pool every time its commissioner saved an unrelated setting. Clearing
+        // is an explicit act: `setPoolPassword(poolId, null)`.
+        const { payload, password } = splitPoolPassword(updates as Record<string, unknown>);
         const success = await poolRepository.update(poolId, {
-            ...updates,
+            ...payload,
             updatedAt: Timestamp.now()
         } as Partial<Pool>);
         if (!success) {
             throw new Error(`Failed to update pool ${poolId}`);
         }
+        if (password) await dbService.setPoolPassword(poolId, password);
+    },
+
+    /**
+     * Set (non-empty string) or clear (`null`) a pool's password. Server-side
+     * PBKDF2; the plaintext is never stored anywhere.
+     */
+    setPoolPassword: async (poolId: string, password: string | null): Promise<void> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; hasPassword: boolean }>(functions, 'setPoolPassword');
+        // Correlated: `validated()` strips `_correlationId` BEFORE the strict
+        // schema sees it (lib/correlationId.ts), so a strictObject is no reason
+        // to ship a callable that leaves no trace in the logs.
+        await fn(withCorrelationId({ poolId, password }));
+    },
+
+    /**
+     * Ask the server whether this password unlocks the pool. Replaces the
+     * browser-side `entered === pool.gridPassword` compare (PoolRoute.tsx),
+     * which could be read straight out of the public pool document.
+     *
+     * Returns a REASON, not just a boolean. The gate has three distinct
+     * outcomes — wrong password, too many attempts, and the call did not go
+     * through — and collapsing them into `false` makes the UI say "Incorrect
+     * password" to somebody who is rate-limited or offline. That is the
+     * blames-the-wrong-subsystem failure CLAUDE.md §2c calls out by name.
+     */
+    verifyPoolAccess: async (
+        poolId: string, password: string,
+    ): Promise<{ ok: boolean; reason?: 'wrong' | 'throttled' | 'error' }> => {
+        try {
+            const fn = httpsCallable<Record<string, unknown>, { ok: boolean }>(functions, 'verifyPoolAccess');
+            const result = await fn(withCorrelationId({ poolId, password }));
+            return result.data.ok === true ? { ok: true } : { ok: false, reason: 'wrong' };
+        } catch (error) {
+            // A throttled or failed call is NOT an unlock — the gate fails
+            // CLOSED. Logged at LOW: being rate-limited is an expected outcome
+            // of this endpoint, not an incident.
+            const code = (error as { code?: string } | null)?.code;
+            const throttled = code === 'functions/resource-exhausted';
+            if (!throttled) {
+                await errorHandler.handleError(error, {
+                    severity: ErrorSeverity.LOW,
+                    context: { operation: 'verifyPoolAccess', poolId }
+                });
+            }
+            return { ok: false, reason: throttled ? 'throttled' : 'error' };
+        }
+    },
+
+    /**
+     * SUPER_ADMIN evacuation sweep for legacy pool passwords
+     * (PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md S1). Moves `gridPassword` /
+     * `accessControl.password` / `passwordHash` off the world-readable
+     * `pools/{id}` document into `pools/{id}/private/access`.
+     *
+     * This is a CALLER, nothing more. Both gates live on the server and neither
+     * can be reached from here: `system/config.poolPasswordMigration.enabled`
+     * must be true or the callable returns `skipped`, and the run is dry unless
+     * BOTH that config's `dryRun` is false AND this `dryRun` argument is false.
+     *
+     * `startAfter` is spread in only when present — the Firebase JS SDK encodes
+     * an explicit-`undefined` property as NULL on the wire, the same trap that
+     * failed the first page of the backfillMemberRecords prod dry run
+     * 2026-07-27. The schema's `nullish()` also accepts null (belt); this is the
+     * suspenders.
+     */
+    migratePoolPasswords: async (
+        input: { dryRun: boolean; limit?: number; startAfter?: string | null },
+    ): Promise<MigratePoolPasswordsReport> => {
+        const fn = httpsCallable<Record<string, unknown>, MigratePoolPasswordsReport>(functions, 'migratePoolPasswords');
+        const res = await fn(withCorrelationId({
+            dryRun: input.dryRun,
+            ...(input.limit ? { limit: input.limit } : {}),
+            ...(input.startAfter ? { startAfter: input.startAfter } : {}),
+        }));
+        return res.data;
     },
 
     deletePool: async (poolId: string) => {
@@ -345,6 +549,111 @@ export const dbService = {
             });
             throw error;
         }
+    },
+
+    /**
+     * The banter feed NEWEST-FIRST (PLAN-WIZARD-BUYFLOW-FIXES T9).
+     *
+     * A separate reader from `subscribeToBanterMessages`, which is the bracket
+     * chat transcript: that one is oldest-first and capped at 150 because a
+     * chat log reads top-down. This is a feed — the last thing posted is the
+     * thing to read — and `orderBy desc + limit` keeps a long-running pool from
+     * pulling its whole history to show ten posts.
+     */
+    subscribeToPoolFeed: (poolId: string, callback: (messages: BanterMessage[]) => void, onError?: (e: unknown) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'messages'), orderBy('timestamp', 'desc'), limit(50));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as BanterMessage)));
+        }, (error) => {
+            logger.error('[dbService] subscribeToPoolFeed error:', error);
+            // ⚠️ Report rather than swallow. `onSnapshot` TERMINATES a listener on
+            // error, so a permission-denied (a non-participant, or a rules
+            // regression) means nothing ever arrives — and an empty array is
+            // indistinguishable from "this pool has no banter yet". The caller
+            // needs to be able to say which.
+            if (onError) onError(error); else callback([]);
+        });
+    },
+
+    /**
+     * The ONE pinned post, watched as a single document.
+     *
+     * Not resolved out of `subscribeToPoolFeed`'s array: that query is the last
+     * 50 messages, and a pin set in week 2 of a chatty pool would silently stop
+     * rendering once it fell off the end. A direct doc listener also handles the
+     * two states the band has to distinguish — the post was DELETED (snapshot
+     * stops existing, band disappears) versus the read FAILED — without either
+     * looking like "nothing is pinned".
+     *
+     * Same read rule as the feed (`isPoolParticipant`), so callers gate on
+     * membership before subscribing, exactly as they do for the feed.
+     */
+    subscribeToPinnedMessage: (
+        poolId: string,
+        messageId: string,
+        callback: (message: BanterMessage | null) => void,
+        onError?: (e: unknown) => void,
+    ) => {
+        const ref = doc(db, 'pools', poolId, 'messages', messageId);
+        return onSnapshot(ref, (snap) => {
+            callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as BanterMessage) : null);
+        }, (error) => {
+            logger.error('[dbService] subscribeToPinnedMessage error:', error);
+            if (onError) onError(error); else callback(null);
+        });
+    },
+
+    /**
+     * The requester's own BANTER requests (T9, codex r5 [P2]).
+     *
+     * Generation is ASYNCHRONOUS: the card gets an optimistic "it appears in a
+     * few seconds" toast, and if the provider fails, the model returns nothing,
+     * or authority was revoked between request and publication, `onAIRequest`
+     * marks the request ERROR and NO post ever arrives. Without this the
+     * commissioner would simply be left waiting for something that is not coming.
+     *
+     * Filtered by `userId` only and narrowed client-side, exactly as
+     * `AICommissioner` does — a compound where() would need a composite index.
+     */
+    subscribeToMyBanterRequests: (poolId: string, userId: string, callback: (requests: { id: string; status: string; error?: string; errorDetail?: string; createdAt: number }[]) => void) => {
+        const q = query(collection(db, `pools/${poolId}/ai_requests`), where('userId', '==', userId));
+        return onSnapshot(q, (snap) => {
+            callback(
+                snap.docs
+                    .map(d => ({ id: d.id, ...(d.data() as Record<string, unknown>) }) as { id: string; status: string; error?: string; errorDetail?: string; createdAt: number; category?: string })
+                    .filter(r => r.category === 'BANTER')
+                    .sort((a, b) => b.createdAt - a.createdAt),
+            );
+        }, (error) => {
+            logger.error('[dbService] subscribeToMyBanterRequests error:', error);
+            callback([]);
+        });
+    },
+
+    /** Commissioner moderation (T9). Rules allow delete for owner/manager/co-commissioner only. */
+    deletePoolMessage: async (poolId: string, messageId: string) => {
+        await deleteDoc(doc(db, 'pools', poolId, 'messages', messageId));
+    },
+
+    /**
+     * Ask the AI Commissioner for a banter post (T9).
+     *
+     * Writes an `ai_requests` doc, exactly like the dispute/insight paths — the
+     * SAME collection `onAIRequest` triggers on, so this inherits the
+     * four-condition create rule and the entitlement gate rather than opening a
+     * second route to the paid provider. The generated post arrives in the feed
+     * subscription above; nothing is returned here.
+     */
+    requestAIBanter: async (poolId: string, userId: string, prompt: string, mood: 'savage' | 'professional' | 'analyst') => {
+        await addDoc(collection(db, `pools/${poolId}/ai_requests`), {
+            userId,
+            poolId,
+            question: prompt,
+            category: 'BANTER',
+            mood,
+            status: 'PENDING',
+            createdAt: Date.now(),
+        });
     },
 
     subscribeToBracketEntries: (poolId: string, callback: (entries: BracketEntry[]) => void) => {
@@ -443,8 +752,15 @@ export const dbService = {
     },
 
     updateBracketPool: async (poolId: string, updates: Record<string, unknown>): Promise<void> => {
+        // Same split as updatePool. This wrapper is a RAW client `updateDoc`, and
+        // it is how `accessControl.password` reached the world-readable pool
+        // document in the clear (audit item 13a). `firestore.rules` now denies a
+        // non-empty value here, so leaving the field in would turn every bracket
+        // settings save into a permission-denied.
+        const { payload, password } = splitPoolPassword(updates);
         const poolRef = doc(db, 'pools', poolId);
-        await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
+        await updateDoc(poolRef, { ...payload, updatedAt: Date.now() });
+        if (password) await dbService.setPoolPassword(poolId, password);
     },
 
     // Server-side since Phase 5 (updateEntryPayment callable): the old raw
@@ -1019,6 +1335,22 @@ export const dbService = {
         const fn = httpsCallable<typeof payload, { success: boolean }>(functions, 'adminUpdatePoolBilling');
         await fn(payload);
     },
+    /**
+     * Turn ONE premium feature on or off for ONE pool (SUPER_ADMIN).
+     *
+     * Narrow on purpose: `adminUpdatePoolBilling({action:'override'})` can
+     * already do this, but it merges an arbitrary billing object and its audit
+     * row cannot say what changed. This one names the feature both in the call
+     * and in `admin_audit`.
+     */
+    adminSetPoolFeature: async (poolId: string, feature: string, enabled: boolean): Promise<void> => {
+        const fn = httpsCallable<{ poolId: string; feature: string; enabled: boolean }, { success: boolean }>(functions, 'adminSetPoolFeature');
+        // Correlated: `validated()` logs nothing at all for a callable with no
+        // `_correlationId` — not on entry, not on success, and not when it
+        // refuses at the role gate. A money-adjacent grant is the last thing
+        // that should be invisible in the logs.
+        await fn(withCorrelationId({ poolId, feature, enabled }));
+    },
     adminAdjustUserCredits: async (targetUid: string, referralCredits: number, freePoolsAvailable: number): Promise<void> => {
         const fn = httpsCallable<{ targetUid: string; referralCredits: number; freePoolsAvailable: number }, { success: boolean }>(functions, 'adminAdjustUserCredits');
         await fn({ targetUid, referralCredits, freePoolsAvailable });
@@ -1471,15 +1803,23 @@ export const dbService = {
 
     // --- NFL POOLS ---
     createNFLPool: async (pool: Record<string, unknown>): Promise<string> => {
+        // Split for symmetry with createPool. NFL pools have no password UI
+        // today, so this is not closing a live leak — but both create wrappers
+        // hand the WHOLE payload to `handleError` as context on failure, and
+        // `createNFLPool` rides the same permissive envelope. Splitting in one
+        // wrapper and not the other is how the next password-bearing pool type
+        // would land in `system_logs`.
+        const { payload, password } = splitPoolPassword(pool);
         try {
             const createNFLPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createNFLPool');
-            const result = await createNFLPoolFn(pool);
+            const result = await createNFLPoolFn(payload);
             const { poolId } = result.data;
+            await applyPasswordAfterCreate(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
-                context: { operation: 'createNFLPool', pool }
+                context: { operation: 'createNFLPool', pool: payload }
             });
             throw error;
         }
@@ -1801,7 +2141,7 @@ export const dbService = {
     // `callback([])` — i.e. rendering a populated pool as an empty one.
     //
     // What replaced it: `subscribeToNFLStandings` + `subscribeToPoolMembers` +
-    // `subscribeToMyNFLEntry` for the rows, and `getPoolPicks` below for pick
+    // `subscribeToMyNFLEntries` for the rows, and `getPoolPicks` below for pick
     // content past the reveal boundary. Do not reinstate it to fix a manager
     // surface — that reopens every week of the season to the commissioner.
 
@@ -1896,13 +2236,79 @@ export const dbService = {
     // On error we now keep the last known state rather than overwriting it with
     // a claim we cannot support. A member who genuinely has no entry is still
     // told so, by the success path, which is the only path that knows.
-    subscribeToMyNFLEntry: (poolId: string, uid: string, callback: (entry: any | null) => void) => {
-        const ref = doc(db, 'pools', poolId, 'entries', uid);
-        return onSnapshot(ref, (snap) => {
-            callback(snap.exists() ? { ...snap.data(), id: snap.id } : null);
+    /**
+     * EVERY entry the viewer owns in this pool (PLAN-MULTI-ENTRY T4/D6).
+     *
+     * Replaces `subscribeToMyNFLEntry`, which read `entries/{uid}` — entry #1's
+     * document (D1) — and therefore could never see a second entry.
+     *
+     * ⚠️ NO RULES CHANGE, AND THAT IS NOT LUCK. The entries read rule is already
+     * `request.auth.uid == resource.data.ownerUid` (firestore.rules), so this
+     * query asks Firestore exactly the question the rule already answers. It is
+     * also why a hypothetical entry document with no `ownerUid` is not a gap
+     * here: that document was never readable by its own owner either.
+     *
+     * ⚠️ The error path deliberately does NOT call back. Reporting a read
+     * failure as an empty array would tell a member with a full sheet that they
+     * have not picked; the dashboard distinguishes "not arrived" from "does not
+     * exist" with its own loaded flag, and only a successful snapshot licenses
+     * the second claim.
+     */
+    subscribeToMyNFLEntries: (poolId: string, uid: string, callback: (entries: any[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'entries'), where('ownerUid', '==', uid));
+        // Monotonic token. Bumped by every snapshot AND by unsubscribe, so an
+        // in-flight probe from a pool the viewer has navigated away from can
+        // never deliver — the callback writes `ownEntryState`, and a stale
+        // delivery would hide the CURRENT pool's entries until the next
+        // snapshot happened to arrive. (codex r3 P2 on the T4 PR.)
+        let seq = 0;
+        const unsub = onSnapshot(q, (snap) => {
+            const mine = seq += 1;
+            const rows = snap.docs.map(d => ({ ...d.data(), id: d.id } as Record<string, unknown>));
+
+            // ⚠️ AN UNSTAMPED DOCUMENT IS INVISIBLE TO A `where` CLAUSE, AND
+            // THAT IS THE ONE THING A QUERY CANNOT ANSWER FOR ITSELF.
+            //
+            // `entries/{uid}` is entry #1's id (D1). Every NFL entry written
+            // since the collection's first commit carries `ownerUid`, but the
+            // server still defends against one that does not
+            // (`resolveOwnedEntry`, `gatherPoolInputs`), and the doc-get this
+            // replaced COULD read it — once a pool reaches FINAL/COMPLETED the
+            // participant branch of the entries rule admits it. Dropping it
+            // would blank that member's own picks.
+            //
+            // 🛑 THE TRIGGER IS "ENTRY #1 IS MISSING FROM THE RESULT", NOT "THE
+            // RESULT IS EMPTY" (codex r3 P1). A member whose unstamped entry #1
+            // is joined by a stamped entry #2 gets a NON-EMPTY query that is
+            // still missing their primary — and an empty-only probe would drop
+            // it and promote entry #2 to primary.
+            //
+            // So the common path — a stamped entry #1, with or without extras —
+            // never probes and pays no extra read (PLAN-COST-CONTROLS).
+            if (rows.some(r => r.id === uid)) { callback(rows); return; }
+
+            // Probed once per snapshot rather than subscribed: an unstamped
+            // document is by definition not being written any more, because the
+            // moment anything submits, `ownerUid` is stamped and the live query
+            // above picks it up.
+            //
+            // The probe FAILING is the NORMAL outcome for a member who simply
+            // has no entry (the rule reads `resource.data.ownerUid`, and a
+            // missing document has no `resource`), so it is not logged as an
+            // error and the queried rows are still delivered.
+            getDoc(doc(db, 'pools', poolId, 'entries', uid))
+                .then((legacy) => {
+                    if (mine !== seq) return;
+                    const data = legacy.exists() ? (legacy.data() as Record<string, unknown>) : null;
+                    callback(data && data.ownerUid === undefined
+                        ? [{ ...data, id: legacy.id }, ...rows]
+                        : rows);
+                })
+                .catch(() => { if (mine === seq) callback(rows); });
         }, (error) => {
-            logger.error("Error subscribing to own NFL entry:", error);
+            logger.error("Error subscribing to own NFL entries:", error);
         });
+        return () => { seq += 1; unsub(); };
     },
 
     // `onError` (optional) — same reason as subscribeToPayoutRecords above.
@@ -1971,6 +2377,13 @@ export const dbService = {
         usedCredit?: boolean;
         customCreditId?: string;
         bundleType?: string;
+        /**
+         * PLAN-PER-POOL-PREMIUM C2. `'addon'` buys features for a pool that is
+         * ALREADY ACTIVE; absent/`'pool'` buys hosting, which is what every
+         * existing caller does. The server refuses the wrong combination — an
+         * add-on purchase for an inactive pool, or hosting for an active one.
+         */
+        purchaseKind?: 'pool' | 'addon';
     }): Promise<{ sessionUrl: string }> {
         try {
             const fn = httpsCallable<Record<string, unknown>, { sessionUrl: string }>(functions, 'createCheckoutSession');

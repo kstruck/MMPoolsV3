@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useOverlayOwner } from '../ui/overlayStack';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { X } from 'lucide-react';
 import { Auth } from '../Auth';
 
@@ -21,6 +22,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
     // on mount — this component stays mounted while closed, and pushing on
     // mount would let it own the stack for the life of the app.
     useOverlayOwner('auth-modal', { active: isOpen, onEscape: onClose });
+    // aria-modal="true" promises focus containment — deliver it (a11y audit).
+    useFocusTrap(dialogRef, isOpen);
     useEffect(() => {
         if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -52,7 +55,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
                 >
                     <X size={24} />
                 </button>
-                <Auth onLogin={(result) => { onClose(); onAuthenticated?.(result); }} defaultIsRegistering={initialMode === 'register'} />
+                {/* onAuthenticated BEFORE onClose (G2, codex r2 [P2]): the close handler
+                    discards any pending post-auth intent, so a success that closed
+                    first would throw away the continuation it just earned. */}
+                <Auth onLogin={(result) => { onAuthenticated?.(result); onClose(); }} defaultIsRegistering={initialMode === 'register'} />
             </div>
         </div>
     );

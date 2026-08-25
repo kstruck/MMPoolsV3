@@ -5,10 +5,12 @@ import type { Pool, NFLGame } from '../../types';
 import { RankChip } from '../ui';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
+import { seasonCompare } from '../../utils/nflResults';
 import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
 import { useTopicShort } from '../../help/scope';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { EntryWeekPicks } from './EntryWeekPicks';
+import { rowDisplayName } from '../../utils/entrySelection';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -39,6 +41,18 @@ interface NFLStandingsProps {
   reveal?: PoolPicksReveal | null;
   /** The viewer's own entry has loaded — the own-row reveal bypass. */
   ownEntryLoaded?: boolean;
+  /**
+   * T10 — this table is the SEASON segment of the merged Standings tab, so its
+   * week-scoped columns (the week's pick / completeness cell and the week's
+   * tiebreaker guess) and the week's row-expand pick reveal are OFF. They live
+   * in the "This Week" segment now (`NFLResults`), which is the whole point of
+   * the merge: a season page that reads as a season page.
+   *
+   * ⚠️ Survivor leaves it FALSE and is unchanged. It has one view and no weekly
+   * table to move a cell to, and Kevin named Survivor as the shape the other
+   * types should copy — so nothing about it moves here.
+   */
+  seasonOnly?: boolean;
 }
 
 export const NFLStandings: React.FC<NFLStandingsProps> = ({
@@ -50,6 +64,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
   pickCounts,
   reveal,
   ownEntryLoaded = false,
+  seasonOnly = false,
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
@@ -111,91 +126,19 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     const rank = (list: any[]) => {
       const scored = list.filter(e => !e.unscored);
       const unscored = list.filter(e => e.unscored)
-        .sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+        // Sorted by what the row DISPLAYS, so a player's two entries do not
+        // tie on a shared `userName` and fall back to array order (§0b.4).
+        .sort((a, b) => rowDisplayName(a).localeCompare(rowDisplayName(b)));
       return [...sortByType(scored), ...unscored];
     };
 
-    const sortByType = (copy: any[]) => {
-
-    if (type === 'NFL_PICKEM') {
-      // Sort Pick'em: totalScore desc, then correctCount desc (fallback), then name
-      return copy.sort((a, b) => {
-        if (b.totalScore !== a.totalScore) {
-          return b.totalScore - a.totalScore;
-        }
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-    }
-
-    if (type === 'NFL_SURVIVOR') {
-      // Sort Survivor: ALIVE first, then lowest strikes, then lowest rebuys, then eliminated week desc
-      return copy.sort((a, b) => {
-        const aAlive = a.status === 'ALIVE' ? 1 : 0;
-        const bAlive = b.status === 'ALIVE' ? 1 : 0;
-
-        if (bAlive !== aAlive) {
-          return bAlive - aAlive; // ALIVE first
-        }
-
-        // If both ALIVE, sort by strikes used (lower strikes is better)
-        if (a.status === 'ALIVE') {
-          if (a.strikesUsed !== b.strikesUsed) {
-            return a.strikesUsed - b.strikesUsed;
-          }
-          if (a.rebuysUsed !== b.rebuysUsed) {
-            return a.rebuysUsed - b.rebuysUsed;
-          }
-        } else {
-          // If both ELIMINATED, sort by who lasted longest
-          const aElimWeek = a.eliminatedWeek ?? 0;
-          const bElimWeek = b.eliminatedWeek ?? 0;
-          if (bElimWeek !== aElimWeek) {
-            return bElimWeek - aElimWeek; // Lasted longer is better
-          }
-        }
-
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-    }
-
-    if (type === 'NFL_MARGIN') {
-      // Sort Margin: 5-level tiebreaker cascade
-      return copy.sort((a, b) => {
-        // 1. Season Total (higher is better)
-        const aTotal = a.seasonTotal ?? 0;
-        const bTotal = b.seasonTotal ?? 0;
-        if (bTotal !== aTotal) {
-          return bTotal - aTotal;
-        }
-
-        // 2. Lowest Negative Burden (lower is better)
-        const aBurden = a.negativeBurden ?? 0;
-        const bBurden = b.negativeBurden ?? 0;
-        if (aBurden !== bBurden) {
-          return aBurden - bBurden;
-        }
-
-        // 3. Most Positive Weeks (higher is better)
-        const aPos = a.positiveWeeks ?? 0;
-        const bPos = b.positiveWeeks ?? 0;
-        if (bPos !== aPos) {
-          return bPos - aPos;
-        }
-
-        // 4. Highest Single Week (higher is better)
-        const aBest = a.bestWeek ?? 0;
-        const bBest = b.bestWeek ?? 0;
-        if (bBest !== aBest) {
-          return bBest - aBest;
-        }
-
-        // 5. Deterministic fallback
-        return (a.userName || '').localeCompare(b.userName || '');
-      });
-    }
-
-      return copy;
-    };
+    // The cascade itself lives in `seasonCompare` (utils/nflResults) — ONE
+    // definition shared with the header's at-a-glance strip, which used to
+    // re-derive a shallower copy and disagree with this table on ties
+    // (codex, 2026-08-23). The alphabetical fallback stays HERE: it is a
+    // display stabiliser for genuinely tied rows, not a ranking fact.
+    const sortByType = (copy: any[]) =>
+      copy.sort((a, b) => seasonCompare(type, a, b) || rowDisplayName(a).localeCompare(rowDisplayName(b)));
 
     return rank([...entries]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,7 +158,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     <div className="bg-card border border-line rounded-xl overflow-hidden shadow-card">
       <div className="p-6 border-b border-line flex justify-between items-center bg-surface">
         <h3 className="font-display font-bold uppercase text-base tracking-[0.05em] text-[color:var(--text)] flex items-center gap-2">
-          <Trophy size={18} className="text-gold-600 dark:text-gold-400" /> Standings Leaderboard
+          <Trophy size={18} className="text-gold-600 dark:text-gold-400" /> {seasonOnly ? 'Season Standings' : 'Standings Leaderboard'}
         </h3>
         <div className="flex items-center gap-3">
           <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted bg-page border border-line px-3 py-1 rounded-full num">
@@ -239,8 +182,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 {/* Custom Pool Columns */}
                 {type === 'NFL_PICKEM' && (
                   <>
-                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
-                    {showTiebreakerColumn && <th className={`${TH} text-center`} title={tiebreakerHint}>Tiebreaker Guess<span className="sr-only"> — {tiebreakerHint}</span></th>}
+                    {!seasonOnly && <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>}
+                    {!seasonOnly && showTiebreakerColumn && <th className={`${TH} text-center`} title={tiebreakerHint}>Tiebreaker Guess<span className="sr-only"> — {tiebreakerHint}</span></th>}
                     <th className={`${TH} text-right w-24`}>Total Points</th>
                   </>
                 )}
@@ -256,7 +199,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 
                 {type === 'NFL_MARGIN' && (
                   <>
-                    <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>
+                    {!seasonOnly && <th className={`${TH} text-center`}>{nflWeekLabel(poolSeasonType(pool), week)} Pick</th>}
                     <th className={`${TH} text-center`}>Negative Burden</th>
                     <th className={`${TH} text-center`}>Win Wks</th>
                     <th className={`${TH} text-center`}>Best Wk</th>
@@ -300,14 +243,20 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                 const isOpen = openRowId === entry.id;
                 return (
                   <React.Fragment key={entry.id}>
+                  {/* T10: on the SEASON segment the row does not expand. What it
+                      expands to is one WEEK's picks, and this table no longer
+                      claims to be about a week — the "This Week" segment carries
+                      the same reveal, over the same `EntryWeekPicks`. Leaving the
+                      handler on would also leave `role="button"` on a row that
+                      does nothing, which is worse than dropping the affordance. */}
                   <tr
-                    onClick={e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(prev => (prev === entry.id ? null : entry.id)); }}
-                    tabIndex={0}
-                    role="button"
-                    onKeyDown={e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(prev => (prev === entry.id ? null : entry.id)); } }}
-                    aria-expanded={isOpen}
-                    title={isOpen ? 'Hide picks' : `Show ${nflWeekLabel(poolSeasonType(pool), week)} picks`}
-                    className={`cursor-pointer transition-colors hover:bg-[color:var(--page)] ${
+                    onClick={seasonOnly ? undefined : e => { if ((e.target as HTMLElement).closest('button,a')) return; setOpenRowId(prev => (prev === entry.id ? null : entry.id)); }}
+                    tabIndex={seasonOnly ? undefined : 0}
+                    role={seasonOnly ? undefined : 'button'}
+                    onKeyDown={seasonOnly ? undefined : e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRowId(prev => (prev === entry.id ? null : entry.id)); } }}
+                    aria-expanded={seasonOnly ? undefined : isOpen}
+                    title={seasonOnly ? undefined : isOpen ? 'Hide picks' : `Show ${nflWeekLabel(poolSeasonType(pool), week)} picks`}
+                    className={`transition-colors hover:bg-[color:var(--page)] ${seasonOnly ? '' : 'cursor-pointer'} ${
                       isMyEntry ? 'bg-brandred-600/[0.07] hover:bg-brandred-600/10' : ''
                     }`}
                   >
@@ -326,10 +275,10 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                           className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
                           title="View player profile"
                         >
-                          {entry.userName}
+                          {rowDisplayName(entry)}
                         </button>
                       ) : (
-                        entry.userName
+                        rowDisplayName(entry)
                       )}
                       {isMyEntry && (
                         <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
@@ -341,6 +290,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {/* Pick'em Columns */}
                     {type === 'NFL_PICKEM' && (
                       <>
+                        {!seasonOnly && (
                         <td className="py-4 px-6 text-center text-[13px] font-bold text-muted num">
                           {/* Counted over THIS week's slate. It used to be
                               `Object.keys(entry.picks).length`, which counts every
@@ -354,7 +304,8 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                               ? `${pickCounts[entry.id]} of ${weekGameIds.length} Picks Set`
                               : faint(marker())}
                         </td>
-                        {showTiebreakerColumn && (
+                        )}
+                        {!seasonOnly && showTiebreakerColumn && (
                           <td className="py-4 px-6 text-center text-[13px] num font-bold text-muted">
                             {entry.weeklyTiebreakers?.[week] ? `${entry.weeklyTiebreakers[week]} pts` : '—'}
                           </td>
@@ -394,9 +345,11 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {/* Margin Columns */}
                     {type === 'NFL_MARGIN' && (
                       <>
+                        {!seasonOnly && (
                         <td className="py-4 px-6 text-center text-[13px] font-display font-bold text-navy-700 dark:text-gold-400 uppercase tracking-[0.08em]">
                           {pickCell}
                         </td>
+                        )}
                         <td className="py-4 px-6 text-center text-[13px] font-bold num text-brandred-600">
                           {entry.unscored ? dash : `-${entry.negativeBurden ?? 0}`}
                         </td>
@@ -412,7 +365,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                       </>
                     )}
                   </tr>
-                  {isOpen && (
+                  {isOpen && !seasonOnly && (
                     <tr className="bg-surface">
                       <td colSpan={99} className="py-3 px-6">
                         <EntryWeekPicks

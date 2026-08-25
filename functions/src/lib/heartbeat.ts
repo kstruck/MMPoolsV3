@@ -249,6 +249,7 @@ export const SCHEDULED_JOB_EXPECTATIONS: Record<string, JobExpectation> = {
     // stale, which is deliberate — a weekly job that ran late is not an outage,
     // and preseason is the only window where a missed run would matter.
     lockNFLSpreadsJob: { everyMinutes: 7 * 24 * 60 },     // '0 9 * * 2' ET
+    authBackupJob: { everyMinutes: 7 * 24 * 60 },         // '15 3 * * 0' ET
 
     // The legacy fleet, wrapped last. Several of these sit on money-adjacent
     // paths — billing enforcement, the Stripe webhook durability sweep, the

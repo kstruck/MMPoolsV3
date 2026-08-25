@@ -239,8 +239,11 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   // Standings and results: what a number on the row is worth.
   { topic: 'settings.confidenceMode', page: 'pool.nfl.standings', section: 'scoring', order: 0 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.standings', section: 'scoring', order: 1 },
-  { topic: 'settings.confidenceMode', page: 'pool.nfl.results', section: 'scoring', order: 0 },
-  { topic: 'pickem.tiebreakerPrediction', page: 'pool.nfl.results', section: 'scoring', order: 1 },
+  // T10: `pool.nfl.results` is gone — its screen is a segment of the Standings
+  // tab now — so the topic it carried that Standings did not moves here rather
+  // than being dropped. `settings.confidenceMode` was on BOTH pages and needs no
+  // second entry.
+  { topic: 'pickem.tiebreakerPrediction', page: 'pool.nfl.standings', section: 'scoring', order: 2 },
   { topic: 'settings.weeklyTiebreaker', page: 'pool.nfl.recaps', section: 'scoring', order: 0 },
 
   // The dashboard's own question is "when do I have to pick by".

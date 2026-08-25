@@ -27,9 +27,30 @@ export interface ProfilePoolInput {
   poolType: ProfileNFLPoolType;
   pickMode?: NFLPickMode; // Pickem only
   season: string;
+  /**
+   * The ENTRY this input is about (PLAN-MULTI-ENTRY D9) — one input per entry
+   * the subject owns in the pool. NOT published: it embeds a uid.
+   */
+  entryId?: string;
+  /** The entry's own name, when it has one. NOT published. */
+  entryName?: string;
+  /**
+   * 🛑 IS THIS THE INPUT THE POOL'S MONEY AND PARTICIPATION ARE COUNTED FROM?
+   *
+   * Absent ⇒ true, so every pre-multi-entry caller (and every test) is
+   * unchanged. Exactly ONE of a subject's inputs for a given pool may carry
+   * `true`: `feeOwed` is the Member Record's already-multiplied figure (D2) and
+   * `awardsWon` reduces Payout Records by uid, so counting either per entry
+   * would double a two-entry player's fees AND their winnings — a profit line
+   * that is wrong in both directions at once.
+   *
+   * Everything else on the input — weeks, picks, team tallies, `finalRank` —
+   * is genuinely per entry and IS counted every time.
+   */
+  primaryEntry?: boolean;
   /** The subject's entry doc (weeklyResults et al). */
   entry: Record<string, any>;
-  /** From users/{uid}/seasonHistory/{poolId}, when finalized. */
+  /** From users/{uid}/seasonHistory/{docId} for THIS entry, when finalized. */
   finalRank?: { rank: number; totalEntries: number } | null;
   /** Sum of this subject's non-superseded award amounts in this pool. */
   awardsWon: number;
@@ -83,17 +104,27 @@ export function buildPublicProfile(
 
   for (const p of pools) {
     seasons.add(p.season);
+    // PLAN-MULTI-ENTRY D9 — the pool's MONEY is counted once per member, its
+    // PLAY once per entry. See `primaryEntry`.
+    const countsMoney = p.primaryEntry !== false;
     const year = yearAgg.get(p.season) || { correct: 0, total: 0, won: 0, fees: 0, anyRecorded: false, best: null };
-    year.won += p.awardsWon;
-    year.fees += p.feeOwed;
+    if (countsMoney) {
+      year.won += p.awardsWon;
+      year.fees += p.feeOwed;
+    }
     if (p.payoutsRecorded) year.anyRecorded = true;
+    // Best finish IS per entry: a player's second entry finishing 1st is a
+    // first-place finish, and `Math.min` over both is the honest answer.
     if (p.finalRank && (!year.best || p.finalRank.rank < year.best.rank)) year.best = p.finalRank;
     yearAgg.set(p.season, year);
 
-    won += p.awardsWon;
-    feesOwed += p.feeOwed;
-    if (p.finalized && !p.payoutsRecorded) pendingPayouts++;
-    if (p.feeEstimated) feesEstimated = true;
+    if (countsMoney) {
+      won += p.awardsWon;
+      feesOwed += p.feeOwed;
+      // Counts POOLS awaiting a payout record, so it follows the money.
+      if (p.finalized && !p.payoutsRecorded) pendingPayouts++;
+      if (p.feeEstimated) feesEstimated = true;
+    }
 
     const wr: Record<string, any> = p.entry?.weeklyResults || {};
     const bucketKey = `${p.poolType}|${p.pickMode ?? ''}`;
@@ -201,7 +232,11 @@ export function buildPublicProfile(
     overall: {
       accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
       correct, total, points,
-      poolsEntered: pools.length,
+      // 🛑 DISTINCT POOLS, NOT INPUTS (PLAN-MULTI-ENTRY D9). There is now one
+      // input per ENTRY, so `pools.length` would report a two-entry player as
+      // having entered two pools when they entered one — and the label on the
+      // profile card literally reads "Pools Entered".
+      poolsEntered: new Set(pools.map(p => p.poolId)).size,
       seasonsPlayed: seasons.size,
     },
     weekly,

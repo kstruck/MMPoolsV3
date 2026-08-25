@@ -7,8 +7,11 @@ spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 
 ## Implementation status
 
-**Phase 0.5 — BUILT, in review as [#516](https://github.com/kstruck/MMPoolsV3/pull/516)
-(branch `claude/rate-limiting-review-gate-dk4w2i`). NOT merged, NOT deployed.**
+**Phase 0.5 — MERGED 2026-08-22 ([#516](https://github.com/kstruck/MMPoolsV3/pull/516))
+and its rules ARE live in prod** (evidence: the `ai_requests` entitlement rule
+was rejecting requests before C1's toggle granted the first entitlement —
+MORNING-2026-08-25.md AI-commissioner postmortem). Status below updated
+2026-08-24; the stale "NOT merged" line stood for two days.
 
 | Item | State |
 |---|---|

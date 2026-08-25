@@ -405,14 +405,17 @@ function PoolHarness({ poolType = 'NFL_PICKEM' as const, audience = 'member' as 
 }
 
 describe('a tab this pool does not have (codex R3)', () => {
-  it('is not listed in "All pages" for a Survivor pool, but is for a Pick’em one', async () => {
-    const results = helpRegistry.getPage('pool.nfl.results')!;
+  // T10 deleted the Results page (its screen is a segment of Standings now), so
+  // the conditional tab this exercises is the Current Picks grid, which a
+  // signed-out reader does not get.
+  it('is not listed in "All pages" without the tab, and is with it', async () => {
+    const results = helpRegistry.getPage('pool.nfl.grid')!;
 
     render(
       <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
         <HelpProvider isAdmin={false}>
           <HelpScopeProvider poolType="NFL_SURVIVOR" audience="member">
-            {/* What NFLPoolDashboard publishes for a Survivor pool. */}
+            {/* What NFLPoolDashboard publishes for a signed-out reader. */}
             <HelpRoutePublisher
               tab="dashboard"
               offeredTabs={['dashboard', 'picks', 'standings', 'recaps', 'rules']}
@@ -432,7 +435,7 @@ describe('a tab this pool does not have (codex R3)', () => {
           <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
             <HelpRoutePublisher
               tab="dashboard"
-              offeredTabs={['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules']}
+              offeredTabs={['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules']}
             />
           </HelpScopeProvider>
         </HelpProvider>
@@ -444,12 +447,12 @@ describe('a tab this pool does not have (codex R3)', () => {
 });
 
 describe('search never offers a screen this pool has no tab for (codex R5)', () => {
-  it('drops the Results page for a Survivor pool, and keeps it for a Pick’em one', async () => {
-    const results = helpRegistry.getPage('pool.nfl.results')!;
+  it('drops the All-picks page when the tab is absent, and keeps it when present', async () => {
+    const results = helpRegistry.getPage('pool.nfl.grid')!;
     // A phrase from that page's own summary, so nothing else in the registry
-    // matches it — which makes the Survivor half a clean "nothing found" rather
+    // matches it — which makes the negative half a clean "nothing found" rather
     // than an absence hidden among unrelated hits.
-    const phrase = results.summary.split(':')[0];
+    const phrase = results.summary.split('.')[0];
 
     render(
       <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
@@ -476,7 +479,7 @@ describe('search never offers a screen this pool has no tab for (codex R5)', () 
           <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
             <HelpRoutePublisher
               tab="dashboard"
-              offeredTabs={['dashboard', 'picks', 'standings', 'results', 'recaps', 'rules']}
+              offeredTabs={['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules']}
             />
           </HelpScopeProvider>
         </HelpProvider>

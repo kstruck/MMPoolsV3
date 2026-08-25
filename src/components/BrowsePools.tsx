@@ -369,13 +369,13 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                         {/* Matchup */}
                                         <div className="bg-surface rounded-lg p-3 border border-line mb-4 flex items-center justify-between relative z-10">
                                             <div className="flex items-center gap-2">
-                                                {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
+                                                {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
                                                 <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{awayTeam}</span>
                                             </div>
                                             <span className="text-xs text-faint font-display font-bold uppercase">VS</span>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{homeTeam}</span>
-                                                {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
+                                                {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
                                             </div>
                                         </div>
 

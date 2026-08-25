@@ -818,7 +818,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                         <span className="text-[10px] text-muted font-display font-bold num">{costDisplay}</span>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" data-testid="pool-card-type">
-                                                        <span className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full border border-line bg-cream text-[color:var(--text)]">{typeLabel}</span>
+                                                        {/* Fixed ink on a fixed background. `--text` flips to near-white in
+    dark mode while bg-cream stays light, which rendered this chip
+    white-on-white (Kevin, 2026-08-23). Same fixed-pair pattern as
+    Badge's `open`/`paid` styles. */}
+<span className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full border border-[#E4DFD3] bg-cream text-navy-800">{typeLabel}</span>
                                                         {optionLabels.map(o => (
                                                             <span key={o} className="text-[10px] font-body text-muted">{o}</span>
                                                         ))}

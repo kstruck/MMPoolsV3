@@ -162,16 +162,15 @@ const NFL_PAGES = poolPages({
         'Everyone’s picks for a week, side by side. A pick appears once its own game locks, so nobody can copy anyone before the deadline.',
     },
     {
+      // T10 (2026-08-23): Standings and Results are ONE tab now, with a scope
+      // control on it — so they are ONE help page. The separate "NFL pool —
+      // Results" page was removed rather than left pointing at `?tab=results`:
+      // that URL still lands (the dashboard aliases it), but offering it as a
+      // second screen is the same two-names-one-thing confusion the merge fixed.
       tab: 'standings',
-      title: 'NFL pool — Standings',
+      title: 'NFL pool — Standings & Results',
       summary:
-        'Who is winning the season. Ranked by total points, with the tie-break rule applied. Updates as each game finishes.',
-    },
-    {
-      tab: 'results',
-      title: 'NFL pool — Results',
-      summary:
-        'What happened in a week: each game, who picked what, and the points it earned. Pick a week to look back at it.',
+        'Who is winning, at the scope you pick. Season shows the season totals with the tie-break rule applied; the week segment shows what happened that week, game by game, and opens a player’s picks; Summary lays every week out in a grid.',
     },
     {
       tab: 'recaps',

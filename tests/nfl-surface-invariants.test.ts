@@ -550,7 +550,12 @@ describe('week results view — absence is not zero, and Survivor has no week to
     // to the dashboard, and `results` is entered in that map from
     // `showResultsTab`.
     expect(dash).toContain('results: showResultsTab');
-    expect(dash).toContain("const activeTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';");
+    expect(dash).toContain("const resolvedTab: TabType = tabOffered[requestedTab] ? requestedTab : 'dashboard';");
+    // T10: and on a pool that DOES offer it, `results` no longer renders a tab
+    // of its own — it is normalized to the Standings tab's week segment. Both
+    // halves matter: the map above is what makes Survivor fall back, this is
+    // what makes every other type land on the merged tab.
+    expect(dash).toContain('resolveStandingsAlias(resolvedTab)');
   });
 
   it('a not-yet-scored week shows no place chip', () => {
@@ -832,16 +837,23 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
     'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx',
     'src/components/NFLPoolDashboard/NFLManagerView.tsx',
     'src/components/PaymentsPanel.tsx',
+    'src/components/NFLPoolDashboard/EntrySwitcher.tsx',
     'src/utils/memberStandings.ts',
     'src/utils/poolRoster.ts',
   ];
   // Residue the plan's T4/T5 remove. Exact symbol per file; nothing else in
   // that file is exempt.
+  //
+  // 🛑 TWO LINES DIED WITH T4 AND THEIR ABSENCE IS ITSELF ASSERTED. The
+  // `memberStandings.ts` entry named the whole uid-keyed fold — `uidOf`,
+  // `scoredByUid`, and four `reveal.*?.[uid]` lookups — and T4 replaced every
+  // one of them with the entry id. The `NFLPoolDashboard.tsx` entry named the
+  // singular `entries.find(… ownerUid === user.id)`, now a `.filter` (§0b.3).
+  // The "allow-list names only files that still carry residue" test below FAILS
+  // if either line is left behind, which is what makes deleting them mandatory
+  // rather than tidy.
   const ALLOW: Record<string, RegExp[]> = {
-    'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],  // myEntry — T5
-    'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/], // myEntry — T5
     'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
-    'src/utils/memberStandings.ts': [/const uidOf = /, /scoredByUid/, /r\.picks\?\.\[uid\]/, /reveal\.picks\?\.\[uid\]/, /reveal\.confidence\?\.\[uid\]/, /reveal\.tiebreakers\?\.\[uid\]/], // the fold — T4
     'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
   };
   const FORBIDDEN: Array<[string, RegExp]> = [
@@ -1009,29 +1021,34 @@ describe('row-click picks (EntryWeekPicks) — the reveal boundary stays the ser
 });
 
 /**
- * A FAILED READ OF THE MEMBER'S OWN ENTRY IS NOT "THEY HAVE NO ENTRY".
+ * A FAILED READ OF THE MEMBER'S OWN ENTRIES IS NOT "THEY HAVE NO ENTRY".
  *
- * `subscribeToMyNFLEntry` is the single source for the viewer's own picks on
+ * `subscribeToMyNFLEntries` is the single source for the viewer's own picks on
  * every NFL surface — the pick sheets, the checklist banners, and the grid's own
- * row (which bypasses the reveal because that document IS its source). Its
- * success path already distinguishes an absent document from a present one, so
- * an error handler that also calls back with `null` collapses "the read failed"
- * into "you have not picked".
+ * row (which bypasses the reveal because those documents ARE its source). Its
+ * success path already distinguishes an absent entry from a present one, so an
+ * error handler that also called back would collapse "the read failed" into
+ * "you have not picked".
  *
  * That is not cosmetic: Firestore's `onSnapshot` TERMINATES a listener on error,
  * so a single errored snapshot leaves the member reading "picks not in yet" over
  * a completed sheet until they reload the page. A behavioural test would need a
- * Firestore double for a three-line subscription; this coarse grep pins the one
+ * Firestore double for a four-line subscription; this coarse grep pins the one
  * thing that matters — the error path does not invent state.
+ *
+ * ⚠️ RENAMED AND PLURALISED BY PLAN-MULTI-ENTRY T4 (`subscribeToMyNFLEntry` →
+ * `subscribeToMyNFLEntries`, doc-get → `where('ownerUid','==',uid)` query).
+ * The rule did not change: an empty ARRAY is now the "no entry" claim that the
+ * error path must not make, exactly as `null` was.
  */
-describe('subscribeToMyNFLEntry — an error must not be reported as "no entry"', () => {
+describe('subscribeToMyNFLEntries — an error must not be reported as "no entries"', () => {
   const src = readFileSync(resolve(root, 'src/services/dbService.ts'), 'utf8');
-  const body = src.slice(src.indexOf('subscribeToMyNFLEntry:'));
+  const body = src.slice(src.indexOf('subscribeToMyNFLEntries:'));
   const handler = body.slice(0, body.indexOf('subscribeToWeeklyRecaps:'));
 
   it('parsed the subscription out of the source', () => {
-    // Guard the guard: a mis-parse would make the assertion below vacuous.
-    expect(handler).toContain("Error subscribing to own NFL entry:");
+    // Guard the guard: a mis-parse would make the assertions below vacuous.
+    expect(handler).toContain("Error subscribing to own NFL entries:");
     expect(handler.length).toBeGreaterThan(0);
     expect(handler.length).toBeLessThan(src.length);
   });
@@ -1039,13 +1056,40 @@ describe('subscribeToMyNFLEntry — an error must not be reported as "no entry"'
   it('the error handler logs and calls back with nothing', () => {
     const errorHandler = handler.slice(handler.indexOf('}, (error) => {'));
     expect(errorHandler).toContain('logger.error');
-    // The removed line, verbatim. Keeping the last known state is the fix.
+    // The removed line, verbatim, and its plural equivalent.
     expect(errorHandler).not.toContain('callback(null)');
+    expect(errorHandler).not.toContain('callback([])');
   });
 
-  it('the success path still reports a genuinely absent entry as null', () => {
-    expect(handler).toContain('snap.exists() ?');
-    expect(handler).toContain(': null');
+  it('it asks for EVERY entry this viewer owns, by ownerUid', () => {
+    // T4: a doc-get on `entries/{uid}` is entry #1 and can never see a second
+    // entry. The query is also exactly what firestore.rules already permits,
+    // which is why this ticket changes no rule.
+    expect(handler).toContain("where('ownerUid', '==', uid)");
+    // Each row carries its own document id — the ENTRY id every downstream
+    // surface keys on (§0b.1).
+    expect(handler).toContain('id: d.id');
+  });
+
+  it('and it still finds an UNSTAMPED legacy entry, but only when the query is empty', () => {
+    // A `where` clause cannot match a document that lacks the field. The probe
+    // is gated on `rows.length > 0` returning first, so the common path pays no
+    // extra read. (codex r2 on the T4 PR.)
+    // The trigger is "entry #1 is MISSING from the result", not "the result is
+    // empty": an unstamped entry #1 joined by a stamped entry #2 yields a
+    // non-empty query that is still missing the primary. (codex r3 P1.)
+    expect(handler).toContain("if (rows.some(r => r.id === uid)) { callback(rows); return; }");
+    expect(handler).not.toContain('if (rows.length > 0)');
+    expect(handler).toContain("getDoc(doc(db, 'pools', poolId, 'entries', uid))");
+    expect(handler).toContain("data.ownerUid === undefined");
+  });
+
+  it('an in-flight probe cannot deliver after the subscription is disposed', () => {
+    // The callback writes `ownEntryState`; a stale delivery from a pool the
+    // viewer has left would hide the CURRENT pool's entries until the next
+    // snapshot happened to arrive. (codex r3 P2.)
+    expect(handler).toContain('return () => { seq += 1; unsub(); };');
+    expect(handler).toContain('if (mine !== seq) return;');
   });
 });
 
@@ -1063,10 +1107,12 @@ describe('NFLPoolDashboard stamps the own-entry snapshot with pool AND uid', () 
   const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'), 'utf8');
 
   it('the subscription callback records which pool and which uid it came from', () => {
-    expect(src).toContain('setOwnEntryState({ poolId: pool.id, uid: user.id, entry })');
+    // T4 pluralised the payload (`entry` → `entries`); the STAMP is unchanged
+    // and is the thing this guards.
+    expect(src).toContain('setOwnEntryState({ poolId: pool.id, uid: user.id, entries })');
     // The pre-change shape: the setter handed straight to the subscription, so
     // nothing recorded the source.
-    expect(src).not.toContain('subscribeToMyNFLEntry(pool.id, user.id, setOwnEntry)');
+    expect(src).not.toContain('subscribeToMyNFLEntries(pool.id, user.id, setOwnEntryState)');
   });
 
   it('and it is checked at render, not in an effect', () => {
@@ -1099,8 +1145,16 @@ describe("WeekChecklist says nothing until the viewer's own entry is known", () 
     expect(dash).toContain('ownEntryLoaded={ownEntryKnown}');
   });
 
-  it('and the strip renders nothing when it is false', () => {
-    expect(strip2).toContain('if (!entryKnown) return null;');
+  it('and the strip makes no pick CLAIMS when it is false — chips stay, as the only week selector', () => {
+    // 2026-08-23: the header week dropdown died, so the chips became the pool
+    // page's only week navigation and a full `return null` would strand
+    // signed-out and load-failed viewers on one week. The #497 invariant is
+    // about false claims, not about pixels: banners and pick marks gate on
+    // `claimsAllowed`, navigation does not.
+    expect(strip2).toContain('const claimsAllowed = entryKnown &&');
+    expect(strip2).toContain('{claimsAllowed && nextDue && (');
+    expect(strip2).toContain('{claimsAllowed && currentComplete && (');
+    expect(strip2).not.toContain('if (!entryKnown) return null;');
   });
 });
 
@@ -1334,5 +1388,75 @@ describe('the inert Pick’em scoring fields are not displayed anywhere', () => 
     expect(stripComments("  // NOT sent: `pointsPerPick` / `primetimeBonus`.")).not.toMatch(READ);
     expect(stripComments("  /* They read `settings.pointsPerPick` and\n   `settings.primetimeBonus`, which nothing reads. */")).not.toMatch(READ);
     expect(stripComments("      {/* reads `settings.pointsPerPick` — removed */}")).not.toMatch(READ);
+  });
+});
+
+
+/**
+ * 🛑 NEVER ADVERTISE ENTRIES NOBODY CAN PLAY (PLAN-MULTI-ENTRY, the flip's own
+ * rule).
+ *
+ * `MULTI_ENTRY_WIZARD_ENABLED` decides whether a commissioner is OFFERED a
+ * per-player entry cap. It was held false through T1 and T2 because the server
+ * accepted a second entry while the client could neither address one nor render
+ * it — a toggle that would have let a commissioner promise something the app
+ * could not deliver.
+ *
+ * This guard makes that rule a TEST rather than a paragraph in a header. It
+ * does NOT assert the flag's value: turning the offer off is a legitimate,
+ * reversible decision. It asserts the IMPLICATION — while the offer is on, the
+ * four capabilities a second entry needs must all be present in the source.
+ *
+ * Coarse greps, same convention as the rest of this file. Each one names the
+ * ticket that put it there, so a deletion is traceable rather than mysterious.
+ */
+describe('the multi-entry offer implies the capability (PLAN-MULTI-ENTRY flip)', () => {
+  const shared = readFileSync(resolve(root, 'shared/multiEntry.ts'), 'utf8');
+  const offered = /export const MULTI_ENTRY_WIZARD_ENABLED = true;/.test(shared);
+
+  const REQUIRED: Array<[string, string, RegExp]> = [
+    // T5 — the member can SELECT which of their entries the sheet is for.
+    ['NFLPoolDashboard renders the entry switcher',
+      'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx', /<EntrySwitcher/],
+    // T5 — and every sheet SENDS the entry it was for.
+    ['PickemPickEntry sends entryIndex',
+      'src/components/NFLPoolDashboard/PickemPickEntry.tsx', /\{ entryIndex \}/],
+    ['SurvivorPickEntry sends entryIndex',
+      'src/components/NFLPoolDashboard/SurvivorPickEntry.tsx', /\{ entryIndex \}/],
+    ['MarginPickEntry sends entryIndex',
+      'src/components/NFLPoolDashboard/MarginPickEntry.tsx', /\{ entryIndex \}/],
+    // T4 — a second entry gets a ROW.
+    ['buildMemberStandings emits one row per entry',
+      'src/utils/memberStandings.ts', /for \(const entryId of ownedEntryIds\(m\)\)/],
+    // T4 — and the viewer's own entries are all subscribed to.
+    ['dbService subscribes to every owned entry',
+      'src/services/dbService.ts', /subscribeToMyNFLEntries:/],
+    // T6a — and the rows are TELLABLE APART.
+    ['NFLStandings displays the entry name',
+      'src/components/NFLPoolDashboard/NFLStandings.tsx', /rowDisplayName\(/],
+    ['NFLPicksGrid displays the entry name',
+      'src/components/NFLPoolDashboard/NFLPicksGrid.tsx', /rowDisplayName\(/],
+    ['NFLResults displays the entry name',
+      'src/components/NFLPoolDashboard/NFLResults.tsx', /rowDisplayName\(/],
+    ['NFLWeeklyPicksGrid displays the entry name',
+      'src/components/NFLPoolDashboard/NFLWeeklyPicksGrid.tsx', /rowDisplayName\(/],
+  ];
+
+  it.each(REQUIRED)('%s', (_label, file, re) => {
+    if (!offered) return;   // the offer is off; the implication is vacuous
+    expect(re.test(readFileSync(resolve(root, file), 'utf8'))).toBe(true);
+  });
+
+  it('the flag is read from ONE place, so hiding the offer hides all of it', () => {
+    // Two copies would drift, and the copy that stayed `true` would be the one
+    // rendering a control the other half no longer supports.
+    const wizard = readFileSync(resolve(root, 'src/components/wizard/create/MultiEntryFields.tsx'), 'utf8');
+    const manager = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLManagerView.tsx'), 'utf8');
+    expect(wizard).toContain("from '@shared/multiEntry'");
+    expect(manager).toContain("from '@shared/multiEntry'");
+    expect(wizard).toContain('if (!MULTI_ENTRY_WIZARD_ENABLED) return null;');
+    // The manager control still renders for a pool that ALREADY took the offer,
+    // so turning the flag off never strands one (`|| currentMaxEntries > 1`).
+    expect(manager).toContain('{(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (');
   });
 });

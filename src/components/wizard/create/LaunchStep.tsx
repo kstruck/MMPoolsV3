@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 import type { PoolType } from '@shared/poolTypes';
 import {
-  ADDON_KEYS,
   type AddonKey,
   type AddonSelection,
   type PoolQuote,
@@ -13,7 +12,10 @@ import { dbService } from '../../../services/dbService';
 import { logger } from '../../../utils/logger';
 import type { User } from '../../../types';
 import { profileUpdatesFrom } from './profilePrefill';
+import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState';
 import { CheckboxField, Field, NumberField } from '../fields';
+import { SELLABLE_ADDON_KEYS, stripFreeAddons } from '../../../config/freeAddons';
+import { estimateIsSet, feeWithoutPaymentPathWarning } from './launchReadiness';
 
 // ---------------------------------------------------------------------------
 // LaunchStep — the final wizard step (PLAN-BUYFLOW-OVERHAUL Phase 2 #5).
@@ -99,6 +101,15 @@ export function LaunchStep(props: LaunchStepProps) {
   const [quote, setQuote] = useState<PoolQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  // Bumped by the "Try again" control so the quote effect re-runs on the SAME
+  // inputs. Without it a failed quote is a dead end until the user edits a field.
+  const [quoteReloadKey, setQuoteReloadKey] = useState(0);
+  // Which INPUTS the quote/error on screen belongs to. `quoteLoading` alone is
+  // not enough: for the 300ms the fetch is debouncing it is still false, so a
+  // superseded quote would read as current and the Activate button would offer
+  // a price the server no longer agrees with (codex round 2 [P1]). Same stamp
+  // BillingInvoiceCard uses (`setQuoteFor(key)`), for the same reason.
+  const [resolvedKey, setResolvedKey] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<Busy>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -110,6 +121,9 @@ export function LaunchStep(props: LaunchStepProps) {
 
   // --- Server quote (debounced; the client renders it verbatim) --------------
   const addonsKey = JSON.stringify(addons);
+  // Identity of the priced inputs. A quote is only "current" while this matches
+  // the key it resolved under — see `resolvedKey`.
+  const quoteInputsKey = JSON.stringify([poolType, estimatedPlayers, addonsKey, couponInput.trim().toUpperCase()]);
   useEffect(() => {
     let cancelled = false;
     const trimmed = couponInput.trim();
@@ -120,14 +134,22 @@ export function LaunchStep(props: LaunchStepProps) {
         const q = await dbService.getPoolQuote({
           poolType,
           estimatedPlayers,
-          addons,
+          // Branding is included with every pool (T4/D1) — never quoted, so the
+          // price is right regardless of the billing_config save.
+          addons: stripFreeAddons(addons),
           couponCode: trimmed ? trimmed.toUpperCase() : undefined,
         });
-        if (!cancelled) setQuote(q);
+        if (!cancelled) {
+          setQuote(q);
+          setResolvedKey(quoteInputsKey);
+        }
       } catch {
         if (!cancelled) {
           setQuote(null);
           setQuoteError('Could not load pricing right now. You can still start a free trial below.');
+          // Stamped on failure too, so the error belongs to THESE inputs and a
+          // later edit reads as pending rather than as a standing failure.
+          setResolvedKey(quoteInputsKey);
         }
       } finally {
         if (!cancelled) setQuoteLoading(false);
@@ -139,7 +161,7 @@ export function LaunchStep(props: LaunchStepProps) {
     };
     // addonsKey captures the four booleans; estimatedPlayers/coupon re-quote too.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poolType, estimatedPlayers, addonsKey, couponInput]);
+  }, [poolType, estimatedPlayers, addonsKey, couponInput, quoteReloadKey]);
 
   // --- Redeemable entitlements (only if the user owns a matching one) --------
   useEffect(() => {
@@ -192,7 +214,31 @@ export function LaunchStep(props: LaunchStepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, poolType, estimatedPlayers]);
 
-  const freeEligible = quote?.freeTierEligible === true;
+  // Which launch actions to render. The rule lives in `launchButtonsState` so a
+  // coupon-zeroed total keeps the Activate path (T2) and so it can be tested.
+  const quoteState: LaunchQuoteState =
+    resolvedKey !== quoteInputsKey || quoteLoading
+      ? 'pending'
+      : quoteError
+        ? 'unavailable'
+        : quote
+          ? 'ready'
+          : 'pending';
+  const buttons = launchButtonsState({ quoteState, quote });
+
+  // G7 — the estimate must be answered. It defaulted to 0 and was never
+  // required, so an untouched field silently routed a 40-person pool onto the
+  // free plan and the wall was found by the 11th member, mid-season.
+  const estimateSet = estimateIsSet(estimatedPlayers);
+
+  // G14 — a fee with nowhere to send it. Warns, never blocks: collecting cash
+  // in person is a legitimate answer.
+  const feeWarning = feeWithoutPaymentPathWarning({
+    fee,
+    handles: watch('paymentHandles') as Record<string, unknown> | undefined,
+    instructions: watch('paymentInstructions'),
+  });
+  const freeEligible = buttons.primary === 'free';
 
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
@@ -213,7 +259,11 @@ export function LaunchStep(props: LaunchStepProps) {
     if (createdPoolId) return createdPoolId;
     const { _tosAccepted, ...clean } = getValues() as Record<string, unknown>;
     void _tosAccepted;
-    const poolId = await createPool(clean);
+    // The coupon lives in this component's state, not the form, so it has to be
+    // merged in here or it never reaches the create payload at all — which is
+    // exactly why `billing.couponCode` was a field nothing wrote (T3).
+    const couponForLaunch = couponInput.trim().toUpperCase();
+    const poolId = await createPool(couponForLaunch ? { ...clean, couponCode: couponForLaunch } : clean);
     setCreatedPoolId(poolId);
 
     // Remember this commissioner's contact + payout handles so their NEXT pool
@@ -249,7 +299,7 @@ export function LaunchStep(props: LaunchStepProps) {
     }
 
     return poolId;
-  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid]);
+  }, [tosAccepted, trigger, getValues, createPool, createdPoolId, user, uid, couponInput]);
 
   const startTrialOrFree = useCallback(async (mode: 'free' | 'trial') => {
     setBusy(mode);
@@ -274,7 +324,7 @@ export function LaunchStep(props: LaunchStepProps) {
         poolName: name || 'Your pool',
         poolType,
         estimatedPlayers,
-        addons,
+        addons: stripFreeAddons(addons),
         couponCode: trimmed ? trimmed.toUpperCase() : undefined,
       });
       // Leaves the app for Stripe. If the user cancels/abandons there, the pool
@@ -322,14 +372,27 @@ export function LaunchStep(props: LaunchStepProps) {
       <NumberField
         name="estimatedPlayers"
         label="Expected number of players"
-        min={0}
+        min={1}
         placeholder="e.g. 10"
       />
+      {/* G7 — say what the number is FOR, at the moment it is asked. The
+          free-plan limit is deliberately not spelled out as a figure here: it
+          is configurable and already hardcoded in three other places (plan
+          §2 G8), and a fourth copy would be a fourth thing to get wrong. */}
+      <p className="-mt-3 mb-4 text-xs text-slate-400">
+        Small pools launch free; above that limit, hosting is priced by size. This is the number we price —
+        estimate high rather than low, because growing past it later means upgrading.
+      </p>
+      {!estimateSet && (
+        <p className="-mt-2 mb-4 text-xs font-semibold text-amber-300">
+          Enter how many players you expect before launching.
+        </p>
+      )}
 
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}
       <p className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Premium add-ons (optional)</p>
       <div className="mb-2 rounded-lg border border-slate-800 bg-slate-950/50 p-4">
-        {ADDON_KEYS.filter((key) => {
+        {SELLABLE_ADDON_KEYS.filter((key) => {
           // SMS notifications disabled for now (product decision 2026-07-07).
           if (key === 'smsNotifications') return false;
           // What-If Simulator is a Bracket-only add-on (matches the pricing page + checkout).
@@ -354,7 +417,20 @@ export function LaunchStep(props: LaunchStepProps) {
       {/* Itemized SERVER quote (verbatim — no client math). */}
       <div className="mb-5 rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm">
         {quoteLoading && <p className="text-slate-400">Fetching your quote…</p>}
-        {!quoteLoading && quoteError && <p className="text-amber-300">{quoteError}</p>}
+        {!quoteLoading && quoteError && (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-amber-300">{quoteError}</p>
+            {/* An enabled control, not a disabled button promising an action —
+                same split BillingInvoiceCard uses for its quote retry. */}
+            <button
+              type="button"
+              onClick={() => setQuoteReloadKey((k) => k + 1)}
+              className="rounded-md border border-amber-400/60 px-3 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-400/10"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         {!quoteLoading && !quoteError && quote && (
           <dl className="space-y-2">
             <div className="flex justify-between">
@@ -394,7 +470,17 @@ export function LaunchStep(props: LaunchStepProps) {
               {freeEligible ? (
                 <span className="text-emerald-400">This pool qualifies for the free plan — launch at no charge.</span>
               ) : (
-                <span className="text-indigo-300">Launches on a {quote.trialDays}-day free trial. No card required to start.</span>
+                <span className="text-indigo-300">
+                  {/* T7 — the trial line said what it COST and nothing about what
+                      it does. Three facts a commissioner needs before they
+                      commit a pool of real people to it, and all three were
+                      missing: what is switched on, what happens when it ends,
+                      and whether anything charges them. */}
+                  Launches on a {quote.trialDays}-day free trial with everything you selected above switched on.
+                  No card required — nothing is charged automatically, ever.
+                  {' '}When the trial ends you get a short grace period to pay; after that the pool locks
+                  (members keep their picks and standings, and it all comes back the moment you activate).
+                </span>
               )}
             </p>
           </dl>
@@ -443,6 +529,12 @@ export function LaunchStep(props: LaunchStepProps) {
         </div>
       )}
 
+      {feeWarning && (
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          {feeWarning}
+        </div>
+      )}
+
       {/* --- Launch state machine actions -------------------------------------
           Creation always happens first (free/trial per server); payment/redeem
           is an action on the created pool. */}
@@ -452,7 +544,7 @@ export function LaunchStep(props: LaunchStepProps) {
           <button
             type="button"
             onClick={() => startTrialOrFree('free')}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || !estimateSet}
             className="rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === 'free' ? 'Launching…' : 'Launch free pool'}
@@ -461,23 +553,30 @@ export function LaunchStep(props: LaunchStepProps) {
           <button
             type="button"
             onClick={() => startTrialOrFree('trial')}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || !estimateSet}
             className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === 'trial' ? 'Launching…' : `Start ${quote?.trialDays ?? 14}-day trial`}
           </button>
         )}
 
-        {/* Activate now — create as trial, then Stripe checkout. Shown when there
-            is a real amount to charge (a $0 total is either free or covered). */}
-        {quote && quote.total > 0 && (
+        {/* Activate now — create as trial, then checkout. A full-discount coupon
+            drives the total to $0 and STILL activates: the server's FREE PATH
+            handles it without a Stripe redirect (T2). */}
+        {buttons.showActivate && (
           <button
             type="button"
             onClick={activateNow}
-            disabled={busy !== null || !tosAccepted}
+            disabled={busy !== null || !tosAccepted || !estimateSet || buttons.activateDisabled}
             className="rounded-md border border-indigo-500/60 bg-indigo-500/10 px-6 py-2.5 text-sm font-bold text-indigo-100 hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy === 'activate' ? 'Starting checkout…' : `Activate now — ${money(quote.total)}`}
+            {busy === 'activate'
+              ? 'Starting checkout…'
+              : buttons.activateDisabled
+                ? 'Updating pricing…'
+              : buttons.activateIsCouponZero
+                ? 'Activate now — $0 (coupon applied)'
+                : `Activate now — ${money(buttons.activateAmount)}`}
           </button>
         )}
 
@@ -493,7 +592,7 @@ export function LaunchStep(props: LaunchStepProps) {
                   key={ent.bundleId}
                   type="button"
                   onClick={() => redeem(ent)}
-                  disabled={busy !== null || !tosAccepted}
+                  disabled={busy !== null || !tosAccepted || !estimateSet}
                   className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {busy === 'redeem' ? 'Redeeming…' : `Redeem ${ent.label}`}

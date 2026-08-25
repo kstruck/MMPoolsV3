@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
-import { executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal } from '../../nflPools';
+import { createNFLPool, executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal, scoreNFLWeekInternal } from '../../nflPools';
 import { proxyPick } from '../../poolExceptions';
 import { setPaidStatus } from '../../setPaidStatus';
 import { updatePoolSettings } from '../../poolOps';
+import { getPoolPicks } from '../../nflPickReveal';
+import { maybeFinalizeNFLPool } from '../../nflFinalize';
+import { recomputeUserProfile, getProfilePoolDetail } from '../../userProfile';
 
 /**
  * PLAN-MULTI-ENTRY T2 — the submit/dues paths, end to end against the emulator.
@@ -33,12 +36,22 @@ const db = admin.firestore();
 const wProxy = test.wrap(proxyPick);
 const wPaid = test.wrap(setPaidStatus);
 const wUpdate = test.wrap(updatePoolSettings);
+const wGetPicks = test.wrap(getPoolPicks);
+const wPoolDetail = test.wrap(getProfilePoolDetail);
+const wCreateNFL = test.wrap(createNFLPool);
 
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 const HOUR = 60 * 60 * 1000;
 const SEASON = 'me-season';
 const G1 = 'me-g1';
 const G2 = 'me-g2';
+// T3 runs against its OWN season and its OWN, already-FINAL slate. `getPoolPicks`
+// and the scorer both resolve a week by (season, seasonType, week), so reusing
+// the T2 games — deliberately still SCHEDULED, hours from kickoff — would make
+// every T3 scoring assertion depend on T2's unlocked state.
+const T3_SEASON = 'me-t3-season';
+const F1 = 'me-f1';
+const F2 = 'me-f2';
 const HOST = 'me-host';
 const ALICE = 'me-alice';
 const BOB = 'me-bob';
@@ -57,13 +70,13 @@ const ledger = async (uid: string) => (await poolRef().collection('payments').wh
 const submit = (uid: string, payload: Record<string, unknown>) =>
   submitNFLPicksInternal(db, { actorUid: uid, subjectUid: uid, subjectName: uid }, { poolId: POOL, week: 1, ...payload } as never);
 
-async function seedPool(opts: { type?: string; max?: number; entryCount?: number | null; alicePaid?: boolean } = {}) {
+async function seedPool(opts: { type?: string; max?: number; entryCount?: number | null; alicePaid?: boolean; season?: string } = {}) {
   n += 1;
   POOL = `pool-me-${n}`;
   createdPools.push(POOL);
   const type = opts.type ?? 'NFL_PICKEM';
   await poolRef().set({
-    name: 'Multi', type, league: 'NFL', season: SEASON, seasonType: 1,
+    name: 'Multi', type, league: 'NFL', season: opts.season ?? SEASON, seasonType: 1,
     ownerId: HOST, managerUid: HOST, participantIds: [HOST, ALICE, BOB], status: 'OPEN', billing: { status: 'free' },
     ...(opts.entryCount === null || opts.entryCount === undefined ? {} : { entryCount: opts.entryCount }),
     settings: {
@@ -106,7 +119,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
   afterAll(async () => {
     try {
       for (const id of createdPools) await db.recursiveDelete(db.collection('pools').doc(id));
-      for (const id of [G1, G2]) await db.collection('nfl_games').doc(id).delete();
+      for (const id of [G1, G2, F1, F2]) await db.collection('nfl_games').doc(id).delete();
       for (const uid of [HOST, ALICE, BOB, 'me-carol']) await db.recursiveDelete(db.collection('users').doc(uid));
     } catch (e) {
       console.warn('[multiEntry.emulator] teardown incomplete:', e);
@@ -318,4 +331,313 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await submitNFLPicksInternal(db, { actorUid: ALICE, subjectUid: ALICE, requestId: 'r1' }, { poolId: POOL, week: 1, picks: { [G1]: 'KC' } } as never);
     expect((await entry(ALICE)).data()!.picks[G1]).toBe('BUF');
   }, 60000);
+});
+
+/**
+ * PLAN-MULTI-ENTRY T3 — scoring, reveal, finalize and profile keyed by ENTRY id.
+ *
+ * The acceptance row, one test each:
+ *  A. a two-entry Margin player gets two DISTINCT ranks, each on its own doc
+ *     (the `entries/{ownerUid}` rank write-back used to put entry 2's rank on
+ *     entry 1 and leave entry 2 rankless — sweeps S1a).
+ *  B. the reveal maps hold BOTH entries, keyed by entry id; and a participant
+ *     sees no `entries` metadata before the week reveals (D5 / the K1 boundary).
+ *  C. the weekly recap lists both entries and names them apart (D4).
+ *  D. finalize writes TWO seasonHistory docs with distinct ids, each carrying
+ *     its own `entryId` (D9).
+ *  E. the profile aggregates both entries but charges the fee ONCE, and
+ *     `getProfilePoolDetail` returns one `entries[]` block per entry (D9).
+ */
+const SYSTEM_ACTOR = { uid: 'system', name: 'system', role: 'SYSTEM' } as never;
+
+/**
+ * 🛑 THE SLATE HAS TO OPEN BEFORE IT CLOSES. Picks are refused once a game
+ * locks (GAME_LOCKED / WEEK_LOCKED), and the scorer only runs
+ * non-provisionally — the branch that publishes the recap — once every game
+ * is FINAL and past its lock. So every scoring test here seeds an OPEN slate,
+ * submits, and only then concludes it. Writing the FINAL slate up front is
+ * the shape that fails, and it fails at SUBMIT, not at the assertion.
+ */
+async function seedOpenSlate() {
+  const future = Date.now() + 5 * HOUR;
+  await db.collection('nfl_games').doc(F1).set({
+    id: F1, espnGameId: F1, season: T3_SEASON, seasonType: 1, week: 1,
+    startTime: future, status: 'SCHEDULED', isMonday: false,
+    homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true },
+  });
+  await db.collection('nfl_games').doc(F2).set({
+    id: F2, espnGameId: F2, season: T3_SEASON, seasonType: 1, week: 1,
+    startTime: future + 60_000, status: 'SCHEDULED', isMonday: true,
+    homeTeam: T('DAL'), awayTeam: T('NYG'), scores: { home: 0, away: 0 }, spread: { value: -1, locked: true },
+  });
+}
+
+/** The same two games, concluded: kicked off hours ago, FINAL, with scores. */
+async function concludeSlate(scores: { f1: [number, number]; f2: [number, number] }) {
+  const past = Date.now() - 6 * HOUR;
+  await db.collection('nfl_games').doc(F1).set({
+    id: F1, espnGameId: F1, season: T3_SEASON, seasonType: 1, week: 1,
+    startTime: past, status: 'FINAL', isMonday: false,
+    homeTeam: T('KC'), awayTeam: T('BUF'),
+    scores: { home: scores.f1[0], away: scores.f1[1] }, spread: { value: -3, locked: true },
+  });
+  await db.collection('nfl_games').doc(F2).set({
+    id: F2, espnGameId: F2, season: T3_SEASON, seasonType: 1, week: 1,
+    startTime: past + 60_000, status: 'FINAL', isMonday: true,
+    homeTeam: T('DAL'), awayTeam: T('NYG'),
+    scores: { home: scores.f2[0], away: scores.f2[1] }, spread: { value: -1, locked: true },
+  });
+}
+
+const loadSlate = async () => (await db.collection('nfl_games')
+  .where('season', '==', T3_SEASON).where('seasonType', '==', 1).where('week', '==', 1).get())
+  .docs.map(d => d.data() as never);
+
+const score = async () => scoreNFLWeekInternal(db, POOL, 1, {
+  pool: { ...(await pool()), id: POOL }, games: await loadSlate(),
+  actor: SYSTEM_ACTOR, provisional: false,
+} as never);
+
+describe('PLAN-MULTI-ENTRY T3 — scoring / reveal / finalize / profile key by entry', () => {
+  /** Only the fields these tests assert on. */
+  type Reveal = {
+    weekRevealed: boolean;
+    counts: Record<string, number>;
+    picks: Record<string, Record<string, string>>;
+    entries?: Record<string, { ownerUid: string; entryName?: string }>;
+  };
+  type Detail = {
+    profit: { feesOwed?: number; feeOwed: number; won: number };
+    entries: Array<{ entryId: string; entryName?: string }>;
+  };
+  type StandingsRow = { id: string; ownerUid: string; rank?: number; entryName?: string };
+  type Recap = {
+    weeklyWinners: Array<{ entryId?: string }>;
+    weeklyPlaces: Array<{ entryId: string }>;
+    sharpOfWeek: { entryId?: string; userId: string; userName: string };
+  };
+  it('A. a two-entry Margin player gets two distinct ranks, each on its own entry doc', async () => {
+    // KC wins by 20, DAL loses by 10 — two different margins, so the two
+    // entries cannot tie and the cascade must separate them on real keys.
+    await seedOpenSlate();
+    await seedPool({ type: 'NFL_MARGIN', max: 3, entryCount: 2, season: T3_SEASON });
+    await submit(ALICE, { picks: { 1: 'KC' } });
+    await submit(ALICE, { picks: { 1: 'DAL' }, entryIndex: 2, entryName: 'Alice B' });
+    await submit(BOB, { picks: { 1: 'BUF' } });
+    await concludeSlate({ f1: [30, 10], f2: [10, 20] });
+
+    await score();
+
+    const e1 = (await entry(ALICE)).data()!;
+    const e2 = (await entry('e2:' + ALICE)).data()!;
+    expect(e1.weeklyScores[1]).toBe(20);
+    expect(e2.weeklyScores[1]).toBe(-10);
+    // 🛑 THE REGRESSION THIS PINS: with the old `doc(r.ownerUid)` write-back,
+    // entry 2's rank landed on entry 1 and entry 2 had none at all.
+    expect(typeof e1.rank).toBe('number');
+    expect(typeof e2.rank).toBe('number');
+    expect(e1.rank).not.toBe(e2.rank);
+    expect(e1.rank).toBe(1);
+    // The member-readable projection carries both rows, distinctly.
+    const rows = (await poolRef().collection('standings').doc('current').get()).data()!.rows as StandingsRow[];
+    const alices = rows.filter(r => r.ownerUid === ALICE);
+    expect(alices.map(r => r.id).sort()).toEqual([ALICE, 'e2:' + ALICE].sort());
+    expect(new Set(alices.map(r => r.rank)).size).toBe(2);
+    expect(alices.find(r => r.id === 'e2:' + ALICE)!.entryName).toBe('Alice B');
+  }, 90000);
+
+  it('B. reveal maps are keyed by entry id and hold both; a participant sees no entries metadata pre-reveal', async () => {
+    // Pre-reveal first: an OPEN slate on the T3 season, so nothing has locked.
+    await seedOpenSlate();
+    await seedPool({ type: 'NFL_PICKEM', max: 3, entryCount: 2, season: T3_SEASON });
+    await submit(ALICE, { picks: { [F1]: 'KC', [F2]: 'DAL' } });
+    await submit(ALICE, { picks: { [F1]: 'BUF' }, entryIndex: 2, entryName: 'Alice B' });
+    await submit(BOB, { picks: { [F1]: 'KC' } });
+
+    // A PARTICIPANT, before the week reveals: counts arrive (ungated since
+    // 2026-08-22) and are keyed by ENTRY, but `entries` metadata does not.
+    const pre = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: auth(BOB) } as never) as Reveal;
+    expect(pre.weekRevealed).toBe(false);
+    expect(pre.entries).toBeUndefined();
+    expect(Object.keys(pre.counts).sort()).toEqual([ALICE, BOB, 'e2:' + ALICE].sort());
+    expect(pre.counts[ALICE]).toBe(2);
+    expect(pre.counts['e2:' + ALICE]).toBe(1);
+    expect(pre.picks).toEqual({});
+
+    // The COMMISSIONER gets the roster at any time — chasing missing picks is
+    // their job, and they already see counts.
+    const host = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: auth(HOST) } as never) as Reveal;
+    expect(host.entries!['e2:' + ALICE]).toEqual({ ownerUid: ALICE, entryName: 'Alice B' });
+    expect(host.entries![ALICE]).toEqual({ ownerUid: ALICE });
+
+    // Once the week has revealed, the participant gets both — keyed by entry id,
+    // with each entry's OWN picks rather than one overwriting the other.
+    await concludeSlate({ f1: [30, 10], f2: [10, 20] });
+    const post = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: auth(BOB) } as never) as Reveal;
+    expect(post.weekRevealed).toBe(true);
+    expect(post.picks[ALICE][F1]).toBe('KC');
+    expect(post.picks['e2:' + ALICE][F1]).toBe('BUF');
+    expect(post.entries!['e2:' + ALICE].ownerUid).toBe(ALICE);
+  }, 90000);
+
+  it('C. the weekly recap lists both of a player’s entries, and names them apart', async () => {
+    await seedOpenSlate();
+    await seedPool({ type: 'NFL_PICKEM', max: 3, entryCount: 2, season: T3_SEASON });
+    // Entry 2 goes 2-for-2 and answers the tiebreaker; entry 1 goes 1-for-2.
+    await submit(ALICE, { picks: { [F1]: 'KC', [F2]: 'NYG' }, tiebreakerPrediction: 30 });
+    await submit(ALICE, { picks: { [F1]: 'KC', [F2]: 'DAL' }, entryIndex: 2, entryName: 'Alice B', tiebreakerPrediction: 44 });
+    await submit(BOB, { picks: { [F1]: 'BUF', [F2]: 'NYG' }, tiebreakerPrediction: 10 });
+    await concludeSlate({ f1: [30, 10], f2: [24, 20] });
+
+    await score();
+
+    const recap = (await poolRef().collection('weekly_recaps').doc('week_1').get()).data()! as Recap;
+    // The winner is the ENTRY that scored 2, and the recap names the entry.
+    expect(recap.weeklyWinners.map(w => w.entryId)).toEqual(['e2:' + ALICE]);
+    expect(recap.sharpOfWeek.entryId).toBe('e2:' + ALICE);
+    expect(recap.sharpOfWeek.userName).toBe('Alice B');
+    expect(recap.sharpOfWeek.userId).toBe(ALICE);
+    // Every scored entry is placed, so BOTH of Alice's rows appear.
+    expect(recap.weeklyPlaces.map(pl => pl.entryId).sort())
+      .toEqual([ALICE, BOB, 'e2:' + ALICE].sort());
+  }, 90000);
+
+  it('D+E. finalize writes one seasonHistory doc per entry; the profile aggregates both and charges ONE fee', async () => {
+    await seedOpenSlate();
+    await seedPool({ type: 'NFL_PICKEM', max: 3, entryCount: 2, season: T3_SEASON });
+    await submit(ALICE, { picks: { [F1]: 'KC', [F2]: 'NYG' } });
+    await submit(ALICE, { picks: { [F1]: 'KC', [F2]: 'DAL' }, entryIndex: 2, entryName: 'Alice B' });
+    await submit(BOB, { picks: { [F1]: 'BUF', [F2]: 'NYG' } });
+    await concludeSlate({ f1: [30, 10], f2: [24, 20] });
+    await score();
+
+    const outcome = await maybeFinalizeNFLPool(db, POOL);
+    expect(outcome.finalized).toBe(true);
+
+    const hist = await db.collection('users').doc(ALICE).collection('seasonHistory').get();
+    const mine = hist.docs.filter(d => (d.data() as { poolId?: string }).poolId === POOL);
+    // D9 — two documents, distinct ids, each stating WHICH entry it is about.
+    expect(mine.map(d => d.id).sort()).toEqual([POOL, POOL + '__e2'].sort());
+    expect(mine.find(d => d.id === POOL)!.data().entryId).toBe(ALICE);
+    const extra = mine.find(d => d.id === POOL + '__e2')!.data();
+    expect(extra.entryId).toBe('e2:' + ALICE);
+    expect(extra.entryName).toBe('Alice B');
+    // Entry 2 went 2-for-2 and outranks entry 1 — the two rows are not copies.
+    expect(extra.finalRank).toBe(1);
+    expect(mine.find(d => d.id === POOL)!.data().finalRank).not.toBe(1);
+    expect(extra.totalEntries).toBe(3);
+
+    // E — the fee is the MEMBER's, counted once (D2 already multiplied it).
+    expect((await member(ALICE)).feeOwed).toBe(50);
+    await db.collection('users').doc(ALICE).collection('participations').doc(POOL)
+      .set({ poolId: POOL, type: 'NFL_PICKEM' });
+    const profile = await recomputeUserProfile(db, ALICE);
+    expect(profile.profit.feesOwed).toBe(50);   // NOT 100
+    // Both entries' play is aggregated: 2 games x 2 entries graded...
+    expect(profile.overall.total).toBe(4);
+    // ...but ONE pool was entered, not two.
+    expect(profile.overall.poolsEntered).toBe(1);
+
+    const detail = await wPoolDetail({ data: { subjectId: ALICE, poolId: POOL }, auth: auth(ALICE) } as never) as Detail;
+    expect(detail.entries).toHaveLength(2);
+    expect(detail.entries.map(e => e.entryId).sort()).toEqual([ALICE, 'e2:' + ALICE].sort());
+    expect(detail.entries[1].entryName).toBe('Alice B');
+    expect(detail.profit.feeOwed).toBe(50);
+  }, 120000);
+});
+
+/**
+ * PLAN-MULTI-ENTRY — THE FLIP'S PROOF: a two-entry member is playable from the
+ * WIZARD'S CREATE PAYLOAD all the way to the standings projection every member
+ * reads.
+ *
+ * 🛑 THIS IS THE TEST THE FLIP IS GATED ON, and it is deliberately an ARC
+ * rather than a set of unit assertions. Every ticket in this plan is individually
+ * green with the feature switched off; the only question the flip actually asks
+ * is whether the pieces line up end to end — and the way that fails is not a
+ * crash, it is a member holding two entries and seeing one row.
+ *
+ * The seam this cannot cross, stated: the emulator suite runs inside
+ * `functions/` and cannot import the client fold (`src/utils/memberStandings`).
+ * The other half of the arc — those exact artifacts turning into two playable
+ * rows — is `src/utils/memberStandings.test.ts`'s "one row per ENTRY" block,
+ * which is fed the same shapes this test asserts the server writes.
+ */
+describe('PLAN-MULTI-ENTRY — FLIP: wizard payload → two entries → standings', () => {
+  it('a member creates a 3-entry pool, plays two entries, and both reach the standings projection', async () => {
+    // 1. THE WIZARD END. `maxEntriesPerUser` is set on the create payload, which
+    //    is the ONLY place it can be declared (the NFL create schemas are
+    //    `z.object` and strip unknown keys — sweeps S2). If T1's schema change
+    //    ever regressed, the value would vanish here and every later assertion
+    //    would still pass on a one-entry pool. So it is asserted on the DOC.
+    await db.collection('users').doc(HOST).set({ name: 'Host', role: 'PARTICIPANT' });
+    const created = await wCreateNFL({
+      data: {
+        type: 'NFL_PICKEM',
+        name: 'Launch Day',
+        season: T3_SEASON,
+        seasonType: 1,
+        settings: {
+          entryFee: 25,
+          isListedPublic: true,
+          lockMode: 'PER_GAME',
+          pickMode: 'STRAIGHT',
+          confidenceMode: false,
+          maxEntriesPerUser: 3,
+          payouts: { places: [], bonuses: [] },
+        },
+      },
+      auth: auth(HOST),
+    } as never) as { poolId: string };
+    POOL = created.poolId;
+    createdPools.push(POOL);
+    expect((await pool()).settings.maxEntriesPerUser).toBe(3);
+
+    // 2. A member joins the normal way.
+    await db.collection('users').doc(ALICE).set({ name: 'Alice', role: 'PARTICIPANT' });
+    await joinNFLPoolInternal(db, { subjectUid: ALICE, subjectName: 'Alice' }, POOL);
+    expect((await member(ALICE)).feeOwed).toBe(25);
+
+    // 3. Two entries, the second named — exactly what the "My Entries" switcher
+    //    sends: `entryIndex` plus `entryName`, and nothing at all for entry #1.
+    await seedOpenSlate();
+    await submit(ALICE, { picks: { [F1]: 'KC', [F2]: 'DAL' } });
+    await submit(ALICE, { picks: { [F1]: 'BUF', [F2]: 'NYG' }, entryIndex: 2, entryName: 'Alice B' });
+
+    // The dues doubled, the roster map holds both, and the pot denominator moved.
+    const m = await member(ALICE);
+    expect(m.feeOwed).toBe(50);
+    expect(m.playableEntryCount).toBe(2);
+    expect(Object.keys(m.entries).sort()).toEqual([ALICE, 'e2:' + ALICE].sort());
+    expect(m.entries['e2:' + ALICE].name).toBe('Alice B');
+    expect((await pool()).entryCount).toBe(2);
+
+    // A third entry is refused only past the cap the WIZARD set, not before.
+    await submit(ALICE, { picks: { [F1]: 'KC' }, entryIndex: 3, entryName: 'Alice C' });
+    await expect(submit(ALICE, { picks: { [F1]: 'KC' }, entryIndex: 4 }))
+      .rejects.toThrow(/ENTRY_INDEX_EXCEEDS_MAX/);
+
+    // 4. Score the week for real.
+    await concludeSlate({ f1: [30, 10], f2: [24, 20] });
+    await score();
+
+    // 5. THE STANDINGS PROJECTION — what every member's table is built from.
+    const rows = (await poolRef().collection('standings').doc('current').get()).data()!.rows as Array<Record<string, unknown>>;
+    const mine = rows.filter(r => r.ownerUid === ALICE);
+    expect(mine).toHaveLength(3);
+    expect(mine.map(r => r.id).sort()).toEqual([ALICE, 'e2:' + ALICE, 'e3:' + ALICE].sort());
+    // 🛑 THREE DISTINCT SCORES FROM THREE DIFFERENT SHEETS. KC and DAL both won,
+    // so entry 1 (KC + DAL) is 2, entry 2 (BUF + NYG) is 0 and entry 3 (KC only)
+    // is 1. If any consumer still keyed by uid, these would collapse onto one
+    // number — and the collapse, not a crash, is how multi-entry fails.
+    expect(mine.find(r => r.id === ALICE)!.totalScore).toBe(2);
+    expect(mine.find(r => r.id === 'e2:' + ALICE)!.totalScore).toBe(0);
+    expect(mine.find(r => r.id === 'e3:' + ALICE)!.totalScore).toBe(1);
+    // The extra entries carry their names; entry #1 carries none, by contract.
+    expect(mine.find(r => r.id === 'e2:' + ALICE)!.entryName).toBe('Alice B');
+    expect(mine.find(r => r.id === ALICE)!.entryName).toBeUndefined();
+    // Every row states its owner, which is what "is this me" and the profile
+    // link key on (§0b.2) — and what the client fold uses for membership.
+    expect(mine.every(r => r.ownerUid === ALICE)).toBe(true);
+  }, 120000);
 });

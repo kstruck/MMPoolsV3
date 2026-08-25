@@ -554,7 +554,6 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                         poolName={config.name || 'New Pool'}
                                         poolType="PROPS"
                                         estimatedPlayers={25}
-                                        hasCustomBranding={hasCustomBranding}
                                         hasAiCommissioner={hasAiCommissioner}
                                         isWizard={true}
                                         onTosAcceptChange={setTosAccepted}

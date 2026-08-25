@@ -10,7 +10,24 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
+  # Scan the full PR history for credentials before any build or deploy work.
+  # The job name is a required status check in the main-branch ruleset.
+  secrets-scan:
+    name: secrets-scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for hard-coded secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   security-audit:
+    name: security-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +36,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          # 2026-08-23 build audit: this job ran both npm ci's cold every time.
+          # Cache keyed on BOTH lockfiles so root and functions/ installs hit.
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
 
       # npm 10 — the version bundled with node 22 — audits against
       # /-/npm/v1/security/audits/quick, which the registry has RETIRED. It now
