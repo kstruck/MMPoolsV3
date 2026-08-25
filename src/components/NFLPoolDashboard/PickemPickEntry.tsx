@@ -47,6 +47,17 @@ interface PickemPickEntryProps {
    * document on their own copies of this prop.)
    */
   seasonGames?: NFLGame[];
+  /**
+   * WHICH of the viewer's entries this sheet is for (PLAN-MULTI-ENTRY T5/D7).
+   * Absent ⇒ 1, which is what every single-entry pool sends and what the
+   * server defaults to — so nothing changes for a pool with one entry each.
+   */
+  entryIndex?: number;
+  /**
+   * The name to give a NEW entry on its first submit. Ignored by the server for
+   * an entry that already exists, so it is only ever the draft's name.
+   */
+  entryName?: string;
   entry: any; // NFLPickemEntry or null
   isWeekLocked: boolean;
 }
@@ -56,6 +67,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   week,
   games,
   seasonGames,
+  entryIndex,
+  entryName,
   entry,
   isWeekLocked
 }) => {
@@ -417,6 +430,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       tiebreakerPrediction: showTiebreaker ? tiebreakerPrediction : undefined,
       // The target the sheet DISPLAYED — the server compares, never stores it.
       displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined,
+      // Sent only for an extra entry: `undefined` keeps the payload — and the
+      // server's own default — byte-for-byte what a single-entry pool sends.
+      ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}),
+      ...(entryIndex && entryIndex > 1 && entryName ? { entryName } : {}),
       requestId: crypto.randomUUID()
     };
 

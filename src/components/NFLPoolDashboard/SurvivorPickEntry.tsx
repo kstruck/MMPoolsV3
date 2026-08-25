@@ -41,6 +41,17 @@ interface SurvivorPickEntryProps {
    * games and scopes to the pool's seasonType, so passing the season is safe.
    */
   seasonGames?: NFLGame[];
+  /**
+   * WHICH of the viewer's entries this sheet is for (PLAN-MULTI-ENTRY T5/D7).
+   * Absent ⇒ 1, which is what every single-entry pool sends and what the
+   * server defaults to — so nothing changes for a pool with one entry each.
+   */
+  entryIndex?: number;
+  /**
+   * The name to give a NEW entry on its first submit. Ignored by the server for
+   * an entry that already exists, so it is only ever the draft's name.
+   */
+  entryName?: string;
   entry: any; // SurvivorEntry or null
   isWeekLocked: boolean;
 }
@@ -50,6 +61,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   week,
   games,
   seasonGames,
+  entryIndex,
+  entryName,
   entry,
   isWeekLocked
 }) => {
@@ -216,6 +229,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
         picks: {
           [week]: selectedTeam
         },
+        // Sent only for an extra entry: `undefined` keeps the payload — and the
+        // server's own default — byte-for-byte what a single-entry pool sends.
+        ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}),
+        ...(entryIndex && entryIndex > 1 && entryName ? { entryName } : {}),
         requestId: crypto.randomUUID()
       });
       setSubmittedAt(serverNow());
@@ -248,7 +265,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     setError(null);
 
     try {
-      await dbService.executeSurvivorRebuy(pool.id, week);
+      await dbService.executeSurvivorRebuy(pool.id, week, entryIndex);
       toast.success(`Rebuy confirmed — you're back in the game! $${rebuyCost} due to the commissioner.`);
     } catch (err: any) {
       logger.error('Failed to execute Survivor rebuy:', err);

@@ -837,6 +837,7 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
     'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx',
     'src/components/NFLPoolDashboard/NFLManagerView.tsx',
     'src/components/PaymentsPanel.tsx',
+    'src/components/NFLPoolDashboard/EntrySwitcher.tsx',
     'src/utils/memberStandings.ts',
     'src/utils/poolRoster.ts',
   ];
@@ -852,7 +853,6 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
   // if either line is left behind, which is what makes deleting them mandatory
   // rather than tidy.
   const ALLOW: Record<string, RegExp[]> = {
-    'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/], // myEntry — T5
     'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
     'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
   };

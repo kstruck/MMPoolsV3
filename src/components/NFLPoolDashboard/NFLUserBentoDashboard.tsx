@@ -42,6 +42,13 @@ interface NFLUserBentoDashboardProps {
   user: UserType | null;
   games: NFLGame[];
   entries: any[];
+  /**
+   * The viewer's ACTIVE entry (PLAN-MULTI-ENTRY T5/D7) — which of their entries
+   * this card, and its "Make Picks" CTA, is about. `null`/absent means "no
+   * explicit choice", which resolves to their first row exactly as before T5,
+   * so a single-entry pool renders identically.
+   */
+  activeEntryId?: string | null;
   recaps: WeeklyRecap[];
   selectedWeek: number;
   setSelectedWeek: (week: number) => void;
@@ -146,6 +153,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   user,
   games: _games,
   entries,
+  activeEntryId,
   recaps: _recaps,
   selectedWeek,
   setSelectedWeek: _setSelectedWeek,
@@ -210,10 +218,23 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   const [awayLogoErr, setAwayLogoErr] = useState(false);
   const [homeLogoErr, setHomeLogoErr] = useState(false);
 
+  /**
+   * THE VIEWER'S ACTIVE ENTRY (PLAN-MULTI-ENTRY §0b.3 / T5).
+   *
+   * `.filter`, never `.find`: under multi-entry one player owns several of these
+   * rows, and `.find` silently returns whichever the fold emitted first — a card
+   * that shows one entry's picks while the pick tab edits another.
+   *
+   * `activeEntryId` names the one the member chose. When it is absent, or names
+   * an entry that is no longer in the rows, the FIRST of their rows is used —
+   * which for every single-entry pool is their only row, so nothing changes
+   * there.
+   */
   const myEntry = useMemo(() => {
     if (!user) return null;
-    return entries.find(e => e.ownerUid === user.id || e.id === user.id) || null;
-  }, [entries, user]);
+    const mine = entries.filter(e => e.ownerUid === user.id || e.id === user.id);
+    return (activeEntryId ? mine.find(e => e.id === activeEntryId) : undefined) ?? mine[0] ?? null;
+  }, [entries, user, activeEntryId]);
 
   // ONE season ordering for every list on this card — `seasonCompare` is the
   // standings table's cascade (utils/nflResults); the three shallow copies
@@ -348,6 +369,16 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
       : !!myEntry.picks?.[selectedWeek]
   );
   const picksCta = pickCtaFor({ locked: weekLocked, complete: weekPicksComplete, hasAnyPick: hasAnyPickThisWeek });
+  /**
+   * On a multi-entry pool the CTA must say WHICH entry it will open, because
+   * "Make Picks" over a card showing entry #2's sheet is ambiguous exactly when
+   * it matters. The suffix appears only when the viewer holds more than one
+   * row — a single-entry member sees the unchanged label.
+   */
+  const myEntryCount = user ? entries.filter(e => e.ownerUid === user.id || e.id === user.id).length : 0;
+  const activeEntryLabel = myEntryCount > 1
+    ? (typeof myEntry?.entryName === 'string' && myEntry.entryName ? myEntry.entryName : `Entry ${typeof myEntry?.entryIndex === 'number' ? myEntry.entryIndex : 1}`)
+    : null;
 
   const myPick = useMemo(() => {
     if (!myEntry || !focusGame) return null;
@@ -583,7 +614,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 size="md"
                 onClick={() => onSelectTab('picks')}
               >
-                {picksCta.label} <ChevronRight size={14} />
+                {picksCta.label}{activeEntryLabel ? ` (${activeEntryLabel})` : ''} <ChevronRight size={14} />
               </Button>
             </div>
 
