@@ -32,6 +32,17 @@ interface MarginPickEntryProps {
    * games and scopes to the pool's seasonType, so passing the season is safe.
    */
   seasonGames?: NFLGame[];
+  /**
+   * WHICH of the viewer's entries this sheet is for (PLAN-MULTI-ENTRY T5/D7).
+   * Absent ⇒ 1, which is what every single-entry pool sends and what the
+   * server defaults to — so nothing changes for a pool with one entry each.
+   */
+  entryIndex?: number;
+  /**
+   * The name to give a NEW entry on its first submit. Ignored by the server for
+   * an entry that already exists, so it is only ever the draft's name.
+   */
+  entryName?: string;
   entry: any; // MarginEntry or null
   isWeekLocked: boolean;
 }
@@ -41,6 +52,8 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   week,
   games,
   seasonGames,
+  entryIndex,
+  entryName,
   entry,
   isWeekLocked
 }) => {
@@ -57,8 +70,11 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   // snapshot refreshes right after a successful submit, and would wipe the
   // receipt it just earned. Same shape as PickemPickEntry (codex r1).
   useEffect(() => {
+    // ⚠️ THE ENTRY IS PART OF THE RECEIPT'S SCOPE (PLAN-MULTI-ENTRY T5). The
+    // receipt says "saved just now" about ONE entry's sheet; carrying it across
+    // an entry switch would tell a member their brand-new entry #2 is saved.
     setSubmittedAt(null);
-  }, [week]);
+  }, [week, entryIndex]);
 
   // Load existing selection for this week when entry or week changes
   useEffect(() => {
@@ -167,6 +183,15 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         picks: {
           [week]: selectedTeam
         },
+        ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}),
+        // ⚠️ A BLANK NAME IS NOT A NAME, AND `''` AND `'   '` MUST MEAN THE SAME
+        // THING (codex r3 on the T5 PR). A whitespace-only string is truthy, so
+        // it used to reach the server and come back ENTRY_NAME_EMPTY, while an
+        // empty one was dropped and silently took the generated default — two
+        // answers to one act. Both now take the default: the switcher PRE-FILLS
+        // a name, so clearing it reads as "whatever you suggested", not as a
+        // request to be refused.
+        ...(entryIndex && entryIndex > 1 && entryName?.trim() ? { entryName: entryName.trim() } : {}),
         requestId: crypto.randomUUID()
       });
       setSubmittedAt(serverNow());

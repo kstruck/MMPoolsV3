@@ -837,6 +837,7 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
     'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx',
     'src/components/NFLPoolDashboard/NFLManagerView.tsx',
     'src/components/PaymentsPanel.tsx',
+    'src/components/NFLPoolDashboard/EntrySwitcher.tsx',
     'src/utils/memberStandings.ts',
     'src/utils/poolRoster.ts',
   ];
@@ -852,7 +853,6 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
   // if either line is left behind, which is what makes deleting them mandatory
   // rather than tidy.
   const ALLOW: Record<string, RegExp[]> = {
-    'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/], // myEntry — T5
     'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
     'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
   };
@@ -1388,5 +1388,75 @@ describe('the inert Pick’em scoring fields are not displayed anywhere', () => 
     expect(stripComments("  // NOT sent: `pointsPerPick` / `primetimeBonus`.")).not.toMatch(READ);
     expect(stripComments("  /* They read `settings.pointsPerPick` and\n   `settings.primetimeBonus`, which nothing reads. */")).not.toMatch(READ);
     expect(stripComments("      {/* reads `settings.pointsPerPick` — removed */}")).not.toMatch(READ);
+  });
+});
+
+
+/**
+ * 🛑 NEVER ADVERTISE ENTRIES NOBODY CAN PLAY (PLAN-MULTI-ENTRY, the flip's own
+ * rule).
+ *
+ * `MULTI_ENTRY_WIZARD_ENABLED` decides whether a commissioner is OFFERED a
+ * per-player entry cap. It was held false through T1 and T2 because the server
+ * accepted a second entry while the client could neither address one nor render
+ * it — a toggle that would have let a commissioner promise something the app
+ * could not deliver.
+ *
+ * This guard makes that rule a TEST rather than a paragraph in a header. It
+ * does NOT assert the flag's value: turning the offer off is a legitimate,
+ * reversible decision. It asserts the IMPLICATION — while the offer is on, the
+ * four capabilities a second entry needs must all be present in the source.
+ *
+ * Coarse greps, same convention as the rest of this file. Each one names the
+ * ticket that put it there, so a deletion is traceable rather than mysterious.
+ */
+describe('the multi-entry offer implies the capability (PLAN-MULTI-ENTRY flip)', () => {
+  const shared = readFileSync(resolve(root, 'shared/multiEntry.ts'), 'utf8');
+  const offered = /export const MULTI_ENTRY_WIZARD_ENABLED = true;/.test(shared);
+
+  const REQUIRED: Array<[string, string, RegExp]> = [
+    // T5 — the member can SELECT which of their entries the sheet is for.
+    ['NFLPoolDashboard renders the entry switcher',
+      'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx', /<EntrySwitcher/],
+    // T5 — and every sheet SENDS the entry it was for.
+    ['PickemPickEntry sends entryIndex',
+      'src/components/NFLPoolDashboard/PickemPickEntry.tsx', /\{ entryIndex \}/],
+    ['SurvivorPickEntry sends entryIndex',
+      'src/components/NFLPoolDashboard/SurvivorPickEntry.tsx', /\{ entryIndex \}/],
+    ['MarginPickEntry sends entryIndex',
+      'src/components/NFLPoolDashboard/MarginPickEntry.tsx', /\{ entryIndex \}/],
+    // T4 — a second entry gets a ROW.
+    ['buildMemberStandings emits one row per entry',
+      'src/utils/memberStandings.ts', /for \(const entryId of ownedEntryIds\(m\)\)/],
+    // T4 — and the viewer's own entries are all subscribed to.
+    ['dbService subscribes to every owned entry',
+      'src/services/dbService.ts', /subscribeToMyNFLEntries:/],
+    // T6a — and the rows are TELLABLE APART.
+    ['NFLStandings displays the entry name',
+      'src/components/NFLPoolDashboard/NFLStandings.tsx', /rowDisplayName\(/],
+    ['NFLPicksGrid displays the entry name',
+      'src/components/NFLPoolDashboard/NFLPicksGrid.tsx', /rowDisplayName\(/],
+    ['NFLResults displays the entry name',
+      'src/components/NFLPoolDashboard/NFLResults.tsx', /rowDisplayName\(/],
+    ['NFLWeeklyPicksGrid displays the entry name',
+      'src/components/NFLPoolDashboard/NFLWeeklyPicksGrid.tsx', /rowDisplayName\(/],
+  ];
+
+  it.each(REQUIRED)('%s', (_label, file, re) => {
+    if (!offered) return;   // the offer is off; the implication is vacuous
+    expect(re.test(readFileSync(resolve(root, file), 'utf8'))).toBe(true);
+  });
+
+  it('the flag is read from ONE place, so hiding the offer hides all of it', () => {
+    // Two copies would drift, and the copy that stayed `true` would be the one
+    // rendering a control the other half no longer supports.
+    const wizard = readFileSync(resolve(root, 'src/components/wizard/create/MultiEntryFields.tsx'), 'utf8');
+    const manager = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLManagerView.tsx'), 'utf8');
+    expect(wizard).toContain("from '@shared/multiEntry'");
+    expect(manager).toContain("from '@shared/multiEntry'");
+    expect(wizard).toContain('if (!MULTI_ENTRY_WIZARD_ENABLED) return null;');
+    // The manager control still renders for a pool that ALREADY took the offer,
+    // so turning the flag off never strands one (`|| currentMaxEntries > 1`).
+    expect(manager).toContain('{(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (');
   });
 });

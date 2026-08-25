@@ -16,6 +16,9 @@ import { CountdownTo } from '../common/CountdownTo';
 import { PickemPickEntry } from './PickemPickEntry';
 import { SurvivorPickEntry } from './SurvivorPickEntry';
 import { MarginPickEntry } from './MarginPickEntry';
+import { EntrySwitcher, type EntryDraft } from './EntrySwitcher';
+import { sortOwnEntries, nextAddableEntryIndex } from '../../utils/entrySelection';
+import { effectiveMaxEntriesPerUser, defaultEntryName } from '@shared/multiEntry';
 import { NFLStandingsTab } from './NFLStandingsTab';
 import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
@@ -258,20 +261,67 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     && ownEntryState.poolId === pool.id
     && ownEntryState.uid === user.id;
   const ownEntries = ownEntryKnown ? ownEntryState!.entries : [];
+  const maxEntriesPerUser = effectiveMaxEntriesPerUser(castPool.settings);
+
   /**
-   * The viewer's PRIMARY entry — the lowest `entryIndex` they own.
+   * WHICH of the viewer's entries every own-entry surface is about (T5/D7).
    *
-   * ⚠️ INTERIM, AND NAMED SO. Every surface that still assumes one entry per
-   * player (the pick sheet, the bento CTA, the checklist strip) reads this, and
-   * for every pool in production it IS the member's only entry. T5 replaces it
-   * with the ACTIVE entry from the "My Entry" switcher; this exists so T4 can
-   * ship the row fold without also rewriting the pick surfaces.
+   * 🛑 STAMPED WITH THE POOL, LIKE EVERY OTHER PIECE OF DERIVED VIEWER STATE
+   * HERE. `PoolRoute` reuses this component across pool navigation and across an
+   * account switch, so a selection made in one pool would otherwise name an
+   * entry id that does not exist in the next — and the fallback below would
+   * silently hand the member a DIFFERENT entry's pick sheet while the tab strip
+   * showed their choice. Same rule `reveal` and `ownEntryState` already follow.
+   *
+   * `null` means "no explicit choice", which resolves to the primary entry.
    */
-  const ownEntry = ownEntries.length > 0
-    ? [...ownEntries].sort((a, b) =>
-        ((typeof a?.entryIndex === 'number' ? a.entryIndex : 1) - (typeof b?.entryIndex === 'number' ? b.entryIndex : 1))
-        || String(a?.id ?? '').localeCompare(String(b?.id ?? '')))[0]
-    : null;
+  const [activeEntrySel, setActiveEntrySel] = useState<{ poolId: string; uid: string; entryId: string } | null>(null);
+  /** The draft entry the member is naming, before its first pick creates it. */
+  const [entryDraft, setEntryDraft] = useState<{ poolId: string; uid: string; draft: EntryDraft } | null>(null);
+  const pendingDraft = entryDraft && entryDraft.poolId === pool.id && entryDraft.uid === (user?.id || '')
+    ? entryDraft.draft : null;
+
+  const sortedOwnEntries = useMemo(() => sortOwnEntries(ownEntries), [ownEntries]);
+
+  /**
+   * 🛑 A DRAFT IS OVER THE MOMENT ITS ENTRY EXISTS (codex r2 P2 on the T5 PR).
+   *
+   * The draft's first successful submit CREATES the entry, and the entries
+   * subscription delivers the new document a beat later. Without this the draft
+   * would still be "live" — and `draft` forces `ownEntry` and `myEntry` to
+   * `null`, so the sheet would keep behaving as an unsaved draft and HIDE the
+   * saved state of the entry the member just created, until they happened to
+   * click its tab.
+   *
+   * Derived rather than cleared in an effect: an effect would set state during
+   * a snapshot-driven render and reintroduce exactly the one-paint lag the
+   * `entries` memo above was rewritten to remove.
+   */
+  const fulfilledDraftEntry = pendingDraft
+    ? sortedOwnEntries.find(e => (typeof e?.entryIndex === 'number' ? e.entryIndex : 1) === pendingDraft.entryIndex)
+    : undefined;
+  const draft = fulfilledDraftEntry ? null : pendingDraft;
+  /**
+   * The ACTIVE entry: the member's explicit choice when it still names an entry
+   * they hold, otherwise their primary (lowest `entryIndex`).
+   *
+   * ⚠️ THE "STILL HOLD" CHECK IS NOT DEFENSIVE PADDING. A selection can name an
+   * entry that has gone — a commissioner removing and re-adding a member deletes
+   * their entries — and a dangling id would resolve to `undefined`, which every
+   * pick surface reads as "you have not entered your picks".
+   */
+  const ownEntry = draft
+    ? null
+    : (fulfilledDraftEntry
+        // The entry the member has just created stays selected — anything else
+        // would bounce them back to entry #1 the instant their pick saved.
+        ?? sortedOwnEntries.find(e => e.id === (activeEntrySel && activeEntrySel.poolId === pool.id && activeEntrySel.uid === (user?.id || '') ? activeEntrySel.entryId : null))
+        ?? sortedOwnEntries[0]
+        ?? null);
+  /** The index the pick sheet submits under: the draft's, or the active entry's. */
+  const activeEntryIndex: number = draft
+    ? draft.entryIndex
+    : (typeof ownEntry?.entryIndex === 'number' ? ownEntry.entryIndex : 1);
   // Stamped with the pool it came from, and keyed BY WEEK.
   //
   // `PoolRoute` reuses this component across pool navigation, so a response
@@ -578,13 +628,35 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const myEntry = useMemo(() => {
     if (!user) return null;
     // PLAN-MULTI-ENTRY §0b.3 — `.filter`, never `.find`. Where a SINGLE entry is
-    // genuinely needed (the pick sheet's CTA) it is the primary one until T5
-    // makes it the ACTIVE one; taking the first match by uid would silently pick
-    // whichever row the fold emitted first.
+    // genuinely needed (the pick sheet, the CTA) it is the ACTIVE one (T5/D7);
+    // taking the first match by uid would silently pick whichever row the fold
+    // emitted first, which under multi-entry is not the member's choice.
+    //
+    // ⚠️ A DRAFT ENTRY HAS NO DOCUMENT AND MUST RESOLVE TO `null`, NOT TO
+    // ANOTHER ENTRY. `ownEntry` is null while a draft is selected, and falling
+    // through to the folded rows here would hand the empty new sheet the
+    // PRIMARY entry's saved picks — pre-filled, and one click from overwriting
+    // the wrong entry.
+    if (draft) return null;
     if (ownEntry) return ownEntry;
+    //
+    // 🛑 AND ON A MULTI-ENTRY POOL, NEVER GUESS (codex r6, P1).
+    //
+    // Below this line the own-entry snapshot has NOT landed, and the only rows
+    // in hand are the FOLD's — which carry no `entryIndex`, so they cannot be
+    // matched to the active one. `mine[0]` is whichever the fold emitted first,
+    // and the fold is ordered by the standings cascade: on a two-entry member
+    // that can be entry #2 while `activeEntryIndex` is still 1. The sheet would
+    // then DISPLAY entry #2's picks and SUBMIT them as entry #1 — a save that
+    // copies one entry's sheet onto another, which is precisely the corruption
+    // this plan exists to prevent.
+    //
+    // A single-entry pool keeps the fallback exactly as it was, because there
+    // `mine[0]` is not a guess: it is the member's only entry.
+    if (maxEntriesPerUser > 1) return null;
     const mine = entries.filter(e => e.ownerUid === user.id);
     return mine[0] || null;
-  }, [ownEntry, entries, user]);
+  }, [ownEntry, draft, entries, user, maxEntriesPerUser]);
 
   // Check if the current selected week is locked (earliest game kicked off).
   // Server-corrected clock — device time can drift and lie about the deadline.
@@ -1047,6 +1119,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                   <NFLUserBentoDashboard
                     pool={pool}
                     user={user}
+                    activeEntryId={ownEntry?.id ?? null}
+                    pendingEntryLabel={draft ? (draft.entryName.trim() || `Entry ${draft.entryIndex}`) : undefined}
                     games={games}
                     entries={entries}
                     recaps={recaps}
@@ -1098,6 +1172,45 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                       {/* Left/Center columns: Matchups/Picks list */}
                       <div className="lg:col-span-2 space-y-6">
+                        {/*
+                          My Entries (T5/D7). Renders nothing when the pool
+                          allows one entry each, which is every pool until
+                          `MULTI_ENTRY_WIZARD_ENABLED` flips — so a single-entry
+                          pool's pick tab is unchanged, pixel for pixel.
+                        */}
+                        <EntrySwitcher
+                          ownEntries={ownEntries}
+                          maxEntries={maxEntriesPerUser}
+                          userName={user?.name || 'Entry'}
+                          activeEntryId={ownEntry?.id ?? null}
+                          activeEntryIndex={activeEntryIndex}
+                          onSelectPrimarySlot={() => setEntryDraft({
+                            poolId: pool.id,
+                            uid: user?.id || '',
+                            // Entry #1 takes no name — see EntrySwitcher.
+                            draft: { entryIndex: 1, entryName: '' },
+                          })}
+                          onSelect={(entryId) => {
+                            setEntryDraft(null);
+                            setActiveEntrySel({ poolId: pool.id, uid: user?.id || '', entryId });
+                          }}
+                          draft={draft}
+                          onStartDraft={() => {
+                            const next = nextAddableEntryIndex(ownEntries, maxEntriesPerUser);
+                            if (next === null) return;
+                            setEntryDraft({
+                              poolId: pool.id,
+                              uid: user?.id || '',
+                              draft: { entryIndex: next, entryName: defaultEntryName(user?.name || 'Entry', next) ?? '' },
+                            });
+                          }}
+                          onDraftNameChange={(entryName) => setEntryDraft(prev => prev
+                            ? { ...prev, draft: { ...prev.draft, entryName } }
+                            : prev)}
+                          onCancelDraft={() => setEntryDraft(null)}
+                          isWeekLocked={isWeekLocked}
+                        />
+
                         {pool.type === 'NFL_PICKEM' && (
                           <PickemPickEntry
                             pool={pool}
@@ -1106,6 +1219,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             seasonGames={games}
                             entry={myEntry}
+                            entryIndex={activeEntryIndex}
+                            entryName={draft?.entryName}
                             isWeekLocked={isWeekLocked}
                           />
                         )}
@@ -1118,6 +1233,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             seasonGames={games}
                             entry={myEntry}
+                            entryIndex={activeEntryIndex}
+                            entryName={draft?.entryName}
                             isWeekLocked={isWeekLocked}
                           />
                         )}
@@ -1130,6 +1247,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             games={weeklyGames}
                             seasonGames={games}
                             entry={myEntry}
+                            entryIndex={activeEntryIndex}
+                            entryName={draft?.entryName}
                             isWeekLocked={isWeekLocked}
                           />
                         )}
