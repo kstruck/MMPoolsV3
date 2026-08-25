@@ -68,9 +68,20 @@ spinning browser on a `200` goes to step 2, always; treating it as a backend
 problem is how that outage costs an hour instead of a minute.
 
 **The hash is the deploy fingerprint.** Compare it to the hash the last known
-good deploy recorded (`HANDOFF.md`'s live-state box carries it). A hash you do
-not recognise means a deploy landed. A hash that matches the last good one means
-the frontend did NOT change and the fault is behind it — jump to step 3.
+good deploy recorded. **`HANDOFF.md`'s live-state box is the intended baseline**
+— the current one records the serving bundle as `index-BRP5Lf-B.js` from the
+2026-08-24 Coolify rebuild — and keeping it current is the "After it is over"
+step at the bottom of this page.
+
+**If the box has no hash, do not guess and do not skip to step 3.** The
+authoritative baseline is then the **Coolify deployment history** itself: the
+previous successful row's commit SHA is what was serving before the current one.
+Search older `HANDOFF.md` boxes only to corroborate, never as the primary
+answer — the hashes further down that file are historical by construction.
+
+A hash you do not recognise means a deploy landed. A hash matching the last good
+one means the **entry bundle** did not change — which narrows the search but does
+not clear the frontend (see the warning below).
 
 ⚠️ **The entry-JS hash is ONE asset, not a checksum of the frontend.** An
 unchanged `index-*.js` does not mean the frontend is unchanged: the CSS bundle,
