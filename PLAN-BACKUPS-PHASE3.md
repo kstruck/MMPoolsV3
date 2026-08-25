@@ -453,7 +453,7 @@ so the automated version is a Cloud Function rather than a wrapped CLI call.
 | `authBackupJob` | Scheduled weekly, **Sunday 03:15 ET** (`15 3 * * 0`, `America/New_York`), `timeoutSeconds: 540`, `memory: 512MiB`. Heartbeat-wrapped (`system/heartbeats.authBackupJob`). |
 | `runAuthBackup` | On-demand callable, **SUPER_ADMIN** via the shared `assertCallerRole` claim+doc gate (through `validated({ role: "SUPER_ADMIN" })`). Input `{ dryRun?: boolean }`, **defaults to `dryRun: true`**. |
 | Pagination | `admin.auth().listUsers(1000, pageToken)` in a loop that follows `nextPageToken` to exhaustion. Capped at 250 pages (250k accounts) and at a repeated cursor; a run that stops before the tenant is exhausted is reported `complete: false`, named `-PARTIAL` in the filename, and marked `ok:false` on the heartbeat. **A truncated export that looks whole is worse than no export**, because it is only discovered on the day it is needed. |
-| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>-<runid>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>-<runid>.manifest.json` — counts, page count, byte size, completeness, run id, `passwordUsersMissingHash`, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** The six-character run id makes every run's objects unique, so the job only ever CREATES and never overwrites — which is what lets the bucket grant be create-only (see the PII section). Timestamp leads, so names still sort chronologically. |
+| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>-<runid>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>-<runid>.manifest.json` — counts, page count, byte size, completeness, run id, `passwordUsersMissingHash`, `unsupportedMfaFactors`, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** The six-character run id makes every run's objects unique, so the job only ever CREATES and never overwrites — which is what lets the bucket grant be create-only (see the PII section). Timestamp leads, so names still sort chronologically. |
 | Import-shape fidelity | The record mapping is written against firebase-tools' actual validator (`lib/accountImporter.js`), not against the Admin SDK's shape, and a test transcribes that validator and runs every exported record through it. This is not pedantry: `auth:import` rejects the **entire file** on one bad record, and the Admin SDK's `providerData` carries a `password` entry the CLI does not accept — which every email/password account in this project has. Caught by codex R3. |
 | Hash-readability signal | `passwordUsersMissingHash` counts accounts that have a `password` provider but no hash — the signature of a runtime service account that cannot read password hashes. Such an export **imports perfectly and leaves every member unable to sign in**, so any value above zero makes the run report `ok:false` and writes an `error` audit row. |
 | Audit | One `admin_audit` row per run (`action: "AUTH_BACKUP"`), counts and object path only. |
@@ -741,8 +741,8 @@ confirm it says `"complete": true`:
 gcloud storage cat gs://mmpools-auth-backups/auth/auth-backup-<stamp>-<runid>.manifest.json
 ```
 
-**Expect:** a small JSON with `"complete": true`, `"passwordUsersMissingHash": 0`
-and a `users` count.
+**Expect:** a small JSON with `"complete": true`, `"passwordUsersMissingHash": 0`,
+`"unsupportedMfaFactors": 0` and a `users` count.
 
 **If the manifest is missing**, that run died mid-flight — the users object
 beside it is not a finished backup. **A `-PARTIAL` file is a last resort, not a
@@ -883,6 +883,12 @@ State these before an incident, not during one:
   `passwordHash`/`salt`, and `phoneNumber` is a top-level field.
 - **`tenantId`.** Deliberately dropped for the same reason (not in the CLI's
   allowed keys). Single-tenant project, so nothing is lost.
+- **TOTP second factors.** `auth:import`'s `mfaInfo` records are phone-shaped
+  and TOTP has no equivalent, so a TOTP enrolment is NOT exported. It is
+  counted in `unsupportedMfaFactors` and makes the run report a problem rather
+  than being dropped in silence. Not reachable today (this project has no MFA —
+  the Identity Platform upgrade is D6, deferred), but it becomes live the moment
+  that changes, which is why it fails loud rather than quietly.
 - **Anything Firestore.** `users/{uid}` profile docs, roles, entries, picks and
   member records live in Firestore and come back through PITR / the Firestore
   export (Steps 2, 4, 5). The Auth export's job is to make the `uid`s match so

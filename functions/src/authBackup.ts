@@ -101,10 +101,14 @@ export interface AuthUserLike {
     multiFactor?: {
         enrolledFactors?: Array<{
             uid?: string;
+            /** "phone" | "totp" in the Admin SDK's discriminated union. */
             factorId?: string;
             displayName?: string;
             enrollmentTime?: string;
+            /** PhoneMultiFactorInfo only. */
             phoneNumber?: string;
+            /** TotpMultiFactorInfo only — no import representation. */
+            totpInfo?: unknown;
         }>;
     };
 }
@@ -123,6 +127,15 @@ export interface AuthUserLike {
  * unrestorable by its own documented restore command, for every user.
  * Found by codex R3 [P1] and verified against the CLI source.
  */
+/**
+ * The only second-factor type this export can represent. `auth:import`'s
+ * `mfaInfo` records are phone-shaped (`phoneInfo`); a TOTP factor carries
+ * `totpInfo` and has no equivalent, so emitting one as a phone record would
+ * produce a factor with no `phoneInfo` — lossy, silently, and possibly rejected
+ * at import. Anything else is COUNTED and reported instead (codex R4).
+ */
+export const PHONE_FACTOR_ID = "phone";
+
 export const IMPORTABLE_PROVIDER_IDS = new Set([
     "google.com",
     "facebook.com",
@@ -189,14 +202,18 @@ export function toEpochMsString(value: string | undefined): string | undefined {
  * Firestore is keyed by that uid. Restore without it and you have accounts that
  * own nothing.
  *
- * `mfaInfo` is emitted only when the user actually has enrolled factors. This
- * project has no MFA today (Identity Platform upgrade is deferred), so the field
- * is absent from every current export — deliberately, because the mapping has
- * never been proven against a real `auth:import` and an untested field is a way
- * to have the whole file rejected on the day it is needed.
+ * `mfaInfo` is emitted only for PHONE factors, and only when the user actually
+ * has one. This project has no MFA today (Identity Platform upgrade is
+ * deferred), so the field is absent from every current export — deliberately,
+ * because the mapping has never been proven against a real `auth:import` and an
+ * untested field is a way to have the whole file rejected on the day it is
+ * needed. A TOTP factor has no import representation at all and is counted by
+ * `countUnsupportedMfaFactors`, never emitted as a phone-shaped record.
  */
 export function toAuthImportRecord(u: AuthUserLike): Record<string, unknown> {
-    const factors = u.multiFactor?.enrolledFactors ?? [];
+    const factors = (u.multiFactor?.enrolledFactors ?? []).filter(
+        (f) => f.factorId === PHONE_FACTOR_ID && !!f.phoneNumber,
+    );
     return compact({
         localId: u.uid,
         email: u.email,
@@ -350,6 +367,19 @@ export function isPasswordUserMissingHash(u: AuthUserLike): boolean {
     return hasPasswordProvider && !u.passwordHash;
 }
 
+/**
+ * Second factors this export CANNOT represent — today that means TOTP.
+ *
+ * Counted rather than dropped in silence: a user whose only second factor
+ * vanishes on restore is locked out of an account the backup claims to hold,
+ * and the run has no business calling itself healthy.
+ */
+export function countUnsupportedMfaFactors(u: AuthUserLike): number {
+    return (u.multiFactor?.enrolledFactors ?? []).filter(
+        (f) => !(f.factorId === PHONE_FACTOR_ID && !!f.phoneNumber),
+    ).length;
+}
+
 export interface AuthBackupPage {
     users: AuthUserLike[];
     /** Present when more pages remain. */
@@ -382,6 +412,12 @@ export interface AuthBackupResult {
      * restores accounts nobody can sign in to.
      */
     passwordUsersMissingHash: number;
+    /**
+     * Enrolled second factors with no representation in the import format
+     * (TOTP). Anything above zero means those users lose their second factor on
+     * restore.
+     */
+    unsupportedMfaFactors: number;
 }
 
 /**
@@ -409,12 +445,14 @@ export async function runAuthBackupCore(
     let pages = 0;
     let complete = false;
     let passwordUsersMissingHash = 0;
+    let unsupportedMfaFactors = 0;
 
     while (pages < maxPages) {
         const page = await deps.listUsers(pageSize, pageToken);
         pages++;
         for (const u of page.users ?? []) {
             if (isPasswordUserMissingHash(u)) passwordUsersMissingHash++;
+            unsupportedMfaFactors += countUnsupportedMfaFactors(u);
             records.push(toAuthImportRecord(u));
         }
 
@@ -470,6 +508,7 @@ export async function runAuthBackupCore(
             pages,
             complete,
             passwordUsersMissingHash,
+            unsupportedMfaFactors,
             bytes,
             runId,
             usersObject: objectPath,
@@ -489,6 +528,7 @@ export async function runAuthBackupCore(
         bytes,
         uploaded: false,
         passwordUsersMissingHash,
+        unsupportedMfaFactors,
     };
 
     if (opts.dryRun) return result;
@@ -549,11 +589,19 @@ function depsFor(gate: AuthBackupGate, dryRun: boolean): AuthBackupDeps {
  * the heartbeat, the audit row and the callable's result can never disagree
  * about whether a backup is trustworthy.
  */
-export function backupProblem(result: Pick<AuthBackupResult, "complete" | "passwordUsersMissingHash">): string | null {
+export function backupProblem(
+    result: Pick<AuthBackupResult, "complete" | "passwordUsersMissingHash" | "unsupportedMfaFactors">,
+): string | null {
+    // Ordered most-severe first: a truncated export is missing whole accounts,
+    // which subsumes any question about the ones it does contain.
     if (!result.complete) return "export truncated before the tenant was exhausted";
     if (result.passwordUsersMissingHash > 0) {
         return `${result.passwordUsersMissingHash} password account(s) exported with NO hash — ` +
             "the runtime service account cannot read password hashes; this export restores accounts nobody can sign in to";
+    }
+    if (result.unsupportedMfaFactors > 0) {
+        return `${result.unsupportedMfaFactors} enrolled second factor(s) have no import representation (TOTP) — ` +
+            "those users lose their second factor on restore";
     }
     return null;
 }
@@ -567,7 +615,7 @@ async function recordRun(
     console.log(
         `[authBackup] ${result.dryRun ? "DRY-RUN" : "LIVE"}: ${result.users} account(s) over ` +
         `${result.pages} page(s), ${result.bytes} bytes, complete=${result.complete}, ` +
-        `uploaded=${result.uploaded}, hashless=${result.passwordUsersMissingHash}, object=${result.objectPath}`,
+        `uploaded=${result.uploaded}, hashless=${result.passwordUsersMissingHash}, unsupportedMfa=${result.unsupportedMfaFactors}, object=${result.objectPath}`,
     );
     await writeAdminAudit({
         actorUid: actor.uid,
@@ -581,6 +629,7 @@ async function recordRun(
             complete: result.complete,
             uploaded: result.uploaded,
             passwordUsersMissingHash: result.passwordUsersMissingHash,
+            unsupportedMfaFactors: result.unsupportedMfaFactors,
             bytes: result.bytes,
             object: result.objectPath,
             bucket: gate.bucket ?? "(unset)",
@@ -669,6 +718,7 @@ export const authBackupJob = onSchedule(
                     complete: result.complete,
                     uploaded: result.uploaded,
                     passwordUsersMissingHash: result.passwordUsersMissingHash,
+                    unsupportedMfaFactors: result.unsupportedMfaFactors,
                     bytes: result.bytes,
                 },
             };

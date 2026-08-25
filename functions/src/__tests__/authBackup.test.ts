@@ -15,6 +15,7 @@ import {
     runAuthBackupSchema,
     backupProblem,
     isPasswordUserMissingHash,
+    countUnsupportedMfaFactors,
     toStandardBase64,
     IMPORTABLE_PROVIDER_IDS,
     type AuthBackupDeps,
@@ -293,11 +294,38 @@ describe("toAuthImportRecord — the CLI's field names, not the SDK's", () => {
         expect(toAuthImportRecord(user("a", { multiFactor: { enrolledFactors: [] } }))).not.toHaveProperty("mfaInfo");
     });
 
-    it("emits mfaInfo when factors do exist", () => {
+    it("emits mfaInfo for a PHONE factor", () => {
         const r = toAuthImportRecord(user("m", {
             multiFactor: { enrolledFactors: [{ uid: "f1", factorId: "phone", phoneNumber: "+15551234567" }] },
         }));
         expect(r.mfaInfo).toEqual([{ mfaEnrollmentId: "f1", phoneInfo: "+15551234567" }]);
+    });
+
+    it("never emits a TOTP factor as a phone-shaped record (codex R4)", () => {
+        // auth:import's mfaInfo is phone-shaped; a TOTP factor has totpInfo and no
+        // equivalent. Emitting it as a phone record with no phoneInfo would be
+        // silently lossy and might be rejected at import.
+        const r = toAuthImportRecord(user("t", {
+            multiFactor: { enrolledFactors: [{ uid: "f9", factorId: "totp", totpInfo: {} }] },
+        }));
+        expect(r).not.toHaveProperty("mfaInfo");
+    });
+
+    it("emits only the phone factors of a mixed enrolment", () => {
+        const r = toAuthImportRecord(user("mix", {
+            multiFactor: { enrolledFactors: [
+                { uid: "f9", factorId: "totp", totpInfo: {} },
+                { uid: "f1", factorId: "phone", phoneNumber: "+15551234567" },
+            ] },
+        }));
+        expect(r.mfaInfo).toEqual([{ mfaEnrollmentId: "f1", phoneInfo: "+15551234567" }]);
+    });
+
+    it("drops a phone factor with no number rather than emitting an empty one", () => {
+        const r = toAuthImportRecord(user("p", {
+            multiFactor: { enrolledFactors: [{ uid: "f1", factorId: "phone" }] },
+        }));
+        expect(r).not.toHaveProperty("mfaInfo");
     });
 
     it("drops undefined fields instead of emitting nulls", () => {
@@ -442,7 +470,34 @@ describe("redacted password hashes — the export that imports cleanly and locks
     });
 
     it("truncation is reported ahead of the hash gap", () => {
-        expect(backupProblem({ complete: false, passwordUsersMissingHash: 5 })).toMatch(/truncated/);
+        expect(backupProblem({ complete: false, passwordUsersMissingHash: 5, unsupportedMfaFactors: 3 })).toMatch(/truncated/);
+    });
+});
+
+describe("unsupported second factors are counted, not silently dropped (codex R4)", () => {
+    it("counts a TOTP factor and does not count a usable phone factor", () => {
+        expect(countUnsupportedMfaFactors(user("a"))).toBe(0);
+        expect(countUnsupportedMfaFactors(user("t", {
+            multiFactor: { enrolledFactors: [{ uid: "f9", factorId: "totp", totpInfo: {} }] },
+        }))).toBe(1);
+        expect(countUnsupportedMfaFactors(user("p", {
+            multiFactor: { enrolledFactors: [{ uid: "f1", factorId: "phone", phoneNumber: "+15551234567" }] },
+        }))).toBe(0);
+    });
+
+    it("makes the run a PROBLEM and lands in the manifest", async () => {
+        const { deps, uploads } = harness([{
+            users: [user("a"), user("t", { multiFactor: { enrolledFactors: [{ uid: "f9", factorId: "totp" }] } })],
+        }]);
+        const r = await runAuthBackupCore(deps, { dryRun: false });
+        expect(r.unsupportedMfaFactors).toBe(1);
+        expect(backupProblem(r)).toMatch(/second factor/);
+        expect(JSON.parse(uploads[1].body)).toMatchObject({ unsupportedMfaFactors: 1 });
+    });
+
+    it("a missing hash outranks an unsupported factor in the reported problem", () => {
+        expect(backupProblem({ complete: true, passwordUsersMissingHash: 1, unsupportedMfaFactors: 1 }))
+            .toMatch(/cannot read password hashes/);
     });
 });
 
