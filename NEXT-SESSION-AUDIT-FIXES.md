@@ -168,8 +168,12 @@ FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
         means the page never goes out), with bounded retries. Continuing
         failures stay visible in health/latest, not the pager.
     (d) PII: delete the full request.data dump at bracketPools.ts:37;
-        apply sentrySanitize-style key redaction on the logClientError
-        branch (errorHandler.ts:107 or server-side logClientError.ts).
+        apply redaction on the logClientError branch (errorHandler.ts:107
+        or server-side logClientError.ts) — BOTH key-based
+        (sentrySanitize-style) AND pattern-based over free-form fields
+        (codex r6: message/stack/URL carry emails, tokens, query params
+        under non-sensitive keys — sweep those strings for email/token
+        patterns and strip URL query/fragment before persisting).
     (e) Structured logging: migrate bare console.* in stripe.ts,
         scoreUpdates.ts, nflSchedule.ts, reminders.ts to
         firebase-functions logger with fields; add source/type to
