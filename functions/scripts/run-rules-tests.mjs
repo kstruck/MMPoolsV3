@@ -35,8 +35,14 @@ const repoRoot = path.resolve(here, '..', '..');
 process.chdir(repoRoot);
 
 // Bump this when a rules test is ADDED. Lower it only with a written reason.
-// 10 as of PLAN-COST-CONTROLS 0.5.1 (aiRequests.rules.test.mjs).
-const MIN_FILES = 11;
+// 13 as of the union of PLAN-AUDIT-AUTH-HARDENING Phase B
+// (poolPrivateAccess.rules.test.mjs) and PLAN-COST-CONTROLS Phase 1
+// (providerUsage.rules.test.mjs). NEITHER side's number was right after the
+// merge: main said 12 counting its own new file but not Phase 1's, and this
+// branch said 11 counting Phase 1's but not main's. The guard only does its
+// job when it tracks the real file count, so it is set from `ls
+// functions/scripts/*.rules.test.mjs | wc -l`, not from either parent.
+const MIN_FILES = 13;
 // Every test file initialises rules-unit-testing with this project id.
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 const host = process.env.FIRESTORE_EMULATOR_HOST;

@@ -71,14 +71,18 @@ describe("pickemOutcome — Pick'em, straight-up and ATS", () => {
   /**
    * ⚠️ THE SCORES LIST INCLUDES `undefined` ON PURPOSE (codex, round 1).
    *
-   * `tests/pickem-result-parity.test.ts` compares `gradePick` to the scorer over
-   * a matrix in which every game HAS scores, so it could never see the one place
-   * they disagree: `gradePickemGames` skips a FINAL the feed reported no scores
-   * for, and `gradePick` grades it off `?? 0`. Straight-up that reads as a
-   * harmless 0-0 PUSH; in ATS the spread pushes it off the tie and the sheet
-   * announces a W or an L on a game the scorer will not grade.
+   * `tests/pickem-result-parity.test.ts` used to compare `gradePick` to the
+   * scorer over a matrix in which every game HAD scores, so it could never see
+   * the one place they disagreed: `gradePickemGames` skips a FINAL the feed
+   * reported no scores for, and `gradePick` graded it off `?? 0`. Straight-up
+   * that reads as a harmless 0-0 PUSH; in ATS the spread pushes it off the tie
+   * and the sheet announced a W or an L on a game the scorer will not grade.
    *
-   * This matrix drives the REAL `gradePickemGames`, so that gap fails here.
+   * That gap is now closed at the root, and the parity matrix carries the
+   * scoreless rows itself. This matrix stays: it drives the REAL
+   * `gradePickemGames` through the SHEET's whole path (`gradePick` then
+   * `pickemOutcome`), which is what proves the two layers compose to the
+   * scorer's answer rather than each being right on its own.
    */
   it('never claims a verdict the real scorer has not reached', () => {
     let checked = 0;
@@ -115,15 +119,27 @@ describe("pickemOutcome — Pick'em, straight-up and ATS", () => {
     expect(sawServerSkip).toBe(true);
   });
 
-  it('stays silent on a scoreless FINAL even where gradePick alone would not', () => {
+  it('stays silent on a scoreless FINAL — now from BOTH layers', () => {
     // The exact shape codex named: ATS, FINAL, no scores, a real line.
     const g = game({ scores: undefined, spread: { value: -6.5, locked: true } });
-    // gradePick DOES decide it — this is the divergence, asserted so the test
-    // fails loudly if `gradePick` is fixed at the root and this gate goes stale.
-    expect(gradePick(g, 'ARI', 'ATS')).toBe('L');
+    // ⚠️ THIS ASSERTION FLIPPED, ON PURPOSE. It used to read `.toBe('L')` and
+    // carried a note saying it would fail loudly if `gradePick` were ever fixed
+    // at the root. That is exactly what happened: the root gate landed so the
+    // Current Picks GRID — which calls `gradePick` with no `pickemOutcome` in
+    // its path — would stop announcing a verdict the scorer has not reached.
+    // The divergence this line pinned no longer exists, so pinning it would be
+    // pinning a bug.
+    expect(gradePick(g, 'ARI', 'ATS')).toBeNull();
     expect(gradePickemGames({ picks: { g1: 'ARI' } } as never, [g], { settings: { pickMode: 'ATS' } } as never).g1)
       .toBeUndefined();
+    // `pickemOutcome`'s own gate is now belt-and-braces rather than the only
+    // thing standing between the member and a false verdict. It is kept — the
+    // signature lets any caller hand over a grade from elsewhere — and this
+    // proves it still answers `null` when handed a decided grade for a game the
+    // scorer skipped, which is the only case where it can still matter.
     expect(pickemOutcome(g, gradePick(g, 'ARI', 'ATS'))).toBeNull();
+    expect(pickemOutcome(g, 'L'), 'the redundant gate still holds on its own').toBeNull();
+    expect(pickemOutcome(g, 'W'), 'in both directions').toBeNull();
   });
 
   it('says nothing about a game that has not concluded, or was not picked', () => {

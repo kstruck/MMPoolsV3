@@ -3,8 +3,11 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { BracketPool } from "./types";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
-import * as crypto from "crypto";
+import * as logger from "firebase-functions/logger";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
+import { hashPoolPassword, hasSecret, verifyPoolPassword } from "./lib/poolPassword";
+import { accessDocRef, publishPasswordPlan, readPoolSecret, rehashOnVerify, scrubUpdateArgs } from "./lib/poolAccess";
+import { chargeAccessAttempt, refundAccessAttempt } from "./lib/poolAttempts";
 import { computeLaunchMode, estimatedPlayersFromPayload } from "./poolOps";
 import { normalizeAddonSelection } from "./lib/launchFields";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
@@ -32,9 +35,12 @@ export const createBracketPool = onCall(async (request) => {
     const { name, settings: rawSettings, seasonYear, gender, tournamentType } = request.data;
     const uid = request.auth.uid;
 
-    // Debug logs
+    // Debug log. The FULL `request.data` dump that used to sit on the next line
+    // is DELETED (NEXT-SESSION-AUDIT-FIXES item 21d): the create payload carries
+    // the commissioner's contact email, payment handles and — until Phase B — a
+    // pool password, all of which went to Cloud Logging in the clear on every
+    // single create, with a default retention nobody had scoped for PII.
     console.log("createBracketPool called by:", uid);
-    console.log("Request Data:", JSON.stringify(request.data, null, 2));
 
     if (!name || !seasonYear) {
         console.error("Missing required fields");
@@ -231,13 +237,9 @@ export const publishBracketPool = validated(
             throw new HttpsError("already-exists", "Slug is already taken.");
         }
 
-        // Hash password if provided (PBKDF2)
-        let passwordHash = undefined;
-        if (password) {
-            const salt = crypto.randomBytes(16).toString('hex');
-            const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
-            passwordHash = `${salt}:${hash}`;
-        }
+        // ALL READS BEFORE ANY WRITE (Firestore transaction rule).
+        const accessRef = accessDocRef(db, poolId);
+        const accessDoc = await transaction.get(accessRef);
 
         // Find Season Lock Time (Fetch from Tournament doc)
         const tournamentRef = db.collection("tournaments").doc(poolData.tournamentId || `mens-${poolData.seasonYear}`);
@@ -247,21 +249,57 @@ export const publishBracketPool = validated(
             lockAt = tournamentDoc.data()?.lockAt || 0;
         }
 
+        // Password — PLAN-AUDIT-AUTH-HARDENING Phase B.
+        //
+        // The hash NO LONGER LANDS ON THE POOL DOCUMENT. `pools/{id}` is
+        // `allow get: if true`, so a PBKDF2 record stored there was
+        // offline-crackable material handed to anyone with a share link; it now
+        // goes to `pools/{id}/private/access`, which rules close outright. The
+        // public doc keeps only the non-secret boolean marker. Written inside
+        // the SAME transaction as the slug reservation, so a pool can never be
+        // published with a marker and no secret behind it.
+        //
+        // ⚠️ PUBLISH NEVER DELETES A PASSWORD (codex r2, P1). The decision and
+        // the reasoning live in `publishPasswordPlan`, which is unit-tested;
+        // this handler only turns the plan into writes.
+        const existingHash = accessDoc.exists ? accessDoc.data()?.passwordHash : undefined;
+        const hasExisting = typeof existingHash === "string" && existingHash.length > 0;
+        const plan = publishPasswordPlan(
+            password, hasExisting, poolData as unknown as Record<string, unknown>,
+        );
+        const newHash = plan.source === "supplied" || plan.source === "legacy-plaintext"
+            ? hashPoolPassword(plan.plaintext)
+            : plan.source === "legacy-hash" ? plan.hash : null;
+        const willBeProtected = plan.willBeProtected;
+
         transaction.set(slugRef, {
             poolId,
             createdAt: Timestamp.now().toMillis(),
         });
 
-        transaction.update(poolRef, {
+        if (newHash) {
+            transaction.set(
+                accessRef,
+                { passwordHash: newHash, updatedAt: Timestamp.now().toMillis() },
+                { merge: true },
+            );
+        }
+
+        // Varargs form, not an object: it is the only way to also delete a
+        // top-level field literally NAMED `accessControl.password`, which a
+        // pre-Phase-B draft can be carrying and which `publishPasswordPlan`
+        // above may have just adopted. Leaving it behind would publish the pool
+        // with the plaintext still readable (codex r6 P1). One write, so the
+        // scrub, the marker and the publish fields cannot come apart.
+        transaction.update(poolRef, ...scrubUpdateArgs(willBeProtected, {
             slug: slugLower,
             slugLower,
             isListedPublic: !!isListedPublic,
             isPublic: !!isListedPublic, // Sync for firestore rules
-            passwordHash: passwordHash || FieldValue.delete(),
             status: "OPEN",
             lockAt: lockAt,
             updatedAt: Timestamp.now().toMillis(),
-        });
+        }));
     });
 
     return { success: true, slug: slugLower };
@@ -286,24 +324,48 @@ export const joinBracketPool = validated(
 
     const poolData = poolDoc.data() as BracketPool;
 
-    // Check Password
-    if (poolData.passwordHash) {
+    // Check Password — PLAN-AUDIT-AUTH-HARDENING Phase B.
+    //
+    // The material is read from `pools/{id}/private/access` first and from the
+    // legacy public fields only while the migration has not reached this pool.
+    // Three formats verify: PBKDF2 `salt:hash` (canonical), a legacy bare
+    // sha256 digest, and — for pools whose password only ever existed as
+    // `gridPassword` / `accessControl.password` — the legacy PLAINTEXT.
+    //
+    // ⚠️ THE PLAINTEXT BRANCH IS NOT A NEW ACCEPTANCE. That value is what the
+    // old squares gate compared against in the browser; refusing it here would
+    // lock out every pool whose commissioner set a password before tonight,
+    // without removing any exposure the migration does not already remove.
+    const secret = await readPoolSecret(db, poolId, poolData as unknown as Record<string, unknown>);
+    if (hasSecret(secret)) {
         if (!password) {
             throw new HttpsError("permission-denied", "Password required.");
         }
-
-        // Support legacy SHA-256 (if any) and new PBKDF2
-        if (poolData.passwordHash.includes(':')) {
-            const [salt, originalHash] = poolData.passwordHash.split(':');
-            const verifyHash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
-            if (originalHash !== verifyHash) {
-                throw new HttpsError("permission-denied", "Incorrect password.");
-            }
-        } else {
-            // Legacy SHA-256 fallback
-            const providedHash = crypto.createHash('sha256').update(password).digest('hex');
-            if (providedHash !== poolData.passwordHash) {
-                throw new HttpsError("permission-denied", "Incorrect password.");
+        // ⚠️ THROTTLED, SAME AS THE PUBLIC GATE (codex r4, P2). This endpoint
+        // requires auth, but "authenticated" is a free account — so without a
+        // cap it is the same unbounded online guessing oracle as
+        // `verifyPoolAccess`, and each guess buys a PBKDF2 derivation, making it
+        // a CPU amplifier too. Moving the hash off the public document
+        // accomplishes nothing if either endpoint will grade unlimited guesses
+        // against it. Per (pool, uid), failures only, refunded on success.
+        await chargeAccessAttempt(db, poolId, uid);
+        const verdict = verifyPoolPassword(password, secret);
+        if (!verdict.ok) {
+            throw new HttpsError("permission-denied", "Incorrect password.");
+        }
+        await refundAccessAttempt(db, poolId, uid);
+        if (verdict.needsRehash) {
+            // Item 13c — rehash-on-successful-join. This is the one moment the
+            // plaintext is in hand, so the legacy form is upgraded to PBKDF2 in
+            // the private doc and the public copies are deleted. Best-effort: a
+            // failure here must not turn a correct password into a failed join.
+            try {
+                const outcome = await rehashOnVerify(db, poolId, password, secret.privateHash ?? null);
+                logger.info("[bracketPools] legacy pool password rehash on join", {
+                    poolId, from: verdict.matched, outcome,
+                });
+            } catch (err) {
+                logger.error("[bracketPools] rehash-on-join failed", { poolId, error: String(err) });
             }
         }
     }

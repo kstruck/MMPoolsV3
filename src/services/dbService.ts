@@ -29,10 +29,88 @@ export type SetPoolCoCommissionerInput =
     | { poolId: string; uid: string; op: 'add'; revision: number }
     | { poolId: string; uid: string; op: 'remove' };
 import { stripEmptyCallableFields } from "./callableParams";
+import { splitPoolPassword } from "./poolPasswordPayload";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
+
+/**
+ * Set a just-created pool's password — or make sure no unprotected pool is left
+ * behind (codex r7/r8, P1).
+ *
+ * ## The problem
+ *
+ * The password no longer rides the create payload onto the pool document, so
+ * creation is TWO calls: `createPool`, then `setPoolPassword`. If the second
+ * fails, the pool EXISTS, is reachable by anyone with its link, and the
+ * commissioner has been told creation failed — a fail-OPEN outcome created by
+ * the very change meant to close one. A retry and a clear message make that
+ * VISIBLE; they do not make it SAFE, which is what codex said when it re-raised
+ * the finding after the first mitigation.
+ *
+ * ## What this does, in order
+ *
+ * 1. Try, then retry once. The realistic failure is a transient callable error.
+ * 2. **Re-read the marker before concluding anything.** A lost RESPONSE looks
+ *    exactly like a lost WRITE from here, and deleting a pool whose password
+ *    actually landed would be a worse bug than the one being fixed. The
+ *    server-set `hasPoolPassword` is the authority, not our error object.
+ * 3. Only if the marker really is absent, DELETE the pool through the product's
+ *    own delete path, and say so. Nothing else has touched it — it is seconds
+ *    old, has no members, and the alternative is leaving a pool the commissioner
+ *    believes does not exist, unprotected, on a public link.
+ * 4. If even the delete fails, throw the loud message naming the consequence.
+ *
+ * The genuinely atomic fix is to write the private secret inside the create
+ * callable's own transaction (`functions/src/poolOps.ts`, `nflPools.ts`). Those
+ * files are outside this PR's scope in a parallel-stream session; this
+ * compensation closes the exposure without reaching into them.
+ */
+async function applyPasswordAfterCreate(poolId: string, password?: string): Promise<void> {
+    if (!password) return;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            await dbService.setPoolPassword(poolId, password);
+            return;
+        } catch (err) {
+            logger.warn(`[dbService] setPoolPassword attempt ${attempt} failed for ${poolId}`, err);
+        }
+    }
+
+    // Step 2 — did it actually land? A dropped response is indistinguishable
+    // from a dropped write on this side, and only the marker knows.
+    try {
+        const snap = await getDoc(doc(db, 'pools', poolId));
+        if (snap.exists() && (snap.data() as { hasPoolPassword?: boolean }).hasPoolPassword === true) {
+            logger.warn(`[dbService] setPoolPassword reported failure but the marker is set for ${poolId}`);
+            return;
+        }
+    } catch (err) {
+        logger.warn(`[dbService] could not confirm the password marker for ${poolId}`, err);
+    }
+
+    // Step 3 — compensate. An unprotected pool must not outlive a create the
+    // commissioner is about to be told failed.
+    let deleted = false;
+    try {
+        await dbService.deletePool(poolId);
+        deleted = true;
+    } catch (err) {
+        await errorHandler.handleError(err, {
+            severity: ErrorSeverity.HIGH,
+            context: { operation: 'applyPasswordAfterCreate.compensate', poolId },
+        });
+    }
+    throw new Error(
+        deleted
+            ? 'Your pool could not be created: the password could not be saved, so the '
+              + 'half-created pool was removed. Please try again.'
+            : 'Your pool was created, but the password could not be saved, so the pool is '
+              + 'currently OPEN to anyone with the link. Open the pool’s settings and set '
+              + 'the password there, or delete the pool.',
+    );
+}
 
 /**
  * What `getPoolPicks` hands a commissioner (PLAN-COMMISSIONER-BLIND-PICKS T2).
@@ -236,27 +314,97 @@ export const dbService = {
     },
 
     createPool: async (pool: Record<string, unknown>): Promise<string> => {
+        // PLAN-AUDIT-AUTH-HARDENING Phase B. The pool password is pulled OUT of
+        // the create payload here and set afterwards through `setPoolPassword`,
+        // which is the only path that can write `pools/{id}/private/access`.
+        //
+        // The server strips these fields too (schemas/poolCore.ts) — that is the
+        // authoritative half. This client-side strip exists for a second reason
+        // the server cannot help with: the catch block below hands the WHOLE
+        // payload to `errorHandler.handleError` as context, which persists it
+        // through `logClientError`. A create that failed for an unrelated reason
+        // would otherwise write the commissioner's chosen password into
+        // `system_logs` — the same class of leak as the `request.data` dump this
+        // phase deleted from bracketPools.ts (item 21d).
+        const { payload, password } = splitPoolPassword(pool);
         try {
             const createPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createPool');
-            const result = await createPoolFn(pool);
+            const result = await createPoolFn(payload);
             const { poolId } = result.data;
+            await applyPasswordAfterCreate(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
-                context: { operation: 'createPool', pool }
+                context: { operation: 'createPool', pool: payload }
             });
             throw error;
         }
     },
 
     updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, unknown>) => {
+        // Same split as createPool. The wizards send a full-object update in
+        // EDIT mode, so `gridPassword` rides along on every settings save.
+        //
+        // ⚠️ AN EMPTY VALUE IS A NO-OP, NOT A CLEAR. After the migration the
+        // field is gone from the document, so the wizard reloads it as `''` —
+        // and treating that as "clear the password" would silently un-gate a
+        // pool every time its commissioner saved an unrelated setting. Clearing
+        // is an explicit act: `setPoolPassword(poolId, null)`.
+        const { payload, password } = splitPoolPassword(updates as Record<string, unknown>);
         const success = await poolRepository.update(poolId, {
-            ...updates,
+            ...payload,
             updatedAt: Timestamp.now()
         } as Partial<Pool>);
         if (!success) {
             throw new Error(`Failed to update pool ${poolId}`);
+        }
+        if (password) await dbService.setPoolPassword(poolId, password);
+    },
+
+    /**
+     * Set (non-empty string) or clear (`null`) a pool's password. Server-side
+     * PBKDF2; the plaintext is never stored anywhere.
+     */
+    setPoolPassword: async (poolId: string, password: string | null): Promise<void> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; hasPassword: boolean }>(functions, 'setPoolPassword');
+        // Correlated: `validated()` strips `_correlationId` BEFORE the strict
+        // schema sees it (lib/correlationId.ts), so a strictObject is no reason
+        // to ship a callable that leaves no trace in the logs.
+        await fn(withCorrelationId({ poolId, password }));
+    },
+
+    /**
+     * Ask the server whether this password unlocks the pool. Replaces the
+     * browser-side `entered === pool.gridPassword` compare (PoolRoute.tsx),
+     * which could be read straight out of the public pool document.
+     *
+     * Returns a REASON, not just a boolean. The gate has three distinct
+     * outcomes — wrong password, too many attempts, and the call did not go
+     * through — and collapsing them into `false` makes the UI say "Incorrect
+     * password" to somebody who is rate-limited or offline. That is the
+     * blames-the-wrong-subsystem failure CLAUDE.md §2c calls out by name.
+     */
+    verifyPoolAccess: async (
+        poolId: string, password: string,
+    ): Promise<{ ok: boolean; reason?: 'wrong' | 'throttled' | 'error' }> => {
+        try {
+            const fn = httpsCallable<Record<string, unknown>, { ok: boolean }>(functions, 'verifyPoolAccess');
+            const result = await fn(withCorrelationId({ poolId, password }));
+            return result.data.ok === true ? { ok: true } : { ok: false, reason: 'wrong' };
+        } catch (error) {
+            // A throttled or failed call is NOT an unlock — the gate fails
+            // CLOSED. Logged at LOW: being rate-limited is an expected outcome
+            // of this endpoint, not an incident.
+            const code = (error as { code?: string } | null)?.code;
+            const throttled = code === 'functions/resource-exhausted';
+            if (!throttled) {
+                await errorHandler.handleError(error, {
+                    severity: ErrorSeverity.LOW,
+                    context: { operation: 'verifyPoolAccess', poolId }
+                });
+            }
+            return { ok: false, reason: throttled ? 'throttled' : 'error' };
         }
     },
 
@@ -548,8 +696,15 @@ export const dbService = {
     },
 
     updateBracketPool: async (poolId: string, updates: Record<string, unknown>): Promise<void> => {
+        // Same split as updatePool. This wrapper is a RAW client `updateDoc`, and
+        // it is how `accessControl.password` reached the world-readable pool
+        // document in the clear (audit item 13a). `firestore.rules` now denies a
+        // non-empty value here, so leaving the field in would turn every bracket
+        // settings save into a permission-denied.
+        const { payload, password } = splitPoolPassword(updates);
         const poolRef = doc(db, 'pools', poolId);
-        await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
+        await updateDoc(poolRef, { ...payload, updatedAt: Date.now() });
+        if (password) await dbService.setPoolPassword(poolId, password);
     },
 
     // Server-side since Phase 5 (updateEntryPayment callable): the old raw
@@ -1592,15 +1747,23 @@ export const dbService = {
 
     // --- NFL POOLS ---
     createNFLPool: async (pool: Record<string, unknown>): Promise<string> => {
+        // Split for symmetry with createPool. NFL pools have no password UI
+        // today, so this is not closing a live leak — but both create wrappers
+        // hand the WHOLE payload to `handleError` as context on failure, and
+        // `createNFLPool` rides the same permissive envelope. Splitting in one
+        // wrapper and not the other is how the next password-bearing pool type
+        // would land in `system_logs`.
+        const { payload, password } = splitPoolPassword(pool);
         try {
             const createNFLPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createNFLPool');
-            const result = await createNFLPoolFn(pool);
+            const result = await createNFLPoolFn(payload);
             const { poolId } = result.data;
+            await applyPasswordAfterCreate(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
-                context: { operation: 'createNFLPool', pool }
+                context: { operation: 'createNFLPool', pool: payload }
             });
             throw error;
         }

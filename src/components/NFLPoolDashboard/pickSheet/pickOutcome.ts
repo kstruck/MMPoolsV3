@@ -50,22 +50,30 @@ export type PickOutcome = 'CORRECT' | 'INCORRECT' | null;
  *
  * PUSH and VOID deliberately answer `null`: both are scored, neither is a loss.
  *
- * ⚠️ `game` IS NOT DECORATION — it closes a real gap in `gradePick` (codex,
- * round 1 of this change). `gradePickemGames` opens with
+ * ⚠️ THE `game` GUARD IS NOW BELT-AND-BRACES, AND IS KEPT ON PURPOSE.
+ *
+ * It was added (codex, round 1 of #568) to close a real gap: `gradePickemGames`
+ * opens with
  *
  *     if (game.status === 'FINAL' && !hasReportedScores(game)) continue;
  *
- * and `gradePick` has no such line: it falls straight to `scores?.home ?? 0`.
- * On a scoreless FINAL that reads 0-0, which is a harmless PUSH straight-up but
- * a decided **W or L in ATS**, because the spread moves the adjusted home score
- * off the tie. So on an ATS pool the sheet would have told a member their pick
- * was right or wrong off a payload the scorer is still refusing to grade — and
- * a FINAL landing before its scores is the ordinary shape of this feed, not a
- * corner case (engine defect NFL7-3).
+ * and `gradePick` had no such line — it fell straight to `scores?.home ?? 0`.
+ * On a scoreless FINAL that reads 0-0: a harmless PUSH straight-up, but a
+ * decided **W or L in ATS**, because the spread moves the adjusted home score
+ * off the tie (engine defect NFL7-3). #568 could only gate it here, because
+ * `src/utils/` belonged to another workstream, which left `picksGrid.ts` — the
+ * grid tab — still carrying the divergence.
  *
- * Gated HERE rather than in `gradePick` because that function is shared with
- * `src/utils/picksGrid.ts`, which this change does not own or test; see the PR
- * body for the residual.
+ * The residual is CLOSED: `gradePick` now carries the same gate, so the grid
+ * and the sheet agree and `result` is already `null` by the time it arrives
+ * here. This line therefore changes no outcome for any caller that pairs a
+ * `game` with the grade `gradePick` produced FOR THAT GAME.
+ *
+ * It stays because the signature does not force that pairing — `result` is a
+ * bare `PickemResult` and any caller may hand over a grade from elsewhere — and
+ * because it is the one place that states, in the sheet's own file, that a
+ * scoreless FINAL renders neutral. `tests/pick-outcome.test.ts` pins the
+ * behaviour either way.
  */
 export function pickemOutcome(game: NFLGame, result: PickemResult): PickOutcome {
   if (game.status === 'FINAL' && !hasReportedScores(game)) return null;
