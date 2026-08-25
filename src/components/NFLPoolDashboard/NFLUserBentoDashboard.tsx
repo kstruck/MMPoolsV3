@@ -245,7 +245,13 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   const myEntry = useMemo(() => {
     if (!user || pendingEntryLabel) return null;
     const mine = entries.filter(e => e.ownerUid === user.id || e.id === user.id);
-    return (activeEntryId ? mine.find(e => e.id === activeEntryId) : undefined) ?? mine[0] ?? null;
+    // 🛑 A SUPPLIED ID THAT MATCHES NOTHING IS "NOT THIS ENTRY", NEVER "SOME
+    // OTHER ENTRY" (codex r5 on the T5 PR). Falling back to the first row would
+    // put entry #1's rank and record on a card whose CTA opens the selected
+    // entry — the same card-says-one-thing-button-does-another defect the
+    // pending-draft case above closes. The fallback is for the ABSENT id only.
+    if (activeEntryId) return mine.find(e => e.id === activeEntryId) ?? null;
+    return mine[0] ?? null;
   }, [entries, user, activeEntryId, pendingEntryLabel]);
 
   // ONE season ordering for every list on this card — `seasonCompare` is the
