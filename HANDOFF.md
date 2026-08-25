@@ -1,5 +1,93 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE. FIVE PRs MERGED (#587–#591), FUNCTIONS DEPLOYED AND VERIFIED. ONE COOLIFY REBUILD IS OWED AND NOTHING A MEMBER CAN SEE CHANGES UNTIL IT RUNS.**
+>
+> Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
+>
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `809384d4`.**
+> ⚠️ Updated 2026-08-25 (the previous tagged claim, `c37bbd37`, had been carried
+> since 2026-08-12 and was stale by four deploys — it is now
+> `<!-- deploy-state:ignore -->`). **RULES ARE *NOT* AT THIS COMMIT** and that is
+> deliberate: `firestore.rules` has not changed since #579, whose rules deploy is
+> still owed as step 2 of the 2026-08-25 audit box below. Do not read "functions
+> are at `809384d4`" as "everything is".
+>
+> ✅ **THE AUDIT BOX'S STEP 1 IS DONE, AS A SIDE EFFECT OF THIS DEPLOY.** One
+> `npx firebase deploy --only functions` covered both. Verified by NAME rather
+> than by `Deploy complete!` (CLAUDE.md §3 — an absent function is the tell, and
+> an absence is easy to miss):
+> `setPoolPassword`, `verifyPoolAccess`, `migratePoolPasswords`, `cspReport`,
+> `authBackupJob`, `runAuthBackup` (the six the audit owed) plus `scoreNFLWeek`,
+> `getPoolPicks`, `submitNFLPicks`, `getProfilePoolDetail`, `recomputeMyProfile`,
+> `nflAutoScoreJob`, `nflFinalizeSweepJob` — **13 of 13 PRESENT**.
+>
+> 🛑 **STILL OWED, AND THEY ARE KEVIN'S:**
+> 1. **Coolify `www` rebuild.** Every member-facing half of this work is in the
+>    frontend bundle. Until the rebuild runs, production serves the OLD client
+>    against the NEW functions — which is safe (every server change is
+>    backward-compatible by construction) but means **nothing a member can see
+>    has changed yet.**
+> 2. **`npx firebase deploy --only firestore:rules`** — still owed from #579,
+>    unchanged by this session. Not deployed here on purpose: this session was
+>    scoped away from `firestore.rules` and a rules deploy is its own decision.
+> 3. The **pool-password migration sweep**, which the audit box says runs only
+>    AFTER the Coolify rebuild.
+>
+> ---
+>
+> 🟢 **WHAT SHIPPED: `MULTI_ENTRY_WIZARD_ENABLED = true` (#591).** A commissioner
+> can now allow up to 10 entries per player on **all three** NFL season types
+> (Kevin's ruling, 2026-08-25 — no per-type gate). Each entry is an independent
+> contestant: its own picks, its own row, its own score, its own Survivor life,
+> strikes and used-teams, its own season-history record, and its own share of the
+> dues.
+>
+> | PR | Ticket | What |
+> |---|---|---|
+> | #587 | **T3** | scoring, reveal, finalize and profiles key by **entry id**, not uid |
+> | #588 | **T4** | `buildMemberStandings` renders one row per **entry**; plural own-entries subscription |
+> | #589 | **T5** | the "My Entries" switcher; all three pick sheets send `entryIndex` + `entryName` |
+> | #590 | **T6a** | every NFL row surface displays `entryName ?? userName` |
+> | #591 | **FLIP** | the flag, plus a wizard→standings emulator arc and a source guard |
+>
+> ⚠️ **NOTHING CHANGES ON ANY EXISTING POOL UNTIL A COMMISSIONER OPTS IN.** No
+> pool carries `maxEntriesPerUser`, which reads as **1**; `updatePoolSettings` is
+> raise-only and only while the pool accepts entries; the server refuses
+> `entryIndex: 2` with `ENTRY_INDEX_EXCEEDS_MAX` on a max-1 pool. Entry #1's id
+> **is** the owner's uid (D1), so every re-key above returns the same string it
+> returned before on a single-entry pool — that is why this is deployable into a
+> live scorer without a migration.
+>
+> 🔴 **THIS WENT INTO A LIVE SCORER.** `system/config.nflAutoScore` is
+> `{enabled: true, dryRun: false}` and `nflAutoScoreJob` runs `*/5`. #587 changed
+> `scoreNFLWeek`, `getPoolPicks`, `maybeFinalizeNFLPool` and the profile
+> recompute — every one on a path that job executes. The safety argument is the
+> id equality above, plus the full emulator suite (524 passed / 2 expected fail /
+> 10 skipped) run against the merged tree.
+>
+> 🟡 **TURNING IT BACK OFF IS ONE LINE AND IS SAFE.**
+> `shared/multiEntry.ts:MULTI_ENTRY_WIZARD_ENABLED = false` hides the OFFER
+> (wizard field + manager raise control) without stranding a pool that already
+> took it — the manager control still renders when `currentMaxEntries > 1`, and
+> the server keeps honouring entries that already exist. It needs a Coolify
+> rebuild to take effect, like any frontend change.
+>
+> 🟡 **CARRIED, NAMED, NOT SILENT — the rest of T6 and T7–T11.**
+> `RecordPayoutsCard` still keys its rows by uid, so a commissioner recording a
+> payout in a multi-entry pool cannot say WHICH entry won. That is season-end
+> machinery and was not on the flip's critical path. Also open: T7 (extend the
+> reveal-rule guard to `NFLWeeklyPicksGrid`), T8 (reminders), T9 (fixtures ≥ 48).
+> Both remaining T6 items still carry their `tests/nfl-surface-invariants.test.ts`
+> allow-list entries, so the guard keeps naming them until they land.
+>
+> ✅ **T10 (one scoped Standings tab) NEEDED NOTHING** — it shipped as #536 on
+> 2026-08-23 and was verified against the spec this session, not re-derived:
+> `src/utils/nflStandingsScope.ts` exists, `results` is filtered out of
+> `offeredTabs` and aliased to the week segment, and `tests/nfl-standings-scope.test.ts`
+> is green. The plan doc it came from (`PLAN-WIZARD-BUYFLOW-FIXES.md`) only ever
+> existed on an unmerged branch, which is why it is not in the tree.
+
+
 > ## 📌 2026-08-25 — **RULESET GOVERNANCE: ANY REVIEW REQUIREMENT ON `main` MUST KEEP "Repository admin" IN THE RULESET'S BYPASS LIST.**
 >
 > Measured on PR #585: the audit session's main ruleset required 1 approving
@@ -1365,12 +1453,14 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > is empty across #416, #418 and #417 — all three are docs or `src/**`.
 
 
-*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules are live from `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules were live from <!-- deploy-state:ignore --> `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## ✅ DEPLOY STATE 2026-08-12 — **functions + rules at `c37bbd37` (still current); its frontend claim is SUPERSEDED — frontend at `d6bae3f4` since 2026-08-13, per the box above**
+> ## ✅ DEPLOY STATE 2026-08-12 — **HISTORY. functions + rules were at <!-- deploy-state:ignore --> `main` @ `c37bbd37`; SUPERSEDED — functions moved to `809384d4` on 2026-08-25 (top box) and the frontend to `d6bae3f4` on 2026-08-13**
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`,
-> and so are the rules.** The frontend WAS at this commit when this box was
+> **Functions are deployed from <!-- deploy-state:ignore --> `main` @ `c37bbd37`,
+> and so are the rules.** ⚠️ SUPERSEDED 2026-08-25 — functions moved to
+> `809384d4` (top box), and the `deploy-state:current` tag moved with them.
+> This line is history. The frontend WAS at this commit when this box was
 > written and has since moved to `d6bae3f4` (2026-08-13, box above). Deployed the morning of 2026-08-12, in
 > the order the change required: **functions → Coolify rebuild → rules.** That order is not cosmetic — see the
 > box below for why the obvious order would have taken commissioner standings

@@ -1,6 +1,10 @@
 # PLAN — multiple entries per player (NFL Pick'em / Survivor / Margin)
 
-> **STATUS: §6 SIGNED 2026-08-15. T0, K9 (#445), T1 (#449) shipped; T2 in a PR (see §7).**
+> **STATUS: §6 SIGNED 2026-08-15. 🟢 SHIPPED AND LIVE 2026-08-25 —
+> `MULTI_ENTRY_WIZARD_ENABLED = true` (#591). T0, K9 (#445), T1 (#449),
+> T2 (#450), T3 (#587), T4 (#588), T5 (#589), T6a (#590), FLIP (#591).
+> Functions deployed from `main` @ `809384d4` and verified by name; the Coolify
+> rebuild is owed. STILL OPEN: the rest of T6 (`RecordPayoutsCard`), T7, T8, T9.**
 > This is a **MONEY + SCORING** change (`mmp-change-control` Rule 3): dues become
 > a multiple of the entry fee, and every scoring, standings, reveal and finalize
 > path re-keys from a uid to an entry. Plan → adversarial review log
@@ -377,29 +381,41 @@ back-compat) and its test covers two entries + one fee (codex r3).
 
 ---
 
-## 7. Implementation tickets — §6 signed 2026-08-15; T0 + K9 + T1 shipped; T2 IN A PR (2026-08-17)
+## 7. Implementation tickets — §6 signed 2026-08-15; SHIPPED AND LIVE 2026-08-25
 
-> **Status 2026-08-17:** **T0** shipped (the §0b invariant is in
-> `tests/nfl-surface-invariants.test.ts`); **K9** shipped as #445; **T1** shipped + deployed as
-> #449 (`maxEntriesPerUser` in `shared/multiEntry.ts` + the three create schemas, rules
-> callable-only key, `updatePoolSettings` raise-only gate in `lib/multiEntryGate.ts`, wizard
-> toggle hidden). **T2 is its own PR** — the submit path: `submitNFLPicks` takes `entryIndex?`
-> (1..max, default 1) + `entryName?`; entry id = uid for #1, `e${n}:${uid}` for n ≥ 2 with the
-> §0a auto-id fallback (`lib/multiEntry.ts` — `resolveOwnedEntry`); every entry doc carries
-> `ownerUid` + `entryIndex`; the cap is enforced from entry EXISTENCE inside the transaction;
-> the Member Record gains `playableEntryCount` + `entries` map (never picks); `feeOwed = fee ×
-> max(joinLiability, count)` (`memberLiableEntries`, K3); fee-edit cascade × count;
-> `setPaidStatus` mirrors onto every owned entry and ledgers `feeOwed`; a PAID member who adds
-> an entry flips UNPAID with a `MARKED_UNPAID` ledger line (K11); `pool.entryCount` is
-> server-maintained (0 at create; derived from Member Record liabilities when absent; the join
-> path, submit, proxyPick and `updatePoolSettings`' first raise all keep it); `proxyPick` +
-> `executeSurvivorRebuy` take `entryIndex`; `NFLManagerView` proxies by ENTRY and gains the
-> manager-side raise control (rendered only when the flag is on or the pool already has max > 1). **`MULTI_ENTRY_WIZARD_ENABLED` STAYS `false`** — the T2 row said flip it, but codex r1+r2 on the T2 PR made the T1 argument again and harder: a member has NO UI to address entry #2 until T5 (the three `*PickEntry` components send no `entryIndex`), so the toggle would advertise entries nobody can play; the T3/T4/T5 PR flips it. Emulator suite:
-> `emulator/multiEntry.emulator.test.ts` (13 cases). **T3 is next** — until it lands, the
-> scorer already grades every entry doc, but winner/sharp candidates, the Margin rank
-> write-back, `getPoolPicks` maps, `seasonHistory` and `userProfile` are still keyed by uid
-> (the T2 PR body names each site), and the client fold (T4) still drops a second row per
-> uid — so the toggle stays hidden until T3/T4/T5 land together.
+> **Status 2026-08-25 (launch day).** Every ticket the flip depended on is
+> merged and the offer is ON.
+>
+> | Ticket | PR | State |
+> |---|---|---|
+> | **T0** | — | shipped (the §0b invariant lives in `tests/nfl-surface-invariants.test.ts`) |
+> | **K9** | #445 | shipped |
+> | **T1** | #449 | shipped + deployed — `maxEntriesPerUser` in the three create schemas, the rules callable-only key, `updatePoolSettings`' raise-only gate |
+> | **T2** | #450 | shipped — the submit path: `entryIndex` + `entryName`, entry-id derivation, the cap from EXISTENCE in the transaction, the Member Record `entries` map + `playableEntryCount`, `feeOwed = fee × count`, the fee-edit cascade, `setPaidStatus`' mirror + K11 paid-reset, `pool.entryCount`, proxyPick + rebuy |
+> | **T3** | #587 | ✅ scoring, reveal, finalize and profiles key by ENTRY id. Margin rank write-back to `doc(r.id)`; `sortMarginLeaderboard` ties on the entry id; `getPoolPicks` maps keyed by entry with an additive `entries` roster gated on the reveal for a participant; one `seasonHistory` doc per entry (`{poolId}__e{n}`) storing `entryId`; `gatherPoolInputs` per entry with the pool's money counted ONCE. **Deployed into a live scorer.** 2 codex rounds |
+> | **T4** | #588 | ✅ `buildMemberStandings` renders one row per entry from the Member Record roster map; `subscribeToMyNFLEntries`. 4 codex rounds, 3 findings fixed |
+> | **T5** | #589 | ✅ the "My Entries" switcher, `entryIndex` + `entryName` from all three sheets, Survivor's rebuy naming its entry, the four `ENTRY_*` error messages. **7 codex rounds, 9 findings fixed** — including a draft key that could save one entry's picks onto another, and a fallback that could display entry #2 while submitting as entry #1 |
+> | **T6a** | #590 | ✅ every NFL row surface displays `entryName ?? userName`; the standings name sorts compare the displayed name. The pot half of T6 needed nothing — `PayoutsPanel` already falls back to `pool.entryCount` |
+> | **FLIP** | #591 | ✅ `MULTI_ENTRY_WIZARD_ENABLED = true` on all three NFL types (Kevin, 2026-08-25 — no per-type gate), plus a wizard-payload→standings emulator arc and a source guard asserting the IMPLICATION (offer on ⇒ ten capabilities present) rather than the flag's value |
+>
+> **🟡 STILL OPEN, and named rather than silently dropped:**
+> - **T6 remainder** — `RecordPayoutsCard` keys its rows by uid and submits a
+>   uid, so a commissioner recording a payout in a multi-entry pool cannot name
+>   WHICH entry won. Season-end machinery; not on the flip's critical path. The
+>   `poolRoster.ts` rename is the other half.
+> - **T7** — extend the "no reveal rule of its own" test to `NFLWeeklyPicksGrid`.
+> - **T8** — reminders: "missing picks" = ANY entry missing, one email per member.
+>   ⚠️ `manualReminderTargets.test.ts`'s existing multi-entry case is green, so
+>   this is a widening, not a break.
+> - **T9** — fixtures: the additive `entryName` selector and one multi-entry
+>   scenario per NFL type (matrix ≥ 48).
+> - **T10** (docs/ADR) and **T11** (the sweeps re-run) — T11 IS DONE
+>   (`PLAN-MULTI-ENTRY-SWEEPS.md` §Re-verification, 2026-08-25); T10's ADR is not
+>   written.
+>
+> Both open T6 items still carry their `tests/nfl-surface-invariants.test.ts`
+> allow-list entries, and the suite fails if an entry names residue that is gone
+> — so the guard keeps naming them until they land.
 
 Order matters: T1–T3 are server and ship together (functions deploy **into a
 LIVE scorer** — say so); T4–T7 client; T8–T10 cross-cutting.

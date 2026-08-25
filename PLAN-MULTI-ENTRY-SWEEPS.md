@@ -126,3 +126,83 @@ grep -rn "ownerUid" functions/src/nflScoringEngine.ts | grep -i "sort\|localeCom
 `sortMarginLeaderboard` breaks its final tie on `ownerUid`; T3 changes every
 per-entry ordering's last resort to `entry.id`. Re-run: zero `ownerUid` in a
 sort comparator.
+
+---
+
+## Re-verification — 2026-08-25, after T3/T4/T5/T6a and the flip
+
+Re-run on `origin/main` @ `809384d4` (#591 merged). The rule the first run set
+was: **after T3, S1a's NFL rows must all take an entry id; after T6, S1c and S1d
+must return zero ❌ rows.**
+
+### S1a — `entries.doc(<uid>)` on the NFL paths
+
+```
+grep -rn "collection('entries').doc(\|collection(\"entries\").doc(" functions/src --include=*.ts | grep -v __tests__ | grep -viE "bracket|playoff"
+```
+
+| Hit | Verdict |
+|---|---|
+| `nflPools.ts:1808` | ✅ **`doc(r.id)`** — the T3 fix. Was `doc(r.ownerUid)`, the line that overwrote entry #1's rank with entry #2's |
+| `lib/multiEntry.ts:214` | ✅ `applyPaidReset` iterates `ownedIds` — a doc per OWNED ENTRY, not a uid |
+| `poolExceptions.ts:249`, `setPaidStatus.ts:134,225`, `userProfile.ts:47` | ✅ all the same shape: a deliberate probe for a LEGACY `entries/{uid}` document that carries no `ownerUid` and so cannot be found by the owned-entries query. Each sits beside that query, never instead of it |
+| `simHarness.ts:207,646` | ✅ the harness fabricates entry #1 per simulated player; its header no longer claims this is a scorer invariant |
+
+**Zero remaining uid-as-identity sites on the NFL scoring path.**
+
+### S1c / S1d — the client
+
+```
+grep -rn "ownerUid ?? \|ownerUid || " src --include=*.tsx --include=*.ts | grep -v test
+grep -rn "entries.find(e => e.ownerUid" src --include=*.tsx
+```
+
+Every ❌ row from the first run is gone:
+
+| First run | Now |
+|---|---|
+| `NFLPicksGrid.tsx:117` `uidOf` (reveal key) | ✅ removed by T0 |
+| `NFLWeeklyPicksGrid.tsx:73` `uidOf` | ✅ removed by T0 |
+| `NFLStandings.tsx:305-306` `pickCounts?.[ownerUid ?? id]` | ✅ removed by T0 |
+| `memberStandings.ts:73` `uidOf` + `scoredByUid`/`seen` | ✅ **T4** — `idOf` (`id ?? ownerUid`), `scoredByEntry`, one row per entry |
+| `NFLPoolDashboard.tsx:489` singular `myEntry` | ✅ **T5** — the ACTIVE entry, `.filter` not `.find` |
+| `NFLUserBentoDashboard.tsx:197` singular `myEntry` | ✅ **T5** — the active entry, with `pendingEntryLabel` for a draft |
+
+What still matches the grep, and why every one is correct:
+
+- `NFLPicksGrid:145`, `NFLWeeklyPicksGrid:87`, `NFLResults:143,153,274`,
+  `NFLStandings:213` — all `=== viewerUid`, i.e. **"is this me"**, which §0b.2
+  says *should* light up every one of the viewer's entries.
+- `memberStandings.ts:283,315` — **membership and `pickedWeeks` are questions
+  about the PERSON.** Asking `participantIds` for `e2:{uid}` would drop every
+  extra entry of every member; `pickedWeeks` is the per-member union by design
+  (D2), so it is written onto every row that owner holds.
+- `poolRoster.ts:81` `uidOf` — dues are per MEMBER and read `feeOwed`, already
+  the multiplied sum. Renamed by T6's remainder; still allow-listed.
+- `NFLManagerView.tsx:865` `targetUid` — the proxy-pick/remind TARGET is a
+  person. `proxyPick` takes an `entryIndex` alongside it (T2).
+- `PaymentsPanel.tsx:58` singular `myEntry` — ❌ **T6 remainder**, still
+  allow-listed in `tests/nfl-surface-invariants.test.ts`.
+- `PaymentLedgerNFL.tsx:69` `entryOwner` — **new since the first sweep** and
+  classified here: the ledger's payee is a person, so ✅.
+- `ReportsTab.tsx:123` — Bracket, out of scope.
+
+### S6 — same-owner tie-breaks
+
+```
+grep -rn "ownerUid" functions/src/nflScoringEngine.ts | grep -iE "sort|localeCompare|tie"
+→ :490  return String(a.id ?? a.ownerUid).localeCompare(String(b.id ?? b.ownerUid));
+```
+
+✅ **Zero `ownerUid` in a comparator.** The one hit is the entry id with a
+legacy fallback — the T3 fix. Two entries of one owner can no longer compare
+equal and take Firestore iteration order for distinct ranks.
+
+### The one thing this re-run does NOT prove
+
+These are greps. The alias case (`const key = row.ownerUid`) is out of a
+regex's reach, exactly as §0b.6 said. The compensating checks are behavioural
+and are green: `memberStandings.test.ts`'s "one row per ENTRY" block (two rows
+sharing an `ownerUid`), and the FLIP arc in `multiEntry.emulator.test.ts`
+(three entries of one player carrying three distinct scores into the standings
+projection).
