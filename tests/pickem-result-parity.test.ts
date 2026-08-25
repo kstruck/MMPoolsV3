@@ -137,6 +137,21 @@ describe('gradePick parity (client sheet vs the real scorer)', () => {
     expect(gradePickemGames({ picks: { g1: 'ARI' } } as never, [g], pool).g1?.result).toBe('VOID');
   });
 
+  it('a CANCELLED game is STILL void when the feed reported no scores', () => {
+    // ⚠️ ORDERING GUARD for the new scoreless gate. The engine tests
+    // `status === 'FINAL' && !hasReportedScores` — the FINAL half is
+    // load-bearing, because a cancelled game never reports a score and VOID is
+    // the right answer for it regardless. A gate written as a bare
+    // `!hasReportedScores(game)` placed above the CANCELLED branch would
+    // silently turn every cancelled game into "not graded yet", which the
+    // standings would contradict (a VOID is refunded, not pending).
+    const pool = { settings: { pickMode: 'ATS' } } as never;
+    const entry = { picks: { g1: 'ARI' } } as never;
+    const g = game({ status: 'CANCELLED', scores: undefined, spread: { value: -6.5, locked: true } });
+    expect(gradePick(g, 'ARI', 'ATS')).toBe('VOID');
+    expect(gradePickemGames(entry, [g], pool).g1?.result).toBe('VOID');
+  });
+
   it('grades nothing for an unpicked or unconcluded game', () => {
     expect(gradePick(game(), undefined, 'STRAIGHT')).toBeNull();
     expect(gradePick(game({ status: 'SCHEDULED' }), 'ARI', 'STRAIGHT')).toBeNull();
