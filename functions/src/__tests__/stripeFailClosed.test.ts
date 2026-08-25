@@ -17,6 +17,7 @@ import {
   resolveStripeMode,
   assertStripePaymentAllowed,
   assertNotMockSessionInDeployedEnv,
+  makeAlertThrottle,
   STRIPE_UNAVAILABLE_MESSAGE,
 } from '../stripe';
 
@@ -141,8 +142,17 @@ describe('resolveStripeMode — the full matrix', () => {
 });
 
 describe('assertStripePaymentAllowed — the money gate', () => {
+  // A FRESH throttle per gate, and persistClaim disabled: the throttle is
+  // exercised on its own below, and a shared module-level one would make these
+  // tests order-dependent (the second refusal would be silently suppressed).
   const gate = (key: string | undefined, env: NodeJS.ProcessEnv, dispatch = vi.fn().mockResolvedValue('sent')) =>
-    ({ dispatch, run: () => assertStripePaymentAllowed({ context: { path: 'test' }, env, readKey: () => key, dispatch }) });
+    ({
+      dispatch,
+      run: () => assertStripePaymentAllowed({
+        context: { path: 'test' }, env, readKey: () => key, dispatch,
+        throttle: makeAlertThrottle(30 * 60 * 1000), persistClaim: null,
+      }),
+    });
 
   it('REFUSES every unusable key in a deployed environment, with failed-precondition', async () => {
     for (const [label, key] of UNUSABLE_KEYS) {
@@ -170,8 +180,79 @@ describe('assertStripePaymentAllowed — the money gate', () => {
   it('still REFUSES when the ops alert itself fails — paging is best-effort, the refusal is not', async () => {
     const dispatch = vi.fn().mockRejectedValue(new Error('courier down'));
     await expect(
-      assertStripePaymentAllowed({ context: {}, env: DEPLOYED, readKey: () => undefined, dispatch }),
+      assertStripePaymentAllowed({
+        context: {}, env: DEPLOYED, readKey: () => undefined, dispatch,
+        throttle: makeAlertThrottle(1), persistClaim: null,
+      }),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
+  it('still REFUSES when the PERSISTED alert claim throws (Firestore down)', async () => {
+    const dispatch = vi.fn().mockResolvedValue('sent');
+    await expect(
+      assertStripePaymentAllowed({
+        context: {}, env: DEPLOYED, readKey: () => undefined, dispatch,
+        throttle: makeAlertThrottle(1), persistClaim: async () => { throw new Error('firestore down'); },
+      }),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+});
+
+/**
+ * codex r1 [P2]: the refusal fires on EVERY checkout attempt for as long as the
+ * secret is broken, and dispatchOpsAlert writes one mail doc per recipient with
+ * no dedupe. Unthrottled, the fix for a config outage would bury the on-call
+ * inbox during that same outage.
+ */
+describe('ops-alert throttling during a config outage', () => {
+  it('makeAlertThrottle admits one claim per window and re-admits after it', () => {
+    const t = makeAlertThrottle(1000);
+    expect(t.tryClaim(0)).toBe(true);
+    expect(t.tryClaim(1)).toBe(false);
+    expect(t.tryClaim(999)).toBe(false);
+    expect(t.tryClaim(1000)).toBe(true);
+    expect(t.tryClaim(1500)).toBe(false);
+    expect(t.tryClaim(2000)).toBe(true);
+  });
+
+  it('admits the very first claim even at t=0 (no "lastAt = 0" off-by-one)', () => {
+    expect(makeAlertThrottle(60_000).tryClaim(0)).toBe(true);
+  });
+
+  it('a storm of refusals inside one window pages ONCE — but refuses EVERY time', async () => {
+    const dispatch = vi.fn().mockResolvedValue('sent');
+    const throttle = makeAlertThrottle(30 * 60 * 1000);
+    let refusals = 0;
+    for (let i = 0; i < 25; i++) {
+      await assertStripePaymentAllowed({
+        context: { attempt: i }, env: DEPLOYED, readKey: () => undefined, dispatch,
+        throttle, persistClaim: null, now: 1_000_000 + i * 1000,
+      }).catch((e) => { if (e?.code === 'failed-precondition') refusals++; });
+    }
+    expect(refusals).toBe(25);       // the refusal is NEVER throttled
+    expect(dispatch).toHaveBeenCalledTimes(1); // the paging is
+  });
+
+  it('pages again once the window has elapsed — a still-broken config is not forgotten', async () => {
+    const dispatch = vi.fn().mockResolvedValue('sent');
+    const throttle = makeAlertThrottle(1000);
+    for (const now of [0, 500, 1000, 1200, 2000]) {
+      await assertStripePaymentAllowed({
+        context: {}, env: DEPLOYED, readKey: () => undefined, dispatch, throttle, persistClaim: null, now,
+      }).catch(() => undefined);
+    }
+    expect(dispatch).toHaveBeenCalledTimes(3); // t=0, t=1000, t=2000
+  });
+
+  it('a persisted claim that says "already paged" suppresses the page but not the refusal', async () => {
+    const dispatch = vi.fn().mockResolvedValue('sent');
+    await expect(
+      assertStripePaymentAllowed({
+        context: {}, env: DEPLOYED, readKey: () => undefined, dispatch,
+        throttle: makeAlertThrottle(1), persistClaim: async () => false,
+      }),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('does NOT refuse and does NOT page when the key is usable', async () => {

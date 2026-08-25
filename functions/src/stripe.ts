@@ -142,6 +142,75 @@ export const STRIPE_UNAVAILABLE_MESSAGE =
     "You have not been charged and nothing about your pool was changed. " +
     "Please try again shortly — we have been alerted.";
 
+// -----------------------------------------------------------------------------
+// Alert throttling (codex r1 [P2]).
+//
+// The refusal fires on EVERY checkout attempt for as long as the secret is
+// broken, and `dispatchOpsAlert` writes one mail doc per recipient with no
+// dedupe of its own. Unthrottled, the fix for a config outage would bury the
+// on-call inbox during that same outage. So: one page per cooldown window.
+//
+// Two layers, because neither alone is enough. The in-process gate is free and
+// stops the per-instance flood; the persisted marker stops a cold-start
+// stampede across instances from paging once per instance. The REFUSAL is never
+// throttled — only the paging is.
+// -----------------------------------------------------------------------------
+
+const STRIPE_CONFIG_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+
+export interface AlertThrottle {
+    /** True when the caller may page; false when a page already went out inside the window. */
+    tryClaim(now: number): boolean;
+    reset(): void;
+}
+
+export function makeAlertThrottle(cooldownMs: number): AlertThrottle {
+    let lastAt = Number.NEGATIVE_INFINITY;
+    return {
+        tryClaim(now: number): boolean {
+            if (now - lastAt < cooldownMs) return false;
+            lastAt = now;
+            return true;
+        },
+        reset() {
+            lastAt = Number.NEGATIVE_INFINITY;
+        },
+    };
+}
+
+const stripeConfigAlertThrottle = makeAlertThrottle(STRIPE_CONFIG_ALERT_COOLDOWN_MS);
+
+/** Cross-instance dedupe marker. Also gives Kevin a doc showing the outage. */
+async function claimStripeConfigAlertPersisted(now: number, verdict: StripeKeyVerdict): Promise<boolean> {
+    try {
+        return await db.runTransaction(async (t) => {
+            const ref = db.collection("monetization_alerts").doc("STRIPE_CONFIG_INVALID");
+            const snap = await t.get(ref);
+            const lastAt = (snap.data()?.lastAlertedAt as number) ?? Number.NEGATIVE_INFINITY;
+            const claim = now - lastAt >= STRIPE_CONFIG_ALERT_COOLDOWN_MS;
+            t.set(
+                ref,
+                {
+                    type: "PAYMENT_FAILED",
+                    reason: "STRIPE_CONFIG_INVALID",
+                    verdict,
+                    status: "open",
+                    updatedAt: now,
+                    ...(claim ? { lastAlertedAt: now, createdAt: (snap.data()?.createdAt as number) ?? now } : {}),
+                    refusalCount: FieldValue.increment(1),
+                },
+                { merge: true },
+            );
+            return claim;
+        });
+    } catch (err) {
+        // Firestore itself is unhappy. Page — the in-process gate above already
+        // caps this instance at one page per window, so this cannot flood.
+        console.error("[Stripe] Could not persist the Stripe-config alert marker:", err);
+        return true;
+    }
+}
+
 /**
  * THE MONEY GATE. In a deployed environment an unusable STRIPE_SECRET_KEY
  * refuses the purchase with `failed-precondition` and pages ops — it never
@@ -153,6 +222,10 @@ export async function assertStripePaymentAllowed(opts: {
     env?: NodeJS.ProcessEnv;
     readKey?: () => string | undefined;
     dispatch?: (input: { type: OpsAlertType; title: string; message: string; context?: Record<string, unknown> }) => Promise<unknown>;
+    throttle?: AlertThrottle;
+    /** Cross-instance claim. `null` skips it (used by the unit tests). */
+    persistClaim?: ((now: number, verdict: StripeKeyVerdict) => Promise<boolean>) | null;
+    now?: number;
 } ): Promise<StripeMode> {
     const env = opts.env ?? process.env;
     const readKey = opts.readKey ?? readStripeSecret;
@@ -163,19 +236,29 @@ export async function assertStripePaymentAllowed(opts: {
         `[Stripe] REFUSING purchase: STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed environment.`,
         opts.context,
     );
-    const dispatch =
-        opts.dispatch ?? ((input) => dispatchOpsAlert(db, input as Parameters<typeof dispatchOpsAlert>[1]));
-    // Best-effort paging must never be the reason the refusal fails to happen.
+
+    // ⚠️ Everything from here to the throw is BEST EFFORT. Paging must never be
+    // the reason the refusal fails to happen — that is the whole point of the
+    // guard, and a thrown alert would restore the hazard.
     try {
-        await dispatch({
-            type: "PAYMENT_FAILED",
-            title: "Stripe is not configured — checkout refused",
-            message:
-                `A purchase was refused because STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed ` +
-                "environment. Nothing was granted: no pool activation, no entitlement, no ledger row, no " +
-                "coupon use. Set the secret and redeploy functions.",
-            context: { verdict: resolution.verdict, ...opts.context },
-        });
+        const now = opts.now ?? Date.now();
+        const throttle = opts.throttle ?? stripeConfigAlertThrottle;
+        const persistClaim = opts.persistClaim === undefined ? claimStripeConfigAlertPersisted : opts.persistClaim;
+        if (throttle.tryClaim(now) && (persistClaim === null || (await persistClaim(now, resolution.verdict)))) {
+            const dispatch =
+                opts.dispatch ?? ((input) => dispatchOpsAlert(db, input as Parameters<typeof dispatchOpsAlert>[1]));
+            await dispatch({
+                type: "PAYMENT_FAILED",
+                title: "Stripe is not configured — checkout refused",
+                message:
+                    `A purchase was refused because STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed ` +
+                    "environment. Nothing was granted: no pool activation, no entitlement, no ledger row, no " +
+                    `coupon use. Further refusals in the next ${STRIPE_CONFIG_ALERT_COOLDOWN_MS / 60000} minutes ` +
+                    "are counted on monetization_alerts/STRIPE_CONFIG_INVALID rather than paged. " +
+                    "Set the secret and redeploy functions.",
+                context: { verdict: resolution.verdict, ...opts.context },
+            });
+        }
     } catch (err) {
         console.error("[Stripe] Ops alert for invalid Stripe config failed to dispatch:", err);
     }
@@ -1307,14 +1390,24 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
         // crash rather than the configuration failure it is. 503 keeps Stripe
         // retrying, which is right: the config can be repaired.
         console.error("[Stripe Webhook] REFUSING: STRIPE_SECRET_KEY is not usable in this environment.");
-        await dispatchOpsAlert(db, {
-            type: "WEBHOOK_FAILED",
-            title: "Stripe webhook refused — secret key not configured",
-            message:
-                "A Stripe webhook could not be verified because STRIPE_SECRET_KEY is missing, a placeholder, " +
-                "or malformed. Nothing was processed and Stripe will retry. Set the secret and redeploy functions.",
-            context: { verdict: classifyStripeKey(readStripeSecret()) },
-        });
+        // Stripe retries a 503 on its own schedule, so this path repeats for as
+        // long as the outage lasts — same throttle as the checkout refusal
+        // (codex r1 [P2]). Best effort: a paging failure must not stop the 503.
+        try {
+            const now = Date.now();
+            if (stripeConfigAlertThrottle.tryClaim(now) && (await claimStripeConfigAlertPersisted(now, classifyStripeKey(readStripeSecret())))) {
+                await dispatchOpsAlert(db, {
+                    type: "WEBHOOK_FAILED",
+                    title: "Stripe webhook refused — secret key not configured",
+                    message:
+                        "A Stripe webhook could not be verified because STRIPE_SECRET_KEY is missing, a placeholder, " +
+                        "or malformed. Nothing was processed and Stripe will retry. Set the secret and redeploy functions.",
+                    context: { verdict: classifyStripeKey(readStripeSecret()) },
+                });
+            }
+        } catch (err) {
+            console.error("[Stripe Webhook] Ops alert for invalid Stripe config failed to dispatch:", err);
+        }
         res.status(503).send("Stripe is not configured");
         return;
     }
