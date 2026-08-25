@@ -9,6 +9,7 @@ import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/picksGrid';
 import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
 import { GridSortToggle } from './GridSortToggle';
+import { rowDisplayName } from '../../utils/entrySelection';
 
 /**
  * CURRENT PICKS (Kevin's A2) — the page that did not exist.
@@ -237,7 +238,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                           className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
                           title="View player profile"
                         >
-                          {row.userName}
+                          {rowDisplayName(row)}
                         </button>
                         {mine && (
                           <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">
