@@ -408,3 +408,22 @@ close because the first two fixes each closed one path and left a sibling open.
 Every finding but one was in the fail-OPEN direction — a pool that has a
 password and does not act like it. That is the direction to look first if this
 code is touched again.
+
+## Post-review — CI found an over-broad guard (2026-08-25)
+
+`build-and-test` failed on the PR's MERGE commit, which none of the ten local
+rounds could have seen: `functions/src/authBackup.ts` — the Firebase Auth export
+job, landed on `main` by a parallel stream — assigns `passwordHash`, an Identity
+Toolkit record field with nothing to do with a pool password. My exact-equality
+ratchet scanned every file under `functions/src` and reported it as a new writer
+of pool password material.
+
+The guard was wrong, not the new file. Its stated invariant is "no NEW writer
+puts pool password material on a POOL DOCUMENT", so the scan is now scoped to
+files that carry `collection("pools")` — all three allowed entries do;
+`authBackup.ts` does not. Verified by dropping `main`'s `authBackup.ts` into the
+worktree and re-running before removing it again.
+
+A ratchet that fires on unrelated code is a ratchet somebody switches off. Worth
+recording that CI caught this and ten codex rounds did not — because only CI
+sees the merge with what the other streams are landing at the same time.

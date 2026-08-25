@@ -348,11 +348,30 @@ describe('source invariants', () => {
         .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
         .replace(/(?<!:)\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
 
-    /** Files that ASSIGN `<field>: …` in an object literal. */
+    /**
+     * Files that ASSIGN `<field>: …` in an object literal AND touch the pools
+     * collection.
+     *
+     * ⚠️ THE `pools` SCOPE IS THE FIX FOR AN OVER-BROAD GUARD, not a
+     * convenience. The first version scanned every file under `functions/src`,
+     * and CI holed it within the hour: `authBackup.ts` (the Firebase Auth export
+     * job, landed on main by a parallel stream) assigns `passwordHash` — an
+     * IDENTITY TOOLKIT record field that has nothing to do with a pool password.
+     * A ratchet that fires on unrelated code is a ratchet somebody switches off.
+     *
+     * The invariant this file actually holds is "no NEW writer puts pool
+     * password material on a pool document", so the scan is scoped to the files
+     * that can write one. All three allowed entries carry
+     * `collection("pools")`; `authBackup.ts` does not.
+     */
     function assignersOf(field: string): string[] {
         const re = new RegExp(`(^|[^.\\w])${field}\\s*:`);
         return sourceFiles()
-            .filter((f) => strip(fs.readFileSync(f, 'utf8')).split('\n').some((l) => re.test(l)))
+            .filter((f) => {
+                const text = strip(fs.readFileSync(f, 'utf8'));
+                return text.includes('collection("pools")')
+                    && text.split('\n').some((l) => re.test(l));
+            })
             .map((f) => path.relative(SRC, f).replace(/\\/g, '/'))
             .sort();
     }
@@ -406,14 +425,16 @@ describe('source invariants', () => {
         // code meant to retire it.
         const src = strip(fs.readFileSync(path.join(SRC, 'lib/poolAccess.ts'), 'utf8'));
         const fn = src.slice(src.indexOf('export async function rehashOnVerify'));
-        const body = fn.slice(0, fn.indexOf('\n}'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+
         expect(body).toMatch(/runTransaction\(/);
         expect(body).toMatch(/expectedPrivateHash/);
         expect(body).toMatch(/return "superseded"/);
         // The precondition is judged against the ACCESS DOC, which is why
         // readPoolSecret reports `privateHash` separately from the winning hash.
         const read = src.slice(src.indexOf('export async function readPoolSecret'));
-        expect(read.slice(0, read.indexOf('\n}'))).toMatch(/privateHash,/);
+        expect(read.slice(0, read.indexOf('\n}'))).toMatch(/privateHash,/);
+
     });
 
     it('the migration re-plans inside a transaction (codex r7 P1)', () => {
