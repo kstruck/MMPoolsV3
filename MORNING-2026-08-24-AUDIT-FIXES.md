@@ -30,7 +30,10 @@ e2e **0/8 → 8/8**.
 since 2025-12-13. The 2026-07-06 "owner ground truth: NOT leaked" was false and
 had propagated into nine skill files — all corrected in #547. Rotation was
 ALREADY Kevin's owed action in HANDOFF; the audits independently rediscovered
-the same key. One rotation closes both.
+the same key. **CLOSED 2026-08-24 morning (Kevin ruling): rotation verified
+already done** — leaked value tested live → `API_KEY_INVALID`; `.env` history
+carries no other private key; the live key (Jan 2026) never touched git.
+Runbook Task 1 and decision D5's urgency are void — D5 is cosmetic now.
 
 ## Stale audit findings (no action needed)
 
