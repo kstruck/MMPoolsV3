@@ -182,6 +182,15 @@ visitors are still served the old client, and those pools would render ungated.
   pool DATA private is a different, larger change — the `get` rule, every
   read path, and the guest-link product decision — and is not attempted here.
   Say so plainly rather than letting the phase read as more than it is.
+- **Pool creation is two calls, not one transaction.** The password no longer
+  rides the create payload, so `createPool` runs and then `setPoolPassword`
+  does. A failure of the second is COMPENSATED client-side — retry, re-read the
+  server-set marker (a lost response looks like a lost write), then delete the
+  pool — so no unprotected pool survives. The genuinely atomic fix is to write
+  the private secret inside the create callable's own transaction
+  (`functions/src/poolOps.ts`, `nflPools.ts`), which was outside this PR's file
+  scope in a parallel-stream session. Worth doing when those files are next
+  open.
 - **A squares commissioner cannot CLEAR a password from the wizard.** The
   wizard cannot distinguish "unchanged" from "cleared" (see above), so it only
   ever SETS. Bracket has an explicit removal control; squares does not yet. The

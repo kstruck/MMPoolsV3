@@ -110,14 +110,22 @@ describe('client source invariants', () => {
     expect(src).not.toMatch(/PASSWORD_VIEW_GATED_TYPES[^\]]*BRACKET/);
   });
 
-  it('a create whose password fails to save reports it instead of returning quietly', () => {
-    // Creation is two calls now, so a failed second call leaves an existing,
-    // UNPROTECTED pool. Not atomic — that fix belongs in the create callable —
-    // but it must never be silent (codex r7 P1).
+  it('a create whose password fails to save leaves no unprotected pool behind', () => {
+    // Creation is two calls now, so a failed second call would otherwise leave
+    // an existing, UNPROTECTED pool while the commissioner is told creation
+    // failed (codex r7/r8 P1). Retry, then confirm via the server-set marker,
+    // then delete — visible AND safe, not just visible.
     const src = strip(read('src/services/dbService.ts'));
     const fn = src.slice(src.indexOf('async function applyPasswordAfterCreate'));
     const body = fn.slice(0, fn.indexOf('\n}'));
-    expect(body).toMatch(/setPoolPassword\([\s\S]*setPoolPassword\(/); // one retry
+    expect(body).toMatch(/attempt <= 2/); // one retry
+    // A lost RESPONSE looks like a lost WRITE from the client. The server-set
+    // marker is re-read before anything destructive happens — deleting a pool
+    // whose password actually landed would be worse than the bug being fixed.
+    expect(body).toMatch(/hasPoolPassword === true/);
+    // Compensation: an unprotected pool must not outlive a create the
+    // commissioner is about to be told failed.
+    expect(body).toMatch(/dbService\.deletePool\(poolId\)/);
     expect(body).toMatch(/throw new Error\(/);
     expect(body).toMatch(/OPEN to anyone with the link/);
     // Both create wrappers go through it.

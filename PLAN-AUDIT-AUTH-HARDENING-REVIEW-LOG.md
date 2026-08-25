@@ -326,3 +326,31 @@ MITIGATED with the residue carried to the PR body.
    what happened ("your pool was created, but the password could not be saved,
    so the pool is currently OPEN…") instead of a generic failure that leaves a
    silently open pool. The residue is CARRIED and named in the PR body.
+
+## Round 8
+
+VERDICT: REVISE. 1 finding (P1) — round 7's carried item, re-raised. ACCEPTED
+and now CLOSED rather than carried.
+
+1. **(P1) "The retry and message only make this visible, not safe."** Correct,
+   and the right correction. Round 7 mitigated the create/set-password gap with
+   a retry and a clear error; codex pointed out that a pool the commissioner
+   believes does not exist is still sitting on a public link.
+
+   Reconsidered, and it CAN be closed without the create callables: compensate.
+   `applyPasswordAfterCreate` now (1) retries once, (2) **re-reads the
+   server-set `hasPoolPassword` marker before doing anything destructive** —
+   a lost RESPONSE is indistinguishable from a lost WRITE on the client, and
+   deleting a pool whose password actually landed would be a worse bug than the
+   one being fixed — and only then (3) deletes the pool through the product's
+   own delete path, reporting which of the two outcomes happened.
+
+   The pool is seconds old with no members, and `dbService.deletePool` is the
+   same path a user's own delete takes, so this introduces no new class of
+   orphaned index row.
+
+   The genuinely atomic fix — writing the private secret inside the create
+   callable's transaction — still belongs in `poolOps.ts` / `nflPools.ts` and is
+   still out of this PR's file scope. It is now an IMPROVEMENT rather than an
+   open exposure, and is recorded in the plan's follow-ups instead of the PR's
+   carried findings.

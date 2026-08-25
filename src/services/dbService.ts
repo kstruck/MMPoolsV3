@@ -36,45 +36,80 @@ import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
 
 /**
- * Set a just-created pool's password, retrying once, and FAILING LOUDLY with an
- * actionable message if it still does not land.
+ * Set a just-created pool's password — or make sure no unprotected pool is left
+ * behind (codex r7/r8, P1).
  *
- * ⚠️ THIS IS A MITIGATION, NOT ATOMICITY, AND THE PR SAYS SO. Creation is now
- * two calls — `createPool`, then `setPoolPassword` — because the password no
- * longer rides the create payload onto the pool document. If the second call
- * fails, the pool EXISTS and is unprotected while the commissioner is told the
- * create failed (codex r7, P1). The atomic fix is to write the private secret
- * inside the create callable's own transaction, which lives in
- * `functions/src/poolOps.ts` / `nflPools.ts` — outside this PR's file scope in a
- * parallel-stream session, so it is carried as a named finding rather than done
- * badly.
+ * ## The problem
  *
- * What this does instead: one retry (the realistic failure is a transient
- * callable error, not a permanent one), and on final failure an error that says
- * exactly what happened and what to do, instead of a generic create failure that
- * leaves a silently open pool behind.
+ * The password no longer rides the create payload onto the pool document, so
+ * creation is TWO calls: `createPool`, then `setPoolPassword`. If the second
+ * fails, the pool EXISTS, is reachable by anyone with its link, and the
+ * commissioner has been told creation failed — a fail-OPEN outcome created by
+ * the very change meant to close one. A retry and a clear message make that
+ * VISIBLE; they do not make it SAFE, which is what codex said when it re-raised
+ * the finding after the first mitigation.
+ *
+ * ## What this does, in order
+ *
+ * 1. Try, then retry once. The realistic failure is a transient callable error.
+ * 2. **Re-read the marker before concluding anything.** A lost RESPONSE looks
+ *    exactly like a lost WRITE from here, and deleting a pool whose password
+ *    actually landed would be a worse bug than the one being fixed. The
+ *    server-set `hasPoolPassword` is the authority, not our error object.
+ * 3. Only if the marker really is absent, DELETE the pool through the product's
+ *    own delete path, and say so. Nothing else has touched it — it is seconds
+ *    old, has no members, and the alternative is leaving a pool the commissioner
+ *    believes does not exist, unprotected, on a public link.
+ * 4. If even the delete fails, throw the loud message naming the consequence.
+ *
+ * The genuinely atomic fix is to write the private secret inside the create
+ * callable's own transaction (`functions/src/poolOps.ts`, `nflPools.ts`). Those
+ * files are outside this PR's scope in a parallel-stream session; this
+ * compensation closes the exposure without reaching into them.
  */
 async function applyPasswordAfterCreate(poolId: string, password?: string): Promise<void> {
     if (!password) return;
-    try {
-        await dbService.setPoolPassword(poolId, password);
-        return;
-    } catch (first) {
-        logger.warn('[dbService] setPoolPassword failed after create, retrying', first);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            await dbService.setPoolPassword(poolId, password);
+            return;
+        } catch (err) {
+            logger.warn(`[dbService] setPoolPassword attempt ${attempt} failed for ${poolId}`, err);
+        }
     }
+
+    // Step 2 — did it actually land? A dropped response is indistinguishable
+    // from a dropped write on this side, and only the marker knows.
     try {
-        await dbService.setPoolPassword(poolId, password);
+        const snap = await getDoc(doc(db, 'pools', poolId));
+        if (snap.exists() && (snap.data() as { hasPoolPassword?: boolean }).hasPoolPassword === true) {
+            logger.warn(`[dbService] setPoolPassword reported failure but the marker is set for ${poolId}`);
+            return;
+        }
+    } catch (err) {
+        logger.warn(`[dbService] could not confirm the password marker for ${poolId}`, err);
+    }
+
+    // Step 3 — compensate. An unprotected pool must not outlive a create the
+    // commissioner is about to be told failed.
+    let deleted = false;
+    try {
+        await dbService.deletePool(poolId);
+        deleted = true;
     } catch (err) {
         await errorHandler.handleError(err, {
             severity: ErrorSeverity.HIGH,
-            context: { operation: 'applyPasswordAfterCreate', poolId },
+            context: { operation: 'applyPasswordAfterCreate.compensate', poolId },
         });
-        throw new Error(
-            'Your pool was created, but the password could not be saved, so the pool is ' +
-            'currently OPEN to anyone with the link. Open the pool’s settings and set the ' +
-            'password there.',
-        );
     }
+    throw new Error(
+        deleted
+            ? 'Your pool could not be created: the password could not be saved, so the '
+              + 'half-created pool was removed. Please try again.'
+            : 'Your pool was created, but the password could not be saved, so the pool is '
+              + 'currently OPEN to anyone with the link. Open the pool’s settings and set '
+              + 'the password there, or delete the pool.',
+    );
 }
 
 /**
