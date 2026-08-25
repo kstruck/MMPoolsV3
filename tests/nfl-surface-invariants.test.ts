@@ -1075,9 +1075,21 @@ describe('subscribeToMyNFLEntries — an error must not be reported as "no entri
     // A `where` clause cannot match a document that lacks the field. The probe
     // is gated on `rows.length > 0` returning first, so the common path pays no
     // extra read. (codex r2 on the T4 PR.)
-    expect(handler).toContain('if (rows.length > 0) { callback(rows); return; }');
+    // The trigger is "entry #1 is MISSING from the result", not "the result is
+    // empty": an unstamped entry #1 joined by a stamped entry #2 yields a
+    // non-empty query that is still missing the primary. (codex r3 P1.)
+    expect(handler).toContain("if (rows.some(r => r.id === uid)) { callback(rows); return; }");
+    expect(handler).not.toContain('if (rows.length > 0)');
     expect(handler).toContain("getDoc(doc(db, 'pools', poolId, 'entries', uid))");
     expect(handler).toContain("data.ownerUid === undefined");
+  });
+
+  it('an in-flight probe cannot deliver after the subscription is disposed', () => {
+    // The callback writes `ownEntryState`; a stale delivery from a pool the
+    // viewer has left would hide the CURRENT pool's entries until the next
+    // snapshot happened to arrive. (codex r3 P2.)
+    expect(handler).toContain('return () => { seq += 1; unsub(); };');
+    expect(handler).toContain('if (mine !== seq) return;');
   });
 });
 

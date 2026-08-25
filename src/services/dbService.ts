@@ -2256,42 +2256,59 @@ export const dbService = {
      */
     subscribeToMyNFLEntries: (poolId: string, uid: string, callback: (entries: any[]) => void) => {
         const q = query(collection(db, 'pools', poolId, 'entries'), where('ownerUid', '==', uid));
-        // Out-of-order protection: the legacy probe below is async, so a later
-        // snapshot must always win over an earlier probe's result.
+        // Monotonic token. Bumped by every snapshot AND by unsubscribe, so an
+        // in-flight probe from a pool the viewer has navigated away from can
+        // never deliver — the callback writes `ownEntryState`, and a stale
+        // delivery would hide the CURRENT pool's entries until the next
+        // snapshot happened to arrive. (codex r3 P2 on the T4 PR.)
         let seq = 0;
-        return onSnapshot(q, (snap) => {
+        const unsub = onSnapshot(q, (snap) => {
             const mine = seq += 1;
-            const rows = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-            if (rows.length > 0) { callback(rows); return; }
-            // ⚠️ ZERO HITS IS THE ONE CASE A QUERY CANNOT ANSWER (codex r2 on
-            // the T4 PR). A `where` clause cannot match a document that lacks
-            // the field, so a hypothetical pre-2026-05-25 `entries/{uid}` with
-            // no `ownerUid` — which the old doc-get COULD read once a pool
-            // reached FINAL/COMPLETED, via the participant branch of the
-            // entries rule — would read as "you have no entry" and blank that
-            // member's own picks.
+            const rows = snap.docs.map(d => ({ ...d.data(), id: d.id } as Record<string, unknown>));
+
+            // ⚠️ AN UNSTAMPED DOCUMENT IS INVISIBLE TO A `where` CLAUSE, AND
+            // THAT IS THE ONE THING A QUERY CANNOT ANSWER FOR ITSELF.
             //
-            // Probed ONLY when the query came back empty, so the common path
-            // pays no extra read (PLAN-COST-CONTROLS), and probed once per
-            // snapshot rather than subscribed: an unstamped document is by
-            // definition not being written any more — the moment anything
-            // submits, `ownerUid` is stamped and the QUERY above picks it up
-            // live.
+            // `entries/{uid}` is entry #1's id (D1). Every NFL entry written
+            // since the collection's first commit carries `ownerUid`, but the
+            // server still defends against one that does not
+            // (`resolveOwnedEntry`, `gatherPoolInputs`), and the doc-get this
+            // replaced COULD read it — once a pool reaches FINAL/COMPLETED the
+            // participant branch of the entries rule admits it. Dropping it
+            // would blank that member's own picks.
             //
-            // The probe FAILING is the normal outcome for a member who simply
-            // has no entry (the rule reads `resource.data.ownerUid` and a
+            // 🛑 THE TRIGGER IS "ENTRY #1 IS MISSING FROM THE RESULT", NOT "THE
+            // RESULT IS EMPTY" (codex r3 P1). A member whose unstamped entry #1
+            // is joined by a stamped entry #2 gets a NON-EMPTY query that is
+            // still missing their primary — and an empty-only probe would drop
+            // it and promote entry #2 to primary.
+            //
+            // So the common path — a stamped entry #1, with or without extras —
+            // never probes and pays no extra read (PLAN-COST-CONTROLS).
+            if (rows.some(r => r.id === uid)) { callback(rows); return; }
+
+            // Probed once per snapshot rather than subscribed: an unstamped
+            // document is by definition not being written any more, because the
+            // moment anything submits, `ownerUid` is stamped and the live query
+            // above picks it up.
+            //
+            // The probe FAILING is the NORMAL outcome for a member who simply
+            // has no entry (the rule reads `resource.data.ownerUid`, and a
             // missing document has no `resource`), so it is not logged as an
-            // error and an empty list is still delivered.
+            // error and the queried rows are still delivered.
             getDoc(doc(db, 'pools', poolId, 'entries', uid))
                 .then((legacy) => {
                     if (mine !== seq) return;
                     const data = legacy.exists() ? (legacy.data() as Record<string, unknown>) : null;
-                    callback(data && data.ownerUid === undefined ? [{ ...data, id: legacy.id }] : []);
+                    callback(data && data.ownerUid === undefined
+                        ? [{ ...data, id: legacy.id }, ...rows]
+                        : rows);
                 })
-                .catch(() => { if (mine === seq) callback([]); });
+                .catch(() => { if (mine === seq) callback(rows); });
         }, (error) => {
             logger.error("Error subscribing to own NFL entries:", error);
         });
+        return () => { seq += 1; unsub(); };
     },
 
     // `onError` (optional) — same reason as subscribeToPayoutRecords above.
