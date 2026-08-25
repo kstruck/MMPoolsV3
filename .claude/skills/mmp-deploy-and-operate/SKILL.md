@@ -353,16 +353,47 @@ output** is the stale/wrong-tree failure — re-run step 3 and confirm `HEAD`.
 Healthcheck failures on a full-fleet deploy are usually §1c's infra flake, not
 your rollback; apply §1c's retry rules.
 
-**Step 7 — ⚠️ the deletion prompt. Read it, never blind-confirm.**
+**Step 7 — ⚠️ the deletion prompt. Read it, never blind-confirm, and know that
+declining is NOT automatically the safe answer.**
+
 Rolling back to a commit from BEFORE a function existed means that function is
 not in the target `index.ts`, and a full-fleet deploy will ask to **delete it
-from production**. Answering yes turns a code rollback into a capability
-deletion, and re-creating it later re-creates the Cloud Scheduler job and IAM
-bindings from scratch.
+from production**.
 
-Success: no prompt, or a prompt you read and declined.
-If it does not: decline, and re-run step 6 in the `--only functions:<name>`
-form, which only touches the names you list.
+Success: no prompt at all — the target commit exports the same set of functions
+the live fleet has, and this step does not apply.
+
+If you DO get a prompt, it is telling you the thing that decides the whole
+rollback: **the bad deploy ADDED a function, and there is no older version of it
+to roll back to.** There are exactly two honest outcomes, and "decline and
+re-run with `--only functions:<name>`" is not one of them — a targeted deploy
+cannot restore an implementation that does not exist in the target tree, so
+declining leaves the new, bad function live and serving while everything around
+it moves backwards. That split fleet is worse than either clean outcome.
+
+Choose deliberately:
+
+- **(a) The new function is the fault, and prod is better without it.** Accept
+  the deletion — but as a decision, not a keystroke. Confirm the name is
+  exactly the one you mean, and know what it costs: deleting a **scheduled**
+  function deletes its Cloud Scheduler job, and re-creating it later rebuilds
+  the job and the IAM invoker binding from scratch. This repo has already been
+  bitten by a missing `roles/run.invoker` binding making a job look armed and
+  never fire (`HANDOFF.md`), so budget for re-verifying that after any
+  re-creation. If the function is money- or scoring-adjacent, this is a
+  plan-gated decision, not an incident-shift one.
+
+- **(b) The new function must stay, and only its neighbours roll back.** Ctrl-C
+  out of the prompt and use the targeted form for the functions that DO have an
+  older version:
+  `npx firebase deploy --only functions:<fnA>,functions:<fnB> --project gridiron-gamble-uzuqo`
+  Then handle the new function on its own, by **rolling FORWARD** —
+  `git revert <bad-sha>` on `main`, gates, deploy — because that is the only
+  operation that can produce a corrected version of code that has no past.
+
+If neither reads as clearly right, **stop rolling back and roll forward
+instead** ("When rollback is the wrong move", below). A revert is slower and
+strictly safer than a fleet that is half old and half new.
 
 **Step 8 — verify by BEHAVIOUR, not by the deploy output.**
 

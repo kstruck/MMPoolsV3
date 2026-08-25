@@ -163,10 +163,13 @@ replace.
    Success: clean status and an empty commit list. If not: that worktree has
    work that the rewrite will strand.
 
-3. **Push or export everything that is not empty.** Preferred: push the branch
-   to `origin` and **merge it before the rewrite** — merged work survives,
-   because it will be in the rewritten history too. Fallback for work that
-   cannot be merged yet:
+3. **Push or export everything that is not empty. COMMITTED and UNCOMMITTED
+   work need different handling — doing only the first silently loses the
+   second.**
+
+   Preferred for committed work: push the branch to `origin` and **merge it
+   before the rewrite** — merged work survives, because it will be in the
+   rewritten history too. Fallback for commits that cannot be merged yet:
 
    ```powershell
    git -C <worktree-path> format-patch origin/main..HEAD -o D:\mmp-scrub-patches\<name>
@@ -176,6 +179,32 @@ replace.
    the rewritten history with `git am` afterwards. (`-o` also creates missing
    leading directories — same measurement as §6 step 1 — so
    `D:\mmp-scrub-patches` needs no pre-creation either.)
+
+   🛑 **`format-patch` exports COMMITS ONLY.** A worktree that step 2 flagged
+   with a dirty `git status --short` has changes that no patch series contains,
+   and step 5's `git worktree remove` will then refuse — leaving you stuck
+   mid-freeze with no instruction. Deal with the dirty tree FIRST, by whichever
+   of these fits:
+
+   ```powershell
+   # BEST: commit it, then it is covered by the format-patch above
+   git -C <worktree-path> add -A
+   git -C <worktree-path> commit -m "WIP before history scrub"
+
+   # OR: export the working tree as a plain diff, untracked files included
+   git -C <worktree-path> diff HEAD > D:\mmp-scrub-patches\<name>-dirty.patch
+   git -C <worktree-path> ls-files --others --exclude-standard   # copy these by hand
+   ```
+
+   🛑 **DO NOT USE `git stash` FOR THIS.** The stash is a **repository-global
+   ref stack shared by every worktree** — all 35 of them here — so a
+   `git stash push` in one worktree and a `git stash pop` in another operate on
+   the same stack. With parallel sessions running, a pop can hand you somebody
+   else's work and drop yours. **Measured on 2026-08-25**, during the session
+   that wrote this runbook: a `stash push`/`pop` pair in one worktree came back
+   holding a different workstream's uncommitted changes, and the author's own
+   files were recoverable only through `git fsck --unreachable`. Committing is
+   free and safe; stashing across a shared `.git` is neither.
 
 4. **Announce a freeze.** No commits, no merges, no deploys from any checkout
    between the mirror clone (§6 step 1) and the re-clone (§7). A commit made
