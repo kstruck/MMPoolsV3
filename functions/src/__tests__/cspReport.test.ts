@@ -215,6 +215,22 @@ describe("cspReport — the write budget is the cost bound", () => {
         expect(s.dropped).toBe(0);
     });
 
+    it("counts the untouched tail of a batch when a write fails (codex r6)", async () => {
+        // A rethrow exits ingest, so every report after the failing one is
+        // neither persisted nor counted unless the catch accounts for it.
+        const s = fresh();
+        const batch = Array.from({ length: 3 }, () => ({
+            directive: "img-src",
+            blockedUri: "https://c.example",
+            documentPath: "/",
+        }));
+        await expect(
+            ingest(batch, "2026-08-25T05", s, async () => { throw new Error("boom"); }, 5),
+        ).rejects.toThrow("boom");
+        // The failing report plus the two never reached.
+        expect(s.dropped).toBe(3);
+    });
+
     it("counts EVERY refused report in a batch, not just the first (codex r1)", async () => {
         // The handler used to `break` out of the batch at the first refusal, so a
         // five-report batch that exhausted the budget on report one recorded ONE

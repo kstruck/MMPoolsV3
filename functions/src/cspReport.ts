@@ -276,21 +276,23 @@ export async function ingest(
     write: (hour: string, v: Violation, dropped: number) => Promise<void>,
     limit: number = MAX_WRITES_PER_HOUR,
 ): Promise<void> {
-    for (const v of reports) {
+    for (let i = 0; i < reports.length; i++) {
         const slot = takeWriteSlot(state, hour, limit);
         if (!slot.allowed) continue;
         try {
-            await write(hour, v, slot.droppedToRecord);
+            await write(hour, reports[i], slot.droppedToRecord);
         } catch (e) {
-            // The reservation is only spent by a write that landed (codex r3),
-            // and `v` ITSELF was never persisted either, so it owes a drop of its
-            // own (codex r5). Without the `+ 1` a failed transaction would lose
-            // one report with nothing anywhere recording that it did.
+            // Three things are owed back, and each was a separate finding:
+            //  - the reservation, spent only by a write that landed (codex r3);
+            //  - the report whose write failed (codex r5);
+            //  - the rest of the batch, which the rethrow never reaches (codex r6).
+            // `reports.length - i` is the last two together: this report plus its
+            // untouched tail. Without it a Firestore outage loses reports with
+            // nothing anywhere recording that it did.
             //
             // The write SLOT stays consumed on purpose: the budget exists to cap
-            // Firestore cost, and a failed transaction cost just as much as a
-            // successful one.
-            restoreDropped(state, slot.droppedToRecord + 1);
+            // Firestore cost, and a failed transaction cost as much as a good one.
+            restoreDropped(state, slot.droppedToRecord + (reports.length - i));
             throw e;
         }
     }
