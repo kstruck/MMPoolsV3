@@ -41,7 +41,15 @@ export type OpsAlertType =
     | "AUTH_APPCHECK_OUTAGE"
     | "CHECKOUT_SLO_BREACH"
     | "NFL_SPREADS_NOT_LOCKED"
-    | "NFL_STAT_CORRECTION";
+    | "NFL_STAT_CORRECTION"
+    // Raised by scheduledHealthCheck on a TRANSITION only (a check flipping
+    // ok→fail, or a job newly entering the stale set). Deliberately NOT
+    // high-priority: the probe runs hourly and its checks include third-party
+    // dependencies (ESPN) that blip on their own, so an SMS per blip is the
+    // crying-wolf mode this dispatcher's comments already warn about. Email is
+    // the right latency for "something has been down for an hour".
+    | "HEALTH_CHECK_FAILED"
+    | "SCHEDULED_JOB_STALE";
 
 const HIGH_PRIORITY_TYPES: ReadonlySet<OpsAlertType> = new Set([
     "WEBHOOK_FAILED",

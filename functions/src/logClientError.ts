@@ -1,6 +1,7 @@
 import { onCall } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import { redactClientErrorReport } from "./shared/piiRedaction";
 
 /**
  * Server-side sink for client-side error telemetry (the ErrorBoundary /
@@ -15,6 +16,14 @@ import * as logger from "firebase-functions/logger";
  *  - Size-capped: every string is truncated so this can't be used as a bulk sink.
  *  - Server-stamped: timestamp/source/uid are set here, never trusted from the client.
  *  - Never throws back to the caller — logging must not cascade into another error.
+ *  - PII-redacted BEFORE persisting (error-tracking audit 21d): key-based over
+ *    `context` and pattern-based over the free-form strings. The schema
+ *    whitelist bounds WHICH fields land in `system_logs`; it says nothing about
+ *    what is INSIDE them, and `message`/`stack`/`url` routinely carry an email,
+ *    a bearer token or a `?token=` query string under those non-sensitive key
+ *    names. `system_logs` is readable by every admin, so this is the boundary
+ *    where that has to stop. Shared with the browser-side pass via
+ *    `shared/piiRedaction.ts` so the two cannot drift.
  */
 
 const SEVERITIES = new Set(["low", "medium", "high", "critical"]);
@@ -35,7 +44,13 @@ export const logClientError = onCall(
     { cors: true, enforceAppCheck: false, consumeAppCheckToken: false },
     async (request) => {
         try {
-            const d = (request.data ?? {}) as Record<string, unknown>;
+            // Redaction runs FIRST, before the size caps. Capping first would cut
+            // a token or an email mid-string and persist the surviving half — a
+            // truncated secret is still a secret, and a truncated address still
+            // identifies a person.
+            const d = redactClientErrorReport(
+                (request.data ?? {}) as Record<string, unknown>,
+            ) as Record<string, unknown>;
 
             const severityRaw = typeof d.severity === "string" ? d.severity : "medium";
             const severity = SEVERITIES.has(severityRaw) ? severityRaw : "medium";

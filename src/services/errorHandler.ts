@@ -3,6 +3,7 @@ import { functions } from '../firebase';
 import { logger } from '../utils/logger';
 import { captureSentryException } from '../sentry';
 import { sanitizeForSentry } from '../utils/sentrySanitize';
+import { redactClientErrorReport } from '@shared/piiRedaction';
 
 export const ErrorSeverity = {
     LOW: 'low',
@@ -103,15 +104,26 @@ class ErrorHandler {
         try {
             // system_logs is functions-only write now; funnel through the
             // App-Check-gated logClientError callable instead of a direct addDoc.
+            //
+            // Redacted HERE as well as in the callable (error-tracking audit 21d).
+            // The server pass is the authoritative one — this client is untrusted
+            // and anyone can call the callable directly — but the Sentry branch
+            // above has always sanitized its payload while this branch sent
+            // `message`, `stack`, the full `window.location.href` and the raw
+            // context verbatim. Redacting before the wire means an email or a
+            // `?token=` never leaves the device at all, rather than being cleaned
+            // up after it arrives.
             const logFn = httpsCallable(functions, 'logClientError');
-            await logFn({
-                message: errorLog.message,
-                code: errorLog.code,
-                stack: errorLog.stack,
-                url: errorLog.url,
-                context: errorLog.context,
-                severity: errorLog.severity,
-            });
+            await logFn(
+                redactClientErrorReport({
+                    message: errorLog.message,
+                    code: errorLog.code,
+                    stack: errorLog.stack,
+                    url: errorLog.url,
+                    context: errorLog.context,
+                    severity: errorLog.severity,
+                }),
+            );
         } catch (e) {
             logger.warn('Failed to log error via logClientError callable:', e);
         }
