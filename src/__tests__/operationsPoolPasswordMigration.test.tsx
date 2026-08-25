@@ -207,6 +207,64 @@ describe('S1 — pool password migration control', () => {
     expect(runButton().disabled).toBe(false);
   });
 
+  it('refuses to page past a report that carries failures (codex r2 P1)', async () => {
+    // The callable catches per-pool errors and keeps scanning, so a page can
+    // carry BOTH failures and a cursor — and the cursor is already past the
+    // pools that failed.
+    migratePoolPasswords.mockResolvedValue({
+      dryRun: false,
+      poolsScanned: 100,
+      poolsChanged: 98,
+      plannedWrites: [],
+      failures: [{ poolId: 'pool-broken', error: 'ABORTED: too much contention' }],
+      nextCursor: 'pool-zzz',
+    });
+    render(<OperationsPanel />);
+    fireEvent.click(dryRunBox());
+    fireEvent.click(runButton());
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'RUN' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Run sweep' }));
+
+    const banner = await screen.findByTestId('migration-failures');
+    expect(banner.textContent).toMatch(/1 pool\(s\) not processed/i);
+    expect((screen.getByRole('button', { name: /Continue from cursor/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('migration-cursor-stale').textContent).toMatch(/already past the pools that failed/i);
+    // A page that left pools unprocessed is audited as an ERROR, not a success.
+    await waitFor(() => expect(logAdminAction).toHaveBeenCalled());
+    expect(logAdminAction.mock.calls[0][0]).toMatchObject({ action: 'OP_MIGRATEPOOLPASSWORDS', status: 'error' });
+  });
+
+  it('keeps every page report while paging (codex r2 P2)', async () => {
+    migratePoolPasswords
+      .mockResolvedValueOnce({
+        dryRun: true, poolsScanned: 100, poolsChanged: 1,
+        plannedWrites: [{ poolId: 'pool-from-page-one', action: 'hash-plaintext' }],
+        failures: [], nextCursor: 'pool-zzz',
+      })
+      .mockResolvedValueOnce({
+        dryRun: true, poolsScanned: 9, poolsChanged: 1,
+        plannedWrites: [{ poolId: 'pool-from-page-two', action: 'move-hash' }],
+        failures: [], nextCursor: null,
+      });
+    render(<OperationsPanel />);
+    await runAndConfirm();
+
+    const cont = await screen.findByRole('button', { name: /Continue from cursor/i });
+    await waitFor(() => expect((cont as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(cont);
+    fireEvent.click(await screen.findByRole('button', { name: 'Run next page' }));
+
+    // Step 4 of the arming procedure is "keep every report". Page 1's evidence
+    // must survive page 2 arriving.
+    await waitFor(() => expect(screen.getByTestId('migration-reports').textContent).toContain('pool-from-page-two'));
+    expect(screen.getByTestId('migration-reports').textContent).toContain('pool-from-page-one');
+
+    // ...but a NEW pass starts a fresh history rather than appending to the old one.
+    migratePoolPasswords.mockResolvedValue({ dryRun: true, poolsScanned: 1, poolsChanged: 0, plannedWrites: [], failures: [], nextCursor: null });
+    await runAndConfirm();
+    await waitFor(() => expect(screen.getByTestId('migration-reports').textContent).not.toContain('pool-from-page-one'));
+  });
+
   it('gates a LIVE run behind the typed RUN token', async () => {
     migratePoolPasswords.mockResolvedValue({ dryRun: false, poolsScanned: 1, poolsChanged: 1, plannedWrites: [], nextCursor: null });
     render(<OperationsPanel />);

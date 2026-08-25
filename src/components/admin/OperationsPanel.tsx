@@ -551,22 +551,53 @@ const PoolPasswordMigrationCard: React.FC = () => {
   const [dryRun, setDryRun] = useState(true);
   const [limitInput, setLimitInput] = useState(String(MIGRATION_DEFAULT_LIMIT));
   const [running, setRunning] = useState(false);
-  const [report, setReport] = useState<MigratePoolPasswordsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
   /** Which button opened the confirm modal: a fresh pass, or the next page. */
   const [pending, setPending] = useState<null | 'start' | 'continue'>(null);
   /**
-   * The mode the CURRENT report was produced under — both what the operator
-   * asked for and what the server actually did. A cursor is only meaningful
-   * inside one pass, and the two values are what decides whether the pass the
-   * cursor belongs to is the same pass the next click would run (codex r1 P1).
+   * EVERY page of the current pass, oldest first — not just the latest one
+   * (codex r2, P2). Step 4 of the arming procedure is "page through … keep
+   * every report", and a card that replaced the report on each Continue
+   * destroyed page 1's `plannedWrites` the moment page 2 arrived. The server's
+   * own `admin_audit` row keeps only the first 100 planned writes, so nothing
+   * else in the system holds the full list either.
+   *
+   * `requestedDryRun` is stored per page because it is what decides whether the
+   * cursor may be resumed, and the report's own `dryRun` because the config can
+   * force a page dry regardless of what was asked for.
    */
-  const [pass, setPass] = useState<{ requestedDryRun: boolean; effectiveDryRun: boolean } | null>(null);
+  const [pages, setPages] = useState<Array<{
+    page: number;
+    requestedDryRun: boolean;
+    report: MigratePoolPasswordsReport;
+  }>>([]);
+
+  const latest = pages.length > 0 ? pages[pages.length - 1] : null;
+  const report = latest?.report ?? null;
+  const page = latest?.page ?? 0;
+  /**
+   * The mode the LATEST page was produced under — both what the operator asked
+   * for and what the server actually did. A cursor is only meaningful inside one
+   * pass, and these two values decide whether the pass the cursor belongs to is
+   * the same pass the next click would run (codex r1, P1).
+   */
+  const pass = latest && !latest.report.skipped
+    ? { requestedDryRun: latest.requestedDryRun, effectiveDryRun: latest.report.dryRun }
+    : null;
 
   // The cursor is CARRIED, not copied by hand. `skipped` responses have no
   // `nextCursor` at all, so a refusal never leaves a stale cursor armed.
   const cursorFromReport = report && !report.skipped ? report.nextCursor ?? null : null;
+
+  /**
+   * Pools this page could not process. The callable catches per-pool errors and
+   * keeps going, so a page can carry failures AND a cursor — and the cursor is
+   * already PAST the pools that failed (codex r2, P1). Resuming from it would
+   * step over them for the rest of the pass, and on a live run their plaintext
+   * would stay on the public document while the card showed a finished sweep.
+   */
+  const failures = report && !report.skipped ? report.failures ?? [] : [];
+  const hasFailures = failures.length > 0;
 
   /**
    * WHY A CURSOR CAN GO STALE WITHOUT THE REPORT CHANGING (codex r1, P1).
@@ -589,13 +620,15 @@ const PoolPasswordMigrationCard: React.FC = () => {
    * says why. The cursor is still SHOWN; it is the resume that is withheld.
    */
   const cursorUsable = Boolean(
-    cursorFromReport && pass && dryRun === pass.requestedDryRun && (dryRun || !pass.effectiveDryRun),
+    cursorFromReport && pass && !hasFailures && dryRun === pass.requestedDryRun && (dryRun || !pass.effectiveDryRun),
   );
   const cursorStaleReason = !cursorFromReport || cursorUsable
     ? null
-    : pass && dryRun !== pass.requestedDryRun
-      ? `the pages so far ran as a ${pass.requestedDryRun ? 'dry run' : 'LIVE run'}, and the box now asks for a ${dryRun ? 'dry run' : 'LIVE run'}. Resuming would skip every pool those pages already covered.`
-      : 'the server forced this pass dry (system/config.poolPasswordMigration.dryRun is still true), so nothing has been written yet. Set that to false, then start the pass again from the beginning.';
+    : hasFailures
+      ? `this page reported ${failures.length} failure(s), and the cursor is already past the pools that failed. Resuming would step over them for the rest of the pass. Fix the cause and run the pass again from the beginning — the sweep is idempotent, so a pool already done costs a no-op.`
+      : pass && dryRun !== pass.requestedDryRun
+        ? `the pages so far ran as a ${pass.requestedDryRun ? 'dry run' : 'LIVE run'}, and the box now asks for a ${dryRun ? 'dry run' : 'LIVE run'}. Resuming would skip every pool those pages already covered.`
+        : 'the server forced this pass dry (system/config.poolPasswordMigration.dryRun is still true), so nothing has been written yet. Set that to false, then start the pass again from the beginning.';
   const nextCursor = cursorUsable ? cursorFromReport : null;
 
   const parsedLimit = Number(limitInput);
@@ -625,23 +658,29 @@ const PoolPasswordMigrationCard: React.FC = () => {
         limit: limitValid ? parsedLimit : MIGRATION_DEFAULT_LIMIT,
         startAfter,
       });
-      setReport(result);
-      setPage(pageNumber);
-      // A refusal is not a pass: it read nothing and returned no cursor, so it
-      // must not leave a previous pass's mode record standing behind it.
-      setPass(result.skipped ? null : { requestedDryRun: dryRun, effectiveDryRun: result.dryRun });
+      // A fresh pass REPLACES the history; a continuation appends to it. A
+      // refusal replaces it too — it read nothing and returned no cursor, so it
+      // must not leave a previous pass's pages (or its mode) standing behind it.
+      const entry = { page: pageNumber, requestedDryRun: dryRun, report: result };
+      setPages((prev) => (mode === 'continue' && !result.skipped ? [...prev, entry] : [entry]));
+      const failed = !result.skipped && (result.failures?.length ?? 0) > 0;
       if (result.skipped) {
         // NOT a toast.error: the doc's step 1 is a deliberately disarmed call
         // whose whole purpose is to watch the gate refuse. Calling that a
         // failure would train the operator to ignore the one signal that proves
         // the kill-switch works.
         toast.info('Migration refused by the kill-switch — see the card.');
+      } else if (failed) {
+        // A page that left pools unprocessed did NOT succeed, whatever the
+        // counters say — the panel's own convention is that a REPORTED failure
+        // is audited as an error, not just a thrown one.
+        toast.error(`Pool password sweep page ${pageNumber} left ${result.failures!.length} pool(s) unprocessed — read the report.`);
       } else {
         toast.success(`Pool password sweep page ${pageNumber} (${result.dryRun ? 'dry run' : 'LIVE'}) finished.`);
       }
       await dbService.logAdminAction({
         action: 'OP_MIGRATEPOOLPASSWORDS',
-        status: 'success',
+        status: failed ? 'error' : 'success',
         metadata: {
           label: 'Pool Password Migration',
           requestedDryRun: dryRun,
@@ -651,6 +690,7 @@ const PoolPasswordMigrationCard: React.FC = () => {
           skipped: result.skipped ?? null,
           poolsScanned: result.poolsScanned,
           poolsChanged: result.poolsChanged,
+          failures: result.failures?.length ?? 0,
           nextCursor: result.nextCursor ?? null,
         },
       });
@@ -797,14 +837,40 @@ const PoolPasswordMigrationCard: React.FC = () => {
             )}
           </div>
 
-          {/* Requirement 3: the WHOLE report, not a count. The sweep doc tells the
-              operator to read plannedWrites and stop on anything unexpected, so
-              nothing here is summarised away or truncated. */}
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">Full report (page {page})</p>
-            <pre className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-300 font-mono overflow-auto max-h-96 whitespace-pre-wrap break-all">
-              {JSON.stringify(report, null, 2)}
-            </pre>
+          {hasFailures && (
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3" data-testid="migration-failures">
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-300 mb-1">
+                {failures.length} pool(s) not processed on this page
+              </p>
+              <p className="text-xs text-rose-100">
+                The callable keeps going past a pool it cannot process, so this page has a cursor that is already PAST them.
+                Paging on would step over these pools for the rest of the pass — so Continue is disabled. Fix the cause and
+                run the pass again from the beginning; the sweep is idempotent, so a pool already done costs a no-op. The
+                per-pool errors are in the report below.
+              </p>
+            </div>
+          )}
+
+          {/* Requirement 3: the WHOLE report, not a count — and EVERY page of the
+              pass, not just the last one (codex r2 P2). The sweep doc tells the
+              operator to read plannedWrites, stop on anything unexpected, and
+              keep every report, so nothing here is summarised away, truncated,
+              or replaced when the next page arrives. */}
+          <div className="space-y-2" data-testid="migration-reports">
+            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+              Full reports — {pages.length} page{pages.length === 1 ? '' : 's'} of this pass, newest first
+            </p>
+            {[...pages].reverse().map((entry) => (
+              <div key={entry.page}>
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                  Page {entry.page} — requested {entry.requestedDryRun ? 'dry run' : 'LIVE'}, server ran{' '}
+                  {entry.report.dryRun ? 'dry' : 'LIVE'}
+                </p>
+                <pre className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-300 font-mono overflow-auto max-h-96 whitespace-pre-wrap break-all">
+                  {JSON.stringify(entry.report, null, 2)}
+                </pre>
+              </div>
+            ))}
           </div>
         </div>
       )}
