@@ -1,8 +1,6 @@
 # MORNING 2026-08-24 — Overnight audit-remediation session
 
-> Sibling doc: [MORNING-2026-08-24.md](MORNING-2026-08-24.md) is the EARLIER
-> doc for this date (previous effort's close-out). This file CONTINUES it —
-> it does not supersede it; different workstream (the six-audit remediation).
+> This file CONTINUES [MORNING-2026-08-24.md](MORNING-2026-08-24.md) (the earlier doc for this date — previous effort's close-out); it does not supersede it. Different workstream: the six-audit remediation.
 
 Kevin's brief: work every finding from the six audits (DB/storage, backend
 API, auth, hosting/deploy, cloud/compute, VCS/CI) plus the 8/8-red Playwright
