@@ -10,10 +10,10 @@ gates, `firestore.rules` in Phase B) and — Phase B only — **production data*
 
 | Item | State |
 |---|---|
-| A1 claim+doc role gate on the two claim-only callables | ✅ built — this PR |
-| A2 bracket create: strict settings schema, no raw spread | ✅ built — this PR |
-| A3 password-reset notification email | ✅ built — this PR |
-| B pool-password plaintext fix | NOT BUILT — DECISION NEEDED (options below) |
+| A1 claim+doc role gate on the two claim-only callables | ✅ built — PR #1 (Phase A) |
+| A2 bracket create: strict settings schema, no raw spread | ✅ built — PR #1 (Phase A) |
+| A3 password-reset notification email | ✅ built — PR #1 (Phase A) |
+| B pool-password plaintext fix | ✅ built — Phase B PR. **Kevin chose Option 2 (full fix, keep the feature) 2026-08-24.** Code is live-safe on merge; the prod-data sweep stays disarmed until Kevin arms it. |
 
 ## Audit verification
 
@@ -66,35 +66,158 @@ Why not a server-side trigger: Firebase Auth has no password-change event
 without upgrading the project to Identity Platform blocking functions —
 out of scope tonight, noted as the stronger future shape.
 
-## Phase B — pool passwords (NOT built; DECISION NEEDED)
+## Phase B — pool passwords (BUILT)
 
-The honest options, in Kevin-decision order:
+### The decision
 
-1. **RECOMMENDED — relabel + kill the field.** The feature's real value today
-   is "unlisted link", and the password adds only false assurance (it is
-   world-readable). Remove the gate UI, relabel "private" → "unlisted",
-   stop writing `gridPassword`/`accessControl.password`, and run a
-   kill-switched, dry-run-default sweep that DELETES the two fields from
-   existing docs (prod-data mutation, Rule 1). Smallest surface, no new
-   crypto, removes real leaked-credential risk (people reuse passwords).
-2. **Full fix.** Server-side PBKDF2 (pattern exists at bracketPools.ts:202),
-   password moved to `pools/{id}/private/access` (`allow read: if false`),
-   join gate becomes a callable that verifies and grants, migration sweep
-   moves+deletes existing plaintext. Keeps the feature; touches rules +
-   client join flow + a migration; several hours + its own review rounds.
-3. **Do nothing** — rejected: the audit is right that this leaks real
-   user-chosen passwords to anyone with a pool link.
+Three options were put to Kevin on 2026-08-24. He chose **Option 2 — the full
+fix, keep the feature**. Recorded here verbatim so the rejected options are not
+silently re-litigated:
 
-Until decided, the exposure is unchanged from today (no new writes make it
-worse tonight; POOLS_OPEN is still false, so no new squares pools are being
-created by the public).
+1. *Relabel + kill the field* (the plan's original recommendation) — REJECTED
+   by Kevin. It would have removed a feature commissioners actually use.
+2. **CHOSEN.** Server-side PBKDF2, password moved to
+   `pools/{id}/private/access` (`allow read: if false`), the join/unlock gate
+   becomes a callable, and a migration sweep evacuates existing plaintext.
+3. *Do nothing* — rejected on the audit's own terms: it leaks real user-chosen
+   passwords to anyone holding a pool link, and people reuse passwords.
+
+### What was actually wrong — all four of it
+
+The audit named one leak. There were four, and they disagreed with each other:
+
+| # | Where | What |
+|---|---|---|
+| B1 | `pool.gridPassword` (squares/props wizards) | PLAINTEXT on `pools/{id}`, which is `allow get: if true`. |
+| B2 | `pool.accessControl.password` (BracketPoolDashboard:380 → dbService:550) | PLAINTEXT, written by a direct client `updateDoc` — **and `joinBracketPool` never read it**, so the field was simultaneously exposed and unenforced (item 13a). |
+| B3 | `pool.passwordHash` (publishBracketPool) | PBKDF2, but still on the world-readable document, i.e. offline-crackable material handed out with the share link. |
+| B4 | `PoolRoute.tsx:402` | The squares gate was `enteredPassword === squaresPool.gridPassword` — a compare **in the browser**, against a field anyone could read out of the network tab. |
+
+### The shape that replaces it
+
+- **One home.** `pools/{poolId}/private/access` holds `{ passwordHash }` and
+  nothing else. `firestore.rules` gives the whole `private/{docId}` wildcard
+  `allow read, write: if false` — closed to guests, members, the pool OWNER and
+  SUPER_ADMIN alike. The only reader is a callable holding an Admin SDK handle.
+- **A non-secret marker.** `pool.hasPoolPassword` (boolean) is what the UI
+  renders a lock from. It is server-written and client-denied.
+- **PBKDF2**, `crypto.pbkdf2Sync(pw, salt, 10000, 64, 'sha512')` → `salt:hash`.
+  Identical parameters to the pattern already at `bracketPools.ts:202`, so
+  existing `passwordHash` values are MOVED verbatim and keep verifying. The
+  iteration count is deliberately unchanged — see the header of
+  `functions/src/lib/poolPassword.ts` for why raising it is a separate change.
+- **Two new callables** plus the sweep, all exported from `index.ts` in one
+  clause:
+  - `setPoolPassword({poolId, password|null})` — commissioner/SA (claim **and**
+    doc agreement on the SA branch). `password: ''` is REJECTED rather than
+    treated as a clear.
+  - `verifyPoolAccess({poolId, password})` — **public** (`auth: "public"`),
+    because a squares share link works logged-out. Throttled 10 failures /
+    15 min per **(pool, principal)**; the key is hashed, only FAILURES are
+    charged, and the slot is refunded on success.
+  - `migratePoolPasswords({dryRun, limit, startAfter})` — the Rule 1 sweep.
+- **The choke point (item 13b).** `createPoolPermissiveSchema` — the open
+  `z.record` create envelope shared by `createPool` and `createNFLPool` — now
+  carries a `.transform(stripPoolPasswordFields)`. `validated()` hands the
+  handler the PARSED data, so the fields cannot reach any pool document from any
+  wizard, present or future. Same transform on `updatePoolSettings.updates`.
+- **Rehash-on-successful-verify (item 13c).** A legacy bare-sha256 hash, or
+  plaintext still on the public doc, is accepted once and upgraded to PBKDF2 in
+  the same request — in `joinBracketPool` and in `verifyPoolAccess`. Both are
+  best-effort: a failed rehash never turns a correct password into a rejected
+  one.
+- **Item 21d.** The `JSON.stringify(request.data)` dump at `bracketPools.ts:37`
+  is deleted. It wrote the commissioner's contact email, payment handles and
+  (pre-Phase-B) the pool password to Cloud Logging on every single create.
+
+### The two decisions inside the fix that are not obvious
+
+**"Empty is not a clear."** `src/constants.ts` ships `gridPassword: ''`, and
+once the value no longer lives on the document every wizard reloads that field
+EMPTY — so an empty value arrives on every ordinary settings save. Encoding
+"clear the password" as the empty string would silently un-gate a pool each time
+its commissioner saved an unrelated setting. Empty is therefore a NO-OP
+everywhere (`splitPoolPassword`, `setPoolPasswordSchema`, the rules predicate),
+and clearing is an explicit act: the bracket dashboard's "Remove the password"
+checkbox → `setPoolPassword(poolId, null)`.
+
+**The rules predicate bans the VALUE, not the FIELD.** An unconditional deny on
+`gridPassword` would break every squares settings save, because the wizards send
+a full-object update carrying the empty default. `poolPasswordNotWritten()`
+allows `''`/`null` through and refuses any non-empty value — and, like
+`callableOnlySettingsUnchanged()`, sits OUTSIDE the disjunction so `isSuperAdmin()`
+cannot short-circuit past it. A same-value write is not an `affectedKey`, so a
+pre-migration pool that still carries its plaintext stays editable until the
+sweep reaches it.
+
+### Rollout order (this is load-bearing)
+
+1. Merge + `npx firebase deploy` — **functions BEFORE rules** (the standing
+   ritual, and here it also matters: rules deny the client write, so the
+   callable has to exist first).
+2. Frontend (manual Coolify trigger). Until it lands, browsers still run the old
+   client — which is fine, because nothing has been deleted from any document
+   yet.
+3. ONLY THEN the sweep, dry first. Details in
+   `PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md`.
+
+Running the sweep before step 2 would delete `gridPassword` from pools whose
+visitors are still served the old client, and those pools would render ungated.
+
+### Known limitations carried
+
+- **A squares commissioner cannot CLEAR a password from the wizard.** The
+  wizard cannot distinguish "unchanged" from "cleared" (see above), so it only
+  ever SETS. Bracket has an explicit removal control; squares does not yet. The
+  fail-safe direction was chosen deliberately — the alternative silently opens
+  pools. A "Remove password" control for the squares wizard is a follow-up.
+- **The password is still a share-link speed bump, not a credential.** Members
+  who know it can pass it on. That is the feature. What changed is that it is no
+  longer READABLE by anyone with the link, and no longer checkable client-side.
+- **App Check is `monitor`, not `enforce`,** on both new callables — repo-wide
+  posture since the 2026-07-30 outage. The public `verifyPoolAccess` therefore
+  leans on the per-principal throttle alone.
 
 ## Tests (same PR)
+
+Phase A:
 
 - Rules-independent unit tests: strict settings schema rejects unknown keys;
   notifyPasswordReset rate-limit predicate; source invariant — no
   `token?.role !== 'SUPER_ADMIN'`-style claim-only checks in
   siteAverages/expertProfiles.
+
+Phase B (standing rule: every change ships with its own test in the same PR):
+
+- `functions/src/__tests__/poolPassword.test.ts` — PBKDF2 round-trip, salting,
+  **format compatibility with the pre-existing publishBracketPool derivation**
+  (if those parameters drift, every legacy bracket pool locks its members out),
+  the two legacy acceptance paths, the private-hash-beats-stale-plaintext
+  precedence, the oversize-candidate early return, `safeEqual` not throwing on a
+  length mismatch, the throttle predicate (cap, rollover, per-principal keying),
+  the create/update choke-point strip, the callable schemas (including that `''`
+  is refused and that `dryRun` defaults TRUE), the migration planner's five
+  branches, and source ratchets: no `JSON.stringify(request.data)` in
+  bracketPools, nothing assigns `gridPassword`, and the set of files assigning
+  `passwordHash` is pinned to exactly three.
+- `tests/pool-password-client.test.ts` — `splitPoolPassword` (both field shapes,
+  the dotted form, empty-is-not-a-clear, no input mutation) plus client source
+  invariants: PoolRoute no longer compares in the browser, the bracket dashboard
+  neither writes nor seeds from the stored value, all three dbService payload
+  wrappers split first, and no file under `src/` writes password material.
+- `functions/scripts/poolPrivateAccess.rules.test.mjs` — the emulator half: the
+  private doc is closed to all five principal classes, the wildcard covers future
+  siblings, the throttle store is closed, the guest `get` on the public doc still
+  works, neither the OWNER nor a SUPER_ADMIN can write any password field onto
+  the pool doc, an ordinary settings save (including `gridPassword: ''`) still
+  passes, and a pre-migration pool stays editable.
+- `functions/scripts/run-rules-tests.mjs` `MIN_FILES` bumped 10 → 12 (it had
+  drifted one below the real file count; the empty-pass guard only works when it
+  tracks the count).
+- `tests/nfl-settings-lockdown.test.ts` — its "applied OUTSIDE the disjunction"
+  assertion pinned the literal string `callableOnlySettingsUnchanged() && (`,
+  which a SECOND outside-the-disjunction guard breaks. Loosened to a regex that
+  still proves the ordering. No coverage lost.
 
 ## Risks / open questions
 

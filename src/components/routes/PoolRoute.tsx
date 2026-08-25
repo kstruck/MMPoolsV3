@@ -140,6 +140,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const [enteredPassword, setEnteredPassword] = useState('');
     const [passwordError, setPasswordError] = useState(false);
     const [isUnlocked, setIsUnlocked] = useState(false);
+    const [checkingPassword, setCheckingPassword] = useState(false);
 
     // Quarterly Payouts (Moved to top)
     const quarterlyPayouts = useMemo(() => {
@@ -398,14 +399,41 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         }
     };
 
-    const handlePasswordSubmit = () => {
-        if (enteredPassword === squaresPool.gridPassword) {
-            setIsUnlocked(true);
-            setPasswordError(false);
-        } else {
-            setPasswordError(true);
+    /**
+     * PLAN-AUDIT-AUTH-HARDENING Phase B (audit item 1).
+     *
+     * This used to be `enteredPassword === squaresPool.gridPassword` — a compare
+     * in the BROWSER against a field on a document that is `allow get: if true`,
+     * so anyone holding the share link could read the password out of the
+     * network tab and never see this box at all. The check now runs in the
+     * `verifyPoolAccess` callable against a PBKDF2 record in
+     * `pools/{id}/private/access`, which rules close to every client.
+     *
+     * The callable is the authority in BOTH directions: a throttled or failed
+     * call returns false, so the gate fails CLOSED.
+     */
+    const handlePasswordSubmit = async () => {
+        if (checkingPassword) return;
+        setCheckingPassword(true);
+        try {
+            const ok = await dbService.verifyPoolAccess(squaresPool.id, enteredPassword);
+            setIsUnlocked(ok);
+            setPasswordError(!ok);
+        } finally {
+            setCheckingPassword(false);
         }
     };
+
+    /**
+     * Whether the gate renders. `hasPoolPassword` is the non-secret marker the
+     * server sets; `gridPassword` is the legacy plaintext, still present on pools
+     * the migration sweep has not reached — reading it here keeps those pools
+     * gated during the rollout without the value being trusted for anything.
+     */
+    const isPasswordProtected = Boolean(
+        (squaresPool as unknown as { hasPoolPassword?: boolean }).hasPoolPassword
+        || squaresPool.gridPassword,
+    );
 
 
     // Actually it was mainly for debug in header.
@@ -418,15 +446,15 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
                 {passwordError && <div className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">Incorrect password.</div>}
                 <div className="flex gap-2">
-                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => e.key === 'Enter' && handlePasswordSubmit()} />
-                    <Button variant="primary" onClick={handlePasswordSubmit}>Unlock</Button>
+                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => { if (e.key === 'Enter') void handlePasswordSubmit(); }} />
+                    <Button variant="primary" disabled={checkingPassword} onClick={() => { void handlePasswordSubmit(); }}>{checkingPassword ? 'Checking…' : 'Unlock'}</Button>
                 </div>
                 <div className="mt-6 pt-6 border-t border-line"><p className="text-xs text-faint font-body">Contact the pool manager for access.</p></div>
             </div>
         </div>
     );
 
-    if (squaresPool.gridPassword && !isUnlocked && user?.id !== squaresPool.ownerId) {
+    if (isPasswordProtected && !isUnlocked && user?.id !== squaresPool.ownerId) {
         return withHelp(renderPasswordGate());
     }
 

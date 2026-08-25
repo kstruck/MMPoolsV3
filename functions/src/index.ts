@@ -27,6 +27,7 @@ export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPai
 export { setPoolCoCommissioner } from "./coCommissioners";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
+export { setPoolPassword, verifyPoolAccess, migratePoolPasswords } from "./poolPassword";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry, updateEntryPayment, adminUpdateEntryOverrides, adminDeleteEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { adminInitTournament, syncBracketTournament, scheduledBracketSync, importTournamentFromESPN, importConferenceTournamentFromESPN, syncPlayInPicks } from "./espnBracket";

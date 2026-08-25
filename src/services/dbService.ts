@@ -29,6 +29,7 @@ export type SetPoolCoCommissionerInput =
     | { poolId: string; uid: string; op: 'add'; revision: number }
     | { poolId: string; uid: string; op: 'remove' };
 import { stripEmptyCallableFields } from "./callableParams";
+import { splitPoolPassword } from "./poolPasswordPayload";
 export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
@@ -236,27 +237,84 @@ export const dbService = {
     },
 
     createPool: async (pool: Record<string, unknown>): Promise<string> => {
+        // PLAN-AUDIT-AUTH-HARDENING Phase B. The pool password is pulled OUT of
+        // the create payload here and set afterwards through `setPoolPassword`,
+        // which is the only path that can write `pools/{id}/private/access`.
+        //
+        // The server strips these fields too (schemas/poolCore.ts) — that is the
+        // authoritative half. This client-side strip exists for a second reason
+        // the server cannot help with: the catch block below hands the WHOLE
+        // payload to `errorHandler.handleError` as context, which persists it
+        // through `logClientError`. A create that failed for an unrelated reason
+        // would otherwise write the commissioner's chosen password into
+        // `system_logs` — the same class of leak as the `request.data` dump this
+        // phase deleted from bracketPools.ts (item 21d).
+        const { payload, password } = splitPoolPassword(pool);
         try {
             const createPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createPool');
-            const result = await createPoolFn(pool);
+            const result = await createPoolFn(payload);
             const { poolId } = result.data;
+            if (password) await dbService.setPoolPassword(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
-                context: { operation: 'createPool', pool }
+                context: { operation: 'createPool', pool: payload }
             });
             throw error;
         }
     },
 
     updatePool: async <T extends Pool>(poolId: string, updates: Partial<T> | Record<string, unknown>) => {
+        // Same split as createPool. The wizards send a full-object update in
+        // EDIT mode, so `gridPassword` rides along on every settings save.
+        //
+        // ⚠️ AN EMPTY VALUE IS A NO-OP, NOT A CLEAR. After the migration the
+        // field is gone from the document, so the wizard reloads it as `''` —
+        // and treating that as "clear the password" would silently un-gate a
+        // pool every time its commissioner saved an unrelated setting. Clearing
+        // is an explicit act: `setPoolPassword(poolId, null)`.
+        const { payload, password } = splitPoolPassword(updates as Record<string, unknown>);
         const success = await poolRepository.update(poolId, {
-            ...updates,
+            ...payload,
             updatedAt: Timestamp.now()
         } as Partial<Pool>);
         if (!success) {
             throw new Error(`Failed to update pool ${poolId}`);
+        }
+        if (password) await dbService.setPoolPassword(poolId, password);
+    },
+
+    /**
+     * Set (non-empty string) or clear (`null`) a pool's password. Server-side
+     * PBKDF2; the plaintext is never stored anywhere.
+     */
+    setPoolPassword: async (poolId: string, password: string | null): Promise<void> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; hasPassword: boolean }>(functions, 'setPoolPassword');
+        // Correlated: `validated()` strips `_correlationId` BEFORE the strict
+        // schema sees it (lib/correlationId.ts), so a strictObject is no reason
+        // to ship a callable that leaves no trace in the logs.
+        await fn(withCorrelationId({ poolId, password }));
+    },
+
+    /**
+     * Ask the server whether this password unlocks the pool. Replaces the
+     * browser-side `entered === pool.gridPassword` compare (PoolRoute.tsx),
+     * which could be read straight out of the public pool document.
+     */
+    verifyPoolAccess: async (poolId: string, password: string): Promise<boolean> => {
+        try {
+            const fn = httpsCallable<Record<string, unknown>, { ok: boolean }>(functions, 'verifyPoolAccess');
+            const result = await fn(withCorrelationId({ poolId, password }));
+            return result.data.ok === true;
+        } catch (error) {
+            // A throttled or failed call is NOT an unlock. Logged at LOW: a
+            // wrong password is an expected outcome, not an incident.
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.LOW,
+                context: { operation: 'verifyPoolAccess', poolId }
+            });
+            return false;
         }
     },
 
@@ -548,8 +606,15 @@ export const dbService = {
     },
 
     updateBracketPool: async (poolId: string, updates: Record<string, unknown>): Promise<void> => {
+        // Same split as updatePool. This wrapper is a RAW client `updateDoc`, and
+        // it is how `accessControl.password` reached the world-readable pool
+        // document in the clear (audit item 13a). `firestore.rules` now denies a
+        // non-empty value here, so leaving the field in would turn every bracket
+        // settings save into a permission-denied.
+        const { payload, password } = splitPoolPassword(updates);
         const poolRef = doc(db, 'pools', poolId);
-        await updateDoc(poolRef, { ...updates, updatedAt: Date.now() });
+        await updateDoc(poolRef, { ...payload, updatedAt: Date.now() });
+        if (password) await dbService.setPoolPassword(poolId, password);
     },
 
     // Server-side since Phase 5 (updateEntryPayment callable): the old raw

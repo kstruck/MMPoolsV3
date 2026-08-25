@@ -18,8 +18,9 @@ const poolId = z.string().trim().min(1).max(200);
  * publishBracketPool — { poolId, slug, password?, isListedPublic? }. slug is
  * length-bounded here; its charset is validated in-handler AFTER lowercasing
  * (kept there so mixed-case input isn't rejected before normalization).
- * password is a user-chosen POOL password (hashed server-side with PBKDF2),
- * not a system credential.
+ * password is a user-chosen POOL password (hashed server-side with PBKDF2 and
+ * stored in `pools/{id}/private/access`, never on the world-readable pool doc —
+ * PLAN-AUDIT-AUTH-HARDENING Phase B), not a system credential.
  */
 export const publishBracketPoolSchema = z.strictObject({
     poolId,
