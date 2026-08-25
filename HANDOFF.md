@@ -26,8 +26,12 @@
 > 🛑 **OWED, AND THE ORDER IS LOAD-BEARING. FOUR STEPS, NOT TWO.**
 > 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
 >    `git pull --ff-only origin main` + `npm --prefix functions ci`. Changed by
->    #569, #570, #572, #573, #575, #579. New functions: `cspReport`, `authBackup`,
->    the pool-password callables. **Verify each by name in `functions:list`.**
+>    #569, #570, #572, #573, #575, #579. **Verify EVERY new function by name** —
+>    `npx firebase functions:list | Select-String "<name>"` in PowerShell. The six
+>    exact export names, read from `functions/src/index.ts`, are: `setPoolPassword`,
+>    `verifyPoolAccess`, `migratePoolPasswords` (line 30), `cspReport` (155),
+>    `authBackupJob` and `runAuthBackup` (158). An absent name is the tell that the
+>    deploy shipped a stale checkout (CLAUDE.md §3).
 > 2. `npx firebase deploy --only firestore:rules` — **#579 is the only PR that
 >    touched rules (+97 lines).** No index change in any PR.
 > 3. Coolify `www` rebuild (manual trigger). Changed by #564, #566, #568, #571,
