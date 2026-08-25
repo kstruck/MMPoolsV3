@@ -211,6 +211,9 @@ replace.
    # PRINTS paths; on its own it preserves nothing.
    $wt = "<worktree-path>"
    $out = "D:\mmp-scrub-patches\<name>-untracked"
+   # Create $out unconditionally: with no untracked files the loop never runs,
+   # and the verification below would then error on a missing directory.
+   New-Item -ItemType Directory -Force $out | Out-Null
    git -C $wt ls-files --others --exclude-standard | ForEach-Object {
        $dest = Join-Path $out $_
        New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
@@ -236,8 +239,13 @@ replace.
    (git -C $wt ls-files --others --exclude-standard | Measure-Object -Line).Lines
    (Get-ChildItem -Recurse -File $out | Measure-Object).Count
 
-   # b) the patch is non-empty and actually applies in reverse-check
-   git -C $wt apply --check --binary D:\mmp-scrub-patches\<name>-dirty.patch
+   # b) the patch is valid against the tree it came from.
+   #    --reverse is REQUIRED: the patch is HEAD -> working tree, and the
+   #    working tree is ALREADY in that state, so a forward --check tries to
+   #    apply it a second time and fails on a correct patch. The reverse check
+   #    asks the right question: "can this be undone from here", i.e. does it
+   #    match. Exit code 0 = good.
+   git -C $wt apply --check --reverse --binary D:\mmp-scrub-patches\<name>-dirty.patch
    ```
 
    **Only once (a) and (b) pass, clean the worktree** — otherwise step 5's
