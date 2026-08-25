@@ -44,6 +44,26 @@ export function entryIdFor(uid: string, entryIndex: number): string {
   return entryIndex <= 1 ? uid : `e${entryIndex}:${uid}`;
 }
 
+/**
+ * D9 — which `users/{uid}/seasonHistory/{docId}` document ONE ENTRY's season
+ * record lands in.
+ *
+ * Entry #1 keeps `{poolId}` — byte-for-byte what every existing document
+ * already is, so nothing migrates and every existing reader keeps working.
+ * Extra entries get `{poolId}__e{n}`.
+ *
+ * 🛑 A DOUBLE UNDERSCORE, AND ONLY BECAUSE OF THE COLLISION A SINGLE ONE HAS.
+ * Auto-generated pool ids never contain `_`, but a hand-made or imported one
+ * can — and `{poolId}_2` would then be ambiguous between "entry 2 of pool X"
+ * and "entry 1 of the pool literally named X_2". `__e` is not a shape a pool id
+ * has ever taken here. It is still only a uniqueness device: the document
+ * carries `poolId` and `entryId` as FIELDS and no reader parses the id.
+ */
+export function seasonHistoryDocIdFor(poolId: string, entryIndex: number | undefined): string {
+  const idx = typeof entryIndex === 'number' && Number.isInteger(entryIndex) ? entryIndex : 1;
+  return idx <= 1 ? poolId : `${poolId}__e${idx}`;
+}
+
 /** Default display name for an extra entry (K5): `"Kevin #2"`. Entry #1 has none — it shows `userName`. */
 export function defaultEntryName(userName: string, entryIndex: number): string | undefined {
   return entryIndex <= 1 ? undefined : `${userName} #${entryIndex}`;

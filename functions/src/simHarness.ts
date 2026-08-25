@@ -158,8 +158,16 @@ async function getVerifiedSimPool(
 
 /**
  * Fabricates entries in a verified sim pool. Entry doc IDs are forced to
- * `ownerUid` (scoreNFLWeek writes ranks back to entries/{ownerUid}) and
+ * `ownerUid` — which under PLAN-MULTI-ENTRY D1 is precisely the id of that
+ * owner's ENTRY #1, so the harness fabricates one entry per simulated player.
  * ownerUids must be sim-namespaced so they can never collide with a real user.
+ *
+ * ⚠️ This used to be justified as "scoreNFLWeek writes ranks back to
+ * entries/{ownerUid}". It no longer does — the Margin rank write-back keys on
+ * the entry document id (D4) — so the forcing is a harness SIMPLIFICATION, not
+ * a scorer invariant. A future harness that wants a two-entry player writes
+ * `e{n}:{uid}` and stamps `entryIndex`; nothing here would have to change but
+ * this comment and the id it builds.
  * Supports the subcollection entry model; the in-pool-doc entry arrays used by
  * playoff/props go through simUpdatePool with the same verification.
  */
@@ -191,8 +199,10 @@ export const simWriteEntries = onCall(async (request) => {
                 );
             }
             uids.push(ownerUid);
-            // docId === ownerUid: rank write-back invariant. simRunId stamp lets the
-            // profile trigger short-circuit without a pool read (Phase 0.3).
+            // docId === ownerUid: this owner's ENTRY #1 (PLAN-MULTI-ENTRY D1), not
+            // a rank write-back invariant any more — see the header. simRunId
+            // stamp lets the profile trigger short-circuit without a pool read
+            // (Phase 0.3).
             batch.set(
                 ref.collection('entries').doc(ownerUid),
                 { ...entry, id: ownerUid, poolId, simRunId: runId },
