@@ -45,7 +45,7 @@ vi.mock('../components/ui/Toast', () => ({
 import { OperationsPanel } from '../components/admin/OperationsPanel';
 
 /** The card's own run button, whichever mode it is in. */
-const runButton = () => screen.getByRole('button', { name: /Run sweep \((dry run|LIVE)\)/i });
+const runButton = () => screen.getByRole('button', { name: /Run sweep \((dry run|LIVE)\)/i }) as HTMLButtonElement;
 const dryRunBox = () => screen.getByLabelText(/Dry run \(writes nothing\)/i) as HTMLInputElement;
 
 /** Click Run, then confirm in the guardrail modal. */
@@ -156,6 +156,55 @@ describe('S1 — pool password migration control', () => {
     await waitFor(() => expect(migratePoolPasswords).toHaveBeenCalledTimes(2));
     // Kevin never hand-copies the opaque id: the second call resumes from it.
     expect(migratePoolPasswords).toHaveBeenLastCalledWith({ dryRun: true, limit: 100, startAfter: 'pool-zzz' });
+  });
+
+  it('refuses to resume a DRY cursor as a LIVE run (codex r1 P1)', async () => {
+    migratePoolPasswords.mockResolvedValue({ dryRun: true, poolsScanned: 100, poolsChanged: 4, plannedWrites: [], nextCursor: 'pool-zzz' });
+    render(<OperationsPanel />);
+    await runAndConfirm();
+
+    const cont = () => screen.getByRole('button', { name: /Continue from cursor/i }) as HTMLButtonElement;
+    await waitFor(() => expect(cont().disabled).toBe(false));
+
+    // Unticking mid-pass: resuming here would skip pools 1..100 in the live
+    // sweep and leave their plaintext on the public document.
+    fireEvent.click(dryRunBox());
+    expect(cont().disabled).toBe(true);
+    expect(screen.getByTestId('migration-cursor-stale').textContent).toMatch(/can no longer be resumed/i);
+    // The cursor itself is still shown — it is the resume that is withheld.
+    expect(screen.getByTestId('migration-cursor-status').textContent).toContain('pool-zzz');
+
+    // Re-ticking restores it: the pass and the request agree again.
+    fireEvent.click(dryRunBox());
+    expect(cont().disabled).toBe(false);
+  });
+
+  it('refuses to resume when the server forced the pass dry (codex r1 P1)', async () => {
+    // Operator asked for LIVE; `system/config.poolPasswordMigration.dryRun` is
+    // still true, so the server ran dry and wrote nothing. Continuing after the
+    // config is fixed would resume past pools nothing has touched.
+    migratePoolPasswords.mockResolvedValue({ dryRun: true, poolsScanned: 100, poolsChanged: 4, plannedWrites: [], nextCursor: 'pool-zzz' });
+    render(<OperationsPanel />);
+    fireEvent.click(dryRunBox());
+    await runAndConfirm();
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'RUN' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Run sweep' }));
+
+    await waitFor(() => expect(screen.queryByTestId('migration-cursor-stale')).not.toBeNull());
+    expect(screen.getByTestId('migration-cursor-stale').textContent).toMatch(/forced this pass dry/i);
+    expect((screen.getByRole('button', { name: /Continue from cursor/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('caps the page size at the callable plannedWrites limit (codex r1 P2)', async () => {
+    render(<OperationsPanel />);
+    const limit = screen.getByRole('spinbutton') as HTMLInputElement;
+    // 200 is the callable's own plannedWrites cap; a bigger page could change
+    // pools the card never lists while telling the operator to read it in full.
+    expect(limit.max).toBe('200');
+    fireEvent.change(limit, { target: { value: '500' } });
+    expect(runButton().disabled).toBe(true);
+    fireEvent.change(limit, { target: { value: '200' } });
+    expect(runButton().disabled).toBe(false);
   });
 
   it('gates a LIVE run behind the typed RUN token', async () => {

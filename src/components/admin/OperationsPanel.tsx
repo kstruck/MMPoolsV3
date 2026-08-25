@@ -541,6 +541,8 @@ const ACTIONS: OpAction[] = [
  * `role: "SUPER_ADMIN"`. A second client-side check here would be decoration.
  */
 const MIGRATION_DEFAULT_LIMIT = 100;
+/** See `limitValid` below — bounded by the callable's plannedWrites cap, not by its schema. */
+const MIGRATION_MAX_LIMIT = 200;
 
 const PoolPasswordMigrationCard: React.FC = () => {
   const toast = useToast();
@@ -554,15 +556,65 @@ const PoolPasswordMigrationCard: React.FC = () => {
   const [page, setPage] = useState(0);
   /** Which button opened the confirm modal: a fresh pass, or the next page. */
   const [pending, setPending] = useState<null | 'start' | 'continue'>(null);
+  /**
+   * The mode the CURRENT report was produced under — both what the operator
+   * asked for and what the server actually did. A cursor is only meaningful
+   * inside one pass, and the two values are what decides whether the pass the
+   * cursor belongs to is the same pass the next click would run (codex r1 P1).
+   */
+  const [pass, setPass] = useState<{ requestedDryRun: boolean; effectiveDryRun: boolean } | null>(null);
 
   // The cursor is CARRIED, not copied by hand. `skipped` responses have no
   // `nextCursor` at all, so a refusal never leaves a stale cursor armed.
-  const nextCursor = report && !report.skipped ? report.nextCursor ?? null : null;
+  const cursorFromReport = report && !report.skipped ? report.nextCursor ?? null : null;
+
+  /**
+   * WHY A CURSOR CAN GO STALE WITHOUT THE REPORT CHANGING (codex r1, P1).
+   *
+   * `startAfter` skips everything BEFORE it, so resuming from a cursor is only
+   * correct if the earlier pages did the same thing this page is about to do.
+   * Two ways that stops being true, both of which the operator can reach by
+   * ticking one box:
+   *
+   *  1. Page 1 ran DRY and returned a cursor; the operator unticks the box and
+   *     clicks Continue. Pools 1..N are skipped by the live sweep entirely and
+   *     keep their plaintext on the public document — the exact outcome this
+   *     whole sweep exists to prevent, arrived at through the resume control.
+   *  2. The operator unticked the box but `system/config` is still dry, so the
+   *     pass wrote NOTHING while reporting pages. Continuing after Kevin fixes
+   *     the config would resume past pools nothing has touched.
+   *
+   * So: same requested mode, and — when a write is being asked for — the pass
+   * so far must actually have been writing. Anything else disables Continue and
+   * says why. The cursor is still SHOWN; it is the resume that is withheld.
+   */
+  const cursorUsable = Boolean(
+    cursorFromReport && pass && dryRun === pass.requestedDryRun && (dryRun || !pass.effectiveDryRun),
+  );
+  const cursorStaleReason = !cursorFromReport || cursorUsable
+    ? null
+    : pass && dryRun !== pass.requestedDryRun
+      ? `the pages so far ran as a ${pass.requestedDryRun ? 'dry run' : 'LIVE run'}, and the box now asks for a ${dryRun ? 'dry run' : 'LIVE run'}. Resuming would skip every pool those pages already covered.`
+      : 'the server forced this pass dry (system/config.poolPasswordMigration.dryRun is still true), so nothing has been written yet. Set that to false, then start the pass again from the beginning.';
+  const nextCursor = cursorUsable ? cursorFromReport : null;
+
   const parsedLimit = Number(limitInput);
-  const limitValid = Number.isInteger(parsedLimit) && parsedLimit >= 1 && parsedLimit <= 500;
+  // 200, not the schema's 500: the callable stops appending to `plannedWrites`
+  // at 200 entries (migratePoolPasswords.ts:153). A larger page could therefore
+  // change pools this card does not list, while the card tells the operator to
+  // read the list in full and stop on anything unexpected — an instruction the
+  // UI would be quietly unable to honour (codex r1, P2). This narrows the UI
+  // only; the server schema still accepts 1..500.
+  const limitValid = Number.isInteger(parsedLimit) && parsedLimit >= 1 && parsedLimit <= MIGRATION_MAX_LIMIT;
 
   const run = async (mode: 'start' | 'continue') => {
     setPending(null);
+    // Belt for the Continue path: the button is disabled without a usable
+    // cursor, but a `continue` that fell through with `startAfter: null` would
+    // silently RESTART the sweep at pool #1 while labelling itself the next
+    // page — a live pass would then re-scan pools it had already done and the
+    // page numbers in `admin_audit` would describe a run that never happened.
+    if (mode === 'continue' && !nextCursor) return;
     setRunning(true);
     setError(null);
     const startAfter = mode === 'continue' ? nextCursor : null;
@@ -575,6 +627,9 @@ const PoolPasswordMigrationCard: React.FC = () => {
       });
       setReport(result);
       setPage(pageNumber);
+      // A refusal is not a pass: it read nothing and returned no cursor, so it
+      // must not leave a previous pass's mode record standing behind it.
+      setPass(result.skipped ? null : { requestedDryRun: dryRun, effectiveDryRun: result.dryRun });
       if (result.skipped) {
         // NOT a toast.error: the doc's step 1 is a deliberately disarmed call
         // whose whole purpose is to watch the gate refuse. Calling that a
@@ -654,12 +709,12 @@ const PoolPasswordMigrationCard: React.FC = () => {
         </label>
 
         <label htmlFor="ppm-limit" className="flex flex-col gap-1 text-xs text-slate-400">
-          Pools per page (1–500)
+          Pools per page (1–{MIGRATION_MAX_LIMIT}, the report&apos;s own cap)
           <input
             id="ppm-limit"
             type="number"
             min={1}
-            max={500}
+            max={MIGRATION_MAX_LIMIT}
             value={limitInput}
             onChange={(e) => setLimitInput(e.target.value)}
             disabled={running}
@@ -716,19 +771,26 @@ const PoolPasswordMigrationCard: React.FC = () => {
       {report && !report.skipped && (
         <div className="mt-4 space-y-3">
           <div
-            className={`rounded-lg border px-4 py-3 ${nextCursor ? 'border-amber-400/30 bg-amber-400/10' : 'border-emerald-500/30 bg-emerald-500/10'}`}
+            className={`rounded-lg border px-4 py-3 ${cursorFromReport ? (cursorUsable ? 'border-amber-400/30 bg-amber-400/10' : 'border-rose-500/30 bg-rose-500/10') : 'border-emerald-500/30 bg-emerald-500/10'}`}
             data-testid="migration-cursor-status"
           >
             <p className="text-sm font-bold text-white">
               Page {page} — {report.dryRun ? 'dry run (nothing written)' : 'LIVE (writes applied)'} · scanned {report.poolsScanned} ·
               changed {report.poolsChanged}
             </p>
-            {nextCursor ? (
+            {cursorFromReport && cursorUsable && (
               <p className="text-xs text-amber-200 mt-1 break-all">
                 More pools remain. Click <span className="font-bold">Continue from cursor</span> to run the next page from{' '}
-                <span className="font-mono">{nextCursor}</span>.
+                <span className="font-mono">{cursorFromReport}</span>.
               </p>
-            ) : (
+            )}
+            {cursorFromReport && !cursorUsable && (
+              <p className="text-xs text-rose-200 mt-1 break-all" data-testid="migration-cursor-stale">
+                More pools remain (<span className="font-mono">{cursorFromReport}</span>) but this cursor can no longer be
+                resumed: {cursorStaleReason} Start the pass again from the beginning.
+              </p>
+            )}
+            {!cursorFromReport && (
               <p className="text-xs text-emerald-200 mt-1">
                 <span className="font-mono">nextCursor</span> is null — this pass has reached the end of the pool collection.
               </p>
