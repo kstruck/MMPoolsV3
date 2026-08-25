@@ -5,7 +5,8 @@ import { dbService } from '../../services/dbService';
 import { ConfirmActionModal } from './ConfirmActionModal';
 import { useToast } from '../ui/Toast';
 import { getUserMessage } from '../../utils/errorMessages';
-import { Wrench, RefreshCw, Database, Trophy, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { Wrench, RefreshCw, Database, Trophy, Users, CheckCircle2, XCircle, KeyRound, ShieldAlert, ArrowRight } from 'lucide-react';
+import type { MigratePoolPasswordsReport } from '../../services/dbService';
 import { foldParkedReport, snapshotReport, type ResumableReport } from '../../utils/resumableReport';
 
 /**
@@ -511,6 +512,388 @@ const ACTIONS: OpAction[] = [
   },
 ];
 
+/**
+ * Pool Password Migration (PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md S1).
+ *
+ * A SEPARATE card rather than another `ACTIONS` entry, for three reasons that
+ * the generic card cannot meet:
+ *
+ *  1. It takes PARAMETERS (`dryRun`, `limit`, `startAfter`). `OpAction.run` is
+ *     a nullary closure.
+ *  2. The Run Log truncates every result at 400 characters. `plannedWrites` is
+ *     the whole point of the dry run — the sweep doc's instruction is "read
+ *     plannedWrites in full … if a pool you did not expect appears, stop" — and
+ *     a truncated blob cannot be read in full. This card renders the raw JSON.
+ *  3. The kill-switch refusal is the EXPECTED outcome of the doc's step 1, not
+ *     an error. It gets its own plainly-worded panel instead of being buried in
+ *     a truncated one-line log entry.
+ *
+ * It is a CALLER and nothing else. Both server gates are unreachable from here:
+ * the callable refuses outright unless `system/config.poolPasswordMigration
+ * .enabled === true`, and it forces `dryRun` whenever EITHER that config says
+ * dry OR this checkbox is ticked. Unticking the box cannot make a run live on
+ * its own — the copy below says so, because an operator who believes otherwise
+ * would read "dryRun: true" in the report as a bug rather than as the config
+ * still doing its job.
+ *
+ * SUPER_ADMIN gating is inherited, not re-implemented: SuperAdmin.tsx renders
+ * this whole panel only inside the admin route, and the callable itself carries
+ * `role: "SUPER_ADMIN"`. A second client-side check here would be decoration.
+ */
+const MIGRATION_DEFAULT_LIMIT = 100;
+/** See `limitValid` below — bounded by the callable's plannedWrites cap, not by its schema. */
+const MIGRATION_MAX_LIMIT = 200;
+
+const PoolPasswordMigrationCard: React.FC = () => {
+  const toast = useToast();
+  // Requirement: the dry-run box starts CHECKED. Going live is a deliberate act
+  // — two of them, counting the config.
+  const [dryRun, setDryRun] = useState(true);
+  const [limitInput, setLimitInput] = useState(String(MIGRATION_DEFAULT_LIMIT));
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** Which button opened the confirm modal: a fresh pass, or the next page. */
+  const [pending, setPending] = useState<null | 'start' | 'continue'>(null);
+  /**
+   * EVERY page of the current pass, oldest first — not just the latest one
+   * (codex r2, P2). Step 4 of the arming procedure is "page through … keep
+   * every report", and a card that replaced the report on each Continue
+   * destroyed page 1's `plannedWrites` the moment page 2 arrived. The server's
+   * own `admin_audit` row keeps only the first 100 planned writes, so nothing
+   * else in the system holds the full list either.
+   *
+   * `requestedDryRun` is stored per page because it is what decides whether the
+   * cursor may be resumed, and the report's own `dryRun` because the config can
+   * force a page dry regardless of what was asked for.
+   */
+  const [pages, setPages] = useState<Array<{
+    page: number;
+    requestedDryRun: boolean;
+    report: MigratePoolPasswordsReport;
+  }>>([]);
+
+  const latest = pages.length > 0 ? pages[pages.length - 1] : null;
+  const report = latest?.report ?? null;
+  const page = latest?.page ?? 0;
+  /**
+   * The mode the LATEST page was produced under — both what the operator asked
+   * for and what the server actually did. A cursor is only meaningful inside one
+   * pass, and these two values decide whether the pass the cursor belongs to is
+   * the same pass the next click would run (codex r1, P1).
+   */
+  const pass = latest && !latest.report.skipped
+    ? { requestedDryRun: latest.requestedDryRun, effectiveDryRun: latest.report.dryRun }
+    : null;
+
+  // The cursor is CARRIED, not copied by hand. `skipped` responses have no
+  // `nextCursor` at all, so a refusal never leaves a stale cursor armed.
+  const cursorFromReport = report && !report.skipped ? report.nextCursor ?? null : null;
+
+  /**
+   * Pools this page could not process. The callable catches per-pool errors and
+   * keeps going, so a page can carry failures AND a cursor — and the cursor is
+   * already PAST the pools that failed (codex r2, P1). Resuming from it would
+   * step over them for the rest of the pass, and on a live run their plaintext
+   * would stay on the public document while the card showed a finished sweep.
+   */
+  const failures = report && !report.skipped ? report.failures ?? [] : [];
+  const hasFailures = failures.length > 0;
+
+  /**
+   * WHY A CURSOR CAN GO STALE WITHOUT THE REPORT CHANGING (codex r1, P1).
+   *
+   * `startAfter` skips everything BEFORE it, so resuming from a cursor is only
+   * correct if the earlier pages did the same thing this page is about to do.
+   * Two ways that stops being true, both of which the operator can reach by
+   * ticking one box:
+   *
+   *  1. Page 1 ran DRY and returned a cursor; the operator unticks the box and
+   *     clicks Continue. Pools 1..N are skipped by the live sweep entirely and
+   *     keep their plaintext on the public document — the exact outcome this
+   *     whole sweep exists to prevent, arrived at through the resume control.
+   *  2. The operator unticked the box but `system/config` is still dry, so the
+   *     pass wrote NOTHING while reporting pages. Continuing after Kevin fixes
+   *     the config would resume past pools nothing has touched.
+   *
+   * So: same requested mode, and — when a write is being asked for — the pass
+   * so far must actually have been writing. Anything else disables Continue and
+   * says why. The cursor is still SHOWN; it is the resume that is withheld.
+   */
+  const cursorUsable = Boolean(
+    cursorFromReport && pass && !hasFailures && dryRun === pass.requestedDryRun && (dryRun || !pass.effectiveDryRun),
+  );
+  const cursorStaleReason = !cursorFromReport || cursorUsable
+    ? null
+    : hasFailures
+      ? `this page reported ${failures.length} failure(s), and the cursor is already past the pools that failed. Resuming would step over them for the rest of the pass. Fix the cause and run the pass again from the beginning — the sweep is idempotent, so a pool already done costs a no-op.`
+      : pass && dryRun !== pass.requestedDryRun
+        ? `the pages so far ran as a ${pass.requestedDryRun ? 'dry run' : 'LIVE run'}, and the box now asks for a ${dryRun ? 'dry run' : 'LIVE run'}. Resuming would skip every pool those pages already covered.`
+        : 'the server forced this pass dry (system/config.poolPasswordMigration.dryRun is still true), so nothing has been written yet. Set that to false, then start the pass again from the beginning.';
+  const nextCursor = cursorUsable ? cursorFromReport : null;
+
+  const parsedLimit = Number(limitInput);
+  // 200, not the schema's 500: the callable stops appending to `plannedWrites`
+  // at 200 entries (migratePoolPasswords.ts:153). A larger page could therefore
+  // change pools this card does not list, while the card tells the operator to
+  // read the list in full and stop on anything unexpected — an instruction the
+  // UI would be quietly unable to honour (codex r1, P2). This narrows the UI
+  // only; the server schema still accepts 1..500.
+  const limitValid = Number.isInteger(parsedLimit) && parsedLimit >= 1 && parsedLimit <= MIGRATION_MAX_LIMIT;
+
+  const run = async (mode: 'start' | 'continue') => {
+    setPending(null);
+    // Belt for the Continue path: the button is disabled without a usable
+    // cursor, but a `continue` that fell through with `startAfter: null` would
+    // silently RESTART the sweep at pool #1 while labelling itself the next
+    // page — a live pass would then re-scan pools it had already done and the
+    // page numbers in `admin_audit` would describe a run that never happened.
+    if (mode === 'continue' && !nextCursor) return;
+    setRunning(true);
+    setError(null);
+    const startAfter = mode === 'continue' ? nextCursor : null;
+    const pageNumber = mode === 'continue' ? page + 1 : 1;
+    try {
+      const result = await dbService.migratePoolPasswords({
+        dryRun,
+        limit: limitValid ? parsedLimit : MIGRATION_DEFAULT_LIMIT,
+        startAfter,
+      });
+      // A fresh pass REPLACES the history; a continuation appends to it. A
+      // refusal replaces it too — it read nothing and returned no cursor, so it
+      // must not leave a previous pass's pages (or its mode) standing behind it.
+      const entry = { page: pageNumber, requestedDryRun: dryRun, report: result };
+      setPages((prev) => (mode === 'continue' && !result.skipped ? [...prev, entry] : [entry]));
+      const failed = !result.skipped && (result.failures?.length ?? 0) > 0;
+      if (result.skipped) {
+        // NOT a toast.error: the doc's step 1 is a deliberately disarmed call
+        // whose whole purpose is to watch the gate refuse. Calling that a
+        // failure would train the operator to ignore the one signal that proves
+        // the kill-switch works.
+        toast.info('Migration refused by the kill-switch — see the card.');
+      } else if (failed) {
+        // A page that left pools unprocessed did NOT succeed, whatever the
+        // counters say — the panel's own convention is that a REPORTED failure
+        // is audited as an error, not just a thrown one.
+        toast.error(`Pool password sweep page ${pageNumber} left ${result.failures!.length} pool(s) unprocessed — read the report.`);
+      } else {
+        toast.success(`Pool password sweep page ${pageNumber} (${result.dryRun ? 'dry run' : 'LIVE'}) finished.`);
+      }
+      await dbService.logAdminAction({
+        action: 'OP_MIGRATEPOOLPASSWORDS',
+        status: failed ? 'error' : 'success',
+        metadata: {
+          label: 'Pool Password Migration',
+          requestedDryRun: dryRun,
+          effectiveDryRun: result.dryRun,
+          page: pageNumber,
+          resumedFrom: startAfter,
+          skipped: result.skipped ?? null,
+          poolsScanned: result.poolsScanned,
+          poolsChanged: result.poolsChanged,
+          failures: result.failures?.length ?? 0,
+          nextCursor: result.nextCursor ?? null,
+        },
+      });
+    } catch (e) {
+      const msg = getUserMessage(e, 'Pool password migration failed.');
+      setError(msg);
+      toast.error(msg);
+      await dbService.logAdminAction({
+        action: 'OP_MIGRATEPOOLPASSWORDS',
+        status: 'error',
+        error: msg,
+        // The cursor the failed page STARTED from, so a retry resumes from a
+        // page that was never applied rather than from pool #1.
+        metadata: { label: 'Pool Password Migration', requestedDryRun: dryRun, page: pageNumber, resumedFrom: startAfter },
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const modalTitle = pending === 'continue' ? 'Pool Password Migration — next page' : 'Pool Password Migration';
+  const modalDescription = dryRun
+    ? `DRY RUN. Reads pools${pending === 'continue' ? ' starting after the cursor below' : ' from the beginning'} and reports what it WOULD change. Writes nothing. Read plannedWrites in full before going live — if a pool you did not expect appears, stop and investigate.`
+    : `LIVE. Moves password material off pools/{id} into pools/{id}/private/access and DELETES the public copies. There is no rollback for the deletions. The server still refuses to write unless system/config.poolPasswordMigration.dryRun is also false.`;
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6" data-testid="pool-password-migration">
+      <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+        <KeyRound size={20} className="text-amber-400" /> Pool Password Migration
+      </h3>
+      <p className="text-sm text-slate-400 mb-4">
+        Evacuates legacy <span className="font-mono">gridPassword</span> / <span className="font-mono">accessControl.password</span> /{' '}
+        <span className="font-mono">passwordHash</span> off the world-readable <span className="font-mono">pools/{'{id}'}</span> document
+        into <span className="font-mono">pools/{'{id}'}/private/access</span>. Follow PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md §S1 —
+        run it dry, read <span className="font-mono">plannedWrites</span> in full, then arm and run it live.
+      </p>
+
+      <p className="text-xs text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-2 mb-4">
+        <span className="font-bold uppercase tracking-wider">Two switches, both server-side.</span>{' '}
+        Nothing here runs at all until <span className="font-mono">system/config.poolPasswordMigration.enabled = true</span>, and
+        nothing WRITES until that same config has <span className="font-mono">dryRun = false</span> <em>and</em> the box below is
+        unticked. Unticking the box on its own leaves the run dry — that is the config doing its job, not a bug.
+      </p>
+
+      <div className="flex flex-wrap items-end gap-4 mb-4">
+        <label htmlFor="ppm-dry-run" className="flex items-center gap-2 text-sm text-slate-200">
+          <input
+            id="ppm-dry-run"
+            type="checkbox"
+            checked={dryRun}
+            onChange={(e) => setDryRun(e.target.checked)}
+            disabled={running}
+            className="w-4 h-4 accent-indigo-500"
+          />
+          Dry run (writes nothing)
+        </label>
+
+        <label htmlFor="ppm-limit" className="flex flex-col gap-1 text-xs text-slate-400">
+          Pools per page (1–{MIGRATION_MAX_LIMIT}, the report&apos;s own cap)
+          <input
+            id="ppm-limit"
+            type="number"
+            min={1}
+            max={MIGRATION_MAX_LIMIT}
+            value={limitInput}
+            onChange={(e) => setLimitInput(e.target.value)}
+            disabled={running}
+            className={`w-28 bg-slate-950 border rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 ${limitValid ? 'border-slate-700' : 'border-rose-500'}`}
+          />
+        </label>
+      </div>
+
+      {!dryRun && (
+        <p className="text-xs font-bold uppercase tracking-wider text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 mb-4 flex items-center gap-2">
+          <ShieldAlert size={14} className="shrink-0" />
+          Live mode requested — deletions are irreversible. The dry run is your only rollback.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={() => setPending('start')}
+          disabled={running || !limitValid}
+          className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 border ${dryRun ? 'bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border-indigo-500/30' : 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border-rose-500/30'}`}
+        >
+          {running ? 'Running…' : dryRun ? 'Run sweep (dry run)' : 'Run sweep (LIVE)'}
+        </button>
+        <button
+          onClick={() => setPending('continue')}
+          disabled={running || !nextCursor || !limitValid}
+          className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          <ArrowRight size={14} /> Continue from cursor
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-4 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 break-all">
+          {error}
+        </p>
+      )}
+
+      {report?.skipped && (
+        // Requirement 1: the refusal is rendered VERBATIM, not swallowed into a
+        // generic error toast. This exact string is what step 1 of the arming
+        // procedure is looking for.
+        <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-3" data-testid="migration-skipped">
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-300 mb-1">Refused by the kill-switch</p>
+          <p className="text-sm text-amber-100 font-mono break-all">{report.skipped}</p>
+          <p className="text-xs text-slate-400 mt-2">
+            Nothing was read and nothing was written. This is the expected result of step 1 — the gate proving itself. To
+            proceed, set <span className="font-mono">poolPasswordMigration = {'{ enabled: true, dryRun: true }'}</span> on{' '}
+            <span className="font-mono">system/config</span> in the Firebase console and run it again.
+          </p>
+        </div>
+      )}
+
+      {report && !report.skipped && (
+        <div className="mt-4 space-y-3">
+          <div
+            className={`rounded-lg border px-4 py-3 ${cursorFromReport ? (cursorUsable ? 'border-amber-400/30 bg-amber-400/10' : 'border-rose-500/30 bg-rose-500/10') : 'border-emerald-500/30 bg-emerald-500/10'}`}
+            data-testid="migration-cursor-status"
+          >
+            <p className="text-sm font-bold text-white">
+              Page {page} — {report.dryRun ? 'dry run (nothing written)' : 'LIVE (writes applied)'} · scanned {report.poolsScanned} ·
+              changed {report.poolsChanged}
+            </p>
+            {cursorFromReport && cursorUsable && (
+              <p className="text-xs text-amber-200 mt-1 break-all">
+                More pools remain. Click <span className="font-bold">Continue from cursor</span> to run the next page from{' '}
+                <span className="font-mono">{cursorFromReport}</span>.
+              </p>
+            )}
+            {cursorFromReport && !cursorUsable && (
+              <p className="text-xs text-rose-200 mt-1 break-all" data-testid="migration-cursor-stale">
+                More pools remain (<span className="font-mono">{cursorFromReport}</span>) but this cursor can no longer be
+                resumed: {cursorStaleReason} Start the pass again from the beginning.
+              </p>
+            )}
+            {!cursorFromReport && (
+              <p className="text-xs text-emerald-200 mt-1">
+                <span className="font-mono">nextCursor</span> is null — this pass has reached the end of the pool collection.
+              </p>
+            )}
+          </div>
+
+          {hasFailures && (
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3" data-testid="migration-failures">
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-300 mb-1">
+                {failures.length} pool(s) not processed on this page
+              </p>
+              <p className="text-xs text-rose-100">
+                The callable keeps going past a pool it cannot process, so this page has a cursor that is already PAST them.
+                Paging on would step over these pools for the rest of the pass — so Continue is disabled. Fix the cause and
+                run the pass again from the beginning; the sweep is idempotent, so a pool already done costs a no-op. The
+                per-pool errors are in the report below.
+              </p>
+            </div>
+          )}
+
+          {/* Requirement 3: the WHOLE report, not a count — and EVERY page of the
+              pass, not just the last one (codex r2 P2). The sweep doc tells the
+              operator to read plannedWrites, stop on anything unexpected, and
+              keep every report, so nothing here is summarised away, truncated,
+              or replaced when the next page arrives. */}
+          <div className="space-y-2" data-testid="migration-reports">
+            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+              Full reports — {pages.length} page{pages.length === 1 ? '' : 's'} of this pass, newest first
+            </p>
+            {[...pages].reverse().map((entry) => (
+              <div key={entry.page}>
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-1">
+                  Page {entry.page} — requested {entry.requestedDryRun ? 'dry run' : 'LIVE'}, server ran{' '}
+                  {entry.report.dryRun ? 'dry' : 'LIVE'}
+                </p>
+                <pre className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-300 font-mono overflow-auto max-h-96 whitespace-pre-wrap break-all">
+                  {JSON.stringify(entry.report, null, 2)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <ConfirmActionModal
+        open={pending !== null}
+        title={modalTitle}
+        description={modalDescription}
+        blastRadius={
+          dryRun
+            ? 'Read-only — no writes. Reports plannedWrites per pool.'
+            : 'Deletes gridPassword / accessControl.password / passwordHash from every scanned pool and writes the hash to pools/{id}/private/access. Irreversible.'
+        }
+        confirmToken={dryRun ? undefined : 'RUN'}
+        destructive={!dryRun}
+        confirmLabel={pending === 'continue' ? 'Run next page' : 'Run sweep'}
+        onConfirm={() => pending && run(pending)}
+        onCancel={() => setPending(null)}
+      />
+    </div>
+  );
+};
+
 export const OperationsPanel: React.FC = () => {
   const toast = useToast();
   const [pending, setPending] = useState<OpAction | null>(null);
@@ -580,6 +963,8 @@ export const OperationsPanel: React.FC = () => {
           fixed conference skeletons, which is why they can run param-lessly from here.
         </p>
       </div>
+
+      <PoolPasswordMigrationCard />
 
       {log.length > 0 && (
         <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
