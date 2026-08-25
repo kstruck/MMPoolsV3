@@ -90,12 +90,22 @@ class ErrorHandler {
 
         logger.error(`[ErrorHandler] ${severity.toUpperCase()}:`, message, error, context);
 
-        await captureSentryException(error instanceof Error ? error : new Error(message), {
-            level: severity === ErrorSeverity.CRITICAL ? 'fatal'
-                : severity === ErrorSeverity.LOW ? 'warning'
-                : 'error',
-            extra: sanitizeForSentry(errorLog.context ?? {}),
-        });
+        // One telemetry sink must never take the other down with it. Sentry
+        // capture awaits a DYNAMIC import, so a blocked or unavailable
+        // @sentry/react chunk rejects here — and before this catch existed that
+        // rejection propagated out of handleError, skipping the logClientError
+        // call below entirely. Every error report would have been lost in exactly
+        // the scenario the Firestore sink exists to cover (codex round 1, P1).
+        try {
+            await captureSentryException(error instanceof Error ? error : new Error(message), {
+                level: severity === ErrorSeverity.CRITICAL ? 'fatal'
+                    : severity === ErrorSeverity.LOW ? 'warning'
+                        : 'error',
+                extra: sanitizeForSentry(errorLog.context ?? {}),
+            });
+        } catch (e) {
+            logger.warn('Sentry capture failed; continuing to the logClientError sink:', e);
+        }
 
         if (notify) {
             // Logic for showing a toast or notification could go here
