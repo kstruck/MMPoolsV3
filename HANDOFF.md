@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE IN PRODUCTION. FUNCTIONS, RULES AND THE FRONTEND ARE ALL DEPLOYED AND EACH VERIFIED SEPARATELY. THE PASSWORD SWEEP IS CLOSED. ONE ITEM LEFT: A SECOND COOLIFY REBUILD AFTER #529.**
+> ## 🟢 2026-08-25 (latest) — **LAUNCH DAY IS DONE. MULTI-ENTRY IS LIVE, POOL CREATION IS OPEN, AND THE DEPLOY QUEUE IS EMPTY. EIGHT PRs MERGED (#587–#594 + #529). FUNCTIONS, RULES AND THE FRONTEND ALL DEPLOYED AND EACH VERIFIED INDEPENDENTLY.**
 >
 > Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
 >
@@ -26,7 +26,7 @@
 >
 > ⚠️ **A HASH CHANGE PROVES A BUILD RAN, NOT WHAT IT BUILT**, and the entry chunk
 > alone does not settle it either: this app code-splits, so the multi-entry
-> strings are NOT in `index-*.js`. All 109 referenced chunks were fetched and
+> strings are NOT in `index-*.js`. All referenced chunks were fetched and
 > searched. Found:
 >
 > | String | Chunk |
@@ -37,6 +37,16 @@
 >
 > **Do not "verify" a future rebuild by the index hash alone** — a per-chunk
 > content check is what actually answers the question.
+>
+> 🛑 **AND CRAWL THE CHUNKS RECURSIVELY, INCLUDING `index` ITSELF.** The obvious
+> script — read `index-*.js`, extract the chunk names it references, search those
+> — has TWO holes, and both produced a false "ABSENT" on 2026-08-25: it never
+> searches `index` itself (a bundle does not reference its own filename), and it
+> misses a chunk that is only referenced from another lazy chunk. A recursive
+> crawl seeded with `index` found 112 chunks where the one-level scan found 109,
+> and the missing string was in `index` all along. A false ABSENT is the
+> dangerous direction: it reads as a failed deploy and invites a pointless
+> rebuild, or worse, a "fix" to code that was already correct.
 >
 > 🛑 **THE OWED LIST — ONE ITEM LEFT AS OF 2026-08-25 EVENING:**
 > 1. ~~`npx firebase deploy --only firestore:rules`~~ ✅ **DONE 2026-08-25**
@@ -60,9 +70,19 @@
 >    doing so. It also follows that `setPoolPassword` / `verifyPoolAccess` have
 >    never been exercised against production — the first commissioner to set a
 >    pool password is the first real test.
-> 3. **A SECOND COOLIFY REBUILD, AFTER #529 MERGES.** `POOLS_OPEN` is a frontend
->    flag, so merging #529 changes nothing in production until another rebuild
->    runs. The rebuild above happened BEFORE that merge, so it does not carry it.
+> 3. ~~A second Coolify rebuild after #529~~ ✅ **DONE 2026-08-25.** #529 merged
+>    (`a6a32648`) and the frontend rebuilt: `index-CtqdBjX0.js` →
+>    **`index-C4LEWyql.js`**.
+>
+>    **`POOLS_OPEN` verified by ABSENCE, which is stronger than presence.** The
+>    landing page is a ternary on the flag, so a build with it TRUE folds the
+>    dead branch away: `2026 NFL Season Pools Are Open` is present in
+>    `index-C4LEWyql.js`, and `2026 NFL Season Pools Coming Soon` is **absent
+>    from all 112 chunks**. The closed-state copy cannot be rendered because it
+>    is not in the bundle.
+>
+> 🟢 **THE OWED LIST IS EMPTY. Functions, rules and the frontend are all
+> deployed, and each was verified independently.**
 >
 > ---
 >
