@@ -1,6 +1,64 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-24 (latest) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
+> ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED AND POOL PASSWORDS ARE HASHED. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
+>
+> Full detail: **[MORNING-2026-08-25-AUDIT-2.md](MORNING-2026-08-25-AUDIT-2.md)**.
+> Worked [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md) items 1–24 plus a
+> triaged codex external-findings program. Run as 15 parallel worktree streams with
+> sequential merges; `codex exec review` on every PR (~60 rounds, ~45 findings
+> absorbed, 4 rejected with measurements, 0 carried).
+>
+> 🔴 **THE STRIPE P0 WAS REAL AND IS CLOSED (#570).** `getStripe()` returned null on a
+> missing or `placeholder`-prefixed key with **no environment condition** — no
+> production file under `functions/src/` referenced `FUNCTIONS_EMULATOR` at all. Pool
+> checkout's `if (!stripe)` branch called `finalizePoolPayment(...)`, the same function
+> the verified webhook calls (billing active, ledger row, `?payment=success`). Bundle
+> checkout called `grantBundle(...)` **with no ownership gate at all**. Both now return
+> `failed-precondition` with zero mutations in deployed environments.
+>
+> 🔴 **POOL PASSWORDS ARE NO LONGER PLAINTEXT (#579, Kevin's D1 Option 2).** PBKDF2 in
+> `pools/{id}/private/access` (`allow read: if false`), join via callable, migration
+> sweep kill-switched OFF and dry-run by default. **10 codex rounds, 17 findings,
+> 16 of them fail-OPEN.** Stated ceiling: this fixes the PASSWORD, not the POOL —
+> `pools/{id}` stays `allow get: if true` for guest links, so the gate governs what the
+> app renders, not what Firestore serves.
+>
+> 🛑 **OWED, AND THE ORDER IS LOAD-BEARING. FOUR STEPS, NOT TWO.**
+> 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
+>    `git pull --ff-only origin main` + `npm --prefix functions ci`. Changed by
+>    #569, #570, #572, #573, #575, #579. New functions: `cspReport`, `authBackup`,
+>    the pool-password callables. **Verify each by name in `functions:list`.**
+> 2. `npx firebase deploy --only firestore:rules` — **#579 is the only PR that
+>    touched rules (+97 lines).** No index change in any PR.
+> 3. Coolify `www` rebuild (manual trigger). Changed by #564, #566, #568, #571,
+>    #577, #578, #579.
+> 4. **ONLY THEN** the pool-password migration sweep
+>    ([PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md](PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md)).
+>    Before step 3 it would leave swept pools rendering UNGATED on the old bundle.
+>
+> 🟡 **TWO THINGS SHIPPED BUT INERT UNTIL KEVIN ACTS.** Sentry stays dead until
+> `VITE_SENTRY_DSN` is set as a Coolify **build** variable (#573). The new
+> transition-only health paging sends nothing if `system/config.opsAlerts.emailRecipients`
+> is empty. The Auth backup (#575) does nothing until the GCS bucket exists and
+> `system/config.authBackup` is armed.
+>
+> 🛑 **DO NOT RUN `git reset --hard` IN `D:\march-melee-pools`.** That checkout carries
+> **351 uncommitted changes** from an earlier session (a context-hygiene/archive pass:
+> the whole `skills/` tree deleted, 10 root `.md` deleted, `docs/archive/legacy-*`
+> added). Verified to contain **zero** changes under `src/`, `functions/`,
+> `firestore.rules`, `firebase.json`, `nginx.conf` or `Dockerfile`, so the deploy above
+> is not at risk from it — but #576's `.gitattributes` renormalise step
+> (`git rm --cached -r . && git reset --hard`) WOULD DESTROY IT. Decide what that work
+> is first. This is also why the repo markdown cleanup was HELD rather than built.
+>
+> ✅ **Item 19 VERIFIED:** ruleset 11714546 now carries `required_status_checks` with
+> `build-and-test`, `emulator-tests`, `security-audit`, `nginx-validate`, main-scoped,
+> enforcement active. **Remaining hole:** `bypass_actors` = Repository admin,
+> `bypass_mode: "always"` — every merge here uses an admin token, so the checks
+> currently bind nobody.
+
+
+> ## 🟢 2026-08-24 (superseded by the 2026-08-25 box above) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
 >
 > Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](MORNING-2026-08-24-AUDIT-FIXES.md)**.
 >
