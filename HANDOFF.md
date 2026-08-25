@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE. FIVE PRs MERGED (#587–#591), FUNCTIONS DEPLOYED AND VERIFIED. ONE COOLIFY REBUILD IS OWED AND NOTHING A MEMBER CAN SEE CHANGES UNTIL IT RUNS.**
+> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE IN PRODUCTION. SIX PRs MERGED (#587–#592). FUNCTIONS DEPLOYED AND VERIFIED BY NAME; FRONTEND REBUILT AND VERIFIED BY CHUNK CONTENT. THE RULES DEPLOY AND THE PASSWORD SWEEP ARE STILL OWED.**
 >
 > Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
 >
@@ -21,17 +21,32 @@
 > `getPoolPicks`, `submitNFLPicks`, `getProfilePoolDetail`, `recomputeMyProfile`,
 > `nflAutoScoreJob`, `nflFinalizeSweepJob` — **13 of 13 PRESENT**.
 >
+> ✅ **COOLIFY REBUILD DONE 2026-08-25 — AND VERIFIED BY CONTENT, NOT BY THE
+> BUNDLE HASH.** Live bundle moved `index-BRP5Lf-B.js` → **`index-CtqdBjX0.js`**.
+>
+> ⚠️ **A HASH CHANGE PROVES A BUILD RAN, NOT WHAT IT BUILT**, and the entry chunk
+> alone does not settle it either: this app code-splits, so the multi-entry
+> strings are NOT in `index-*.js`. All 109 referenced chunks were fetched and
+> searched. Found:
+>
+> | String | Chunk |
+> |---|---|
+> | `Allow more than one entry per player` (the wizard toggle) | `buildNFLPayload-DbSxJbA6.js` |
+> | `Entry 1 is created when you save its first pick` (the switcher's draft copy) | `PoolRoute-DJtanu6e.js` |
+> | `You already have an entry with that name` | `PoolRoute-DJtanu6e.js` |
+>
+> **Do not "verify" a future rebuild by the index hash alone** — a per-chunk
+> content check is what actually answers the question.
+>
 > 🛑 **STILL OWED, AND THEY ARE KEVIN'S:**
-> 1. **Coolify `www` rebuild.** Every member-facing half of this work is in the
->    frontend bundle. Until the rebuild runs, production serves the OLD client
->    against the NEW functions — which is safe (every server change is
->    backward-compatible by construction) but means **nothing a member can see
->    has changed yet.**
-> 2. **`npx firebase deploy --only firestore:rules`** — still owed from #579,
+> 1. **`npx firebase deploy --only firestore:rules`** — still owed from #579,
 >    unchanged by this session. Not deployed here on purpose: this session was
 >    scoped away from `firestore.rules` and a rules deploy is its own decision.
-> 3. The **pool-password migration sweep**, which the audit box says runs only
->    AFTER the Coolify rebuild.
+> 2. The **pool-password migration sweep**, which the audit box says runs only
+>    AFTER the Coolify rebuild — that precondition is now satisfied.
+> 3. **A SECOND COOLIFY REBUILD, AFTER #529 MERGES.** `POOLS_OPEN` is a frontend
+>    flag, so merging #529 changes nothing in production until another rebuild
+>    runs. The rebuild above happened BEFORE that merge, so it does not carry it.
 >
 > ---
 >
