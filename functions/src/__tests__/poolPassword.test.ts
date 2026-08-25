@@ -410,13 +410,43 @@ describe('source invariants', () => {
         ]);
     });
 
-    it("the pool document's password marker is a boolean, never the secret", () => {
-        // `hasPoolPassword` is what the UI renders a lock from. If it ever
-        // carried the value instead of a boolean the phase would be undone in
-        // one line, so pin the type at its single writer.
+    it('there is exactly ONE scrub shape, and every writer uses it', () => {
+        // Two shapes is how the literal dotted field survived on two paths: an
+        // object `scrubPatch` every caller used, plus a FieldPath helper only
+        // the migration called (codex r6). A partial scrub that most callers
+        // apply is worse than none, because it reads as complete.
+        const files = ['lib/poolAccess.ts', 'bracketPools.ts', 'migrations/migratePoolPasswords.ts'];
+        for (const f of files) {
+            const src = strip(fs.readFileSync(path.join(SRC, f), 'utf8'));
+            expect(src, `${f} must scrub through scrubUpdateArgs`).toMatch(/scrubUpdateArgs\(/);
+            expect(src, `${f} must not resurrect the old shapes`).not.toMatch(/scrubPatch\(|scrubDottedLegacyField\(/);
+        }
+    });
+
+    it('the scrub deletes BOTH the nested and the literal dotted field', () => {
+        // They are different targets: a string field is parsed as a PATH, so
+        // only a FieldPath can name a top-level field whose NAME has a dot.
         const src = strip(fs.readFileSync(path.join(SRC, 'lib/poolAccess.ts'), 'utf8'));
-        expect(src).toMatch(/HAS_POOL_PASSWORD_FIELD\]:\s*hasPassword/);
-        expect(src).toMatch(/gridPassword:\s*FieldValue\.delete\(\)/);
-        expect(src).toMatch(/"accessControl\.password":\s*FieldValue\.delete\(\)/);
+        const fn = src.slice(src.indexOf('export function scrubUpdateArgs'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+        expect(body).toMatch(/args\.push\("gridPassword", FieldValue\.delete\(\)\)/);
+        expect(body).toMatch(/args\.push\(DOTTED_ACCESS_PASSWORD_FIELD, FieldValue\.delete\(\)\)/);
+        expect(body).toMatch(/new admin\.firestore\.FieldPath\(DOTTED_ACCESS_PASSWORD_FIELD\)/);
+        expect(body).toMatch(/args\.push\(LEGACY_HASH_FIELD, FieldValue\.delete\(\)\)/);
+        // The marker is a BOOLEAN. If it ever carried the value instead, the
+        // whole phase would be undone in one line.
+        expect(body).toMatch(/args\.push\(HAS_POOL_PASSWORD_FIELD, hasPassword\)/);
+    });
+
+    it('the migration commits its secret and its marker in one batch', () => {
+        // Same defect r4 found in writePoolSecret, repeated in the sweep: a
+        // private hash landing without the marker leaves a pool that HAS a
+        // password and renders UNGATED.
+        const src = strip(fs.readFileSync(path.join(SRC, 'migrations/migratePoolPasswords.ts'), 'utf8'));
+        const loop = src.slice(src.indexOf('for (const doc of snap.docs)'));
+        expect(loop).toMatch(/db\.batch\(\)/);
+        expect(loop).toMatch(/batch\.commit\(\)/);
+        expect(loop).not.toMatch(/await\s+accessDocRef\([^)]*\)\.set\(/);
+        expect(loop).not.toMatch(/await\s+doc\.ref\.update\(/);
     });
 });

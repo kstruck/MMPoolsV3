@@ -235,3 +235,42 @@ rounds-2+-find-defects-in-the-fixes pattern §2c predicts, twice over.
    Fixing this class at the schema (r3) and not at the rules (r5) is precisely
    the "guard that looks like it guards" shape — the create path was closed while
    the direct-write path stayed open, and the two are alternatives, not layers.
+
+## Round 6
+
+VERDICT: REVISE. 3 findings (all P1), ALL ACCEPTED. All three are the same
+structural mistake wearing three hats, and it is worth naming.
+
+Rounds 3 and 5 closed the dotted-field bypass on the create schema and on the
+rules. The fix for the *runtime* half (r3) was an OPT-IN second helper —
+`scrubDottedLegacyField()` — that only the migration called. So the codebase had
+TWO scrub shapes, one complete and one partial, and three of the four writers
+used the partial one:
+
+1. **(P1) `publishBracketPool` left the literal dotted plaintext public.**
+   `publishPasswordPlan` would ADOPT it (r2's fix) and hash it into the private
+   doc — then publish the pool with the plaintext still readable.
+2. **(P1) `writePoolSecret` left it too**, so every password change and every
+   legacy rehash carried the leak forward.
+3. **(P1) The migration repeated r4's non-atomicity.** It committed the private
+   hash and the public scrub as two writes; a failure between them leaves a pool
+   that HAS a password and renders UNGATED. Exactly the defect r4 found in
+   `writePoolSecret`, in the code right next to it.
+
+Fix: ONE shape. `scrubPatch()` and `scrubDottedLegacyField()` are deleted and
+replaced by `scrubUpdateArgs()`, which returns a single `update()` VARARGS
+argument list — the only form that can express both targets, because a
+`FieldPath` cannot be an object key and a string key with a dot is always parsed
+as a path. All three writers use it, the migration now commits in one batch, and
+a test asserts that no file resurrects either old name.
+
+The lesson recorded, because it generalises: **a partial fix that most callers
+apply is worse than no fix, because it reads as complete.** The right response
+to r3 was to make the complete scrub the ONLY scrub, not to add a second helper
+beside it.
+
+Also added the assertion the whole saga should have started from: an emulator
+test that mints a literal dotted field with `setDoc`, then proves one
+`update()` removes BOTH it and the nested one without the two targets
+colliding. That behaviour had been reasoned about across four rounds and never
+measured.

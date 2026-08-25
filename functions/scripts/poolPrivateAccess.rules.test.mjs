@@ -184,18 +184,65 @@ await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     const BARE_ID = 'pool-no-access-fields';
     await setDoc(doc(db, 'pools', BARE_ID), { type: 'BRACKET', name: 'Bare', ownerId: OWNER_UID });
-    await updateDoc(doc(db, 'pools', BARE_ID), {
-        gridPassword: deleteField(),
-        'accessControl.password': deleteField(),
-        passwordHash: deleteField(),
-        hasPoolPassword: true,
-    });
+    // The VARARGS form the server helper emits, including the FieldPath that
+    // names the literal dotted field. Written out here rather than imported
+    // because this file talks to the client SDK; the shape is what is under
+    // test, and `poolPassword.test.ts` pins that the helper emits exactly it.
+    await updateDoc(
+        doc(db, 'pools', BARE_ID),
+        'gridPassword', deleteField(),
+        'accessControl.password', deleteField(),
+        'passwordHash', deleteField(),
+        'hasPoolPassword', true,
+        new FieldPath('accessControl.password'), deleteField(),
+    );
     const after = await getDoc(doc(db, 'pools', BARE_ID));
     assert.strictEqual(after.data().hasPoolPassword, true);
     assert.ok(!('accessControl' in after.data()), 'the delete must not materialise an empty parent map');
     assert.strictEqual(after.data().name, 'Bare', 'unrelated fields survive');
 });
-console.log('  ok: the scrub patch applies cleanly to a pool with none of those fields');
+console.log('  ok: the scrub applies cleanly to a pool with none of those fields');
+
+// --- …and it actually REMOVES a literal dotted field when one exists --------
+//
+// This is the claim the r6 fix rests on: that one `update()` can delete both
+// the nested `accessControl.password` AND a top-level field literally named
+// `accessControl.password`, without the two targets colliding. Asserted rather
+// than assumed — the whole dotted-field saga started from an assumption about
+// how Firestore parses a key with a dot in it.
+await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    const DOTTED_ID = 'pool-dotted-legacy';
+    // setDoc writes object keys as LITERAL field names, which is exactly how
+    // such a field could be minted through the permissive create callable.
+    await setDoc(doc(db, 'pools', DOTTED_ID), {
+        type: 'SQUARES', name: 'Dotted', ownerId: OWNER_UID,
+        'accessControl.password': 'literal-secret',
+        accessControl: { password: 'nested-secret', requireEmail: true },
+        gridPassword: 'grid-secret',
+    });
+    const before = await getDoc(doc(db, 'pools', DOTTED_ID));
+    assert.strictEqual(before.get(new FieldPath('accessControl.password')), 'literal-secret',
+        'the literal dotted field must be creatable, or this test proves nothing');
+
+    await updateDoc(
+        doc(db, 'pools', DOTTED_ID),
+        'gridPassword', deleteField(),
+        'accessControl.password', deleteField(),
+        'passwordHash', deleteField(),
+        'hasPoolPassword', true,
+        new FieldPath('accessControl.password'), deleteField(),
+    );
+    const after = await getDoc(doc(db, 'pools', DOTTED_ID));
+    assert.strictEqual(after.get(new FieldPath('accessControl.password')), undefined,
+        'the LITERAL dotted field must be gone');
+    assert.strictEqual(after.get(new FieldPath('accessControl', 'password')), undefined,
+        'the NESTED password must be gone');
+    assert.ok(!('gridPassword' in after.data()), 'the plaintext must be gone');
+    assert.strictEqual(after.data().accessControl.requireEmail, true, 'siblings survive');
+    assert.strictEqual(after.data().hasPoolPassword, true);
+});
+console.log('  ok: one update removes the nested AND the literal dotted password field');
 
 await env.cleanup();
 console.log('poolPrivateAccess.rules.test.mjs: ALL PASS');

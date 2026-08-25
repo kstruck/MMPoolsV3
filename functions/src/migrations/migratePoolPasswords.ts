@@ -34,7 +34,13 @@ import { validated } from "../lib/validated";
 import { writeAdminAudit } from "../lib/adminAudit";
 import { migratePoolPasswordsSchema } from "../schemas/poolPassword";
 import { hashPoolPassword } from "../lib/poolPassword";
-import { accessDocRef, legacyHashOf, legacyPlaintextOf, scrubDottedLegacyField, scrubPatch } from "../lib/poolAccess";
+import {
+    DOTTED_ACCESS_PASSWORD_FIELD,
+    accessDocRef,
+    legacyHashOf,
+    legacyPlaintextOf,
+    scrubUpdateArgs,
+} from "../lib/poolAccess";
 import { readJobGate } from "../nflSchedule";
 
 /** What the sweep would do to one pool. `null` = nothing to do. */
@@ -160,31 +166,34 @@ export const migratePoolPasswords = validated(
                 }
                 if (dryRun) continue;
 
+                // ⚠️ ONE BATCH (codex r6 P1). Writing the private hash first and
+                // the public scrub second leaves a window where the pool HAS a
+                // password and renders UNGATED, because the squares client
+                // decides from the marker alone — the same defect r4 found in
+                // `writePoolSecret`, repeated here. Both documents commit or
+                // neither does.
+                const batch = db.batch();
                 if (plan.action === "hash-plaintext") {
-                    const plaintext = legacyPlaintextOf(data)!;
-                    await accessDocRef(db, doc.id).set(
-                        { passwordHash: hashPoolPassword(plaintext), migratedAt: Date.now() },
+                    batch.set(
+                        accessDocRef(db, doc.id),
+                        { passwordHash: hashPoolPassword(legacyPlaintextOf(data)!), migratedAt: Date.now() },
                         { merge: true },
                     );
-                    await doc.ref.update(scrubPatch(true));
                 } else if (plan.action === "move-hash") {
-                    await accessDocRef(db, doc.id).set(
+                    batch.set(
+                        accessDocRef(db, doc.id),
                         { passwordHash: legacyHashOf(data)!, migratedAt: Date.now() },
                         { merge: true },
                     );
-                    await doc.ref.update(scrubPatch(true));
-                } else {
-                    // A private secret already exists (or the public doc only
-                    // needed its marker fixed) — delete the public copies and
-                    // set the marker to match what is actually stored.
-                    await doc.ref.update(scrubPatch(hasPrivate));
                 }
-                // The exotic dotted field cannot be removed by `scrubPatch` —
-                // an object key with a dot is parsed as a PATH, so it would
-                // miss a top-level field literally NAMED `accessControl.password`
-                // (codex r3). Needs a FieldPath, hence its own call. No-ops for
-                // every normal pool.
-                if (await scrubDottedLegacyField(doc.ref, data)) report.dottedFieldsRemoved++;
+                // `scrub-only` writes no secret: one already exists (or only the
+                // marker was wrong). The marker then follows what IS stored.
+                const willBeProtected = plan.action === "scrub-only" ? hasPrivate : true;
+                batch.update(doc.ref, ...scrubUpdateArgs(willBeProtected));
+                if (typeof data[DOTTED_ACCESS_PASSWORD_FIELD] === "string") {
+                    report.dottedFieldsRemoved++;
+                }
+                await batch.commit();
             } catch (err: any) {
                 report.failures.push({ poolId: doc.id, error: String(err?.message || err) });
             }

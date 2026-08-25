@@ -6,7 +6,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
 import { hashPoolPassword, hasSecret, verifyPoolPassword } from "./lib/poolPassword";
-import { accessDocRef, publishPasswordPlan, readPoolSecret, rehashOnVerify, scrubPatch } from "./lib/poolAccess";
+import { accessDocRef, publishPasswordPlan, readPoolSecret, rehashOnVerify, scrubUpdateArgs } from "./lib/poolAccess";
 import { chargeAccessAttempt, refundAccessAttempt } from "./lib/poolAttempts";
 import { computeLaunchMode, estimatedPlayersFromPayload } from "./poolOps";
 import { normalizeAddonSelection } from "./lib/launchFields";
@@ -285,18 +285,21 @@ export const publishBracketPool = validated(
             );
         }
 
-        transaction.update(poolRef, {
+        // Varargs form, not an object: it is the only way to also delete a
+        // top-level field literally NAMED `accessControl.password`, which a
+        // pre-Phase-B draft can be carrying and which `publishPasswordPlan`
+        // above may have just adopted. Leaving it behind would publish the pool
+        // with the plaintext still readable (codex r6 P1). One write, so the
+        // scrub, the marker and the publish fields cannot come apart.
+        transaction.update(poolRef, ...scrubUpdateArgs(willBeProtected, {
             slug: slugLower,
             slugLower,
             isListedPublic: !!isListedPublic,
             isPublic: !!isListedPublic, // Sync for firestore rules
-            // Legacy public copies are removed on the way past, so publishing a
-            // pool that was drafted before Phase B also evacuates it.
-            ...scrubPatch(willBeProtected),
             status: "OPEN",
             lockAt: lockAt,
             updatedAt: Timestamp.now().toMillis(),
-        });
+        }));
     });
 
     return { success: true, slug: slugLower };

@@ -56,28 +56,11 @@ export function legacyPlaintextOf(poolData: Record<string, unknown> | undefined)
 }
 
 /**
- * A LITERAL top-level field name containing a dot. Deleting it needs a
- * `FieldPath` — an `update({ "accessControl.password": … })` object key is
- * parsed as a PATH into the nested map and would miss this field entirely.
+ * A LITERAL top-level field name containing a dot. Naming it needs a
+ * `FieldPath`: a string field — object key or varargs — is parsed as a PATH
+ * into the nested map and misses this field entirely.
  */
 export const DOTTED_ACCESS_PASSWORD_FIELD = "accessControl.password";
-
-/**
- * Delete the exotic dotted field if the pool is carrying one. Separate from
- * `scrubPatch` because it cannot be expressed as an object key — see above.
- * No-ops (no write at all) for the overwhelmingly normal case.
- */
-export async function scrubDottedLegacyField(
-    ref: admin.firestore.DocumentReference,
-    poolData: Record<string, unknown> | undefined,
-): Promise<boolean> {
-    if (typeof poolData?.[DOTTED_ACCESS_PASSWORD_FIELD] !== "string") return false;
-    await ref.update(
-        new admin.firestore.FieldPath(DOTTED_ACCESS_PASSWORD_FIELD),
-        FieldValue.delete(),
-    );
-    return true;
-}
 
 /** The legacy hash a pool document may still be carrying (bracket publish path). */
 export function legacyHashOf(poolData: Record<string, unknown> | undefined): string | null {
@@ -151,17 +134,51 @@ export function publishPasswordPlan(
 }
 
 /**
- * The patch that scrubs every legacy password field off the PUBLIC pool doc and
- * sets the non-secret marker. Exported so the migration and the runtime paths
- * provably write the same thing (and so a dry run can print it).
+ * THE ONE SCRUB SHAPE. Every path that touches a pool's password state —
+ * `writePoolSecret`, `publishBracketPool`, the migration — goes through this,
+ * and it returns a single `update()` argument list so the scrub, the marker and
+ * any accompanying fields land in ONE write.
+ *
+ * ## Why varargs and not an object
+ *
+ * An object-form `update({ "accessControl.password": FieldValue.delete() })`
+ * deletes the NESTED field. It cannot express the deletion of a top-level field
+ * whose NAME contains a dot, because every string key is parsed as a path. Only
+ * a `FieldPath` can name that field, and a `FieldPath` cannot be an object key.
+ * Both targets are emitted here, because both shapes exist in the wild.
+ *
+ * ## Why ONE shape and not two
+ *
+ * There were two: an object `scrubPatch()` that every caller used, plus a
+ * separate `scrubDottedLegacyField()` that only the migration called. Codex
+ * then found the two paths that leaked — publish, and every password change
+ * through `writePoolSecret` — in a single round (r6). A partial scrub that
+ * three of four callers apply is worse than no scrub, because it reads as
+ * complete. One list, nothing optional.
+ *
+ * ⚠️ `extra` KEYS MUST NOT CONTAIN DOTS — in the varargs form a string field is
+ * a field PATH, so a dotted key would silently write a NESTED field instead of
+ * the one named. Enforced with a throw rather than a comment.
  */
-export function scrubPatch(hasPassword: boolean): Record<string, unknown> {
-    return {
-        gridPassword: FieldValue.delete(),
-        "accessControl.password": FieldValue.delete(),
-        [LEGACY_HASH_FIELD]: FieldValue.delete(),
-        [HAS_POOL_PASSWORD_FIELD]: hasPassword,
-    };
+export function scrubUpdateArgs(
+    hasPassword: boolean,
+    extra: Record<string, unknown> = {},
+): [string | admin.firestore.FieldPath, unknown, ...unknown[]] {
+    const args: unknown[] = [];
+    for (const [k, v] of Object.entries(extra)) {
+        if (k.includes(".")) {
+            throw new Error(`scrubUpdateArgs: dotted key "${k}" would be read as a path`);
+        }
+        args.push(k, v);
+    }
+    args.push("gridPassword", FieldValue.delete());
+    // The NESTED `accessControl.password`.
+    args.push(DOTTED_ACCESS_PASSWORD_FIELD, FieldValue.delete());
+    args.push(LEGACY_HASH_FIELD, FieldValue.delete());
+    args.push(HAS_POOL_PASSWORD_FIELD, hasPassword);
+    // The LITERAL top-level field of the same name. A different target.
+    args.push(new admin.firestore.FieldPath(DOTTED_ACCESS_PASSWORD_FIELD), FieldValue.delete());
+    return args as [string | admin.firestore.FieldPath, unknown, ...unknown[]];
 }
 
 /**
@@ -191,7 +208,7 @@ export async function writePoolSecret(
         { passwordHash: hasPassword ? hashPoolPassword(password) : FieldValue.delete(), updatedAt: now },
         { merge: true },
     );
-    batch.update(db.collection("pools").doc(poolId), scrubPatch(hasPassword));
+    batch.update(db.collection("pools").doc(poolId), ...scrubUpdateArgs(hasPassword));
     await batch.commit();
     return { hasPassword };
 }
