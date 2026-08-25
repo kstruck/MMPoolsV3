@@ -169,20 +169,49 @@ describe("cspReport — the write budget is the cost bound", () => {
         expect(takeWriteSlot(s, "2026-08-25T06", 1).allowed).toBe(true);
     });
 
-    it("reports refusals to the next accepted write instead of hiding them", () => {
+    it("reports refusals to the next accepted write instead of hiding them", async () => {
         // The stored document must say it is incomplete. Silent under-counting is
         // the failure this whole area of the codebase exists to avoid.
         const s = fresh();
-        expect(takeWriteSlot(s, "2026-08-25T05", 1).droppedToRecord).toBe(0);
+        const one = [{ directive: "img-src", blockedUri: "https://c.example", documentPath: "/" }];
+        const seen: number[] = [];
+        const ok = async (_h: string, _v: unknown, d: number) => { seen.push(d); };
+
+        await ingest(one, "2026-08-25T05", s, ok, 1);
+        expect(seen).toEqual([0]);
         takeWriteSlot(s, "2026-08-25T05", 1); // refused
         takeWriteSlot(s, "2026-08-25T05", 1); // refused
-        const next = takeWriteSlot(s, "2026-08-25T06", 1);
-        expect(next.allowed).toBe(true);
-        expect(next.droppedToRecord).toBe(2);
-        // And the counter is consumed, not double-reported.
-        s.hour = "2026-08-25T06";
+        expect(s.dropped).toBe(2);
+
         s.used = 0;
-        expect(takeWriteSlot(s, "2026-08-25T06", 1).droppedToRecord).toBe(0);
+        await ingest(one, "2026-08-25T05", s, ok, 1);
+        expect(seen).toEqual([0, 2]);
+        // Consumed once the write landed, so it is not double-reported.
+        expect(s.dropped).toBe(0);
+    });
+
+    it("keeps the refusal count when the write FAILS (codex r3)", async () => {
+        // Clearing the counter at slot time meant a Firestore outage silently
+        // erased the incompleteness signal: the next successful report would
+        // store droppedCount 0 and claim the aggregate was complete.
+        const s = fresh();
+        const one = [{ directive: "img-src", blockedUri: "https://c.example", documentPath: "/" }];
+        takeWriteSlot(s, "2026-08-25T05", 0); // refused (limit 0)
+        takeWriteSlot(s, "2026-08-25T05", 0); // refused
+        expect(s.dropped).toBe(2);
+
+        s.used = 0;
+        await expect(
+            ingest(one, "2026-08-25T05", s, async () => { throw new Error("firestore down"); }, 1),
+        ).rejects.toThrow("firestore down");
+        // Still owed.
+        expect(s.dropped).toBe(2);
+
+        s.used = 0;
+        const seen: number[] = [];
+        await ingest(one, "2026-08-25T05", s, async (_h, _v, d) => { seen.push(d); }, 1);
+        expect(seen).toEqual([2]);
+        expect(s.dropped).toBe(0);
     });
 
     it("counts EVERY refused report in a batch, not just the first (codex r1)", async () => {

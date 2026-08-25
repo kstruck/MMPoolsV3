@@ -209,6 +209,12 @@ export interface BudgetState {
  * Per-instance write budget. Returns whether this report may cost a Firestore
  * transaction, and — when it may — how many refusals accumulated since the last
  * accepted write, so the stored document can admit to being incomplete.
+ *
+ * It does NOT clear the refusal counter (codex r3): the caller clears it with
+ * `clearDropped` only once the write has actually persisted. Clearing here would
+ * lose the incompleteness signal whenever the transaction fails — a Firestore
+ * outage, or retries exhausted — and the very next successful report would then
+ * store `droppedCount: 0` and claim the aggregate is complete.
  */
 export function takeWriteSlot(
     state: BudgetState,
@@ -229,9 +235,12 @@ export function takeWriteSlot(
         return { allowed: false, droppedToRecord: 0 };
     }
     state.used += 1;
-    const droppedToRecord = state.dropped;
-    state.dropped = 0;
-    return { allowed: true, droppedToRecord };
+    return { allowed: true, droppedToRecord: state.dropped };
+}
+
+/** Consume refusals ONLY after the write that carried them actually persisted. */
+export function clearDropped(state: BudgetState, n: number): void {
+    state.dropped = Math.max(0, state.dropped - n);
 }
 
 /** Module-scoped budget: one per warm instance, reset on cold start. */
@@ -261,6 +270,10 @@ export async function ingest(
         const slot = takeWriteSlot(state, hour, limit);
         if (!slot.allowed) continue;
         await write(hour, v, slot.droppedToRecord);
+        // Only after the write actually landed (codex r3). If `write` throws, the
+        // error propagates to the handler's catch with `state.dropped` intact, so
+        // the refusals are still owed to the next successful write.
+        clearDropped(state, slot.droppedToRecord);
     }
 }
 
