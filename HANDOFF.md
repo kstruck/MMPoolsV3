@@ -3,6 +3,8 @@
 > ## 🟢 2026-08-24 (latest) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
 >
 > Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](MORNING-2026-08-24-AUDIT-FIXES.md)**.
+>
+> 🆘 **Site down? Start at [RUNBOOK-SITE-DOWN.md](RUNBOOK-SITE-DOWN.md)** — one page: uptime alert → bundle-hash curl → debugging-playbook S7b → Coolify Rollback (§2b) → `/readiness` → `functions:log` → functions rollback (§1d).
 > Worked from Kevin's six audits (DB/storage, backend, auth, hosting, cloud,
 > VCS). Two new plan docs: PLAN-AUDIT-SCAN-BOUNDS (Phase 1 built) and
 > PLAN-AUDIT-AUTH-HARDENING (Phase A built; Phase B = pool-password plaintext
