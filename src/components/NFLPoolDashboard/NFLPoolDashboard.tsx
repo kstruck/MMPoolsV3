@@ -213,7 +213,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // the reveal-safe standings projection, the Member Records, and their OWN entry
   // document.
   //
-  // ⚠️ `subscribeToMyNFLEntry` is now load-bearing for the commissioner, not just
+  // ⚠️ `subscribeToMyNFLEntries` is now load-bearing for the commissioner, not just
   // the member. A commissioner is usually also a player, and their own entry is
   // what the three pick-entry forms render and edit — dropping the raw read
   // without this would make their own saved picks vanish while `getPoolPicks`
@@ -225,14 +225,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // an account switch, so a snapshot outlives the pool and the uid that asked for
   // it.
   //
-  // This used to be cleared by accident: `subscribeToMyNFLEntry` reported a read
+  // This used to be cleared by accident: the own-entry subscription reported a read
   // FAILURE by calling back with `null`, which happened to wipe the previous
   // pool's entry on the way past. That error contract is gone (it was telling a
   // member with a full sheet that they had not picked), so the guard that was
   // implicit has to become explicit — otherwise a new listener that errors before
   // its first snapshot leaves the PREVIOUS pool's, or the previous account's,
   // picks on screen and prefilled into this pool's pick sheet. (codex r1, P1.)
-  const [ownEntryState, setOwnEntryState] = useState<{ poolId: string; uid: string; entry: any | null } | null>(null);
+  //
+  // PLAN-MULTI-ENTRY T4 — an ARRAY, because a member may hold several entries in
+  // one pool. Empty means "this viewer owns none", which is a different fact
+  // from `null` ("no snapshot has landed"); the two are still distinguished by
+  // `ownEntryKnown` below, exactly as they were for the single entry.
+  const [ownEntryState, setOwnEntryState] = useState<{ poolId: string; uid: string; entries: any[] } | null>(null);
   /**
    * Has a SUCCESSFUL snapshot for THIS pool and THIS viewer actually landed?
    *
@@ -252,7 +257,21 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     && ownEntryState !== null
     && ownEntryState.poolId === pool.id
     && ownEntryState.uid === user.id;
-  const ownEntry = ownEntryKnown ? ownEntryState!.entry : null;
+  const ownEntries = ownEntryKnown ? ownEntryState!.entries : [];
+  /**
+   * The viewer's PRIMARY entry — the lowest `entryIndex` they own.
+   *
+   * ⚠️ INTERIM, AND NAMED SO. Every surface that still assumes one entry per
+   * player (the pick sheet, the bento CTA, the checklist strip) reads this, and
+   * for every pool in production it IS the member's only entry. T5 replaces it
+   * with the ACTIVE entry from the "My Entry" switcher; this exists so T4 can
+   * ship the row fold without also rewriting the pick surfaces.
+   */
+  const ownEntry = ownEntries.length > 0
+    ? [...ownEntries].sort((a, b) =>
+        ((typeof a?.entryIndex === 'number' ? a.entryIndex : 1) - (typeof b?.entryIndex === 'number' ? b.entryIndex : 1))
+        || String(a?.id ?? '').localeCompare(String(b?.id ?? '')))[0]
+    : null;
   // Stamped with the pool it came from, and keyed BY WEEK.
   //
   // `PoolRoute` reuses this component across pool navigation, so a response
@@ -278,8 +297,8 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   useEffect(() => {
     const unsubStandings = dbService.subscribeToNFLStandings(pool.id, setStandingsRows);
     const unsubOwn = user
-      ? dbService.subscribeToMyNFLEntry(pool.id, user.id, (entry) =>
-          setOwnEntryState({ poolId: pool.id, uid: user.id, entry }))
+      ? dbService.subscribeToMyNFLEntries(pool.id, user.id, (entries) =>
+          setOwnEntryState({ poolId: pool.id, uid: user.id, entries }))
       : undefined;
     return () => { unsubStandings(); unsubOwn?.(); };
   }, [pool.id, user?.id]);
@@ -511,7 +530,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // doc should not re-run this. (qodo.)
   const entries = useMemo(
     () => buildMemberStandings({
-      pool: castPool, members, standingsRows, ownEntry, reveal: weekReveal,
+      pool: castPool, members, standingsRows, ownEntries, reveal: weekReveal,
       // Survivor and Margin draw many weeks at once, so their rows need every
       // cached week's revealed picks — not just the selected week's, which
       // would render every earlier column as "made no pick". The per-column
@@ -519,7 +538,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       weeklyReveals: pool.type === 'NFL_PICKEM' ? undefined : Object.values(revealsForPool),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [standingsRows, ownEntry, members, weekReveal, castPool.participantIds, pool.type, revealsForPool],
+    [standingsRows, ownEntries, members, weekReveal, castPool.participantIds, pool.type, revealsForPool],
   );
 
   // 2b. Subscribe to Member Records (roster truth — everyone who joined, ADR 0003)
@@ -558,7 +577,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // lookup stays as a fallback for the moment before the snapshot lands.
   const myEntry = useMemo(() => {
     if (!user) return null;
-    return ownEntry || entries.find(e => e.ownerUid === user.id) || null;
+    // PLAN-MULTI-ENTRY §0b.3 — `.filter`, never `.find`. Where a SINGLE entry is
+    // genuinely needed (the pick sheet's CTA) it is the primary one until T5
+    // makes it the ACTIVE one; taking the first match by uid would silently pick
+    // whichever row the fold emitted first.
+    if (ownEntry) return ownEntry;
+    const mine = entries.filter(e => e.ownerUid === user.id);
+    return mine[0] || null;
   }, [ownEntry, entries, user]);
 
   // Check if the current selected week is locked (earliest game kicked off).
