@@ -557,14 +557,16 @@ shell variables — so nothing breaks if you close the tab and come back.
    30. A year of weekly exports is ~52 files; the cost is pennies and the window
    covers "we noticed a season later".
 
+   ⚠️ Two single-line commands on purpose. A heredoc written inside an indented
+   list block copies with its leading spaces, and an indented terminator does not
+   end a heredoc — bash then sits waiting for input forever.
+
    ```
-   cat > /tmp/auth-lifecycle.json <<'JSON'
-   {"lifecycle":{"rule":[
-     {"action":{"type":"Delete"},"condition":{"age":365,"isLive":true}},
-     {"action":{"type":"Delete"},"condition":{"daysSinceNoncurrentTime":30}}
-   ]}}
-   JSON
-   gcloud storage buckets update gs://mmpools-auth-backups --lifecycle-file=/tmp/auth-lifecycle.json
+   echo '{"lifecycle":{"rule":[{"action":{"type":"Delete"},"condition":{"age":365,"isLive":true}},{"action":{"type":"Delete"},"condition":{"daysSinceNoncurrentTime":30}}]}}' > ~/auth-lifecycle.json
+   ```
+
+   ```
+   gcloud storage buckets update gs://mmpools-auth-backups --lifecycle-file=$HOME/auth-lifecycle.json
    ```
 
    **Expect:** `Updating gs://mmpools-auth-backups/...` with no error.
@@ -704,7 +706,7 @@ match — the members are locked out exactly as thoroughly as if you had no back
    `https://console.firebase.google.com/project/gridiron-gamble-uzuqo/authentication/users`
 2. Click the **⋮** (three-dot) menu at the top right of the users table.
 3. Click **Password hash parameters**.
-4. Copy all four values verbatim: `hash_config.algorithm` (SCRYPT),
+4. Copy every value on that panel verbatim — all five: `algorithm` (SCRYPT),
    `base64_signer_key`, `base64_salt_separator`, `rounds`, `mem_cost`.
 5. **Store them somewhere that is not this repository and not the backup
    bucket** — a password manager entry is right. The signer key is a credential;
@@ -713,49 +715,128 @@ match — the members are locked out exactly as thoroughly as if you had no back
 **If the menu item is missing**, you are not signed in as an Owner/Editor on the
 project.
 
-### 6d.1 — Get the export locally
+### 6d.1 — Find the right object (Cloud Shell)
+
+⚠️ **Cloud Shell, not PowerShell.**
 
 ```
 gcloud storage ls gs://mmpools-auth-backups/auth/
-gcloud storage cp gs://mmpools-auth-backups/auth/auth-backup-<stamp>.json /tmp/restore.json
 ```
 
-Pick a name **without** `-PARTIAL` in it, and confirm its sibling
-`.manifest.json` exists and reads `"complete": true`. A `-PARTIAL` file is a
-last resort, not a restore.
+Pick a name **without** `-PARTIAL` in it, then read its manifest sibling and
+confirm it says `"complete": true`:
 
-### 6d.2 — Import
+```
+gcloud storage cat gs://mmpools-auth-backups/auth/auth-backup-<stamp>.manifest.json
+```
 
-The file is already in `firebase auth:import` shape (`{"users":[…]}` with
+**Expect:** a small JSON with `"complete": true` and a `users` count. **If the
+manifest is missing**, that run died mid-flight — the users object beside it is
+not a finished backup. **A `-PARTIAL` file is a last resort, not a restore.**
+
+### 6d.2 — Download it to your machine (PowerShell)
+
+⚠️ **Everything from here runs in PowerShell on your Windows machine, from
+`D:\march-melee-pools`** — that is where `npx` resolves the pinned Firebase CLI
+and where you are already authenticated. No POSIX paths.
+
+⚠️ **This puts a file of every member's email and password hash on the laptop.**
+6d.5 deletes it and verifies the delete; do not skip that step.
+
+```
+cd D:\march-melee-pools
+```
+
+```
+$AUTH_RESTORE = Join-Path $env:TEMP "auth-restore.json"
+```
+
+**If you have local gcloud installed** (Step 0's optional path):
+
+```
+gcloud storage cp "gs://mmpools-auth-backups/auth/auth-backup-<stamp>.json" $AUTH_RESTORE
+```
+
+**If you do NOT have local gcloud**, download it through the browser instead:
+go to
+`https://console.cloud.google.com/storage/browser/mmpools-auth-backups/auth?project=gridiron-gamble-uzuqo`,
+click the object, click **Download**, then move the file to the path
+`$AUTH_RESTORE` prints:
+
+```
+$AUTH_RESTORE
+```
+
+Confirm it is real before importing it:
+
+```
+(Get-Content $AUTH_RESTORE -Raw | ConvertFrom-Json).users.Count
+```
+
+**Expect:** a number matching the manifest's `users`. **If it is 0 or errors**,
+stop — you are about to import nothing over a live tenant.
+
+### 6d.3 — Import (PowerShell)
+
+The file is already in `firebase auth:import` shape (`{"users":[...]}` with
 `localId`, `passwordHash`, `salt`, `providerUserInfo`), so there is no
-conversion step:
+conversion step. Substitute the four values you captured in 6d.0:
 
 ```
-npx firebase auth:import /tmp/restore.json --project gridiron-gamble-uzuqo --hash-algo=SCRYPT --hash-key=<base64_signer_key> --salt-separator=<base64_salt_separator> --rounds=<rounds> --mem-cost=<mem_cost>
+npx firebase auth:import $AUTH_RESTORE --project gridiron-gamble-uzuqo --hash-algo=SCRYPT --hash-key=<base64_signer_key> --salt-separator=<base64_salt_separator> --rounds=<rounds> --mem-cost=<mem_cost>
 ```
 
-**Expect:** `Processing N account(s)` and `N/N accounts imported successfully`.
+**Expect:** `Processing N account(s)` and a success count matching N.
 
-**If instead** you get `Failed to create user ...` for a subset, read the reason
-per account — a duplicate `localId` means that user already exists and was
-skipped (import does not overwrite an existing uid), which on a partial-recovery
-run is the correct behaviour.
+**If instead** individual accounts fail, read the per-account reason before
+re-running.
+
+⚠️ **UNVERIFIED — what happens to a uid that ALREADY exists.** Whether
+`auth:import` overwrites an existing account or skips it has never been tested
+here, and getting it wrong on a live tenant is not recoverable by re-running.
+**Treat an import into a tenant that still has users as a merge whose semantics
+you have not established.** Restore into a tenant you know is empty or known
+lost, or test the behaviour first in the throwaway project from 6d.7.
 
 **If** the whole file is rejected for an unrecognised field, strip `mfaInfo`
 first — that mapping is emitted only for users with enrolled second factors and
 has never been proven against a live import (**UNVERIFIED**; the project has no
 MFA today, so current exports contain no `mfaInfo` at all).
 
-### 6d.3 — Verify the restore, do not assume it
+### 6d.4 — Verify the restore, do not assume it
 
-1. Count: `npx firebase auth:export /tmp/verify.json --format=json --project gridiron-gamble-uzuqo` then compare `.users.Count` against the manifest's `users`.
-2. **Sign in as a real account with its real password.** This is the only
+1. Count:
+
+   ```
+   npx firebase auth:export (Join-Path $env:TEMP "auth-verify.json") --format=json --project gridiron-gamble-uzuqo
+   ```
+
+   then compare `.users.Count` against the manifest's `users` from 6d.1.
+2. **Sign in as a real account with its real password.** This is the ONLY
    evidence that the hash parameters were right. A count match proves the
    accounts exist; it proves nothing about whether anyone can get in.
-3. Spot-check that a restored uid still owns its pools — pick a `localId` from
+3. Spot-check that a restored uid still owns its pools — take a `localId` from
    the export and confirm `users/{uid}` and their entries resolve.
 
-### 6d.4 — What is NOT recoverable from this export
+### 6d.5 — Delete the local copies and PROVE they are gone
+
+```
+Remove-Item $AUTH_RESTORE
+```
+
+```
+Remove-Item (Join-Path $env:TEMP "auth-verify.json")
+```
+
+```
+Test-Path $AUTH_RESTORE
+```
+
+**Expect:** `False`. **If it prints `True`**, the delete did not happen — re-run
+`Remove-Item $AUTH_RESTORE` and check again before moving on. Two files of
+password hashes on a laptop is how a good restore becomes a breach.
+
+### 6d.6 — What is NOT recoverable from this export
 
 State these before an incident, not during one:
 
@@ -785,7 +866,7 @@ State these before an incident, not during one:
   sources of different ages an admin may need `syncMyClaims` before admin
   callables work.
 
-### 6d.5 — The Auth restore drill (never run yet)
+### 6d.7 — The Auth restore drill (never run yet)
 
 The Firestore drill in Step 7 restores into a scratch database. **Auth has no
 equivalent**: a Firebase project has exactly one Auth tenant, and there is no

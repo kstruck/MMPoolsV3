@@ -124,6 +124,21 @@ describe("pagination — the loop that decides whether the backup is whole", () 
     it("the shipped cap is large enough to be a safety net, not a limit", () => {
         expect(AUTH_BACKUP_MAX_PAGES).toBeGreaterThanOrEqual(100);
     });
+
+    it("clamps a zero page cap to one page rather than exporting nothing", async () => {
+        // maxPages: 0 would skip the loop and upload an EMPTY users file — a
+        // zero-account 'backup' indistinguishable from a genuinely empty tenant.
+        const { deps } = harness([{ users: [user("a")] }]);
+        const r = await runAuthBackupCore(deps, { dryRun: true, maxPages: 0 });
+        expect(r.pages).toBe(1);
+        expect(r.users).toBe(1);
+    });
+
+    it("never asks for more than the API's 1000-user page size", async () => {
+        const { deps, listCalls } = harness([{ users: [] }]);
+        await runAuthBackupCore(deps, { dryRun: true, pageSize: 99999 });
+        expect(listCalls[0].maxResults).toBe(1000);
+    });
 });
 
 describe("dry-run gate — nothing leaves the function on a dry run", () => {
@@ -162,6 +177,26 @@ describe("dry-run gate — nothing leaves the function on a dry run", () => {
         expect(uploads.map((u) => u.path)).toEqual([r.objectPath, r.manifestPath]);
         expect(r.uploaded).toBe(true);
         expect(uploads.every((u) => u.contentType === "application/json")).toBe(true);
+    });
+});
+
+describe("structural integrity — refuse to write an unrestorable export", () => {
+    it("throws rather than exporting records with no localId", async () => {
+        // UserRecord is mapped through an `as unknown as` cast, so an SDK field
+        // rename would not be a type error — it would produce records with no
+        // localId, i.e. a file that restores accounts owning nothing.
+        const { deps } = harness([{ users: [{ uid: "" } as AuthUserLike] }]);
+        await expect(runAuthBackupCore(deps, { dryRun: false })).rejects.toThrow(/localId/);
+    });
+
+    it("catches it on a DRY RUN too, before anyone arms the job", async () => {
+        const { deps } = harness([{ users: [{ uid: undefined as unknown as string }] }]);
+        await expect(runAuthBackupCore(deps, { dryRun: true })).rejects.toThrow(/unrestorable/);
+    });
+
+    it("an empty tenant is not an integrity failure", async () => {
+        const { deps } = harness([{ users: [] }]);
+        await expect(runAuthBackupCore(deps, { dryRun: true })).resolves.toMatchObject({ users: 0 });
     });
 });
 

@@ -40,7 +40,7 @@ import { writeAdminAudit } from "./lib/adminAudit";
  * PII. Every record carries a real email address and, for password users, the
  * scrypt hash and salt. That is not incidental — it is the thing that makes the
  * export restorable — so the controls are (a) the bucket's access posture, which
- * is Kevin's console action and is specified in PLAN-BACKUPS-PHASE3.md Step 4,
+ * is Kevin's console action and is specified in PLAN-BACKUPS-PHASE3.md Step 6a,
  * and (b) this module NEVER logging a user record. Logs and audit metadata carry
  * counts and object paths only. `__tests__/authBackup.test.ts` enforces (b)
  * mechanically.
@@ -48,7 +48,7 @@ import { writeAdminAudit } from "./lib/adminAudit";
  * NOT RECOVERABLE FROM THIS EXPORT ALONE: the project's password-hash
  * parameters (signer key, salt separator, rounds, memory cost). They live in the
  * Firebase console and must be captured separately or every restored password
- * is dead. See PLAN-BACKUPS-PHASE3.md Step 6b.
+ * is dead. See PLAN-BACKUPS-PHASE3.md Step 6d.0.
  */
 
 /** listUsers' documented maximum page size. */
@@ -60,6 +60,16 @@ export const AUTH_BACKUP_PAGE_SIZE = 1000;
  * reported as INCOMPLETE rather than quietly filed as a backup. A truncated
  * export that looks whole is worse than no export at all, because it is only
  * discovered on the day it is needed.
+ *
+ * ⚠️ MEMORY IS THE REAL CEILING, NOT THIS NUMBER. The whole export is held in
+ * memory twice — the mapped records, then the serialized JSON — so at ~600
+ * bytes per account the 512MiB allocation runs out somewhere in the low
+ * hundreds of thousands of users, i.e. in the same neighbourhood as this cap.
+ * An OOM is a hard kill, so `withHeartbeat`'s catch does NOT run and the
+ * failure surfaces as a STALE weekly heartbeat rather than a failing one —
+ * slow, at a weekly cadence. Nowhere near either limit at this project's size,
+ * but if the user base ever approaches six figures this job must stream to the
+ * bucket instead of buffering, and that is a rewrite, not a config change.
  */
 export const AUTH_BACKUP_MAX_PAGES = 250;
 
@@ -295,8 +305,11 @@ export async function runAuthBackupCore(
     deps: AuthBackupDeps,
     opts: { dryRun: boolean; maxPages?: number; pageSize?: number },
 ): Promise<AuthBackupResult> {
-    const maxPages = opts.maxPages ?? AUTH_BACKUP_MAX_PAGES;
-    const pageSize = opts.pageSize ?? AUTH_BACKUP_PAGE_SIZE;
+    // Clamped, not trusted. A maxPages of 0 would skip the loop entirely and
+    // then upload an EMPTY users file — a zero-account "backup" that looks like
+    // a successful run of an empty tenant. At least one page must always run.
+    const maxPages = Math.max(1, opts.maxPages ?? AUTH_BACKUP_MAX_PAGES);
+    const pageSize = Math.min(AUTH_BACKUP_PAGE_SIZE, Math.max(1, opts.pageSize ?? AUTH_BACKUP_PAGE_SIZE));
 
     const records: Array<Record<string, unknown>> = [];
     const seenTokens = new Set<string>();
@@ -324,6 +337,20 @@ export async function runAuthBackupCore(
         pageToken = next;
     }
 
+    // STRUCTURAL INTEGRITY, checked rather than assumed. The Admin SDK's
+    // `UserRecord` is mapped through `as unknown as AuthUserLike`, so a field
+    // rename in a future firebase-admin would not be a type error — it would
+    // silently produce records with no `localId`, and a restore from that file
+    // creates accounts that own none of their Firestore data. Every record must
+    // carry one; refusing to write is the only safe response.
+    const missingLocalId = records.filter((r) => typeof r.localId !== "string" || !r.localId).length;
+    if (missingLocalId > 0) {
+        throw new Error(
+            `[authBackup] ${missingLocalId} of ${records.length} record(s) have no localId — ` +
+            "the export would be unrestorable; refusing to write it.",
+        );
+    }
+
     const now = deps.now();
     const stamp = backupStamp(now);
     const objectPath = authBackupObjectPath(stamp, complete);
@@ -344,7 +371,7 @@ export async function runAuthBackupCore(
             complete,
             bytes,
             usersObject: objectPath,
-            restore: "PLAN-BACKUPS-PHASE3.md Step 6b — password hash parameters are NOT in this export.",
+            restore: "PLAN-BACKUPS-PHASE3.md Step 6d — password hash parameters are NOT in this export.",
         },
         null,
         2,
@@ -446,6 +473,29 @@ async function recordRun(
 }
 
 /**
+ * Audit a run that THREW. Without this, a failed backup leaves nothing in
+ * `admin_audit` at all, and the durable record of "we tried and it did not
+ * work" exists only in a heartbeat that the next run overwrites — the same
+ * reasoning feedReplay.ts uses for auditing its failures.
+ */
+async function recordFailure(
+    actor: { uid: string; email?: string },
+    gate: AuthBackupGate,
+    dryRun: boolean,
+    message: string,
+): Promise<void> {
+    await writeAdminAudit({
+        actorUid: actor.uid,
+        actorEmail: actor.email,
+        action: "AUTH_BACKUP",
+        targetType: "authTenant",
+        metadata: { dryRun, failed: true, bucket: gate.bucket ?? "(unset)" },
+        status: "error",
+        error: message,
+    });
+}
+
+/**
  * Weekly Auth export. Sunday 03:15 ET — outside both DST hazard windows
  * (02:00-02:59 does not exist on spring-forward, 01:00-01:59 happens twice on
  * fall-back) and clear of the 03:00 and 03:30 daily jobs.
@@ -508,6 +558,7 @@ export const authBackupJob = onSchedule(
             // merely stopped running.
             const message = e instanceof Error ? e.message : String(e);
             console.error("[authBackupJob] export failed:", message);
+            await recordFailure({ uid: "system" }, gate, gate.dryRun, message);
             return { ok: false, error: message, detail: { enabled: true, dryRun: gate.dryRun } };
         }
     }),
@@ -557,8 +608,23 @@ export const runAuthBackup = validated(
         }
         const dryRun = input.dryRun !== false;
 
-        const result = await runAuthBackupCore(depsFor(gate, dryRun), { dryRun });
-        await recordRun(result, { uid: request.auth?.uid ?? "unknown", email: request.auth?.token?.email as string | undefined }, gate);
+        const actor = {
+            uid: request.auth?.uid ?? "unknown",
+            email: request.auth?.token?.email as string | undefined,
+        };
+        let result: AuthBackupResult;
+        try {
+            result = await runAuthBackupCore(depsFor(gate, dryRun), { dryRun });
+        } catch (e) {
+            // Audited before rethrowing: an operator-triggered backup that failed
+            // must leave a durable record, not just an error toast.
+            const message = e instanceof Error ? e.message : String(e);
+            console.error("[runAuthBackup] export failed:", message);
+            await recordFailure(actor, gate, dryRun, message);
+            // No third arg: HttpsError's `details` is serialized to the client.
+            throw new HttpsError("internal", `Auth backup failed: ${message}`);
+        }
+        await recordRun(result, actor, gate);
         return {
             ...result,
             enabled: gate.enabled,
