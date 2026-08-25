@@ -24,6 +24,33 @@ import { userRepository } from "./userRepository";
 import { errorHandler, ErrorSeverity } from "./errorHandler";
 import { withCorrelationId } from "../utils/correlationId";
 
+/**
+ * Report returned by `migratePoolPasswords`
+ * (functions/src/migrations/migratePoolPasswords.ts).
+ *
+ * Every field but `dryRun` is OPTIONAL on purpose: the kill-switch refusal is a
+ * DIFFERENT, much shorter object — `{ skipped, dryRun, poolsScanned,
+ * poolsChanged }` with no `nextCursor` and no `plannedWrites` — and typing the
+ * full report as required would make the UI read `report.nextCursor` off a
+ * shape that does not have it. `skipped` present IS the refusal.
+ */
+export interface MigratePoolPasswordsReport {
+    /** Present ONLY when `system/config.poolPasswordMigration.enabled !== true`. */
+    skipped?: string;
+    dryRun: boolean;
+    poolsScanned: number;
+    poolsChanged: number;
+    hashedPlaintext?: number;
+    movedHash?: number;
+    scrubbedOnly?: number;
+    dottedFieldsRemoved?: number;
+    /** Per-pool verb list — the dry run's evidence. Never carries password material. */
+    plannedWrites?: Array<{ poolId: string; action: string }>;
+    failures?: Array<{ poolId: string; error: string }>;
+    /** Non-null = more pools remain; call again with `startAfter` set to it. */
+    nextCursor?: string | null;
+}
+
 // Mirrors functions/src/schemas/coCommissioners.ts (discriminated on `op`; `revision` only on add).
 export type SetPoolCoCommissionerInput =
     | { poolId: string; uid: string; op: 'add'; revision: number }
@@ -406,6 +433,35 @@ export const dbService = {
             }
             return { ok: false, reason: throttled ? 'throttled' : 'error' };
         }
+    },
+
+    /**
+     * SUPER_ADMIN evacuation sweep for legacy pool passwords
+     * (PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md S1). Moves `gridPassword` /
+     * `accessControl.password` / `passwordHash` off the world-readable
+     * `pools/{id}` document into `pools/{id}/private/access`.
+     *
+     * This is a CALLER, nothing more. Both gates live on the server and neither
+     * can be reached from here: `system/config.poolPasswordMigration.enabled`
+     * must be true or the callable returns `skipped`, and the run is dry unless
+     * BOTH that config's `dryRun` is false AND this `dryRun` argument is false.
+     *
+     * `startAfter` is spread in only when present — the Firebase JS SDK encodes
+     * an explicit-`undefined` property as NULL on the wire, the same trap that
+     * failed the first page of the backfillMemberRecords prod dry run
+     * 2026-07-27. The schema's `nullish()` also accepts null (belt); this is the
+     * suspenders.
+     */
+    migratePoolPasswords: async (
+        input: { dryRun: boolean; limit?: number; startAfter?: string | null },
+    ): Promise<MigratePoolPasswordsReport> => {
+        const fn = httpsCallable<Record<string, unknown>, MigratePoolPasswordsReport>(functions, 'migratePoolPasswords');
+        const res = await fn(withCorrelationId({
+            dryRun: input.dryRun,
+            ...(input.limit ? { limit: input.limit } : {}),
+            ...(input.startAfter ? { startAfter: input.startAfter } : {}),
+        }));
+        return res.data;
     },
 
     deletePool: async (poolId: string) => {
