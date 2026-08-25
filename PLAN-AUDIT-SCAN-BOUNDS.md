@@ -15,7 +15,7 @@ writers)._
 | 1.1 reminders type/flag-bounded queries | ✅ built — this PR |
 | 1.2 syncGameStatus dead-pool guards | ✅ built — this PR |
 | 1.3 checkPlayoffScores season window | ✅ built — this PR |
-| 2.x denormalized sync flag + backfill | NOT STARTED — DECISION NEEDED (see Risks) |
+| 2.x denormalized sync flag + backfill | **SKIP recommended** — measured 2026-08-25, see "Phase 2 decision gate" |
 
 ## The findings (audit, verified)
 
@@ -117,11 +117,9 @@ when the window says it should run.
 Denormalize `scores.syncActive` (true from lock/first-live until 36h-post or
 CLOSE), maintained by the existing writers, plus a one-time backfill for
 existing pools. Backfill = prod-data mutation → kill-switch + dry-run per
-Rule 1, own plan section + Kevin sign-off. **DECISION NEEDED: do we want
-Phase 2 at all?** Phase 1 already removes the ESPN fan-out; remaining cost is
-Firestore reads of dead-pool docs once a minute. Recommendation: measure after
-Phase 1 (the job logs its query sizes) and only build Phase 2 if the read line
-is still material.
+Rule 1, own plan section + Kevin sign-off. **DECISION: measured 2026-08-25 —
+SKIP. See "Phase 2 decision gate" below** for the numbers, the cost formula, and
+the three thresholds that would flip it back to BUILD.
 
 ## Risks / open questions
 
@@ -137,6 +135,152 @@ is still material.
   enforceBillingStatus lesson).
 - **R4 (rejected)**: audit's `.limit()` — see "Why the obvious fixes are
   wrong" #1.
+
+## Phase 2 decision gate — measured 2026-08-25
+
+_Read-only production measurement (project `gridiron-gamble-uzuqo`), taken to
+settle the "DECISION NEEDED" above. No prod data was written, no config changed._
+
+**Recommendation: SKIP Phase 2.** The read set it would bound is empty, and has
+been effectively empty for as long as the job has kept records.
+
+### What could NOT be measured, and why
+
+The task asked for ~a week of Phase 1 `SYNC_GAME_STATUS` summary records
+including `skippedDead`. **Those records do not exist.** `syncGameStatus`
+writes its summary doc only when the scan finds at least one pool — the
+`allPools.length === 0` branch (`functions/src/scoreUpdates.ts`) returns after
+the heartbeat write and logs nothing. The newest `SYNC_GAME_STATUS` doc in
+`system_logs` is **2026-07-31T21:45Z**; there are none after it, i.e. every run
+since has found zero pools. Phase 1 shipped 2026-08-24, so **`skippedDead` has
+never been written to prod even once** (`skippedDead_phase1Counter: null` in the
+census output). This is a fact about the data, not a failed access attempt.
+
+Two independent measurements were used instead:
+
+1. **Live replay** of the two queries `syncGameStatus` issues, with the returned
+   docs classified by the same `isDeadSyncPool` predicate the job uses.
+2. **1,559 historical runs** that did carry `details` (2026-07-07 → 2026-07-31),
+   plus 10,440 `status:"idle"` docs from an older code revision that logged
+   zero-pool runs (2026-05-17 → 2026-05-26).
+
+Re-run command (repo root, PowerShell — the key stays outside the repo):
+
+```
+$env:GOOGLE_APPLICATION_CREDENTIALS = "C:\keys\mmp-census.json"
+node scripts/syncScanCensus.mjs
+```
+
+### Measured
+
+| Quantity | Value | Source |
+|---|---|---|
+| Runs/day (`every 1 minutes`) | 1,440 scheduled; heartbeat `system/scoreSync` 51 s old, `"No active pools to sync"` | live |
+| `activePools` — the `!= "post"` query Phase 2 targets | n=1,559 runs: min 0, **p50 0, p95 0, max 1**, mean 0.007; nonzero on **11 of 1,559** runs | log history |
+| `completedPools` — the recent-post 6 h window | p50 3, p95 9, max 9, mean 4.38; nonzero on 1,557 of 1,559 | log history |
+| `totalPoolsFound` | p50 3, p95 9, max 9 | log history |
+| `!= "post"` query **right now** | **0 docs returned** | live replay |
+| Recent-post query right now | 0 docs returned | live replay |
+| Dead/skippable docs in the current read set | **0** | live replay |
+| Run duration | p50 119 ms, p95 379 ms, max 10.06 s (timeout is 120 s) | log history |
+| Total pools in prod | **23** | live scan |
+| Pools with `scores.gameStatus` | 6 — all `"post"`, all `COMPLETED` + `closedVia: ADMIN_CLOSE` (Feb 2026 squares) | live scan |
+| Pools with **no** `scores.gameStatus` field | 17 (NFL season, bracket, props) | live scan |
+
+Two structural facts that matter more than the counts:
+
+- **Firestore `!=` excludes documents where the field is missing.** 17 of 23
+  pools have no `scores.gameStatus` at all, so they can never be returned by
+  this query — no flag is needed to keep them out. The dead population the
+  audit imagined is not in the read set to begin with.
+- **The cost is dominated by the recent-post query** (mean 4.38 docs/run vs
+  0.007), which is already bounded by a 6-hour `updatedAt` window and which
+  Phase 2 as scoped does not touch.
+
+This revises the cloud re-audit's item-14 framing ("still bills a read per dead
+pool per minute"): at current prod state it bills **zero** reads for dead pools,
+because there are none in the result set.
+
+### Cost arithmetic
+
+Let `R` = runs/day (1,440), `A` = docs returned by the `!= "post"` query, `C` =
+docs returned by the recent-post query, `D` = the subset of `A` that
+`isDeadSyncPool` would skip. Firestore bills a **minimum of one read for a query
+that matches nothing**, so:
+
+```
+billed reads/day   = R × ( max(A,1) + max(C,1) )
+Phase 2 saving/day = R × D                       (Phase 2 only shrinks A)
+```
+
+At the list price of **$0.06 per 100,000 document reads** (published Firestore
+rate — quoted, not measured):
+
+```
+Phase 2 saving/yr ($) = D × 1440 × 365 × 0.0000006 ≈ $0.315 × D
+```
+
+| `D` (dead pools persistently in the active query) | Reads/day saved | Saving/yr |
+|---|---|---|
+| **0 (measured today)** | **0** | **$0.00** |
+| 1 (historical max of `A`, and it was not even dead) | 1,440 | $0.32 |
+| 100 | 144,000 | $32 |
+| 500 | 720,000 | $158 |
+| 1,000 | 1,440,000 | $315 |
+
+Current total spend on this job: `1440 × (1 + 1) = 2,880` reads/day ≈ **$0.0017
+/day, $0.63/yr** — that is the empty-query minimum, and no flag can reduce it.
+
+Against that, Phase 2 costs: a denormalized field maintained by every lock /
+first-live / close writer (extra document writes at $0.18/100k), a one-time
+backfill that is a **prod-data mutation** (kill-switch + dry-run + Kevin
+sign-off per Rule 1), and a new invariant — a pool whose `syncActive` flag is
+wrong silently stops being scored, which is a scoring-path failure with no
+error. **At `D = 0` the change is net-negative: real risk, zero saving.**
+
+### Threshold that would flip this to BUILD
+
+Build Phase 2 when **any** of these holds; re-measure with the command above
+before deciding:
+
+1. **Cost:** 7-day p50 of `details.skippedDead` **≥ 500** (≈ $158/yr and rising
+   — the first point where the saving exceeds a couple of hours of work). A
+   softer watch line is `≥ 100` (≈ $32/yr): worth re-checking monthly, not
+   worth building for.
+2. **Latency:** p95 `durationMs` **> 60,000 ms** (half the 120 s timeout) with
+   the scan size, not ESPN, as the driver. Today it is 379 ms.
+3. **Scan size:** `activePools` p50 **> 1,000** docs/run for a week, whether
+   dead or live — at that point the unbounded-collection-scan shape is a
+   problem independently of the dead fraction.
+
+None is within two orders of magnitude of the current numbers. The realistic
+path to any of them is a large, sustained population of live **SQUARES** pools
+(the only type that carries `scores.gameStatus`); NFL season, bracket and props
+pools do not enter this query at all, so the first live NFL season does not move
+this line.
+
+**Re-measure trigger, not a calendar item:** run `scripts/syncScanCensus.mjs`
+after the first full squares-heavy weekend of the 2026 season and compare
+`activePools` against threshold 3.
+
+### Tooling note
+
+`scripts/syncScanCensus.mjs` was added for this measurement. The existing
+`firestore-census.mjs` (in `.claude/skills/mmp-diagnostics-and-tooling/scripts/`)
+does not fit: it answers lifecycle questions over `/pools` (stuck-open, missing
+`billing`, test pools) and never reads `system_logs` or replays the
+`syncGameStatus` queries. The new script is read-only, adds no dependency, and
+carries its own re-run instructions. Two incidental findings from writing it:
+
+- A `system_logs` query filtering `type` **and** ranging `timestamp` throws
+  `FAILED_PRECONDITION` (code 9) — no composite index exists. The script scans
+  newest-first and filters in memory instead. Do not create the index; that is a
+  prod change and this read does not justify one.
+- `system_logs.timestamp` is **mixed-typed** — server jobs write `Timestamp`,
+  `logClientError` writes epoch-ms numbers. Firestore orders numbers before
+  timestamps, so `orderBy("timestamp","desc")` happens to return the
+  server-written docs first. Anything that ranges on this field must account for
+  it.
 
 ## Out of scope
 
