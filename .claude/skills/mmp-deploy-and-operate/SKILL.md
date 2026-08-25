@@ -195,6 +195,231 @@ if the change spans functions that must agree.
 4. Never `npm audit fix --force` or change code between attempts — the retry
    must ship the same bundle, or a pass proves nothing about the failure.
 
+### 1d. Rollback (Cloud Functions) — the mirror of §2b
+
+**Status: WRITTEN FROM THE DEPLOY MECHANICS, NOT YET EXERCISED IN A REAL
+INCIDENT.** §2b's Coolify procedure was tested live end to end; this one has
+not been. Every step below is derived from the deploy ritual in §1 and the
+traps already measured there, but treat the first real use as the test.
+
+#### The trap first, because it is the whole difference from §2b
+
+Coolify rolls back by **restarting a stored image** — the artifact already
+exists, so what you point at is what you get. Cloud Functions has no equivalent
+button in the Firebase CLI. **A functions rollback is a REDEPLOY, and
+`firebase deploy` builds from LOCAL FILES, not from GitHub and not from the
+commit you name.** (CLAUDE.md §3.)
+
+So the thing that decides what ships is **the state of the working tree in
+`D:\march-melee-pools` at the moment you run the command** — nothing else.
+Two consequences, both of which have already bitten this repo once:
+
+- **A stale checkout ships the wrong code and still prints `Deploy complete!`.**
+  Measured 2026-08-21: the checkout sat four merges behind `origin`, a whole
+  effort deployed as a no-op, and the deploy output looked perfectly healthy.
+  **The tell is an ABSENCE** — the function you expected simply is not named in
+  the output. During a rollback the same failure is worse, because "nothing
+  changed" is indistinguishable from "the outage continues".
+- **The tree, not the commit, is what gets packaged.** Uncommitted edits under
+  `functions/` or `shared/` ride along into the rollback. §1's copy-paste block
+  already guards this at step 1b; during an incident it matters more, not less.
+
+⚠️ **Roll back ONE function by name when you can.** `--only functions:<name>`
+is smaller, faster, and — see step 7 — sidesteps the deletion prompt entirely.
+Reserve the full-fleet form for a bad deploy that spanned many functions.
+
+#### Before you start — three things to know
+
+1. **Rolling functions back does NOT roll `firestore.rules` back.** Rules and
+   indexes deploy on separate commands (`--only firestore:rules`,
+   `--only firestore:indexes`) and are untouched by `--only functions`. If the
+   bad deploy included a rules change, you have TWO rollbacks, and §1a's
+   ordering table decides which goes first — a rules revoke that the live
+   client still needs is its own outage.
+2. **A rollback undoes CODE, never DATA.** Anything a bad function already
+   wrote to Firestore is still written. Assess that separately; the backfill
+   and audit tooling is in §5 and `mmp-diagnostics-and-tooling`.
+3. **Secrets re-pin to CURRENT, not to the old commit's.** v2 `defineSecret`
+   binds the secret **version** at deploy time, so redeploying an old commit
+   picks up today's latest version of `GEMINI_API_KEY` / `STRIPE_SECRET_KEY`,
+   not the one that was live then. Normally what you want; know it anyway.
+
+#### The procedure
+
+Every step says where to be, the exact command, what success looks like, and
+what to do when it does not.
+
+**Step 0 — pick the target commit.**
+Where: any shell. Command:
+
+```powershell
+git -C D:\march-melee-pools fetch origin
+git -C D:\march-melee-pools log --oneline -20 origin/main -- functions shared
+```
+
+Success: a list of the last 20 commits that actually touched deployable server
+code. Pick the newest one BEFORE the bad change. Note the SHA.
+If it does not: an empty list means the bad change was not in `functions/` or
+`shared/` at all — it is a frontend change (§2b) or a rules change (§1a), and
+this runbook is the wrong one.
+
+**Step 1 — be in the main checkout.**
+Where: `D:\march-melee-pools`, and nowhere else. `firebase-tools` is a
+devDependency of the repo root, so `npx firebase` from a worktree or any other
+directory fails with *"could not determine executable to run"*. Command:
+
+```powershell
+cd D:\march-melee-pools
+git status --porcelain
+```
+
+Success: **empty output.** If it does not: stash or commit first
+(`git stash push -u`). Do not proceed with a dirty tree — step 4's guard will
+stop you anyway, and finding out then costs incident minutes.
+
+**Step 2 — record what is live now, so you can prove the rollback moved.**
+Command:
+
+```powershell
+npx firebase functions:list --project gridiron-gamble-uzuqo | Select-String "<theFunctionName>"
+git -C D:\march-melee-pools rev-parse --short HEAD
+```
+
+Success: the function is listed, and you have written down the current HEAD
+short SHA — that is your roll-FORWARD target for step 9.
+If it does not: a function missing from `functions:list` was never deployed;
+you are not rolling back, you are deploying for the first time.
+
+**Step 3 — move the working tree to the target commit.**
+Command:
+
+```powershell
+git switch --detach <target-sha>
+git rev-parse --short HEAD
+```
+
+Success: `HEAD` prints the target SHA. Detached is correct and deliberate —
+every worktree in this repo shares one `main` ref, so **never reset `main`** to
+do a rollback (CLAUDE.md §2c: `-B` silently discards commits).
+If it does not: `git switch --detach` refusing means the tree is dirty after
+all; go back to step 1.
+
+⚠️ **Check out the WHOLE tree, not just `functions/`.** The predeploy hook
+mirrors repo-root `shared/` into `functions/src/shared/` before compiling
+(`firebase.json:12-14`), so a `functions/`-only checkout compiles new contracts
+against old handlers and the rollback is not the artifact you think it is.
+
+**Step 4 — install from the target commit's lockfile and confirm the tree is
+clean.** Command:
+
+```powershell
+npm --prefix functions ci
+if (git status --porcelain -- functions shared) { throw "functions/ or shared/ is dirty - deploy packages the WORKING TREE, not the commit." }
+```
+
+Success: `ci` completes and the guard throws nothing.
+If it does not: **`ci`, never `install`** — `install` rewrites
+`functions/package-lock.json` and dirties the very tree the deploy packages,
+which then trips the guard you just ran.
+
+**Step 5 — build, to fail fast before touching prod.** Command:
+
+```powershell
+npm --prefix functions run build
+```
+
+Success: `tsc` exits clean.
+If it does not: the target commit does not compile on its own. Stop. Pick an
+older target, or roll forward with `git revert` instead (see "When rollback is
+the wrong move" below). Never patch the code to make an old commit build — that
+is a new, unreviewed deploy wearing a rollback's clothes.
+
+**Step 6 — deploy.** One function (preferred):
+
+```powershell
+npx firebase deploy --only functions:<theFunctionName> --project gridiron-gamble-uzuqo
+```
+
+Whole fleet (only when the bad deploy spanned many):
+
+```powershell
+npx firebase deploy --only functions --project gridiron-gamble-uzuqo
+```
+
+Success: the CLI names your function(s) in the update list and ends
+`✔ Deploy complete!`.
+If it does not: `✔ Deploy complete!` **with your function absent from the
+output** is the stale/wrong-tree failure — re-run step 3 and confirm `HEAD`.
+Healthcheck failures on a full-fleet deploy are usually §1c's infra flake, not
+your rollback; apply §1c's retry rules.
+
+**Step 7 — ⚠️ the deletion prompt. Read it, never blind-confirm.**
+Rolling back to a commit from BEFORE a function existed means that function is
+not in the target `index.ts`, and a full-fleet deploy will ask to **delete it
+from production**. Answering yes turns a code rollback into a capability
+deletion, and re-creating it later re-creates the Cloud Scheduler job and IAM
+bindings from scratch.
+
+Success: no prompt, or a prompt you read and declined.
+If it does not: decline, and re-run step 6 in the `--only functions:<name>`
+form, which only touches the names you list.
+
+**Step 8 — verify by BEHAVIOUR, not by the deploy output.**
+
+```powershell
+npx firebase functions:list --project gridiron-gamble-uzuqo | Select-String "<theFunctionName>"
+npx firebase functions:log --only <theFunctionName> --project gridiron-gamble-uzuqo
+```
+
+Then exercise the thing that was broken and watch it in the logs. §2b's bundle
+hash flip is the frontend's proof; **the functions equivalent is a log line
+from the restored code path.** "Deploy complete" is not evidence — this repo's
+standing rule 2 exists because `✔ Deploy complete!` has lied twice.
+If it does not: check `--project` was explicit. A worktree has no `.firebaserc`
+default and logs pulled from another project show a convincing-looking silence.
+
+**Step 9 — 🛑 PUT THE CHECKOUT BACK. This step is not optional.**
+
+```powershell
+cd D:\march-melee-pools
+git switch main
+git pull --ff-only origin main
+npm --prefix functions ci
+git status --porcelain
+```
+
+Success: on `main`, up to date with `origin`, clean tree.
+If it does not: **a main checkout left detached at an old commit is a loaded
+gun.** The next person to run the deploy ritual from it ships the rolled-back
+code over whatever fixed the incident, and it prints `Deploy complete!` while
+doing so. This is CLAUDE.md §3's failure with the rollback as the accidental
+payload. Do not end the incident until `git status` here is clean and on
+`main`.
+
+#### The faster path, UNVERIFIED — Cloud Run revisions
+
+Every function here is v2 (`firebase-functions/v2`), so each one is backed by a
+Cloud Run service that keeps prior **revisions**, and the Cloud Run console can
+shift 100% of traffic back to a previous revision in seconds without any
+rebuild — the true analogue of §2b's image rollback. Location: GCP console →
+Cloud Run → the service named after the function (lowercased, e.g.
+`nfldeepscoresweepjob`) → **Revisions** → *Manage traffic*.
+
+**Not tested here, and not the recommended first move**, for two reasons: the
+Firebase CLI's view of the function would then disagree with what is serving,
+and the next `firebase deploy` overwrites the traffic split without warning.
+If you use it, treat it as a stopgap that buys time for the git-based procedure
+above, and verify it before relying on it.
+
+#### When rollback is the wrong move
+
+Prefer **roll-forward** — `git revert <bad-sha>` on `main`, PR, gates, deploy —
+whenever the bad change is isolable and the site is not down. It leaves history
+honest, keeps the checkout on `main`, and cannot strand anyone at step 9.
+§2b reaches the same conclusion for the frontend when an image has been pruned.
+Roll BACK when prod is broken now and a revert would take longer than a
+redeploy of known-good code.
+
 ## 2. www frontend deploy (Coolify — NOT Firebase Hosting)
 
 **As of 2026-07-06, per owner: prod www deploy is a MANUAL trigger in the Coolify dashboard by Kevin. Pushing to `main` does NOT deploy the frontend.** (PHASE0-DEPLOY-CHECKLIST.md line 19 claims "Coolify auto-builds main on push" — that doc claim is superseded by the owner interview; treat auto-deploy as false.)
