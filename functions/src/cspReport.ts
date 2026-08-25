@@ -282,8 +282,15 @@ export async function ingest(
         try {
             await write(hour, v, slot.droppedToRecord);
         } catch (e) {
-            // The reservation is only spent by a write that landed (codex r3).
-            restoreDropped(state, slot.droppedToRecord);
+            // The reservation is only spent by a write that landed (codex r3),
+            // and `v` ITSELF was never persisted either, so it owes a drop of its
+            // own (codex r5). Without the `+ 1` a failed transaction would lose
+            // one report with nothing anywhere recording that it did.
+            //
+            // The write SLOT stays consumed on purpose: the budget exists to cap
+            // Firestore cost, and a failed transaction cost just as much as a
+            // successful one.
+            restoreDropped(state, slot.droppedToRecord + 1);
             throw e;
         }
     }

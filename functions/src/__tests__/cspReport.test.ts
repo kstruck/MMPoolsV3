@@ -204,13 +204,14 @@ describe("cspReport — the write budget is the cost bound", () => {
         await expect(
             ingest(one, "2026-08-25T05", s, async () => { throw new Error("firestore down"); }, 1),
         ).rejects.toThrow("firestore down");
-        // Still owed.
-        expect(s.dropped).toBe(2);
+        // Still owed — AND the report whose write failed owes one too (codex r5):
+        // it was accepted, never persisted, and nothing else would record that.
+        expect(s.dropped).toBe(3);
 
         s.used = 0;
         const seen: number[] = [];
         await ingest(one, "2026-08-25T05", s, async (_h, _v, d) => { seen.push(d); }, 1);
-        expect(seen).toEqual([2]);
+        expect(seen).toEqual([3]);
         expect(s.dropped).toBe(0);
     });
 
