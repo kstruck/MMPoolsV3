@@ -30,7 +30,7 @@ Command: `grep -rn 'collection("pools")' functions/src/*.ts` (query sites only)
 | Site | Bounded? | Verdict |
 |---|---|---|
 | `reminders.ts:159` | ❌ full scan | **fixed by this plan (1.1)** |
-| `scoreUpdates.ts:1107,1114` | ⚠️ `gameStatus != post` grows with dead pools | guards added (1.2); query fix deferred to Phase 2 |
+| `scoreUpdates.ts:1107,1114` | ⚠️ `gameStatus != post` grows with dead pools **in theory only — measured 0 docs returned, 2026-08-25** | guards added (1.2); Phase 2 query fix **SKIP** per the decision gate in PLAN-AUDIT-SCAN-BOUNDS.md |
 | `scoreUpdates.ts:1399` (`fixPoolScores` path) | admin-invoked | out of scope (accepted) |
 | `autoLock.ts:59,66` | `isLocked == false` + time-window filters | bounded — OK |
 | `billing.ts:126,180` | status + trialEndsAt filters | bounded — OK |
@@ -45,3 +45,19 @@ Command: `grep -rn 'collection("pools")' functions/src/*.ts` (query sites only)
 | `checkPlayoffScores` (playoffPools.ts:387) | none | Jan1–Feb20 window + `playoffSync.forceActive` override (1.3) |
 | `syncGameStatus` per-pool fetches | future-'pre' skip, 36h-post skip | + CLOSED skip, + dead-'pre' (>7d past start) skip (1.2) |
 | `syncNFLScoresJob` / bracket sync | own staleness guards (espnBracket.ts:1019 precedent) | unchanged |
+
+## S4 — Phase 2 read-set measurement (2026-08-25, read-only prod)
+
+Command: `node scripts/syncScanCensus.mjs` (with
+`GOOGLE_APPLICATION_CREDENTIALS` pointed at a service-account key kept outside
+the repo). Full write-up and cost arithmetic in PLAN-AUDIT-SCAN-BOUNDS.md
+"Phase 2 decision gate".
+
+| Question | Answer |
+|---|---|
+| Docs returned by `scores.gameStatus != "post"` today | 0 |
+| Same, over 1,559 recorded runs | p50 0, p95 0, max 1, nonzero on 11 runs |
+| Dead/skippable docs in the current read set | 0 |
+| `skippedDead` records available (Phase 1, PR #549) | **none** — the job writes no summary doc on a zero-pool run, and every run since 2026-07-31 has found zero pools |
+| Total pools in prod / with `scores.gameStatus` | 23 / 6 (all `post`, all admin-closed) |
+| Verdict | Phase 2 **SKIP** — nothing to bound |
