@@ -383,7 +383,15 @@ export const cspReport = onRequest(
     // maxInstances overrides the repo-wide 10 (lib/globalOptions.ts): this is a
     // public, unauthenticated endpoint whose only job is counting, so the fleet
     // is capped hard rather than allowed to scale with abusive traffic.
-    { maxInstances: 2, memory: "128MiB", timeoutSeconds: 10 },
+    // 256MiB, not the 128MiB this shipped with. EVERY function in this codebase
+    // shares ONE container image that loads the whole `index.ts` module graph —
+    // firebase-admin, stripe, the lot — so the floor is set by the bundle, not by
+    // what this handler does. At 128MiB the container never listened on PORT=8080
+    // and the 2026-08-25 deploy failed it with "Container Healthcheck failed"
+    // while all 190-odd other functions succeeded. 256MiB matches every other
+    // HTTP endpoint here (joinPreview, readiness, emailUnsubscribeHttp,
+    // emailPrefsPage, revenueAggregates) and is the Gen-2 default.
+    { maxInstances: 2, memory: "256MiB", timeoutSeconds: 10 },
     async (req, res) => {
         // Reporting-API v1 endpoints are cross-origin (the site is on
         // marchmeleepools.com, this is on cloudfunctions.net), so Chrome sends a
