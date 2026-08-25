@@ -195,10 +195,33 @@ replace.
    git -C <worktree-path> add -A
    git -C <worktree-path> commit -m "WIP before history scrub"
 
-   # OR: export the working tree as a plain diff, untracked files included
+   # OR, if it truly cannot be committed: export it in TWO parts, because
+   # one command does not cover both. `git diff HEAD` covers TRACKED changes
+   # only and silently omits every untracked file.
    git -C <worktree-path> diff HEAD > D:\mmp-scrub-patches\<name>-dirty.patch
-   git -C <worktree-path> ls-files --others --exclude-standard   # copy these by hand
+
+   # ...and then actually COPY the untracked files. `ls-files --others` only
+   # PRINTS paths; on its own it preserves nothing.
+   $wt = "<worktree-path>"
+   $out = "D:\mmp-scrub-patches\<name>-untracked"
+   git -C $wt ls-files --others --exclude-standard | ForEach-Object {
+       $dest = Join-Path $out $_
+       New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+       Copy-Item (Join-Path $wt $_) $dest -Force
+   }
    ```
+
+   Verify the copy before removing anything — the counts must match:
+
+   ```powershell
+   (git -C $wt ls-files --others --exclude-standard | Measure-Object -Line).Lines
+   (Get-ChildItem -Recurse -File $out | Measure-Object).Count
+   ```
+
+   **This is why "commit it" is listed first.** `git add -A` picks up tracked
+   and untracked in one operation and needs no verification step; the two-part
+   export exists only for work that genuinely cannot be committed, and it is
+   the path where files get left behind.
 
    🛑 **DO NOT USE `git stash` FOR THIS.** The stash is a **repository-global
    ref stack shared by every worktree** — all 35 of them here — so a
