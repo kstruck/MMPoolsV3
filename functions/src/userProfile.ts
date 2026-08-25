@@ -13,7 +13,8 @@ import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { reduceAwards, type PayoutRecord } from "./shared/payoutRecords";
 import { buildPublicProfile, type ProfilePoolInput, type ProfileNFLPoolType } from "./lib/profileBuild";
 import { validated } from "./lib/validated";
-import { recomputeMyProfileSchema } from "./schemas/userProfile";
+import { recomputeMyProfileSchema, getProfilePoolDetailSchema } from "./schemas/userProfile";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -110,7 +111,9 @@ export const recomputeMyProfile = validated(
   async (input, request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required.');
   const target = input.uid || request.auth.uid;
-  if (target !== request.auth.uid && request.auth.token?.role !== 'SUPER_ADMIN') {
+  // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): recomputing SOMEONE ELSE'S
+  // profile is the admin-only path, and it used to accept the JWT claim alone.
+  if (target !== request.auth.uid && !(await hasConfirmedRole(request, 'SUPER_ADMIN'))) {
     throw new HttpsError('permission-denied', 'Can only recompute your own profile.');
   }
   return recomputeUserProfile(admin.firestore(), target);
@@ -123,19 +126,24 @@ export const recomputeMyProfile = validated(
  * THAT pool, or an admin. poolId is REQUIRED and authorization is per pool per
  * call — one shared pool never unlocks the subject's other pools.
  */
-export const getProfilePoolDetail = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Login required.');
-  const caller = request.auth.uid;
-  const { subjectId, poolId } = request.data || {};
-  if (!subjectId || typeof subjectId !== 'string') throw new HttpsError('invalid-argument', 'subjectId is required.');
-  if (!poolId || typeof poolId !== 'string') throw new HttpsError('invalid-argument', 'poolId is required.');
+export const getProfilePoolDetail = validated(
+  { schema: getProfilePoolDetailSchema, label: "getProfilePoolDetail", auth: "required", appCheck: "monitor" },
+  // PLAN-AUDIT-BACKEND-RESIDUE 17f: was a bare onCall whose only input checking
+  // was two hand-rolled `typeof !== 'string'` throws, so every other key on
+  // request.data reached the handler unexamined. The wrapper supplies auth +
+  // a strict schema; the per-pool viewer gate below is unchanged.
+  async ({ subjectId, poolId }, request) => {
+  const caller = request.auth!.uid;
 
   const db = admin.firestore();
   const poolSnap = await db.collection('pools').doc(poolId).get();
   if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found.');
   const pool: any = poolSnap.data();
 
-  const isAdmin = request.auth.token?.role === 'SUPER_ADMIN';
+  // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): this flag bypasses the
+  // subject/co-member gate below, so the claim alone was enough to read any
+  // member's per-pool breakdown.
+  const isAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
   const participantIds: string[] = pool.participantIds || [];
   const isSubject = caller === subjectId;
   const isPoolStaff = pool.ownerId === caller || pool.managerUid === caller;
@@ -166,4 +174,5 @@ export const getProfilePoolDetail = onCall(async (request) => {
     finish: input.finalRank,
     profit: { won: input.awardsWon, feeOwed: input.feeOwed },
   };
-});
+},
+);

@@ -69,6 +69,7 @@ import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -2015,8 +2016,14 @@ export const scoreNFLWeek = validated(
 
     const pool = poolSnap.data() as any;
 
-    // RBAC checks
-    const userRole = request.auth!.token.role || 'USER';
+    // RBAC checks. CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d):
+    // assertPoolOwnerOrSuperAdmin short-circuits on `userRole === 'SUPER_ADMIN'`,
+    // so feeding it the raw claim let a demoted admin score any pool's week.
+    // confirmedAdminClaim strips an UNCONFIRMED SUPER_ADMIN claim to undefined
+    // and passes every other value through untouched — the helper branches on
+    // SUPER_ADMIN and nothing else, so 'USER' vs undefined is not a distinction
+    // it can see.
+    const userRole = await confirmedAdminClaim(request);
     try {
       assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
     } catch {

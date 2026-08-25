@@ -1,4 +1,5 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { validated } from "../lib/validated";
+import { backfillProfileDataSchema } from "../schemas/migrations";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { NFL_SEASON_TYPES } from "../shared/poolTypes";
@@ -40,13 +41,26 @@ interface PoolReport {
   finalized: boolean;
 }
 
-export const backfillProfileData = onCall({ timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
-  if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
-    throw new HttpsError('permission-denied', 'Super Admin only.');
-  }
+/**
+ * PLAN-AUDIT-BACKEND-RESIDUE 17b: was a raw `onCall` with NO input schema and a
+ * CLAIM-ONLY SUPER_ADMIN check, so (a) `request.data` reached a prod batch
+ * migration unvalidated and (b) a demoted admin with an un-expired token could
+ * still run it. `validated()` supplies both halves — the strict schema and
+ * `assertCallerRole`'s claim+doc agreement — matching all four sibling
+ * migrations. `options` carries forward the sizing the bare onCall declared.
+ */
+export const backfillProfileData = validated(
+  {
+    schema: backfillProfileDataSchema,
+    label: "backfillProfileData",
+    role: "SUPER_ADMIN",
+    appCheck: "monitor",
+    options: { timeoutSeconds: 540, memory: '1GiB' },
+  },
+  async (input, request) => {
   const db = admin.firestore();
-  const dryRun = request.data?.dryRun !== false; // Rule 1: dry-run default
-  const afterPoolId: string | undefined = request.data?.afterPoolId;
+  const dryRun = input.dryRun; // Rule 1: dry-run default, declared at the schema layer
+  const afterPoolId: string | undefined = input.afterPoolId;
 
   let q = db.collection('pools')
     .where('type', 'in', [...NFL_SEASON_TYPES])
@@ -230,7 +244,7 @@ export const backfillProfileData = onCall({ timeoutSeconds: 540, memory: '1GiB' 
   };
 
   await writeAdminAudit({
-    actorUid: request.auth.uid,
+    actorUid: request.auth!.uid,
     action: 'PROFILE_DATA_BACKFILL',
     targetType: 'pool',
     metadata: { ...summary, perPool: reports.slice(0, 20) },
@@ -238,4 +252,5 @@ export const backfillProfileData = onCall({ timeoutSeconds: 540, memory: '1GiB' 
   });
 
   return summary;
-});
+},
+);
