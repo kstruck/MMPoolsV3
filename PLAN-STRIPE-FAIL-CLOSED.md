@@ -168,8 +168,23 @@ export function resolveStripeMode(raw, env): { mode: "live" } | { mode: "mock", 
 3. throws `HttpsError("failed-precondition", ...)` with copy that says no charge
    was made and nothing was changed.
 
-It is injectable (`{ env, readKey, dispatch }`) so the negative tests exercise
-the real decision rather than a re-implementation of it.
+It is injectable (`{ env, readKey, dispatch, throttle, persistClaim, now }`) so
+the negative tests exercise the real decision rather than a re-implementation of
+it.
+
+**Alert throttling (added in absorption of codex r1 [P2]).** The refusal fires on
+*every* checkout attempt for as long as the secret is broken, and
+`dispatchOpsAlert` writes one mail doc per recipient with no dedupe of its own —
+so unthrottled, the fix for a config outage would bury the on-call inbox during
+that same outage. Two layers: an in-process `makeAlertThrottle(30 min)` caps the
+per-instance flood for free, and a persisted
+`monetization_alerts/STRIPE_CONFIG_INVALID` marker (claimed in a transaction)
+stops a cold-start stampede from paging once per instance. The marker also
+carries `refusalCount`, so the outage stays visible without the pages. **The
+refusal itself is never throttled — only the paging is**, and a paging or
+Firestore failure is swallowed so it can never be the reason the refusal does
+not happen. The webhook's 503 path shares the same throttle, because Stripe
+retries it on its own schedule.
 
 ### Where it is applied
 
@@ -261,5 +276,31 @@ Negative tests are the point of the change, so they are enumerated:
    - `handleStripeWebhook` null-checks `getStripe()` before
      `webhooks.constructEvent`.
 
-Standing rule (Kevin, 2026-08-17): the feature ships with its test in the same
-PR. It does.
+8. **Throttling** (codex r1) — `makeAlertThrottle` window arithmetic including
+   the `t=0` first claim; a storm of 25 refusals in one window throws
+   `failed-precondition` **25 times** and pages **once**; paging resumes after
+   the window; a persisted claim that says "already paged" suppresses the page
+   but not the refusal; and the refusal still happens when the dispatcher throws
+   or the persisted claim throws.
+
+36 tests. Standing rule (Kevin, 2026-08-17): the feature ships with its test in
+the same PR. It does.
+
+## Out-of-scope edit this PR had to make
+
+`tests/mocks/firebase-functions-params.ts` — the suite-wide `defineSecret` fake
+returned the literal `'mock-secret-value'`, which `classifyStripeKey` now
+correctly calls `malformed`. Left alone, the root suite's happy-path checkout
+tests would have exercised the new refusal instead of the live path. The
+`STRIPE_SECRET_KEY` fake is now `sk_test_mock_secret_value`; every other secret
+keeps the old value, and nothing asserts on either.
+
+## Gate evidence (2026-08-25, from the worktree root)
+
+| Gate | Result |
+|---|---|
+| `npm --prefix functions run typecheck` | exit 0, clean |
+| `npm --prefix functions test` | **124 files / 1897 tests passed** |
+| `npx tsc -b` | exit 0 |
+| `npm test` (root) | 122 files / 2078 passed; **3 failures in `tests/addon-purchase.test.ts` are PRE-EXISTING** — reproduced in the clean `D:\march-melee-pools` checkout at `da8a5f0a` (this branch's base) with none of this code present. They are CRLF-sensitive source-substring assertions and a local-checkout artifact. |
+| `npm run build:static` | not run — no frontend file is touched. |
