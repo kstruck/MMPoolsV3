@@ -141,14 +141,20 @@ everywhere (`splitPoolPassword`, `setPoolPasswordSchema`, the rules predicate),
 and clearing is an explicit act: the bracket dashboard's "Remove the password"
 checkbox → `setPoolPassword(poolId, null)`.
 
-**The rules predicate bans the VALUE, not the FIELD.** An unconditional deny on
+**The rules predicate tests EQUALITY, not emptiness.** An unconditional deny on
 `gridPassword` would break every squares settings save, because the wizards send
-a full-object update carrying the empty default. `poolPasswordNotWritten()`
-allows `''`/`null` through and refuses any non-empty value — and, like
-`callableOnlySettingsUnchanged()`, sits OUTSIDE the disjunction so `isSuperAdmin()`
-cannot short-circuit past it. A same-value write is not an `affectedKey`, so a
-pre-migration pool that still carries its plaintext stays editable until the
-sweep reaches it.
+a full-object update carrying the empty default. The first version therefore
+allowed `''`/`null` through and refused only a non-empty value — and codex
+holed it (r5 P1): an owner could then CLEAR a pre-migration pool's plaintext by
+submitting `''`, deleting the only value that makes the gate render. Clearing is
+exactly as dangerous as setting, and in the fail-OPEN direction.
+`poolPasswordNotWritten()` now requires the value to be UNCHANGED, treating
+absent/`null`/`''` as one value, and it separately denies the LITERAL top-level
+field named `accessControl.password` (writable only through
+`new FieldPath(...)`, which `affectedKeys()` reports as its own key). Like
+`callableOnlySettingsUnchanged()` it sits OUTSIDE the disjunction, so
+`isSuperAdmin()` cannot short-circuit past it. A same-value write still passes,
+which is what keeps pre-migration pools editable until the sweep reaches them.
 
 ### Rollout order (this is load-bearing)
 

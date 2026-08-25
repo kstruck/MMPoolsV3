@@ -205,3 +205,33 @@ VERDICT: REVISE. 3 findings (1 P1, 2 P2), ALL ACCEPTED:
    is deliberately a DISARMED call whose whole purpose is to watch the gate
    refuse — evidence that lives only in a returned object nobody kept is not
    evidence. Row now written before the early return. Pinned by a test.
+
+## Round 5
+
+VERDICT: REVISE. 2 findings (both P1), BOTH ACCEPTED. Both are in
+`firestore.rules`, i.e. in the guard written to close round 3's finding — the
+rounds-2+-find-defects-in-the-fixes pattern §2c predicts, twice over.
+
+1. **(P1) The predicate allowed CLEARING a legacy password.** It refused only a
+   NON-EMPTY value, on the reasoning that a full-object wizard save legitimately
+   carries `gridPassword: ''`. But for a pre-migration pool, that plaintext is
+   the ONLY thing that makes `PoolRoute` render the gate — so an owner
+   submitting `''` deleted the gate and opened the pool. I wrote
+   "empty-is-not-a-clear" into four other layers and then encoded the opposite
+   here. Fixed: the test is now EQUALITY, with absent/`null`/`''` treated as one
+   value. Setting, changing and clearing are all denied; a same-value carry-through
+   still passes, which is what keeps ordinary settings saves working. Six new
+   emulator assertions, including the one that proves a sibling edit to
+   `accessControl` still succeeds when the password rides along unchanged.
+
+2. **(P1) The rules missed the literal dotted field.** Same bypass class as
+   round 3, one layer over. `updateDoc(ref, {'accessControl.password': v})` is
+   parsed by the SDK into the nested path and was caught; but
+   `updateDoc(ref, new FieldPath('accessControl.password'), v)` writes a genuine
+   TOP-LEVEL field whose name contains a dot, `affectedKeys()` reports that
+   literal key, and no clause looked at it. Denied explicitly now, and proved in
+   the emulator for both the owner and a super-admin.
+
+   Fixing this class at the schema (r3) and not at the rules (r5) is precisely
+   the "guard that looks like it guards" shape — the create path was closed while
+   the direct-write path stayed open, and the two are alternatives, not layers.

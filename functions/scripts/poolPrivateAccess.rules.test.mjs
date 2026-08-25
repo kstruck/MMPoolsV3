@@ -33,7 +33,7 @@ import {
     assertFails,
     assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField, FieldPath } from 'firebase/firestore';
 
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 
@@ -133,6 +133,43 @@ await env.withSecurityRulesDisabled(async (ctx) => {
 await assertSucceeds(updateDoc(doc(owner, 'pools', LEGACY_ID), { name: 'Legacy Renamed', gridPassword: 'oldvalue' }));
 await assertFails(updateDoc(doc(owner, 'pools', LEGACY_ID), { gridPassword: 'changed' }));
 console.log('  ok: a legacy pool is still editable, but its password cannot be changed client-side');
+
+// --- …and CLEARING a legacy password is denied too (codex r5 P1) ------------
+//
+// The first version of the predicate only refused a NON-EMPTY value, so an
+// owner could submit `''` and delete the plaintext that is the ONLY thing
+// making PoolRoute render the gate for a pre-migration pool. Clearing is
+// exactly as dangerous as setting, and in the fail-OPEN direction.
+for (const cleared of [{ gridPassword: '' }, { gridPassword: null }, { gridPassword: deleteField() }]) {
+    await assertFails(updateDoc(doc(owner, 'pools', LEGACY_ID), cleared));
+}
+await assertFails(updateDoc(doc(admin, 'pools', LEGACY_ID), { gridPassword: '' }));
+// Same for the nested accessControl form.
+const LEGACY_AC = 'pool-legacy-accesscontrol';
+await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'pools', LEGACY_AC), {
+        type: 'BRACKET', ownerId: OWNER_UID, managerUid: OWNER_UID, isPublic: true,
+        status: 'OPEN', name: 'LegacyAC', accessControl: { password: 'oldvalue', requireEmail: false },
+    });
+});
+await assertFails(updateDoc(doc(owner, 'pools', LEGACY_AC), { 'accessControl.password': '' }));
+await assertFails(updateDoc(doc(owner, 'pools', LEGACY_AC), { accessControl: { requireEmail: true } }));
+// …but a sibling edit that carries the password through UNCHANGED still works,
+// which is what keeps an ordinary settings save from failing.
+await assertSucceeds(updateDoc(doc(owner, 'pools', LEGACY_AC), {
+    accessControl: { password: 'oldvalue', requireEmail: true },
+}));
+console.log('  ok: clearing a legacy password is denied; a sibling edit carrying it through is not');
+
+// --- The LITERAL dotted field cannot be written either (codex r5 P1) --------
+//
+// `updateDoc(ref, {'accessControl.password': v})` is parsed by the SDK into the
+// NESTED path (covered above). `new FieldPath('accessControl.password')` writes
+// a genuine TOP-LEVEL field whose name contains a dot; `affectedKeys()` reports
+// that literal key, and nothing but the explicit clause looks at it.
+await assertFails(updateDoc(doc(owner, 'pools', POOL_ID), new FieldPath('accessControl.password'), 'secret'));
+await assertFails(updateDoc(doc(admin, 'pools', POOL_ID), new FieldPath('accessControl.password'), 'secret'));
+console.log('  ok: the literal dotted field is denied to the owner and to a super-admin');
 
 // --- scrubPatch's SHAPE is safe on a doc that has none of the fields --------
 //
