@@ -33,7 +33,15 @@ items, in priority order — work them one PR at a time per CLAUDE.md §2c/§2d
 6. SuperAdmin.tsx split, phase 1 only: extract the Members tab into its own
    file with zero behavior change (clobber-guard tests must stay green).
 7. Babysit dependabot #550 (mmp-loop-babysit-deps skill; isolated worktree).
-8. Re-audits I want re-run to verify the fixes: [FILL IN which of the six,
+8. KEVIN FEATURE REQUEST (2026-08-24, do this one high priority): on the
+   pool picks view (e.g. /pool/<id>?tab=picks&week=3) users misread the
+   green check next to their own pick as "I won this game". Remove that
+   pick-indicator checkmark entirely and replace with result feedback:
+   (a) green check ONLY when the pick was CORRECT, (b) red X when the pick
+   was INCORRECT, (c) highlight the whole game card green for correct / red
+   for incorrect. Pending/unscored games get neither mark nor highlight.
+   Theme-safe (light+dark), and ships with tests per the standing rule.
+9. Re-audits I want re-run to verify the fixes: [FILL IN which of the six,
    or "none"]. Re-run each audit prompt verbatim from the originals and diff
    the scores against: DB/storage 3/6 → expect ~5/6; backend 5/6 → 6/6;
    auth 4/6 → 5/6; hosting 3/6 (unchanged until my console tasks are done);
