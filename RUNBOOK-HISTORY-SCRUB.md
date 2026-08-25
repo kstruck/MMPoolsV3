@@ -203,7 +203,9 @@ replace.
    # parent directories and fails outright if they are absent. (Unlike `git
    # clone` and `git format-patch -o`, which do create them - see §6 step 1.)
    New-Item -ItemType Directory -Force D:\mmp-scrub-patches | Out-Null
-   git -C <worktree-path> diff HEAD > D:\mmp-scrub-patches\<name>-dirty.patch
+
+   # --binary, and --output rather than `>`. Both matter, see below.
+   git -C <worktree-path> diff --binary HEAD --output=D:\mmp-scrub-patches\<name>-dirty.patch
 
    # ...and then actually COPY the untracked files. `ls-files --others` only
    # PRINTS paths; on its own it preserves nothing.
@@ -216,17 +218,48 @@ replace.
    }
    ```
 
-   Verify the copy before removing anything — the counts must match:
+   ⚠️ **`--binary` and `--output` are both load-bearing, for different
+   reasons.**
+   - **`--binary`**: a plain `git diff HEAD` emits only `Binary files … differ`
+     for a modified tracked binary (an image, a font, a `.webp` asset — this
+     repo has plenty). That patch cannot restore the edit, and the loss is
+     silent. `--binary` embeds the literal delta.
+   - **`--output=` instead of `>`**: PowerShell 5.1's redirection writes
+     **UTF-16LE**, which `git apply` cannot read — the export would look fine
+     on disk and fail at the moment you need it. `--output` has git write the
+     file itself, in the right encoding, on any PowerShell version.
+
+   Verify the export before removing anything. All three must hold:
 
    ```powershell
+   # a) untracked file counts match
    (git -C $wt ls-files --others --exclude-standard | Measure-Object -Line).Lines
    (Get-ChildItem -Recurse -File $out | Measure-Object).Count
+
+   # b) the patch is non-empty and actually applies in reverse-check
+   git -C $wt apply --check --binary D:\mmp-scrub-patches\<name>-dirty.patch
    ```
 
+   **Only once (a) and (b) pass, clean the worktree** — otherwise step 5's
+   `git worktree remove` refuses on a dirty tree, which is exactly where this
+   runbook would otherwise dead-end:
+
+   ```powershell
+   git -C $wt reset --hard
+   git -C $wt clean -fd          # add -x only if you mean to delete ignored files too
+   git -C $wt status --short     # expect EMPTY; step 5 can now proceed
+   ```
+
+   🛑 **`reset --hard` + `clean -fd` is irreversible.** Run it only after the
+   verification above has actually passed — not after merely running the export
+   commands. If (a) or (b) failed, fix the export first; a worktree you cleaned
+   without a good patch is work that is simply gone.
+
    **This is why "commit it" is listed first.** `git add -A` picks up tracked
-   and untracked in one operation and needs no verification step; the two-part
-   export exists only for work that genuinely cannot be committed, and it is
-   the path where files get left behind.
+   and untracked, text and binary, in one operation, needs no verification step,
+   and leaves the worktree clean for step 5 by itself. The whole apparatus above
+   exists only for work that genuinely cannot be committed, and it is the path
+   where things get left behind.
 
    🛑 **DO NOT USE `git stash` FOR THIS.** The stash is a **repository-global
    ref stack shared by every worktree** — all 35 of them here — so a
