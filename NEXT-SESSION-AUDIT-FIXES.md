@@ -65,10 +65,13 @@ FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
 2.5/6). Their findings, deduped against items above:
 
 21. ERROR TRACKING (from the 2/6 audit — the codeable set):
-    (a) Dockerfile: add ARG/ENV VITE_SENTRY_DSN after line 31 — the entire
-        client Sentry setup (src/sentry.ts) is dead in prod because the
-        build can never receive the DSN. Kevin sets the value in Coolify
-        (his console list below); code half ships regardless.
+    (a) Dockerfile: add ARG/ENV for VITE_SENTRY_DSN AND
+        VITE_SENTRY_REPLAY_SAMPLE_RATE (codex: sentry.ts documents the
+        replay knob too — DSN alone leaves replay stuck at zero) after
+        line 31 — the entire client Sentry setup (src/sentry.ts) is dead
+        in prod because the build can never receive the DSN. Kevin sets
+        the values in Coolify (his console list below); code half ships
+        regardless.
     (b) src/main.tsx: register window 'error' + 'unhandledrejection'
         handlers funneling into errorHandler.handleError (rate-limited) —
         non-render JS errors currently vanish.
@@ -118,7 +121,11 @@ FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
     (a) CSP: drop 'unsafe-inline' from script-src (hashes/nonces — TEST
         CAREFULLY, App-Check-outage-class risk if the SPA inlines
         anything), tighten img-src bare https:, add frame-ancestors,
-        add report-to so violations are visible BEFORE tightening.
+        add a REAL reporting pipeline — a report-to directive alone
+        discards everything (codex): define Reporting-Endpoints (or
+        legacy Report-To header) pointing at an actual collector (a tiny
+        onRequest sink writing to system_logs, or Sentry's CSP endpoint
+        once 21a lands) BEFORE tightening.
         The CSP string exists in THREE copies (nginx.conf:33,52,82) —
         dedupe into one include/variable or they will drift.
     (b) Retire X-XSS-Protection (set 0); consider HSTS preload.
