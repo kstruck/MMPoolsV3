@@ -19,8 +19,10 @@
 > 🔴 **POOL-PASSWORD HASHING IS BUILT (#579, Kevin's D1 Option 2) — BUT THE EXPOSURE IS
 > NOT REMEDIATED YET.** NEWLY SET passwords go to PBKDF2 in `pools/{id}/private/access`
 > (`allow read: if false`) and joins run through a callable. **EXISTING pools still
-> carry `gridPassword` / `accessControl.password` / `passwordHash` in plaintext on the
-> publicly readable parent document** until the migration sweep runs — and the sweep is
+> expose their password material on the publicly readable parent document** until the
+> migration sweep runs: `gridPassword` and `accessControl.password` are PLAINTEXT, and
+> `passwordHash` is a legacy hash the sweep moves verbatim — not plaintext, but
+> publicly readable and offline-crackable. The sweep is
 > deliberately kill-switched OFF and dry-run by default, and HAS NOT BEEN RUN. Step 4
 > of the deploy order below is what actually closes this. Do not treat #579 alone as
 > the fix. **10 codex rounds, 17 findings, 16 of them fail-OPEN.**

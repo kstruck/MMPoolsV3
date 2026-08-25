@@ -54,8 +54,10 @@ possibly-null `stripe`, a 500 crash loop on the same config state.
 
 **2. Pool passwords, sixteen fail-OPEN defects in ten rounds (#579) — and the
 exposure is NOT closed yet.** NEWLY set passwords are hashed; EXISTING pools still
-carry plaintext on the publicly readable parent document until the migration sweep
-runs, and the sweep is kill-switched OFF and has not been run. Step 4 of the deploy
+expose password material on the publicly readable parent document until the migration
+sweep runs — `gridPassword` and `accessControl.password` are plaintext, `passwordHash`
+is a legacy hash moved verbatim (publicly readable and offline-crackable, not
+plaintext). The sweep is kill-switched OFF and has not been run. Step 4 of the deploy
 order is what actually closes it.
 Round 1 came back clean; the stream's own read then found four, including a
 literal NUL byte in source. Later rounds found publish deleting a draft's
