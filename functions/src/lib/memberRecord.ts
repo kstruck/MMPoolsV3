@@ -257,21 +257,70 @@ export function ensureMemberRecord(
   return { wrote: true, liabilityDelta: plan.member.liabilityDelta, ...(reset ? { paidReset: reset } : {}) };
 }
 
-/** Remove a Member Record + drop the uid from participantIds (leave/last-entry-removal). */
-export function voidMemberRecord(tx: Transaction, db: Firestore, poolId: string, uid: string): void {
-  // A departed member must never keep a co-commissioner grant
-  // (PLAN-CO-COMMISSIONERS D2, sweeps S8): both removal helpers drop the uid
-  // from `coManagers` too, so whichever removal callable is wired later inherits it.
-  // ponytail: on a pool with NO `coManagers` field this transform materialises an
-  // EMPTY array (Firestore arrayRemove semantics — codex r2). Accepted: an empty
-  // array grants nothing anywhere, and the clear's invariant is "no NON-EMPTY
-  // array" (`nonEmpty === 0`), not field absence. Guarding it would cost a pool
-  // read inside every removal transaction for a cosmetic property.
-  tx.update(db.collection('pools').doc(poolId), {
+/**
+ * EVERY write a member's departure implies, issued into ONE caller transaction.
+ *
+ * There are SIX places a membership fact is stored, and a removal that misses
+ * one leaves a copy that outlives the member (PLAN-MEMBER-REMOVAL-HARDENING):
+ *
+ *   1. `pools/{poolId}.participantIds` — the array every authorization check
+ *      reads. `firestore.rules` resolves it with a LIVE `get()` on every
+ *      request, so dropping the uid here is what actually revokes access.
+ *   2. `pools/{poolId}.coManagers` — the delegated co-commissioner grant. A
+ *      departed member must never keep one (PLAN-CO-COMMISSIONERS D2, sweeps
+ *      S8), and it has to go in the SAME write as (1): a removal that revoked
+ *      membership but left the grant standing would leave a non-member holding
+ *      commissioner powers, which `isNFLCoManagerOf` honours in both the rules
+ *      and the payout callables.
+ *   3. `pools/{poolId}/members/{uid}` — the Member Record, roster + payment
+ *      truth (ADR 0003) and the canonical admission evidence `getPoolPicks`
+ *      demands (`nflPickReveal.ts` assertPickReader).
+ *   4. THE THREE RECIPROCAL INDEXES, which is what this helper was missing:
+ *      • `pools/{poolId}/participants/{uid}` — written by the
+ *        `syncParticipantIndices` trigger (`participant.ts`). Leaving it is not
+ *        cosmetic: `backfillMemberRecords` reads that subcollection
+ *        (`migrations/backfillMemberRecords.ts`), so a stale index doc lets the
+ *        next backfill RESURRECT a removed member's name onto a rebuilt record.
+ *      • `users/{uid}/participations/{poolId}` — written by the NFL-season join
+ *        and create paths (`nflPools.ts`, `lib/poolCreation.ts`) and read by
+ *        `recomputeUserProfile` (`userProfile.ts`) and the client's own
+ *        pool-discovery query (`src/services/dbService.ts`). Leaving it means a
+ *        removed member's profile keeps counting the pool and their pool list
+ *        keeps offering it — a door that now 403s.
+ *      • `users/{uid}/joinedPools/{poolId}` — the bracket password-join index
+ *        (`bracketPools.ts`). NOTHING reads it today, and it is deleted anyway:
+ *        a write-only membership index is precisely the kind of thing that
+ *        acquires a reader later, and the cost here is one `tx.delete` that is
+ *        a no-op on every pool type that never wrote one.
+ *
+ * ⚠️ ONE TRANSACTION IS THE WHOLE POINT. All of them are issued on the caller's
+ * `tx`, so Firestore commits them together or not at all; there is no window in
+ * which the Member Record is gone and the grant survives. `tx.delete` on a
+ * document that does not exist is a no-op, so a pool carrying none of the three
+ * indexes pays three cheap deletes and nothing else.
+ *
+ * ponytail: on a pool with NO `coManagers` field the transform materialises an
+ * EMPTY array (Firestore arrayRemove semantics — codex r2). Accepted: an empty
+ * array grants nothing anywhere, and the clear's invariant is "no NON-EMPTY
+ * array" (`nonEmpty === 0`), not field absence. Guarding it would cost a pool
+ * read inside every removal transaction for a cosmetic property.
+ */
+function applyMembershipRemoval(tx: Transaction, db: Firestore, poolId: string, uid: string): void {
+  const poolRef = db.collection('pools').doc(poolId);
+  tx.update(poolRef, {
     participantIds: FieldValue.arrayRemove(uid),
     coManagers: FieldValue.arrayRemove(uid),
   });
   tx.delete(membersCol(db, poolId).doc(uid));
+  const userRef = db.collection('users').doc(uid);
+  tx.delete(poolRef.collection('participants').doc(uid));
+  tx.delete(userRef.collection('participations').doc(poolId));
+  tx.delete(userRef.collection('joinedPools').doc(poolId));
+}
+
+/** Remove a Member Record + drop the uid from participantIds (leave/last-entry-removal). */
+export function voidMemberRecord(tx: Transaction, db: Firestore, poolId: string, uid: string): void {
+  applyMembershipRemoval(tx, db, poolId, uid);
 }
 
 /**
@@ -292,12 +341,13 @@ export function reconcileMembership(
   const plan = planMembershipWrite(poolId, uid, facts, existing, now);
 
   if (plan.participant === 'remove') {
-    // See voidMemberRecord — the departed uid leaves `coManagers` as well.
-    tx.update(poolRef, {
-      participantIds: FieldValue.arrayRemove(uid),
-      coManagers: FieldValue.arrayRemove(uid),
-    });
-    tx.delete(mRef);
+    // ONE code path for removal, deliberately. This branch and voidMemberRecord
+    // were byte-identical duplicates, and the duplication is how the reciprocal
+    // indexes came to be missed by both: a fix applied to one would not reach
+    // the other. `applyMembershipRemoval` is now the single definition of what
+    // a departure writes, so whichever removal callable is wired later inherits
+    // the complete set no matter which helper it reaches for.
+    applyMembershipRemoval(tx, db, poolId, uid);
     return;
   }
   tx.update(poolRef, { participantIds: FieldValue.arrayUnion(uid) });
