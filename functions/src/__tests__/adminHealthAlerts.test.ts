@@ -31,6 +31,7 @@ import {
   applyDispatchOutcomes,
   failingCheckKeys,
   staleJobKeys,
+  pageableStaleJobs,
   MAX_ALERT_ATTEMPTS,
   type HealthAlertState,
   type HealthSnapshot,
@@ -159,6 +160,48 @@ describe('property 2 — only a SENT dispatch marks the condition alerted', () =
     expect(recovered.next.attempts).toEqual({});
     const again = cycle(recovered.next, ['check:email'], 'sent');
     expect(again.dispatched).toEqual(['check:email']);
+  });
+});
+
+describe('pageableStaleJobs — what is worth a page vs worth a card (codex round 2)', () => {
+  const EXPECT = { daily: { everyMinutes: 1440 }, weekly: { everyMinutes: 10080 }, fast: { everyMinutes: 5 } };
+  const HOUR = 60 * 60 * 1000;
+  const NOW = 1_000_000_000_000;
+
+  it('does not page a never-ran job on the very first run — nothing has been watched yet', () => {
+    const stale: StaleJob[] = [
+      { jobName: 'daily', reason: 'never-ran', ageMinutes: null },
+      { jobName: 'weekly', reason: 'never-ran', ageMinutes: null },
+    ];
+    expect(pageableStaleJobs(stale, undefined, NOW, EXPECT)).toEqual([]);
+  });
+
+  it('does not page a never-ran WEEKLY job an hour into monitoring — the bootstrap flood', () => {
+    const stale: StaleJob[] = [{ jobName: 'weekly', reason: 'never-ran', ageMinutes: null }];
+    expect(pageableStaleJobs(stale, NOW - HOUR, NOW, EXPECT)).toEqual([]);
+  });
+
+  it('DOES page a never-ran job once it has been silent for longer than its own tolerance', () => {
+    const stale: StaleJob[] = [{ jobName: 'fast', reason: 'never-ran', ageMinutes: null }];
+    // 5-minute job, 3x tolerance = 15 minutes of watching.
+    expect(pageableStaleJobs(stale, NOW - 20 * 60 * 1000, NOW, EXPECT)).toHaveLength(1);
+  });
+
+  it('never suppresses stale or failing — those are facts about the job, not the monitor', () => {
+    const stale: StaleJob[] = [
+      { jobName: 'weekly', reason: 'stale', ageMinutes: 99999 },
+      { jobName: 'daily', reason: 'failing', ageMinutes: 5, error: 'boom' },
+    ];
+    expect(pageableStaleJobs(stale, undefined, NOW, EXPECT)).toHaveLength(2);
+  });
+
+  it('never pages about ITSELF — a broken pager must not page about the pager', () => {
+    const stale: StaleJob[] = [
+      { jobName: 'scheduledHealthCheck', reason: 'failing', ageMinutes: 60, error: 'ops page undelivered' },
+      { jobName: 'daily', reason: 'failing', ageMinutes: 60 },
+    ];
+    const out = pageableStaleJobs(stale, NOW - 30 * 24 * HOUR, NOW, EXPECT);
+    expect(out.map((s) => s.jobName)).toEqual(['daily']);
   });
 });
 

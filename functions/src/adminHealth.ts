@@ -282,6 +282,13 @@ export interface HealthAlertState {
   alerted: string[];
   /** Condition → consecutive undelivered dispatch attempts. */
   attempts: Record<string, number>;
+  /**
+   * Epoch ms of the first run that ever evaluated staleness. It is the clock a
+   * `never-ran` verdict is measured against — see `pageableStaleJobs`. Optional
+   * because state written before this field existed has none, in which case the
+   * next run stamps it and the grace period starts from there.
+   */
+  monitoringSince?: number;
 }
 
 export interface HealthAlertPlan {
@@ -389,6 +396,53 @@ export function failingCheckKeys(snapshot: HealthSnapshot): string[] {
     .map(([name]) => `check:${name}`);
 }
 
+/** This monitor's own job name — see `pageableStaleJobs`. */
+const SELF_JOB_NAME = "scheduledHealthCheck";
+
+/**
+ * Which stale jobs are worth PAGING about, as opposed to worth showing on the
+ * Ops Health card. Two exclusions, both from codex round 2:
+ *
+ * 1. BOOTSTRAP `never-ran` (P1). `findStaleJobs` reports a job with no beat as
+ *    `never-ran` immediately, with no grace period — heartbeat.ts documents this
+ *    and deliberately did not model deploy time, on the grounds that it was
+ *    cosmetic on a card that "pages nobody". Wiring a pager to it inverts that
+ *    reasoning: on the first run after this deploys, or after any job is added
+ *    to SCHEDULED_JOB_EXPECTATIONS, every daily and weekly job would page for
+ *    not having run yet. `lockNFLSpreadsJob` alone would page for up to seven
+ *    days while nothing whatsoever was wrong. So a `never-ran` job pages only
+ *    once we have been WATCHING for longer than its own tolerance window —
+ *    which is exactly the point at which "it has never run" becomes a fact
+ *    about the job rather than about the monitor.
+ *
+ * 2. THIS JOB ITSELF (P2). An undelivered page makes this handler return
+ *    `ok: false`, which `withHeartbeat` records — and next hour that beat reads
+ *    as a NEW `job:scheduledHealthCheck:failing` condition, so a broken pager
+ *    would page about the pager being broken, through the broken pager. It also
+ *    escapes the retry bound, since the feedback condition is a different key
+ *    from the one being retried. A monitor cannot usefully page about itself:
+ *    if it is dead it is not running to send anything, and if its pager is
+ *    broken the page cannot land. Its own state stays visible in health/latest
+ *    and on the Ops Health card, which is where it belongs.
+ */
+export function pageableStaleJobs(
+  stale: StaleJob[],
+  monitoringSince: number | undefined,
+  nowMs: number,
+  expectations: Record<string, { everyMinutes: number }> = SCHEDULED_JOB_EXPECTATIONS,
+  toleranceMultiplier = 3,
+): StaleJob[] {
+  return stale.filter((s) => {
+    if (s.jobName === SELF_JOB_NAME) return false;
+    if (s.reason !== "never-ran") return true;
+    // No recorded start yet — this is the first run that has ever looked, so
+    // nothing can be said about how long a job has been silent.
+    if (monitoringSince === undefined) return false;
+    const everyMinutes = expectations[s.jobName]?.everyMinutes ?? 0;
+    return nowMs - monitoringSince >= everyMinutes * toleranceMultiplier * 60_000;
+  });
+}
+
 /**
  * `job:<name>:<reason>` for every stale job. The reason is part of the key on
  * purpose: `never-ran` → `failing` is a genuinely different condition needing a
@@ -467,8 +521,12 @@ async function alertOnHealthTransitions(
   snapshot: HealthSnapshot,
   prev: HealthAlertState | undefined,
 ): Promise<HeartbeatVerdict> {
+  const now = Date.now();
   const heartbeats = await readHeartbeats(db);
-  const stale = heartbeats === null ? [] : findStaleJobs(heartbeats, SCHEDULED_JOB_EXPECTATIONS, Date.now());
+  const stale =
+    heartbeats === null
+      ? []
+      : pageableStaleJobs(findStaleJobs(heartbeats, SCHEDULED_JOB_EXPECTATIONS, now), prev?.monitoringSince, now);
   const staleByKey = new Map(stale.map((s) => [`job:${s.jobName}:${s.reason}`, s]));
 
   // When heartbeats are unreadable the job half of the condition set is UNKNOWN,
@@ -496,7 +554,12 @@ async function alertOnHealthTransitions(
   for (const key of plan.toDispatch) {
     outcomes[key] = await dispatchOpsAlert(db, buildAlertInput(key, snapshot, staleByKey));
   }
-  const next = applyDispatchOutcomes(plan, outcomes);
+  const next: HealthAlertState = {
+    ...applyDispatchOutcomes(plan, outcomes),
+    // Stamped on the first run and never moved afterwards: it is the start of
+    // the observation window, not a last-seen timestamp.
+    monitoringSince: prev?.monitoringSince ?? now,
+  };
   await db.doc(HEALTH_DOC).set({ alerts: next }, { merge: true });
 
   const undelivered = plan.toDispatch.filter((k) => outcomes[k] !== "sent");
