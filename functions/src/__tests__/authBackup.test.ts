@@ -364,15 +364,50 @@ describe("object naming", () => {
     });
 
     it("puts exports under auth/ and pairs each with a manifest", () => {
-        const p = authBackupObjectPath("20260824-070503Z", true);
-        expect(p).toBe("auth/auth-backup-20260824-070503Z.json");
-        expect(manifestPathFor(p)).toBe("auth/auth-backup-20260824-070503Z.manifest.json");
+        const p = authBackupObjectPath("20260824-070503Z", true, "a1b2c3");
+        expect(p).toBe("auth/auth-backup-20260824-070503Z-a1b2c3.json");
+        expect(manifestPathFor(p)).toBe("auth/auth-backup-20260824-070503Z-a1b2c3.manifest.json");
     });
 
     it("marks a partial export in the filename", () => {
-        expect(authBackupObjectPath("20260824-070503Z", false)).toBe(
-            "auth/auth-backup-20260824-070503Z-PARTIAL.json",
+        expect(authBackupObjectPath("20260824-070503Z", false, "a1b2c3")).toBe(
+            "auth/auth-backup-20260824-070503Z-a1b2c3-PARTIAL.json",
         );
+    });
+
+    it("the stamp leads, so names still sort chronologically", () => {
+        const early = authBackupObjectPath(backupStamp(new Date(Date.UTC(2026, 0, 1))), true, "zzzzzz");
+        const late = authBackupObjectPath(backupStamp(new Date(Date.UTC(2026, 5, 1))), true, "000000");
+        expect([late, early].sort()).toEqual([early, late]);
+    });
+
+    it("two runs in the SAME second get different object names (codex R2)", async () => {
+        // The weekly schedule firing while an admin triggers a manual export, or
+        // a Cloud Scheduler retry, would otherwise target identical paths — which
+        // can pair one run's manifest with the other run's users object, and 403s
+        // against the create-only bucket IAM.
+        const at = () => new Date(Date.UTC(2026, 7, 24, 7, 15, 30));
+        const mk = (): AuthBackupDeps => ({
+            listUsers: async () => ({ users: [user("a")] }),
+            upload: async () => undefined,
+            now: at,
+        });
+        const a = await runAuthBackupCore(mk(), { dryRun: true });
+        const b = await runAuthBackupCore(mk(), { dryRun: true });
+        expect(a.objectPath).not.toBe(b.objectPath);
+        expect(a.manifestPath).not.toBe(b.manifestPath);
+    });
+
+    it("the manifest records the run id it was named with", async () => {
+        const uploads: Array<{ path: string; body: string }> = [];
+        const deps: AuthBackupDeps = {
+            listUsers: async () => ({ users: [user("a")] }),
+            upload: async (path, body) => { uploads.push({ path, body }); },
+            now: () => new Date(0),
+        };
+        const r = await runAuthBackupCore(deps, { dryRun: false, runId: "deadbe" });
+        expect(r.objectPath).toContain("-deadbe.json");
+        expect(JSON.parse(uploads[1].body)).toMatchObject({ runId: "deadbe", usersObject: r.objectPath });
     });
 });
 

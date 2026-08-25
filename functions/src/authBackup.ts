@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import * as admin from "firebase-admin";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -251,12 +252,27 @@ export function backupStamp(now: Date): string {
 }
 
 /**
- * Object path for a run. An incomplete export is named `-PARTIAL`, in the
- * filename, because that is the one place an operator reaching for a backup in
- * an emergency is guaranteed to look.
+ * Object path for a run: `auth/auth-backup-<stamp>-<runId>[-PARTIAL].json`.
+ *
+ * `-PARTIAL` goes in the FILENAME because that is the one place an operator
+ * reaching for a backup in an emergency is guaranteed to look.
+ *
+ * The `runId` makes every run's objects unique, and that is load-bearing rather
+ * than decorative (codex R2). Two live runs in the same second — the weekly
+ * schedule firing while an admin triggers a manual export, or a Cloud Scheduler
+ * retry — would otherwise target identical paths. Two failure modes follow from
+ * that, and the run id closes both:
+ *   - Interleaved uploads can pair one run's manifest with the other run's users
+ *     object, silently breaking the "the manifest describes THIS export"
+ *     invariant the manifest exists to provide.
+ *   - The recommended bucket IAM is `roles/storage.objectCreator` ONLY, which
+ *     grants create but not delete — so an overwrite is a 403 and a retried run
+ *     would fail rather than land. Unique names mean the job only ever CREATES,
+ *     which is exactly what a create-only grant allows.
+ * The stamp still leads, so names remain chronologically sortable.
  */
-export function authBackupObjectPath(stamp: string, complete: boolean): string {
-    return `auth/auth-backup-${stamp}${complete ? "" : "-PARTIAL"}.json`;
+export function authBackupObjectPath(stamp: string, complete: boolean, runId: string): string {
+    return `auth/auth-backup-${stamp}-${runId}${complete ? "" : "-PARTIAL"}.json`;
 }
 
 /** Manifest sibling of a users object. */
@@ -303,7 +319,7 @@ export interface AuthBackupResult {
  */
 export async function runAuthBackupCore(
     deps: AuthBackupDeps,
-    opts: { dryRun: boolean; maxPages?: number; pageSize?: number },
+    opts: { dryRun: boolean; maxPages?: number; pageSize?: number; runId?: string },
 ): Promise<AuthBackupResult> {
     // Clamped, not trusted. A maxPages of 0 would skip the loop entirely and
     // then upload an EMPTY users file — a zero-account "backup" that looks like
@@ -353,7 +369,11 @@ export async function runAuthBackupCore(
 
     const now = deps.now();
     const stamp = backupStamp(now);
-    const objectPath = authBackupObjectPath(stamp, complete);
+    // Six hex characters: enough that two runs in the same second do not collide,
+    // short enough that the object name stays readable. Injectable so the naming
+    // tests stay deterministic.
+    const runId = opts.runId ?? randomBytes(3).toString("hex");
+    const objectPath = authBackupObjectPath(stamp, complete, runId);
     const manifestPath = manifestPathFor(objectPath);
 
     // NOTE: `records` holds emails and password hashes. It is serialized to the
@@ -370,6 +390,7 @@ export async function runAuthBackupCore(
             pages,
             complete,
             bytes,
+            runId,
             usersObject: objectPath,
             restore: "PLAN-BACKUPS-PHASE3.md Step 6d — password hash parameters are NOT in this export.",
         },

@@ -453,7 +453,7 @@ so the automated version is a Cloud Function rather than a wrapped CLI call.
 | `authBackupJob` | Scheduled weekly, **Sunday 03:15 ET** (`15 3 * * 0`, `America/New_York`), `timeoutSeconds: 540`, `memory: 512MiB`. Heartbeat-wrapped (`system/heartbeats.authBackupJob`). |
 | `runAuthBackup` | On-demand callable, **SUPER_ADMIN** via the shared `assertCallerRole` claim+doc gate (through `validated({ role: "SUPER_ADMIN" })`). Input `{ dryRun?: boolean }`, **defaults to `dryRun: true`**. |
 | Pagination | `admin.auth().listUsers(1000, pageToken)` in a loop that follows `nextPageToken` to exhaustion. Capped at 250 pages (250k accounts) and at a repeated cursor; a run that stops before the tenant is exhausted is reported `complete: false`, named `-PARTIAL` in the filename, and marked `ok:false` on the heartbeat. **A truncated export that looks whole is worse than no export**, because it is only discovered on the day it is needed. |
-| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>.manifest.json` — counts, page count, byte size, completeness, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** |
+| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>-<runid>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>-<runid>.manifest.json` — counts, page count, byte size, completeness, run id, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** The six-character run id makes every run's objects unique, so the job only ever CREATES and never overwrites — which is what lets the bucket grant be create-only (see the PII section). Timestamp leads, so names still sort chronologically. |
 | Audit | One `admin_audit` row per run (`action: "AUTH_BACKUP"`), counts and object path only. |
 
 ### SAFETY posture (Rule 1 — kill switch + dry-run default)
@@ -496,9 +496,12 @@ project produces, and the controls are:
    boundary, separate lifecycle, and the function's service account can be
    granted create-only on this one without touching the other.
 4. **Least privilege for the function: `roles/storage.objectCreator`, NOT
-   `objectAdmin`.** The job only ever creates new objects. A create-only grant
-   means a compromised function cannot read back the archive of every previous
-   export or delete it.
+   `objectAdmin`.** The job only ever creates new objects — every run's object
+   names carry a unique run id, so it never needs to overwrite one. A
+   create-only grant means a compromised function cannot read back the archive
+   of every previous export, cannot delete it, and cannot overwrite it. (This
+   pairing is deliberate: without the run id, two runs in the same second would
+   collide, and an overwrite against a create-only grant is a 403.)
 5. **Object versioning ON**, so an overwrite or a delete does not destroy the
    only copy.
 6. **Human access limited to the project owner.** Do not grant a group.
@@ -634,7 +637,7 @@ happens while you are watching:
 gcloud storage ls --recursive gs://mmpools-auth-backups/auth/
 ```
 
-**Expect:** two objects — `auth-backup-<stamp>.json` with a non-zero size, and
+**Expect:** two objects — `auth-backup-<stamp>-<runid>.json` with a non-zero size, and
 its `.manifest.json`. **If only the users file is there**, the manifest upload
 failed and the run did not finish; treat that as an incident, not a partial
 success. **If the object name contains `-PARTIAL`**, the page loop stopped early
@@ -727,7 +730,7 @@ Pick a name **without** `-PARTIAL` in it, then read its manifest sibling and
 confirm it says `"complete": true`:
 
 ```
-gcloud storage cat gs://mmpools-auth-backups/auth/auth-backup-<stamp>.manifest.json
+gcloud storage cat gs://mmpools-auth-backups/auth/auth-backup-<stamp>-<runid>.manifest.json
 ```
 
 **Expect:** a small JSON with `"complete": true` and a `users` count. **If the
@@ -754,7 +757,7 @@ $AUTH_RESTORE = Join-Path $env:TEMP "auth-restore.json"
 **If you have local gcloud installed** (Step 0's optional path):
 
 ```
-gcloud storage cp "gs://mmpools-auth-backups/auth/auth-backup-<stamp>.json" $AUTH_RESTORE
+gcloud storage cp "gs://mmpools-auth-backups/auth/auth-backup-<stamp>-<runid>.json" $AUTH_RESTORE
 ```
 
 **If you do NOT have local gcloud**, download it through the browser instead:
