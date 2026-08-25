@@ -47,6 +47,17 @@ interface PickemPickEntryProps {
    * document on their own copies of this prop.)
    */
   seasonGames?: NFLGame[];
+  /**
+   * WHICH of the viewer's entries this sheet is for (PLAN-MULTI-ENTRY T5/D7).
+   * Absent ⇒ 1, which is what every single-entry pool sends and what the
+   * server defaults to — so nothing changes for a pool with one entry each.
+   */
+  entryIndex?: number;
+  /**
+   * The name to give a NEW entry on its first submit. Ignored by the server for
+   * an entry that already exists, so it is only ever the draft's name.
+   */
+  entryName?: string;
   entry: any; // NFLPickemEntry or null
   isWeekLocked: boolean;
 }
@@ -56,6 +67,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   week,
   games,
   seasonGames,
+  entryIndex,
+  entryName,
   entry,
   isWeekLocked
 }) => {
@@ -84,7 +97,16 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // change the sheet ignored it, so an approved extension never reopened
   // anything for the member it was granted for.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, week);
-  const draftKey = `pickem:${pool.id}:${week}`;
+  // 🛑 THE ENTRY IS PART OF THE DRAFT'S IDENTITY (PLAN-MULTI-ENTRY T5,
+  // codex r1 P1). A local draft is restored into the sheet and then SUBMITTED
+  // under whatever `entryIndex` is active — so a key of pool+week alone would
+  // restore unsaved picks made on entry #1 into entry #2's empty sheet and save
+  // them there. One entry's picks written onto another is the multi-entry
+  // failure this whole plan exists to prevent, arriving through localStorage.
+  //
+  // Entry #1 keeps the ORIGINAL key, so a draft saved before this shipped is
+  // still restored for the entry it was made on.
+  const draftKey = `pickem:${pool.id}:${week}${entryIndex && entryIndex > 1 ? `:e${entryIndex}` : ''}`;
 
   // Re-evaluate lock state every 30s so the UI flips to locked in place at T-0
   // instead of accepting taps the server will reject
@@ -113,7 +135,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     // (gated on !validationError). Margin/Survivor clear theirs in the load
     // effect; Pick'em never did (qodo, on this PR).
     setValidationError(null);
-  }, [week]);
+    // ⚠️ AND ON THE ENTRY (PLAN-MULTI-ENTRY T5). The receipt says "saved just
+    // now" about ONE entry's sheet, so carrying it across an entry switch would
+    // tell a member their brand-new entry #2 is already saved. `entryIndex` is
+    // a number, not the snapshot, so this still does not fire on the
+    // post-submit entry refresh the comment above is about.
+  }, [week, entryIndex]);
 
   useEffect(() => {
     dirtyRef.current = false;
@@ -417,6 +444,17 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       tiebreakerPrediction: showTiebreaker ? tiebreakerPrediction : undefined,
       // The target the sheet DISPLAYED — the server compares, never stores it.
       displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined,
+      // Sent only for an extra entry: `undefined` keeps the payload — and the
+      // server's own default — byte-for-byte what a single-entry pool sends.
+      ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}),
+      // ⚠️ A BLANK NAME IS NOT A NAME, AND `''` AND `'   '` MUST MEAN THE SAME
+      // THING (codex r3 on the T5 PR). A whitespace-only string is truthy, so
+      // it used to reach the server and come back ENTRY_NAME_EMPTY, while an
+      // empty one was dropped and silently took the generated default — two
+      // answers to one act. Both now take the default: the switcher PRE-FILLS
+      // a name, so clearing it reads as "whatever you suggested", not as a
+      // request to be refused.
+      ...(entryIndex && entryIndex > 1 && entryName?.trim() ? { entryName: entryName.trim() } : {}),
       requestId: crypto.randomUUID()
     };
 
