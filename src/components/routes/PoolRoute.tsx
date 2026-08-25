@@ -138,7 +138,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
     // Password Gate (Local) moved to top
     const [enteredPassword, setEnteredPassword] = useState('');
-    const [passwordError, setPasswordError] = useState(false);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [checkingPassword, setCheckingPassword] = useState(false);
 
@@ -414,11 +414,17 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
      */
     const handlePasswordSubmit = async () => {
         if (checkingPassword) return;
+        // An empty box is not worth a round trip, and it would burn one of the
+        // caller's ten attempts against the throttle.
+        if (!enteredPassword) { setPasswordError('Enter the pool password.'); return; }
         setCheckingPassword(true);
         try {
-            const ok = await dbService.verifyPoolAccess(squaresPool.id, enteredPassword);
+            const { ok, reason } = await dbService.verifyPoolAccess(squaresPool.id, enteredPassword);
             setIsUnlocked(ok);
-            setPasswordError(!ok);
+            setPasswordError(ok ? null
+                : reason === 'throttled' ? 'Too many attempts. Wait a few minutes and try again.'
+                : reason === 'error' ? 'Could not check the password right now. Try again.'
+                : 'Incorrect password.');
         } finally {
             setCheckingPassword(false);
         }
@@ -444,7 +450,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 <div className="w-16 h-16 bg-page rounded-full flex items-center justify-center mx-auto mb-6 border border-line"><Lock size={32} className="text-gold-500" /></div>
                 <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Password Protected</h2>
                 <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
-                {passwordError && <div className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">Incorrect password.</div>}
+                {passwordError && <div role="alert" className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">{passwordError}</div>}
                 <div className="flex gap-2">
                     <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => { if (e.key === 'Enter') void handlePasswordSubmit(); }} />
                     <Button variant="primary" disabled={checkingPassword} onClick={() => { void handlePasswordSubmit(); }}>{checkingPassword ? 'Checking…' : 'Unlock'}</Button>

@@ -154,6 +154,15 @@ describe('verify throttle', () => {
         // No raw uid / IP in the document id.
         expect(attemptKey('poolA', '203.0.113.7')).not.toContain('203.0.113.7');
     });
+
+    it('does not collide when a pool id contains the separator character', () => {
+        // A Firestore document id MAY contain a space, so a space separator
+        // would put ("pool a", "b") and ("pool", "a b") in the same throttle
+        // bucket — two principals sharing one cap. The key uses NUL, which an id
+        // cannot contain.
+        expect(attemptKey('pool a', 'b')).not.toBe(attemptKey('pool', 'a b'));
+        expect(attemptKey('a', 'b c')).not.toBe(attemptKey('a b', 'c'));
+    });
 });
 
 describe('create choke point (item 13b)', () => {

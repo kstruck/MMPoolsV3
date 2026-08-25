@@ -33,7 +33,7 @@ import {
     assertFails,
     assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 
@@ -133,6 +133,32 @@ await env.withSecurityRulesDisabled(async (ctx) => {
 await assertSucceeds(updateDoc(doc(owner, 'pools', LEGACY_ID), { name: 'Legacy Renamed', gridPassword: 'oldvalue' }));
 await assertFails(updateDoc(doc(owner, 'pools', LEGACY_ID), { gridPassword: 'changed' }));
 console.log('  ok: a legacy pool is still editable, but its password cannot be changed client-side');
+
+// --- scrubPatch's SHAPE is safe on a doc that has none of the fields --------
+//
+// ⚠️ THIS IS A PUBLISH-PATH RISK, not a tidiness check. `scrubPatch()` deletes
+// `accessControl.password` with a DOTTED path, and `publishBracketPool` applies
+// it inside the same transaction that reserves the slug. Most bracket pools have
+// no `accessControl` map at all — so if Firestore rejected a nested delete whose
+// PARENT is absent, publishing a pool would start failing outright. Rules do not
+// answer that question; only the emulator does. Run with rules DISABLED, which
+// is how the Admin SDK sees the database.
+await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    const BARE_ID = 'pool-no-access-fields';
+    await setDoc(doc(db, 'pools', BARE_ID), { type: 'BRACKET', name: 'Bare', ownerId: OWNER_UID });
+    await updateDoc(doc(db, 'pools', BARE_ID), {
+        gridPassword: deleteField(),
+        'accessControl.password': deleteField(),
+        passwordHash: deleteField(),
+        hasPoolPassword: true,
+    });
+    const after = await getDoc(doc(db, 'pools', BARE_ID));
+    assert.strictEqual(after.data().hasPoolPassword, true);
+    assert.ok(!('accessControl' in after.data()), 'the delete must not materialise an empty parent map');
+    assert.strictEqual(after.data().name, 'Bare', 'unrelated fields survive');
+});
+console.log('  ok: the scrub patch applies cleanly to a pool with none of those fields');
 
 await env.cleanup();
 console.log('poolPrivateAccess.rules.test.mjs: ALL PASS');

@@ -301,20 +301,33 @@ export const dbService = {
      * Ask the server whether this password unlocks the pool. Replaces the
      * browser-side `entered === pool.gridPassword` compare (PoolRoute.tsx),
      * which could be read straight out of the public pool document.
+     *
+     * Returns a REASON, not just a boolean. The gate has three distinct
+     * outcomes — wrong password, too many attempts, and the call did not go
+     * through — and collapsing them into `false` makes the UI say "Incorrect
+     * password" to somebody who is rate-limited or offline. That is the
+     * blames-the-wrong-subsystem failure CLAUDE.md §2c calls out by name.
      */
-    verifyPoolAccess: async (poolId: string, password: string): Promise<boolean> => {
+    verifyPoolAccess: async (
+        poolId: string, password: string,
+    ): Promise<{ ok: boolean; reason?: 'wrong' | 'throttled' | 'error' }> => {
         try {
             const fn = httpsCallable<Record<string, unknown>, { ok: boolean }>(functions, 'verifyPoolAccess');
             const result = await fn(withCorrelationId({ poolId, password }));
-            return result.data.ok === true;
+            return result.data.ok === true ? { ok: true } : { ok: false, reason: 'wrong' };
         } catch (error) {
-            // A throttled or failed call is NOT an unlock. Logged at LOW: a
-            // wrong password is an expected outcome, not an incident.
-            await errorHandler.handleError(error, {
-                severity: ErrorSeverity.LOW,
-                context: { operation: 'verifyPoolAccess', poolId }
-            });
-            return false;
+            // A throttled or failed call is NOT an unlock — the gate fails
+            // CLOSED. Logged at LOW: being rate-limited is an expected outcome
+            // of this endpoint, not an incident.
+            const code = (error as { code?: string } | null)?.code;
+            const throttled = code === 'functions/resource-exhausted';
+            if (!throttled) {
+                await errorHandler.handleError(error, {
+                    severity: ErrorSeverity.LOW,
+                    context: { operation: 'verifyPoolAccess', poolId }
+                });
+            }
+            return { ok: false, reason: throttled ? 'throttled' : 'error' };
         }
     },
 
@@ -1657,15 +1670,23 @@ export const dbService = {
 
     // --- NFL POOLS ---
     createNFLPool: async (pool: Record<string, unknown>): Promise<string> => {
+        // Split for symmetry with createPool. NFL pools have no password UI
+        // today, so this is not closing a live leak — but both create wrappers
+        // hand the WHOLE payload to `handleError` as context on failure, and
+        // `createNFLPool` rides the same permissive envelope. Splitting in one
+        // wrapper and not the other is how the next password-bearing pool type
+        // would land in `system_logs`.
+        const { payload, password } = splitPoolPassword(pool);
         try {
             const createNFLPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createNFLPool');
-            const result = await createNFLPoolFn(pool);
+            const result = await createNFLPoolFn(payload);
             const { poolId } = result.data;
+            if (password) await dbService.setPoolPassword(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.HIGH,
-                context: { operation: 'createNFLPool', pool }
+                context: { operation: 'createNFLPool', pool: payload }
             });
             throw error;
         }

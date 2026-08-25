@@ -241,7 +241,15 @@ export function evaluateAttempt(
  * Throttle key. Hashed so neither an IP address nor a uid is readable off the
  * document id — the counter store is server-only, but the id ends up in logs
  * and error messages, which this keeps clean.
+ *
+ * NUL is the separator, WRITTEN AS AN ESCAPE. A Firestore document id may
+ * contain a space, so a space separator would make ("pool a", "b") and
+ * ("pool", "a b") hash to the same bucket — two principals sharing one
+ * throttle. NUL is the one byte an id cannot contain. It is written as an
+ * escape sequence rather than typed literally because a raw NUL makes git and most diff/grep
+ * tooling treat the file as binary; this line shipped with a literal one for a
+ * single commit, and codex's hexdump is how it surfaced.
  */
 export function attemptKey(poolId: string, principal: string): string {
-    return crypto.createHash("sha256").update(`${poolId} ${principal}`).digest("hex").slice(0, 40);
+    return crypto.createHash("sha256").update(`${poolId}\u0000${principal}`).digest("hex").slice(0, 40);
 }
