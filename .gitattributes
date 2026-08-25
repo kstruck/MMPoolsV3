@@ -1,0 +1,45 @@
+# Line endings.
+#
+# WHY THIS FILE EXISTS: several suites in tests/ read repo source files off disk
+# and assert on multi-line string literals written with `\n` — for example
+# tests/addon-purchase.test.ts:
+#
+#     expect(stripe).toContain('status: "pending",\n            purchaseKind,');
+#
+# The assertion is correct and CI (Linux, LF) agrees with it. On a Windows
+# checkout with core.autocrlf=true git rewrote every file to CRLF on the way
+# out, so the same assertion compared CRLF file content against an LF
+# expectation and failed for a reason that had nothing to do with the code.
+# Three such assertions failed on every Windows worktree while CI stayed green.
+#
+# `eol=lf` fixes it at the source — the working tree gets LF regardless of the
+# developer's core.autocrlf setting — rather than by weakening the assertions.
+#
+# BLAST RADIUS: this changes the working-tree line endings of every text file
+# for every developer whose core.autocrlf is true or input-with-crlf. Editors in
+# use here (VS Code, the JetBrains family, vim) all handle LF natively on
+# Windows. Nothing in this repo is consumed by a CRLF-only tool: there are no
+# .bat/.cmd files, and the two tracked .sh files plus the .husky hooks require
+# LF anyway. Committed content does not change — git already stored LF for every
+# tracked text file bar one (see the renormalise commit).
+* text=auto eol=lf
+
+# Windows batch interpreters require CRLF. None are tracked today; this keeps a
+# future one correct rather than silently broken by the blanket rule above.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary. `text=auto` already detects these by content; declaring them is belt
+# and braces so a future file that happens to lack a NUL byte early cannot be
+# mangled by end-of-line conversion.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary

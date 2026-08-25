@@ -11,6 +11,7 @@ import { X } from 'lucide-react';
 import { HelpPanelContext, type HelpPanelHandle } from '../../help/scope';
 import { HelpRouteStoreProvider } from '../../help/publish';
 import { useOverlayOwner } from '../ui/overlayStack';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { cn } from '../ui/cn';
 import { HelpPanelBody } from './HelpPanelBody';
 import { useHelpShortcut } from './useHelpShortcut';
@@ -85,6 +86,12 @@ export function HelpPanel({ state, onClose }: { state: HelpPanelState; onClose: 
   const [bodyMounted, setBodyMounted] = useState(isOpen);
 
   useOverlayOwner(HELP_PANEL_ID, { active: isOpen, onEscape: onClose });
+
+  // a11y audit item 15a: deliver the containment `aria-modal` promises. The
+  // condition MUST match the `aria-modal` expression below — on desktop this is
+  // a non-modal side drawer, and trapping Tab there would strand a keyboard
+  // reader in a panel the page never claimed to own.
+  useFocusTrap(asideRef, isOpen && isMobile);
 
   useEffect(() => {
     if (isOpen) {

@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useEffect, useRef } from 'react';
 import { useOverlayOwner } from '../ui/overlayStack';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { Share2, Twitter, Facebook, MessageCircle, Link as LinkIcon, LogOut, Instagram } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { InviteByEmail } from '../InviteByEmail';
@@ -24,6 +25,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
     // on mount — this component stays mounted while closed, and pushing on
     // mount would let it own the stack for the life of the app.
     useOverlayOwner('share-modal', { active: isOpen, onEscape: onClose });
+    // aria-modal="true" promises focus containment — deliver it (a11y audit
+    // item 15a). Registered on `isOpen`, not on mount, same as the hook's other
+    // call sites: this component stays mounted while closed.
+    useFocusTrap(dialogRef, isOpen);
     useEffect(() => {
         if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

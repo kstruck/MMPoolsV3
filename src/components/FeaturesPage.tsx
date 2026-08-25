@@ -161,6 +161,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <img
                                 src="/feature-live-grid.webp"
                                 loading="lazy"
+                                width={1024}
+                                height={591}
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -199,6 +201,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <img
                                 src="/feature-scoreboard.webp"
                                 loading="lazy"
+                                width={1024}
+                                height={517}
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -237,6 +241,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <img
                                 src="/feature-scenarios.webp"
                                 loading="lazy"
+                                width={1024}
+                                height={541}
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -275,6 +281,8 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <img
                                 src="/feature-setup-wizard.webp"
                                 loading="lazy"
+                                width={996}
+                                height={986}
                                 alt="Easy Pool Setup Wizard for commissioners with customization options"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />

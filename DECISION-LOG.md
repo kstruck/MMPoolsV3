@@ -236,6 +236,44 @@ engineering. Deeper detail always lives in the linked PLAN-*.md / PR.
   repo-canonical log, NotebookLM ingests it as a source (NotebookLM has no
   write API — verified; the installed `notebooklm` skill is query-only).
 
+## Era 7 — Commerce model recorded, scope rejections written down (Aug 2026)
+
+*This era is thin on purpose: the log went quiet after 2026-07-24 while the
+work moved into `PLAN-*.md` files and `HANDOFF.md`. These are the decisions from
+that stretch that belong here rather than in a plan, because they close
+questions rather than open work.*
+
+- **2026-08-24 · Option A recorded: commerce is ONE-TIME ONLY. Recurring
+  billing is intentionally out of scope.** Every paid surface — pool
+  activation, Credit Bundles, the Unlimited Pass, per-pool add-ons — is a
+  single charge. **Why:** the money boundary (Stripe = commissioner hosting
+  fees only) is the product's legal posture and recurring billing is the
+  doorway away from it; the product is seasonal, not monthly; and dunning,
+  proration, cancellation and the `invoice.*`/`customer.subscription.*` webhook
+  classes are a machine a solo operator should not be running. **Evidence:**
+  both Checkout sessions are `mode: "payment"` (`functions/src/stripe.ts:609`,
+  `:689`), `mode: "subscription"` appears nowhere in `functions/`, the webhook
+  has no subscription event branch, and the Unlimited Pass stamps a one-off
+  `termEndsAt` that simply expires (`stripe.ts:790-792`). Already a non-goal in
+  `PLAN-BUYFLOW-OVERHAUL.md:143`; promoted here to a standing decision.
+  Detail: [DECISION-COMMERCE-MODEL.md](DECISION-COMMERCE-MODEL.md) §1.
+- **2026-08-24 · Three external review suggestions REJECTED, with reasoning on
+  the record.** (a) **Organizations / multi-org tenancy** — the Pool already IS
+  the tenancy unit and `firestore.rules` enforces it (`:101-112` pool-read
+  scoping, `:142-144` `isPoolManager`, `:411-416` `isPoolParticipant`,
+  `:173-188` server-owned `participantIds`/`coManagers`); an org tier is a B2B
+  pivot, not a hardening. (b) **Recipient-bound single-use invite tokens** —
+  the invite email carries the *share* link, not a token
+  (`functions/src/invites.ts:80-82`), that link is built to be re-shared and
+  gets an OG preview for crawlers (`functions/src/joinPreview.ts:26-46`), and
+  authorization lives on the gate (`isPublic` + PBKDF2 pool password) rather
+  than in the forwardable artifact. (c) **A RateLimit HTTP headers program** —
+  its useful half is absorbed by `PLAN-COST-CONTROLS.md` **Phase 2**
+  (enforcement: per-user+pool and per-pool quotas, kill-switch, circuit
+  breaker) on **Phase 1**'s attribution, at per-pool rather than per-org
+  granularity; the header surface itself is wrong for a callable-based API.
+  Detail: [DECISION-COMMERCE-MODEL.md](DECISION-COMMERCE-MODEL.md) §2.
+
 ---
 
 ## Standing rules distilled (the ones that keep earning their keep)

@@ -19,7 +19,7 @@ costs time, not data.
 | Asset | Backed up? | Consequence if lost |
 |---|---|---|
 | **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Bad writes/corruption in the last 7 days are recoverable **while the database still exists** — PITR is historical reads/exports of a live database, not a restore after deletion or project loss. Deletion and >7-day corruption still need the scheduled/off-region exports (items 16/17). |
-| **Firebase Auth** — user accounts, emails, password hashes | ❌ none | Every member loses access, even with a perfect Firestore restore. |
+| **Firebase Auth** — user accounts, emails, password hashes | ⚠️ **code shipped, NOT YET ARMED** — `authBackupJob` (weekly) + `runAuthBackup` (on-demand, SUPER_ADMIN) export to GCS. Kill-switch OFF and dry-run by default; **the destination bucket does not exist yet.** See Step 6. | Until the bucket exists and the switch is flipped, this is still ❌ none in practice: every member loses access, even with a perfect Firestore restore. |
 
 ✅ **PITR IS ENABLED — measured 2026-08-10, not assumed.**
 `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
@@ -37,7 +37,17 @@ is still there. It does not bring back a DELETED database or survive a
 project-level loss; the recovery matrix below still requires the off-region
 export for those. The remaining exposure is: database deletion / project loss
 (items 16/17), corruption discovered more than 7 days late (item 16), and Auth
-(item 18) — Auth is still the un-recreatable half with nothing behind it.
+(item 18).
+
+**Auth update (this change):** item 18's job now exists in code — weekly
+`authBackupJob` plus a SUPER_ADMIN `runAuthBackup` callable, both writing an
+`auth:import`-ready JSON to GCS, both kill-switched OFF and dry-run defaulted.
+**That does not yet make Auth backed up.** The destination bucket has not been
+created, the switch has not been flipped, and the password hash parameters that
+make a restore work at all are console state nobody has captured. Until Steps
+6a, 6b and 6d.0 are done by hand, Auth remains the un-recreatable half with
+nothing behind it — the difference is that the remaining work is now four
+console actions rather than an unwritten feature.
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the
@@ -49,13 +59,24 @@ executable version of those items.
 
 **Almost all of Phase 3 is Kevin-only.** PITR, backup schedules, GCS buckets and
 IAM are Google Cloud project operations — there is no code to write for items
-15, 16, 17 and 19. Only item 18 (the Auth export job) is code, and it is
-deliberately deferred until the bucket from item 17 exists, because a scheduled
-job that writes to a nonexistent bucket is a job that fails silently. This repo
-has already been bitten four times by exactly that failure mode.
+15, 16, 17 and 19. Only item 18 (the Auth export job) is code.
+
+**Item 18's code now EXISTS** (`functions/src/authBackup.ts`), and the reason it
+was deferred is handled rather than ignored. The original objection was that "a
+scheduled job that writes to a nonexistent bucket is a job that fails silently",
+and this repo has been bitten four times by exactly that. So the job ships
+**disabled and dry-run defaulted**, and its arming gate requires the operator to
+name the bucket explicitly:
+
+- `system/config.authBackup.enabled !== true` → the job logs and does nothing.
+- `enabled: true` with no valid `bucket` → the job reports `ok:false` on its
+  heartbeat and is visibly UNHEALTHY, which is the opposite of failing silently.
+- A live run is only possible once both are set, and a dry run rehearses the
+  whole path (including the `listUsers` permission) without writing a byte.
 
 **Recommended order:** ~~15~~ → 19 → 17 → 16 → 18. Item 15 (PITR) is **done —
-measured enabled 2026-08-10**; the remaining work starts at 19.
+measured enabled 2026-08-10**; the remaining work starts at 19. Item 18's
+**Kevin half** (bucket + IAM + flipping the switch) is Step 6a.
 
 ---
 
@@ -415,23 +436,229 @@ missing-index outages, and it should be treated as an incident, not a wait.
 
 ---
 
-## Step 6 — Firebase Auth export (item 18) — DEFERRED, and why
+## Step 6 — Firebase Auth export (item 18) — CODE SHIPPED, BUCKET PENDING
 
-`npx firebase auth:export` writes a **local file**; it has no direct-to-GCS mode.
-Firestore backups do **not** contain Auth users, so losing Auth means every
-member loses access to their pools even with a perfect Firestore restore.
+Firestore backups do **not** contain Auth users. Losing Auth means every member
+loses access to their pools even after a byte-perfect Firestore restore, because
+every entry, pick and member record is keyed by `uid`. This was the one row of
+the recovery matrix that read "none".
 
-The intended shape is a scheduled function that exports, uploads to the step-4
-bucket, and is kill-switched and dry-run defaulted like every other scheduled
-job in this repo.
+`npx firebase auth:export` writes a **local file** and has no direct-to-GCS mode,
+so the automated version is a Cloud Function rather than a wrapped CLI call.
 
-**It is deliberately not written yet.** It depends on the bucket from step 4
-existing and on service-account permissions that do not exist today. Writing it
-now would produce exactly the artifact this repo keeps getting burned by: a job
-that is deployed, appears armed, and silently fails every night.
+### What shipped (`functions/src/authBackup.ts`)
 
-**Interim manual export** — worth running once before the pilot, and it takes
-one minute.
+| | |
+|---|---|
+| `authBackupJob` | Scheduled weekly, **Sunday 03:15 ET** (`15 3 * * 0`, `America/New_York`), `timeoutSeconds: 540`, `memory: 512MiB`. Heartbeat-wrapped (`system/heartbeats.authBackupJob`). |
+| `runAuthBackup` | On-demand callable, **SUPER_ADMIN** via the shared `assertCallerRole` claim+doc gate (through `validated({ role: "SUPER_ADMIN" })`). Input `{ dryRun?: boolean }`, **defaults to `dryRun: true`**. |
+| Pagination | `admin.auth().listUsers(1000, pageToken)` in a loop that follows `nextPageToken` to exhaustion. Capped at 250 pages (250k accounts) and at a repeated cursor; a run that stops before the tenant is exhausted is reported `complete: false`, named `-PARTIAL` in the filename, and marked `ok:false` on the heartbeat. **A truncated export that looks whole is worse than no export**, because it is only discovered on the day it is needed. |
+| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>-<runid>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>-<runid>.manifest.json` — counts, page count, byte size, completeness, run id, `passwordUsersMissingHash`, `unsupportedMfaFactors`, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** The six-character run id makes every run's objects unique, so the job only ever CREATES and never overwrites — which is what lets the bucket grant be create-only (see the PII section). Timestamp leads, so names still sort chronologically. |
+| Import-shape fidelity | The record mapping is written against firebase-tools' actual validator (`lib/accountImporter.js`), not against the Admin SDK's shape, and a test transcribes that validator and runs every exported record through it. This is not pedantry: `auth:import` rejects the **entire file** on one bad record, and the Admin SDK's `providerData` carries a `password` entry the CLI does not accept — which every email/password account in this project has. Caught by codex R3. |
+| Hash-readability signal | `passwordUsersMissingHash` counts accounts that have a `password` provider but no hash — the signature of a runtime service account that cannot read password hashes. Such an export **imports perfectly and leaves every member unable to sign in**, so any value above zero makes the run report `ok:false` and writes an `error` audit row. |
+| Audit | One `admin_audit` row per run (`action: "AUTH_BACKUP"`), counts and object path only. |
+
+### SAFETY posture (Rule 1 — kill switch + dry-run default)
+
+The arming key is **`system/config.authBackup`**:
+
+```
+system/config.authBackup = {
+  enabled: <boolean>,   // DEFAULT/absent = false. Nothing is written.
+  dryRun:  <boolean>,   // DEFAULT/absent = true. Only an explicit false goes live.
+  bucket:  "<name>"     // REQUIRED for a live run. No default — a backup job that
+                        // guesses its own destination is one nobody can find.
+}
+```
+
+- **Absent or unreadable config → disabled**, and an unreadable one reports
+  `ok:false` rather than masquerading as "switched off".
+- **`enabled: true` with no valid `bucket` → the job is visibly UNHEALTHY** on
+  `system/heartbeats`, not quietly idle. That is the direct answer to the
+  original objection to writing this job at all.
+- **A dry run pages through every account and uploads nothing.** It is the
+  rehearsal that proves the `listUsers` permission and the page loop before any
+  byte reaches a bucket.
+- The callable **refuses** an explicit `dryRun: false` while the switch is off or
+  no bucket is set, rather than silently downgrading it to a dry run. An operator
+  who asked for a backup and got a rehearsal has to be told.
+
+### PII — what the bucket's access posture MUST be
+
+**The export contains every user's email address and, for password accounts,
+their scrypt hash and salt.** That is not incidental: it is precisely what makes
+the export restorable. So the file is the single most sensitive artifact this
+project produces, and the controls are:
+
+1. **Uniform bucket-level access** (`--uniform-bucket-level-access`). Per-object
+   ACLs are how a "private" bucket ends up with one world-readable object.
+2. **Public access prevention ENFORCED** (`--public-access-prevention=enforced`).
+   Not "not currently public" — structurally unable to become public.
+3. **A dedicated bucket, not the Firestore export bucket.** Separate IAM
+   boundary, separate lifecycle, and the function's service account can be
+   granted create-only on this one without touching the other.
+4. **Least privilege for the function: `roles/storage.objectCreator`, NOT
+   `objectAdmin`.** The job only ever creates new objects — every run's object
+   names carry a unique run id, so it never needs to overwrite one. A
+   create-only grant means a compromised function cannot read back the archive
+   of every previous export, cannot delete it, and cannot overwrite it. (This
+   pairing is deliberate: without the run id, two runs in the same second would
+   collide, and an overwrite against a create-only grant is a 403.)
+5. **Object versioning ON**, so an overwrite or a delete does not destroy the
+   only copy.
+6. **Human access limited to the project owner.** Do not grant a group.
+7. **No bucket retention LOCK.** A lock makes objects undeletable for the
+   period, which is good against ransomware and bad against a user's deletion
+   request — you would be unable to purge their hash from the archive.
+   Versioning plus a lifecycle rule gives most of the durability without that
+   trap. Stated as a deliberate tradeoff, not an oversight.
+8. Encryption at rest is Google-managed by default and is fine at this scale;
+   CMEK adds a key you can lose, which at one weekly JSON file is a net
+   reduction in safety.
+9. **The code never logs a user record** — logs and audit metadata carry counts
+   and object paths only, enforced mechanically by
+   `functions/src/__tests__/authBackup.test.ts`. Cloud Functions logs are
+   readable by anyone with project viewer and are NOT covered by this bucket's
+   access controls.
+
+### Step 6a — Kevin: create the bucket and grant the function (does NOT exist yet)
+
+⚠️ **These commands run in Google Cloud Shell (the browser terminal from Step 0),
+NOT in PowerShell on your machine.** Bucket names are written out literally — no
+shell variables — so nothing breaks if you close the tab and come back.
+
+1. Open Cloud Shell and confirm the project:
+
+   ```
+   gcloud config get-value project
+   ```
+
+   **Expect:** `gridiron-gamble-uzuqo`.
+   **If instead** it prints anything else, run
+   `gcloud config set project gridiron-gamble-uzuqo` and repeat.
+
+2. Create the bucket, off-region from the database (`locationId` is `nam5`,
+   measured 2026-07-21, which is US multi-region — so `us-east1` is a single
+   region inside the US but a distinct failure domain; that is the same choice
+   Step 4 makes):
+
+   ```
+   gcloud storage buckets create gs://mmpools-auth-backups --project gridiron-gamble-uzuqo --location us-east1 --uniform-bucket-level-access --public-access-prevention
+   ```
+
+   **Expect:** `Creating gs://mmpools-auth-backups/...` and no error.
+   **If instead** you get `409 ... already own it`, it exists — continue.
+   **If** you get `409 ... bucket names must be globally unique` and you do not
+   own it, pick `mmpools-auth-backups-gg` and **use that name in every command
+   below and in the `bucket` config value in Step 6b.**
+
+3. Turn on object versioning:
+
+   ```
+   gcloud storage buckets update gs://mmpools-auth-backups --versioning
+   ```
+
+4. Lifecycle: delete live objects after 365 days, and non-current versions after
+   30. A year of weekly exports is ~52 files; the cost is pennies and the window
+   covers "we noticed a season later".
+
+   ⚠️ Two single-line commands on purpose. A heredoc written inside an indented
+   list block copies with its leading spaces, and an indented terminator does not
+   end a heredoc — bash then sits waiting for input forever.
+
+   ```
+   echo '{"lifecycle":{"rule":[{"action":{"type":"Delete"},"condition":{"age":365,"isLive":true}},{"action":{"type":"Delete"},"condition":{"daysSinceNoncurrentTime":30}}]}}' > ~/auth-lifecycle.json
+   ```
+
+   ```
+   gcloud storage buckets update gs://mmpools-auth-backups --lifecycle-file=$HOME/auth-lifecycle.json
+   ```
+
+   **Expect:** `Updating gs://mmpools-auth-backups/...` with no error.
+
+5. Find the runtime service account the v2 functions execute as:
+
+   ```
+   gcloud projects describe gridiron-gamble-uzuqo --format="value(projectNumber)"
+   ```
+
+   **Expect:** a 12-digit number. The service account is
+   `<that number>-compute@developer.gserviceaccount.com`.
+
+6. Grant it **create-only** on this bucket (substitute the number from step 5):
+
+   ```
+   gcloud storage buckets add-iam-policy-binding gs://mmpools-auth-backups --member=serviceAccount:<PROJECT_NUMBER>-compute@developer.gserviceaccount.com --role=roles/storage.objectCreator
+   ```
+
+   **Expect:** the updated IAM policy printed, containing `storage.objectCreator`.
+
+7. Confirm the bucket is not public:
+
+   ```
+   gcloud storage buckets describe gs://mmpools-auth-backups --format="value(iamConfiguration.publicAccessPrevention,iamConfiguration.uniformBucketLevelAccess.enabled)"
+   ```
+
+   **Expect:** `enforced` and `True`. **If either is missing**, re-run step 2's
+   flags via `gcloud storage buckets update` before putting real data in it.
+
+### Step 6b — Kevin: arm the job in two stages
+
+⚠️ **Deploy first.** `authBackupJob` and `runAuthBackup` are new, so they do not
+exist in prod until a functions deploy ships them. Follow CLAUDE.md §3
+(`git -C D:\march-melee-pools pull --ff-only origin main` FIRST), then verify by
+name in PowerShell:
+
+```
+npx firebase functions:list | Select-String "runAuthBackup"
+```
+
+**Expect:** a line naming `runAuthBackup`. **If it is absent**, the deploy shipped
+the old code — this is the silent stale-checkout failure CLAUDE.md §3 describes;
+pull and redeploy rather than retrying.
+
+**Stage 1 — dry run, still disabled.** In the Firestore console, set
+`system/config` field `authBackup` to a map:
+
+```
+authBackup: { enabled: false, dryRun: true, bucket: "mmpools-auth-backups" }
+```
+
+Then call `runAuthBackup` with `{ "dryRun": true }`. **Expect** a result whose
+`users` count roughly matches the Firebase console's Authentication tab,
+`complete: true`, `uploaded: false`, `passwordUsersMissingHash: 0` and
+`problem: null`.
+
+**If `passwordUsersMissingHash` is above 0**, the runtime service account cannot
+read password hashes. Do NOT arm the job — an armed job in that state produces
+weekly exports that import cleanly and lock every member out. Fix the service
+account's Firebase Auth permissions and re-run the dry run first. **If `users` is 0** or the call fails
+with a permission error, the runtime service account cannot read Auth — stop and
+fix that before arming anything; a dry run failing here is the whole point of
+running it.
+
+**Stage 2 — arm.** Set `enabled: true` and `dryRun: false`. Then call
+`runAuthBackup` with `{ "dryRun": false }` once, by hand, so the first live write
+happens while you are watching:
+
+```
+gcloud storage ls --recursive gs://mmpools-auth-backups/auth/
+```
+
+**Expect:** two objects — `auth-backup-<stamp>-<runid>.json` with a non-zero size, and
+its `.manifest.json`. **If only the users file is there**, the manifest upload
+failed and the run did not finish; treat that as an incident, not a partial
+success. **If the object name contains `-PARTIAL`**, the page loop stopped early
+and the export is NOT whole.
+
+**Verify the following Sunday, not the same day.** A schedule that exists has
+produced nothing yet. After the first scheduled run, check
+`system/heartbeats.authBackupJob` has a recent `at` and `ok: true`.
+
+### Step 6c — Interim manual export (still worth running once)
+
+Until Step 6a/6b are done there is no automated Auth backup at all, and this
+takes one minute.
 
 ⚠️ **The export file contains every user's email and their password hashes.**
 Write it **outside the repository**, so it cannot be caught by a stray
@@ -459,7 +686,7 @@ Then upload it and delete the local copy. Use a timestamped object name so a
 second run never silently overwrites the first:
 
 ```
-gcloud storage cp $AUTH_EXPORT "gs://$BACKUP_BUCKET/auth/auth-backup-$(Get-Date -Format yyyyMMdd-HHmmss).json"
+gcloud storage cp $AUTH_EXPORT "gs://mmpools-auth-backups/auth/auth-backup-manual-$(Get-Date -Format yyyyMMdd-HHmmss).json"
 Remove-Item $AUTH_EXPORT
 ```
 
@@ -473,8 +700,224 @@ Test-Path $AUTH_EXPORT
 **Expect:** `False`. **If it prints `True`**, the delete did not happen; re-run
 `Remove-Item $AUTH_EXPORT` and check again before moving on.
 
-Once step 4's bucket exists, the scheduled version of this becomes a small,
-testable piece of work.
+---
+
+## Step 6d — THE RESTORE PROCEDURE (an export nobody can restore is not a backup)
+
+### 6d.0 — Capture the password hash parameters NOW, before you need them
+
+🛑 **THIS IS THE STEP THAT MAKES OR BREAKS THE WHOLE THING, AND IT IS NOT IN THE
+EXPORT.** Firebase hashes passwords with a modified scrypt keyed by a
+**project-specific signer key**. The export carries each user's hash and salt;
+it does **not** carry the parameters needed to verify them. Import the users
+without those parameters and every account exists with a password that can never
+match — the members are locked out exactly as thoroughly as if you had no backup.
+
+1. Go to
+   `https://console.firebase.google.com/project/gridiron-gamble-uzuqo/authentication/users`
+2. Click the **⋮** (three-dot) menu at the top right of the users table.
+3. Click **Password hash parameters**.
+4. Copy every value on that panel verbatim — all five: `algorithm` (SCRYPT),
+   `base64_signer_key`, `base64_salt_separator`, `rounds`, `mem_cost`.
+5. **Store them somewhere that is not this repository and not the backup
+   bucket** — a password manager entry is right. The signer key is a credential;
+   putting it beside the hashes it unlocks defeats having two places.
+
+**If the menu item is missing**, you are not signed in as an Owner/Editor on the
+project.
+
+### 6d.1 — Find the right object (Cloud Shell)
+
+⚠️ **Cloud Shell, not PowerShell.**
+
+```
+gcloud storage ls gs://mmpools-auth-backups/auth/
+```
+
+Pick a name **without** `-PARTIAL` in it, then read its manifest sibling and
+confirm it says `"complete": true`:
+
+```
+gcloud storage cat gs://mmpools-auth-backups/auth/auth-backup-<stamp>-<runid>.manifest.json
+```
+
+**Expect:** a small JSON with `"complete": true`, `"passwordUsersMissingHash": 0`,
+`"unsupportedMfaFactors": 0` and a `users` count.
+
+**If the manifest is missing**, that run died mid-flight — the users object
+beside it is not a finished backup. **A `-PARTIAL` file is a last resort, not a
+restore.**
+
+🛑 **If `passwordUsersMissingHash` is anything but 0, DO NOT restore from this
+file expecting people to be able to sign in.** That count means the export was
+taken by a service account that could not read password hashes, so those
+accounts come back with no password at all. The accounts import fine — which is
+exactly why this has to be checked here, before the import, rather than
+discovered by a member who cannot log in. Take a fresh export (Step 6b) after
+fixing the service account's Auth permissions.
+
+### 6d.2 — Download it to your machine (PowerShell)
+
+⚠️ **Everything from here runs in PowerShell on your Windows machine, from
+`D:\march-melee-pools`** — that is where `npx` resolves the pinned Firebase CLI
+and where you are already authenticated. No POSIX paths.
+
+⚠️ **This puts a file of every member's email and password hash on the laptop.**
+6d.5 deletes it and verifies the delete; do not skip that step.
+
+```
+cd D:\march-melee-pools
+```
+
+```
+$AUTH_RESTORE = Join-Path $env:TEMP "auth-restore.json"
+```
+
+**If you have local gcloud installed** (Step 0's optional path):
+
+```
+gcloud storage cp "gs://mmpools-auth-backups/auth/auth-backup-<stamp>-<runid>.json" $AUTH_RESTORE
+```
+
+**If you do NOT have local gcloud**, download it through the browser instead:
+go to
+`https://console.cloud.google.com/storage/browser/mmpools-auth-backups/auth?project=gridiron-gamble-uzuqo`,
+click the object, click **Download**, then move the file to the path
+`$AUTH_RESTORE` prints:
+
+```
+$AUTH_RESTORE
+```
+
+Confirm it is real before importing it:
+
+```
+(Get-Content $AUTH_RESTORE -Raw | ConvertFrom-Json).users.Count
+```
+
+**Expect:** a number matching the manifest's `users`. **If it is 0 or errors**,
+stop — you are about to import nothing over a live tenant.
+
+### 6d.3 — Import (PowerShell)
+
+The file is already in `firebase auth:import` shape (`{"users":[...]}` with
+`localId`, `passwordHash`, `salt`, `providerUserInfo`), so there is no
+conversion step. Substitute the four values you captured in 6d.0:
+
+```
+npx firebase auth:import $AUTH_RESTORE --project gridiron-gamble-uzuqo --hash-algo=SCRYPT --hash-key=<base64_signer_key> --salt-separator=<base64_salt_separator> --rounds=<rounds> --mem-cost=<mem_cost>
+```
+
+**Expect:** `Processing N account(s)` and a success count matching N.
+
+**If instead** individual accounts fail, read the per-account reason before
+re-running.
+
+⚠️ **UNVERIFIED — what happens to a uid that ALREADY exists.** Whether
+`auth:import` overwrites an existing account or skips it has never been tested
+here, and getting it wrong on a live tenant is not recoverable by re-running.
+**Treat an import into a tenant that still has users as a merge whose semantics
+you have not established.** Restore into a tenant you know is empty or known
+lost, or test the behaviour first in the throwaway project from 6d.7.
+
+**If** the whole file is rejected for an unrecognised field, strip `mfaInfo`
+first — that mapping is emitted only for users with enrolled second factors and
+has never been proven against a live import (**UNVERIFIED**; the project has no
+MFA today, so current exports contain no `mfaInfo` at all).
+
+### 6d.4 — Verify the restore, do not assume it
+
+1. Count:
+
+   ```
+   npx firebase auth:export (Join-Path $env:TEMP "auth-verify.json") --format=json --project gridiron-gamble-uzuqo
+   ```
+
+   then compare `.users.Count` against the manifest's `users` from 6d.1.
+2. **Sign in as a real account with its real password.** This is the ONLY
+   evidence that the hash parameters were right. A count match proves the
+   accounts exist; it proves nothing about whether anyone can get in.
+3. Spot-check that a restored uid still owns its pools — take a `localId` from
+   the export and confirm `users/{uid}` and their entries resolve.
+
+### 6d.5 — Delete the local copies and PROVE they are gone
+
+```
+Remove-Item $AUTH_RESTORE
+```
+
+```
+Remove-Item (Join-Path $env:TEMP "auth-verify.json")
+```
+
+```
+Test-Path $AUTH_RESTORE
+```
+
+**Expect:** `False`. **If it prints `True`**, the delete did not happen — re-run
+`Remove-Item $AUTH_RESTORE` and check again before moving on. Two files of
+password hashes on a laptop is how a good restore becomes a breach.
+
+### 6d.6 — What is NOT recoverable from this export
+
+State these before an incident, not during one:
+
+- **Password hash parameters.** Covered above. Not in the export, by design.
+- **Restoring into a DIFFERENT Firebase project** works only if you pass the
+  ORIGINAL project's hash parameters to `auth:import`. Without them the hashes
+  are inert. This is the documented migration path, but it is one more reason
+  6d.0 is mandatory.
+- **Sessions and refresh tokens.** Everyone is signed out. Expect a support wave
+  on restore day; that is normal, not a failed restore.
+- **Identity-provider CONFIGURATION.** `providerUserInfo` restores the *link*
+  between a user and, say, Google — it does not restore the project's enabled
+  sign-in methods, OAuth client ids/secrets, or authorized domains. Those are
+  project settings and must be reconfigured by hand.
+- **Email templates, action-URL settings, SMS/reCAPTCHA config, authorized
+  domains, App Check registrations, custom SMTP.** All project configuration,
+  none of it in this export.
+- **`lastRefreshTime`.** Not exported; `lastSignedInAt` is.
+- **The `password` and `phone` entries of `providerData`.** Deliberately dropped:
+  `auth:import` accepts only the ten federated provider ids and rejects the whole
+  file otherwise. Nothing is lost — a password account is reconstituted from
+  `passwordHash`/`salt`, and `phoneNumber` is a top-level field.
+- **`tenantId`.** Deliberately dropped for the same reason (not in the CLI's
+  allowed keys). Single-tenant project, so nothing is lost.
+- **TOTP second factors.** `auth:import`'s `mfaInfo` records are phone-shaped
+  and TOTP has no equivalent, so a TOTP enrolment is NOT exported. It is
+  counted in `unsupportedMfaFactors` and makes the run report a problem rather
+  than being dropped in silence. Not reachable today (this project has no MFA —
+  the Identity Platform upgrade is D6, deferred), but it becomes live the moment
+  that changes, which is why it fails loud rather than quietly.
+- **Anything Firestore.** `users/{uid}` profile docs, roles, entries, picks and
+  member records live in Firestore and come back through PITR / the Firestore
+  export (Steps 2, 4, 5). The Auth export's job is to make the `uid`s match so
+  those documents have owners again. **Restore Auth and Firestore as a pair, or
+  you get accounts that own nothing / data nobody can log in to reach.**
+- **The custom-claim role, if it drifts.** `customAttributes` carries the
+  `SUPER_ADMIN` claim, and `users/{uid}.role` comes from Firestore. The repo's
+  `assertCallerRole` requires the two to AGREE, so after a restore from two
+  sources of different ages an admin may need `syncMyClaims` before admin
+  callables work.
+
+### 6d.7 — The Auth restore drill (never run yet)
+
+The Firestore drill in Step 7 restores into a scratch database. **Auth has no
+equivalent**: a Firebase project has exactly one Auth tenant, and there is no
+`--database=restore-drill` for identity. Importing into production to "test" it
+is not an option.
+
+Realistic options, in order of preference:
+
+1. **Create a throwaway Firebase project**, import the export into it with the
+   PRODUCTION hash parameters, and sign in as a test account you created in prod
+   beforehand and whose password you know. This is the only drill that proves
+   the hash parameters end to end.
+2. At minimum, **import one deliberately-deleted test account back into prod**
+   and sign in as it.
+
+Until one of those has been done, this backup is **untested** and should be
+described that way. A backup that has never been restored is a hypothesis.
 
 ---
 
@@ -526,11 +969,16 @@ old documents over current ones and cannot be undone.
 | Same, noticed after a week | Scheduled backups (step 5), up to 14 weeks |
 | Database deleted, or project-level accident | Off-region export (step 4) |
 | Regional outage at the database's location | Off-region export (step 4) |
-| Auth users lost | Manual export (step 6); no automation yet |
+| Auth users lost | `authBackupJob` weekly + `runAuthBackup` on demand (step 6) — **code shipped, NOT armed; bucket does not exist yet.** Until step 6a/6b are done, the only cover is the manual export in step 6c. |
+| Auth users lost, restore attempted without the hash parameters | **Nothing.** Every account comes back with a password that can never match. Step 6d.0 is the mitigation and it is a Kevin action, not code. |
 | User-uploaded files lost | **Nothing** — pending the step 3 inventory |
 
 The honest current state is that **every row of that table reads "nothing"**
 until step 2 is run.
+
+⚠️ Two rows are load-bearing and NOT satisfied by merging the code: the Auth
+bucket (step 6a) and the hash parameters (step 6d.0). Shipping a backup job is
+not the same as having a backup.
 
 ---
 
@@ -541,5 +989,9 @@ until step 2 is run.
 - Cloud Storage in use? _(step 3)_
 - Export bucket + region: _(step 4)_
 - Backup schedules created: _(step 5)_
-- Auth user count at first export: _(step 6)_
-- Restore drill outcome: _(step 7)_
+- Auth backup bucket created + IAM granted: _(step 6a)_
+- `system/config.authBackup` armed (`enabled`/`dryRun`/`bucket`): _(step 6b)_
+- Auth user count at first export: _(step 6b/6c)_
+- Password hash parameters captured, and where: _(step 6d.0 — record WHERE, never the values)_
+- Firestore restore drill outcome: _(step 7)_
+- Auth restore drill outcome: _(step 6d.5 — **never run as of this writing**)_

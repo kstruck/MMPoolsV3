@@ -17,6 +17,7 @@ import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords
 import { confidenceValueOwners, isConfidenceValueTaken } from '../../utils/confidenceWeights';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
+import { pickemOutcome, pickOutcomeCardClass, pickOutcomeLabel } from './pickSheet/pickOutcome';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
@@ -610,11 +611,26 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             // that covered but lost outright rendered RED while the server
             // recorded a WIN. Unreachable until the wizard gained an ATS
             // control; exposing the mode is what made it live.
-            const result = gradePick(game, savedForGame ?? myPick, castPool.settings?.pickMode);
-            const isCorrect = result === 'W';
-            // A PUSH is neither a win nor a loss — colouring it red would call
-            // a refunded pick wrong.
-            const isGraded = result === 'W' || result === 'L';
+            // ⚠️ `savedForGame` ONLY — never `savedForGame ?? myPick`, which is
+            // what this line used to read (codex, round 2 of this change).
+            //
+            // `picks` is seeded from a LOCAL DRAFT as well as from the entry, so
+            // on a game that went FINAL with an unsubmitted draft still in the
+            // browser, `myPick` is populated while the server holds nothing. The
+            // old expression graded that draft and this change would then have
+            // replaced the honest "Unsaved" marker with a green tick — telling a
+            // member they won a game they never entered a pick for.
+            //
+            // Grading the server's copy is also what Survivor and Margin already
+            // do (`savedPick`), so all three sheets now answer the same question:
+            // how did the pick the pool actually holds turn out?
+            const result = gradePick(game, savedForGame, castPool.settings?.pickMode);
+            // A PUSH or a VOID is neither a win nor a loss — `pickemOutcome`
+            // maps both to `null`, so neither the card nor the badge claims the
+            // refunded pick was wrong. It is also handed the GAME, because
+            // `gradePick` alone will decide a scoreless FINAL in an ATS pool
+            // while the scorer is still refusing to grade it (codex round 1).
+            const outcome = pickemOutcome(game, result);
 
             const homeAbbrev = game.homeTeam.abbreviation;
             const awayAbbrev = game.awayTeam.abbreviation;
@@ -623,14 +639,18 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${
-                  isGraded
-                    ? isCorrect
-                      ? 'border-[#BEE7D0] bg-[#0F7B4A]/5'
-                      : 'border-brandred-600/30 bg-brandred-600/5'
-                    : 'border-line'
-                }`}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
               >
+                {/* The card colour is (d) in Kevin's request, and on its own it
+                    is colour-only signalling. This line is the text half: one
+                    sentence naming the matchup and the verdict, read out where
+                    the highlight is merely seen. It renders only on a graded
+                    game, so a pending slate announces nothing extra. */}
+                {outcome && (
+                  <span className="sr-only">
+                    {`${game.awayTeam.abbreviation} at ${game.homeTeam.abbreviation}: ${pickOutcomeLabel(outcome)}`}
+                  </span>
+                )}
                 {/* Day, kickoff, TV listing, the line, and the lock badge — the
                     CBS row. The old hand-rolled lock pill and the ATS-only
                     "Spread: -6.5" chip are both GONE: GameMeta renders the lock
@@ -649,6 +669,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     consensusPct={split?.awayPct}
                     selected={awayPicked}
                     saved={awaySaved}
+                    outcome={savedForGame === awayAbbrev ? outcome : null}
                     disabled={locked}
                     title={pickHighlightLabel(awayPicked, awaySaved) || undefined}
                     onSelect={() => handlePickSelect(game.id, awayAbbrev)}
@@ -687,6 +708,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     consensusPct={split?.homePct}
                     selected={homePicked}
                     saved={homeSaved}
+                    outcome={savedForGame === homeAbbrev ? outcome : null}
                     disabled={locked}
                     title={pickHighlightLabel(homePicked, homeSaved) || undefined}
                     onSelect={() => handlePickSelect(game.id, homeAbbrev)}

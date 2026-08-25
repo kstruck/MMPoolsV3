@@ -15,6 +15,7 @@ import { submitPlayoffPicksSchema, managePlayoffEntrySchema } from "./schemas/pl
 import { withHeartbeat } from "./lib/heartbeat";
 import { syncPlayoffPoolsSchema } from "./schemas/noInputAdmin";
 import { calculatePlayoffScoresSchema } from "./schemas/playoffEntries";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 
 
 
@@ -277,7 +278,11 @@ export const managePlayoffEntry = validated(
     const { poolId, entryId, action } = input;
     const value = input.action === 'togglePaid' ? input.value : undefined;
     const uid = request.auth!.uid;
-    const isAdmin = request.auth!.token.role === 'SUPER_ADMIN';
+    // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d). This flag widens `isManager`
+    // below, so a bare `token.role === 'SUPER_ADMIN'` let a demoted admin with an
+    // un-expired token toggle payment and edit entries on any pool. The doc read
+    // only happens when the claim already says SUPER_ADMIN.
+    const isAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
     const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);

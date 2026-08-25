@@ -725,9 +725,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               type="checkbox"
                               checked={liabilityAccepted}
                               onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                              className="peer h-5 w-5 cursor-pointer appearance-none rounded border border-line bg-page transition-all checked:border-gold-500 checked:bg-gold-500 hover:border-gold-400"
+                              className="peer h-6 w-6 cursor-pointer appearance-none rounded border border-line bg-page transition-all checked:border-gold-500 checked:bg-gold-500 hover:border-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                            />
-                           <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-navy-950 opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                           <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-navy-950 opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                         </div>
                         <p className="text-xs text-muted leading-relaxed group-hover:text-[color:var(--text)] transition-colors duration-150">
                            By checking this box and selecting Reserve Squares, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.

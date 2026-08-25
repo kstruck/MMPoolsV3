@@ -151,4 +151,7 @@ export { siteAveragesJob, refreshSiteAverages } from "./siteAverages";
 
 // --- EXPERT PROFILES (ADR 0005 Phase 6) — experts rendered through the same projection ---
 export { gradeExpertProfilesJob, refreshExpertProfiles } from "./expertProfiles";
+export { cspReport } from "./cspReport"; // CSP violation sink — bounded collector behind the CSP report-uri/report-to
 
+// --- FIREBASE AUTH BACKUP (PLAN-BACKUPS-PHASE3 item 18) — kill-switched, dry-run-default ---
+export { authBackupJob, runAuthBackup } from "./authBackup";

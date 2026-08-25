@@ -148,8 +148,18 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 // no new deploy prerequisite. On deploy, SMS reminders start actually going out
 // to members who have a phone number and have opted in. Reverting is deleting
 // this one option — the job keeps working, minus SMS.
+//
+// SIZING (item 14, PLAN-AUDIT-BACKEND-RESIDUE §1): 540s/512MiB. This job had NO
+// explicit sizing, so it ran on the Gen-2 default of 60 SECONDS — and the shape
+// of that failure is the reason the audit named this job specifically. It scans
+// the bounded pool union above and then SENDS email and SMS per pool, so the
+// wall lands mid-send: some members notified, some not, and the only trace is a
+// timeout with no indication that anything was half-delivered.
+// 540s/512MiB is the repo's ceiling for a scan-and-write job — the same values
+// nflFinalizeSweepJob and recomputeGlobalStatsDaily carry. It stays under the
+// 900s cadence gap, so two runs still cannot overlap.
 export const runReminders = functions.scheduler.onSchedule(
-    { schedule: "every 15 minutes", secrets: [courierAuthToken] },
+    { schedule: "every 15 minutes", timeoutSeconds: 540, memory: "512MiB", secrets: [courierAuthToken] },
     withHeartbeat('runReminders', async () => {
     const db = admin.firestore();
     const now = Date.now();

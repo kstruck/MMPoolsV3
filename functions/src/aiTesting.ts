@@ -6,6 +6,7 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { geminiApiKey, generateAIResponse } from "./gemini";
+import { assertCallerRole } from "./lib/assertRole";
 import { Type } from "@google/genai";
 
 // ===== SCENARIO GENERATION =====
@@ -97,9 +98,11 @@ export const generateTestScenario = onCall(
     async (request) => {
         // Test-only tooling that runs expensive Gemini jobs — SUPER_ADMIN only.
         // Without this, any authenticated user could drain the Gemini quota / bill.
-        if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-            throw new HttpsError("permission-denied", "Only super admins can run AI testing tools.");
-        }
+        // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17a): the check used to read the
+        // JWT claim alone, so a demoted admin holding an un-expired token still
+        // passed. assertCallerRole requires users/{uid}.role to agree — the same
+        // edit PLAN-AUDIT-AUTH-HARDENING A1 made to siteAverages/expertProfiles.
+        await assertCallerRole(request, "SUPER_ADMIN");
         try {
             const { poolType, userRequest } = request.data;
 
@@ -150,9 +153,11 @@ export const validateTestResults = onCall(
     async (request) => {
         // Test-only tooling that runs expensive Gemini jobs — SUPER_ADMIN only.
         // Without this, any authenticated user could drain the Gemini quota / bill.
-        if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-            throw new HttpsError("permission-denied", "Only super admins can run AI testing tools.");
-        }
+        // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17a): the check used to read the
+        // JWT claim alone, so a demoted admin holding an un-expired token still
+        // passed. assertCallerRole requires users/{uid}.role to agree — the same
+        // edit PLAN-AUDIT-AUTH-HARDENING A1 made to siteAverages/expertProfiles.
+        await assertCallerRole(request, "SUPER_ADMIN");
         try {
             const { scenario, testResult } = request.data;
 
@@ -203,9 +208,11 @@ export const generateTestReport = onCall(
     async (request) => {
         // Test-only tooling that runs expensive Gemini jobs — SUPER_ADMIN only.
         // Without this, any authenticated user could drain the Gemini quota / bill.
-        if (!request.auth || request.auth.token.role !== "SUPER_ADMIN") {
-            throw new HttpsError("permission-denied", "Only super admins can run AI testing tools.");
-        }
+        // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17a): the check used to read the
+        // JWT claim alone, so a demoted admin holding an un-expired token still
+        // passed. assertCallerRole requires users/{uid}.role to agree — the same
+        // edit PLAN-AUDIT-AUTH-HARDENING A1 made to siteAverages/expertProfiles.
+        await assertCallerRole(request, "SUPER_ADMIN");
         try {
             const { scenario, testResult, validation } = request.data;
 

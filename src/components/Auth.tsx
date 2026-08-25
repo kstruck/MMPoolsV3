@@ -93,7 +93,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, defaultIsRegistering = fals
         <div className="p-8 space-y-6">
           {/* Error Banner */}
           {error && (
-            <div className="bg-brandred-600/10 border border-brandred-600/40 rounded-lg p-3 flex items-start gap-3 text-brandred-600 text-sm font-body">
+            <div role="alert" className="bg-brandred-600/10 border border-brandred-600/40 rounded-lg p-3 flex items-start gap-3 text-brandred-600 text-sm font-body">
               <AlertCircle size={18} className="shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
