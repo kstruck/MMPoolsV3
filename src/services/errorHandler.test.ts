@@ -22,7 +22,12 @@ vi.stubGlobal('window', { location: { href: 'https://mmp.app/pool/p1?email=kevin
  * browser on this path.
  */
 
-const captureSentryException = vi.hoisted(() => vi.fn(async () => {}));
+// Both mocks declare their parameters for the same reason: `tsc -b` compiles
+// everything under src/, and a zero-arg mock makes `mock.calls[0][0]` a TS2493
+// error that fails the Docker build's first layer (codex round 3).
+const captureSentryException = vi.hoisted(() =>
+    vi.fn(async (_error?: Error, _options?: unknown) => {}),
+);
 vi.mock('../sentry', () => ({ captureSentryException }));
 
 // The payload parameter is declared even though the mock ignores it: `tsc -b`
@@ -53,6 +58,19 @@ describe('errorHandler.handleError', () => {
         callable.mockRejectedValueOnce(new Error('callable unavailable'));
         const { errorHandler } = await import('./errorHandler');
         await expect(errorHandler.handleError(new Error('boom'), { notify: false })).resolves.toBeUndefined();
+    });
+
+    it('redacts the exception sent to Sentry too, without mutating the caller\'s error', async () => {
+        const { errorHandler } = await import('./errorHandler');
+        const err = new TypeError('failed to fetch https://mmp.app/j?email=kevin@example.com');
+        err.stack = 'TypeError: x\n    at f (https://mmp.app/j?token=abcdef123456:1:2)';
+        await errorHandler.handleError(err, { notify: false });
+        const sent = captureSentryException.mock.calls[0][0] as unknown as Error;
+        expect(sent.message).not.toContain('kevin@example.com');
+        expect(sent.stack).not.toContain('abcdef123456');
+        // Grouping identity survives, and the original is untouched.
+        expect(sent.name).toBe('TypeError');
+        expect(err.message).toContain('kevin@example.com');
     });
 
     it('redacts PII before the payload leaves the browser', async () => {

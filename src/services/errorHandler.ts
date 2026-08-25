@@ -3,7 +3,7 @@ import { functions } from '../firebase';
 import { logger } from '../utils/logger';
 import { captureSentryException } from '../sentry';
 import { sanitizeForSentry } from '../utils/sentrySanitize';
-import { redactClientErrorReport } from '@shared/piiRedaction';
+import { redactClientErrorReport, redactFreeText } from '@shared/piiRedaction';
 
 export const ErrorSeverity = {
     LOW: 'low',
@@ -43,6 +43,28 @@ function cleanUndefined(obj: any): any {
         }
     }
     return newObj;
+}
+
+/**
+ * A copy of an error with its message and stack swept for PII.
+ *
+ * `sanitizeForSentry` only ever covered the CONTEXT object; the exception itself
+ * went to Sentry verbatim, and a failed-request error routinely carries the URL
+ * it failed on — query params, tokens and all — in exactly those two fields.
+ * Sentry is a third party, which `utils/sentrySanitize.ts` already calls the
+ * stricter boundary of the two, so it should not be the one sink that sees the
+ * raw text (codex round 4).
+ *
+ * A copy, never a mutation: the caller's error object belongs to the caller and
+ * may still be rendered or rethrown. `name` is carried over because Sentry's
+ * grouping uses it (a plain `Error` in place of a `FirebaseError` would silently
+ * re-bucket every issue).
+ */
+function redactedForSentry(error: Error): Error {
+    const copy = new Error(redactFreeText(error.message));
+    copy.name = error.name;
+    if (error.stack) copy.stack = redactFreeText(error.stack);
+    return copy;
 }
 
 class ErrorHandler {
@@ -97,7 +119,7 @@ class ErrorHandler {
         // call below entirely. Every error report would have been lost in exactly
         // the scenario the Firestore sink exists to cover (codex round 1, P1).
         try {
-            await captureSentryException(error instanceof Error ? error : new Error(message), {
+            await captureSentryException(redactedForSentry(error instanceof Error ? error : new Error(message)), {
                 level: severity === ErrorSeverity.CRITICAL ? 'fatal'
                     : severity === ErrorSeverity.LOW ? 'warning'
                         : 'error',
