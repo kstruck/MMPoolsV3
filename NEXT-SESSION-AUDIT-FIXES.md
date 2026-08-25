@@ -208,7 +208,10 @@ FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
 24. SECURITY HARDENING (from the 6/7 audit; the FAIL is D1/item 1):
     (a) CSP: drop 'unsafe-inline' from script-src (hashes/nonces — TEST
         CAREFULLY, App-Check-outage-class risk if the SPA inlines
-        anything), tighten img-src bare https:, add frame-ancestors,
+        anything), img-src bare https: is LOAD-BEARING — commissioner
+        branding accepts any web-hosted logoUrl (wizard-shared.ts), so
+        KEEP it unless/until branding images are proxied or migrated
+        (codex r5), add frame-ancestors,
         add a REAL reporting pipeline — a report-to directive alone
         discards everything (codex): define Reporting-Endpoints (or
         legacy Report-To header) pointing at an actual collector (a tiny
