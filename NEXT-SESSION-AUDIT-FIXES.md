@@ -136,6 +136,109 @@ either queued (D1, SuperAdmin split, tokenization, job sizing) or settled
     re-run an audit again if tonight's work claims to close its items
     (13-19). Current baselines to diff against: frontend 4/6, backend 6/6,
     auth 5/6, hosting 5/6, cloud 4.5/6, VCS 5/6.
+
+FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
+6/7, caching/perf 5/7 with Lighthouse mobile 46 & LCP 11.2s, availability
+2.5/6). Their findings, deduped against items above:
+
+21. ERROR TRACKING (from the 2/6 audit — the codeable set):
+    (a) Dockerfile: add ARG/ENV for VITE_SENTRY_DSN AND
+        VITE_SENTRY_REPLAY_SAMPLE_RATE (codex: sentry.ts documents the
+        replay knob too — DSN alone leaves replay stuck at zero) after
+        line 31 — the entire client Sentry setup (src/sentry.ts) is dead
+        in prod because the build can never receive the DSN. Kevin sets
+        the values in Coolify (his console list below); code half ships
+        regardless.
+    (b) src/main.tsx: register window 'error' + 'unhandledrejection'
+        handlers — non-render JS errors currently vanish. DESIGN (codex
+        r3): when Sentry is live its GlobalHandlers integration already
+        captures both, so these handlers must feed ONLY the logClientError
+        sink, must be skipped (or Sentry-aware) when Sentry initialized,
+        and MUST carry their own dedupe/rate limit — handleError has none
+        today, and a recurring rejection would otherwise write unbounded
+        callable/Firestore traffic.
+    (c) ALERTING GAP (also the availability audit's #2): make
+        scheduledHealthCheck (adminHealth.ts:236) call dispatchOpsAlert
+        on TRANSITIONS only — a check flipping ok->fail, or a job NEWLY
+        entering the stale set (diff against the previous snapshot; codex
+        r3: findStaleJobs returns the same entry every hour, naive wiring
+        pages hourly until recovery). Persist the "alerted" mark only on
+        a SENT dispatch outcome (codex r4: dispatchOpsAlert returns
+        "failed" without throwing — marking first and failing to send
+        means the page never goes out), with bounded retries. Continuing
+        failures stay visible in health/latest, not the pager.
+    (d) PII: delete the full request.data dump at bracketPools.ts:37;
+        apply redaction on the logClientError branch (errorHandler.ts:107
+        or server-side logClientError.ts) — BOTH key-based
+        (sentrySanitize-style) AND pattern-based over free-form fields
+        (codex r6: message/stack/URL carry emails, tokens, query params
+        under non-sensitive keys — sweep those strings for email/token
+        patterns and strip URL query/fragment before persisting).
+    (e) Structured logging: migrate bare console.* in stripe.ts,
+        scoreUpdates.ts, nflSchedule.ts, reminders.ts to
+        firebase-functions logger with fields; add source/type to
+        scoreUpdates' system_logs writes (prodWatchdog filters around the
+        missing field today).
+22. PERFORMANCE (from the 5/7 audit; Lighthouse mobile 46, LCP 11.2s,
+    CLS 0.238 — network weight, TBT 0):
+    (a) Eager-JS diet: analyze the 574KB entry chunk
+        (npx vite-bundle-visualizer); 365KiB reported unused; consider
+        deferring Firestore init on marketing routes.
+    (b) CLS: explicit width/height (or aspect-ratio) on the hero/feature
+        imgs (LandingPage.tsx:133, FeaturesPage.tsx:161-277,
+        GamedaySquaresLanding.tsx:88-188).
+    (c) Fold into item 15's article images: bracket-pool-features.png
+        needs a WEBP TWIN (675KB, none exists) + lazy;
+        squares-heatmap.jpg (272KB) lazy.
+    (d) Compress og-image.png (373KB; crawlers fetch constantly; a
+        1200x630 needs ~100KB).
+    (e) loading="lazy" on ESPN team-logo imgs in list views (Scoreboard,
+        BrowsePools, LiveScoreTicker).
+    NOTE: auditors again suggested deleting the ~4.6MB unreferenced
+    public/ PNGs — Kevin's D3 KEEP ruling stands; mmp-logo-full.png
+    becomes referenced by item 8 anyway.
+23. AVAILABILITY (from the 2.5/6 audit — the codeable set):
+    (a) Functions rollback runbook: write the mirror of §2b for functions
+        (redeploy-prior-commit procedure incl. the stale-checkout trap)
+        into mmp-deploy-and-operate.
+    (b) One-page "SITE IS DOWN" triage doc: uptime alert -> bundle-hash
+        curl -> debugging-playbook S7b -> Coolify Rollback -> /readiness
+        -> functions:log. Put it at repo root or in the deploy skill;
+        link from HANDOFF.
+    (c) Prep (commands only, Kevin executes): PLAN-BACKUPS-PHASE3 Steps
+        4-5 (off-region GCS bucket + scheduled Firestore exports) and the
+        Step-7 restore drill script.
+    (d) Auth export job = item 2 (already queued).
+24. SECURITY HARDENING (from the 6/7 audit; the FAIL is D1/item 1):
+    (a) CSP: drop 'unsafe-inline' from script-src (hashes/nonces — TEST
+        CAREFULLY, App-Check-outage-class risk if the SPA inlines
+        anything), img-src bare https: is LOAD-BEARING — commissioner
+        branding accepts any web-hosted logoUrl (wizard-shared.ts), so
+        KEEP it unless/until branding images are proxied or migrated
+        (codex r5), add frame-ancestors,
+        add a REAL reporting pipeline — a report-to directive alone
+        discards everything (codex): define Reporting-Endpoints (or
+        legacy Report-To header) pointing at an actual collector (a tiny
+        onRequest sink writing to system_logs, or Sentry's CSP endpoint
+        once 21a lands) BEFORE tightening.
+        The CSP string exists in FOUR copies — nginx.conf:33,52,82 AND
+        firebase.json:115 — and tests/csp-invariants.test.ts REQUIRES all
+        four identical (codex r2). Any CSP change edits all four (or
+        consolidates them) and keeps that test green.
+    (b) Retire X-XSS-Protection (set 0); consider HSTS preload.
+
+KEVIN CONSOLE FOLLOW-UPS (surface in the morning chat with full steps):
+- Coolify: set VITE_SENTRY_DSN env/build-arg (needs his Sentry DSN) —
+  pairs with 21a.
+- GCP: Uptime Check + alert policy on https://www.marchmeleepools.com/
+  AND fire a test alert to prove the channel delivers (closes
+  "frontend down, nobody paged").
+- GCP: run the prepped backup-bucket/schedule commands (23c), then the
+  restore drill once, and record evidence in PLAN-BACKUPS-PHASE3.
+- GitHub (optional, recommended): remove the "Repository admin — always"
+  bypass actor from the Required Checks ruleset — as saved, the checks
+  bind nobody because every merge uses the admin token.
+
 Overnight rules as usual: merges on green gates OK, no deploys, no console
 actions, no prod-data mutations past dry-run; runbook + decisions inline in
 chat by morning.
