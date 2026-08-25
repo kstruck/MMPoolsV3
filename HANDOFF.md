@@ -92,7 +92,8 @@
 > never worked before, because no pool had ever held the entitlement until C1's
 > toggle granted one.
 >
-> 🔴 **STILL OWED, KEVIN'S ACTION: ROTATE THE GEMINI KEY.**
+> ~~🔴 STILL OWED, KEVIN'S ACTION: ROTATE THE GEMINI KEY.~~ **SUPERSEDED —
+> rotation CLOSED with evidence 2026-08-24, see the top box.**
 > `CODE_REVIEW_REPORT.md:183` records that it was committed to git history once,
 > and it now has no application restriction. Create a fresh key (Application
 > restrictions **None**, API restrictions **Generative Language API only**),
