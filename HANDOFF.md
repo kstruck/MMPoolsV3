@@ -40,7 +40,8 @@
 > pool-password fix, D3 = mmp-logo-full becomes the site+email logo).
 > The owed-list below is KEPT for the record but is COMPLETE:
 >
-> 🛑 **OWED, order matters:**
+> ~~🛑 OWED, order matters~~ **✅ BOTH STEPS BELOW EXECUTED AND VERIFIED
+> 2026-08-24 — do NOT re-run them; historical record only:**
 > 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
 >    `git pull --ff-only origin main` + `npm --prefix functions ci` — #547,
 >    #548, #549, #554 all change `functions/` (plus #542's guard if still

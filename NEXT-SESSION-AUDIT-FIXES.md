@@ -132,12 +132,10 @@ either queued (D1, SuperAdmin split, tokenization, job sizing) or settled
     `gh api repos/kstruck/MMPoolsV3/rulesets` that required_status_checks
     exists with the four contexts, main-scoped, no bypass actors.
 
-20. Re-audits already re-run 2026-08-24 (this block) — only re-run again
-    if tonight's work claims to close items 13-19: [FILL IN which of the six,
-   or "none"]. Re-run each audit prompt verbatim from the originals and diff
-   the scores against: DB/storage 3/6 → expect ~5/6; backend 5/6 → 6/6;
-   auth 4/6 → 5/6; hosting 3/6 (unchanged until my console tasks are done);
-   cloud 1.5/6 → ~4/6; VCS 5/6 (unchanged until required checks).
+20. Re-audits: already re-run 2026-08-24 (this block IS the result). Only
+    re-run an audit again if tonight's work claims to close its items
+    (13-19). Current baselines to diff against: frontend 4/6, backend 6/6,
+    auth 5/6, hosting 5/6, cloud 4.5/6, VCS 5/6.
 Overnight rules as usual: merges on green gates OK, no deploys, no console
 actions, no prod-data mutations past dry-run; runbook + decisions inline in
 chat by morning.
