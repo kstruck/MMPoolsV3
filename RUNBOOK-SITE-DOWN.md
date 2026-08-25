@@ -53,10 +53,18 @@ curl.exe -s https://www.marchmeleepools.com/ | Select-String "index-[A-Za-z0-9_-
 
 | Result | Reading | Go to |
 |---|---|---|
-| `200` and a bundle hash prints | HTML is being served. The shell is alive; the failure is in what the shell loads or talks to | Step 3 |
+| `200` + a bundle hash, **and the browser shows a permanent spinner / blank page** | ⚠️ **This is the S7b signature.** The shell is served fine and the app never comes alive — curl cannot see the difference, only the browser can | **Step 2** — do NOT skip to step 3 |
+| `200` + a bundle hash, **and the browser renders but something is wrong** | HTML and JS are fine; the failure is in what the app talks to | Step 3 |
 | `200` but NO bundle line | nginx is serving something that is not the SPA shell — a bad build, or a wrong container | Step 2 |
 | `502` / `503` / `504` | The container is not serving. Coolify build or container failure | Step 2 |
 | connection refused / DNS failure / Cloudflare error page | Edge or host problem, not a code problem. Check the Cloudflare dashboard and the Coolify host before deploying anything | Step 2 only after the edge is ruled out |
+
+🛑 **A `200` is not "the frontend is fine".** The one known way to kill this
+site stone dead — step 2a — leaves nginx serving a perfect `200` and the correct
+bundle while the app never finishes booting. `/readiness` in step 3 will usually
+be **green** during it, because the backend genuinely is healthy. So a blank or
+spinning browser on a `200` goes to step 2, always; treating it as a backend
+problem is how that outage costs an hour instead of a minute.
 
 **The hash is the deploy fingerprint.** Compare it to the hash the last known
 good deploy recorded (`HANDOFF.md`'s live-state box carries it). A hash you do

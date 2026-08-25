@@ -429,12 +429,27 @@ payload. Do not end the incident until `git status` here is clean and on
 
 #### The faster path, UNVERIFIED — Cloud Run revisions
 
-Every function here is v2 (`firebase-functions/v2`), so each one is backed by a
-Cloud Run service that keeps prior **revisions**, and the Cloud Run console can
-shift 100% of traffic back to a previous revision in seconds without any
+**Applies to v2 functions ONLY — check first.** A v2 function
+(`firebase-functions/v2`, which is the overwhelming majority here) is backed by
+a Cloud Run service that keeps prior **revisions**, and the Cloud Run console
+can shift 100% of traffic back to a previous revision in seconds without any
 rebuild — the true analogue of §2b's image rollback. Location: GCP console →
 Cloud Run → the service named after the function (lowercased, e.g.
 `nfldeepscoresweepjob`) → **Revisions** → *Manage traffic*.
+
+⚠️ **This repo still exports gen-1 functions, and they have no Cloud Run
+service to roll back.** Verified on disk: `functions/src/announcements.ts:1`,
+`functions/src/participant.ts:5,11`, and `functions/src/userSync.ts:2,5` all
+import `firebase-functions/v1` — that is `onAnnouncementCreated`,
+`onUserCreated`/`createParticipantProfile`, and the user-sync triggers. For any
+of those, the Cloud Run console will simply not list a service by that name,
+and **the git-based redeploy above is the only rollback path.** Confirm which
+generation you are dealing with before reaching for this shortcut:
+
+```powershell
+Select-String -Path functions\src\*.ts -Pattern "firebase-functions/v1"
+npx firebase functions:list --project gridiron-gamble-uzuqo   # the table has a v1/v2 column
+```
 
 **Not tested here, and not the recommended first move**, for two reasons: the
 Firebase CLI's view of the function would then disagree with what is serving,
