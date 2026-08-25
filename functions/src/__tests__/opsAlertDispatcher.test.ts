@@ -116,4 +116,29 @@ describe("dispatchOpsAlert", () => {
             dispatchOpsAlert(db, { type: "NFL_SPREADS_NOT_LOCKED", title: "t", message: "m" })
         ).resolves.toBe("failed");
     });
+
+    it("reports no-recipients for an EMAIL-ONLY type when only SMS recipients are configured", async () => {
+        // An SMS-only config is a real shape. For a non-high-priority type the SMS
+        // branch is skipped, and `emailOk` is vacuously true with no email
+        // recipients to fail — so this used to return "sent" having sent nothing.
+        // A caller that trusts "sent" (the health check marks the condition alerted
+        // and stops retrying) would lose the notification outright. codex round 3.
+        const { dispatchOpsAlert } = await import("../lib/opsAlertDispatcher");
+        const addSpy = vi.fn();
+        const db = fakeDb({ opsAlerts: { emailRecipients: [], smsRecipients: ["+15551234567"] } }, addSpy);
+        await expect(
+            dispatchOpsAlert(db, { type: "HEALTH_CHECK_FAILED", title: "t", message: "m" })
+        ).resolves.toBe("no-recipients");
+        expect(addSpy).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("still SMS-pages a HIGH-PRIORITY type on an SMS-only config", async () => {
+        const { dispatchOpsAlert } = await import("../lib/opsAlertDispatcher");
+        const db = fakeDb({ opsAlerts: { emailRecipients: [], smsRecipients: ["+15551234567"] } }, vi.fn());
+        await expect(
+            dispatchOpsAlert(db, { type: "SITE_DOWN", title: "t", message: "m" })
+        ).resolves.toBe("sent");
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
 });

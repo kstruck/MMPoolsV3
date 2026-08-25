@@ -318,12 +318,11 @@ const KNOWN_SILENT_ON_FAILURE = new Set([
   // file, so an exemption granted for a 2026 job would silently cover whatever
   // lands beside it later. Codex caught the inconsistency between the two lists.
   //
-  // adminHealth.ts was PASSING the loose whole-file version of this check
-  // because its timed() helper returns { ok: false } for an individual probe,
-  // while scheduledHealthCheck itself never returns a verdict. Tightening the
-  // scan to each callback exposed it — a health check that cannot report its
-  // own ill health, which is a particularly poor joke.
-  'adminHealth.ts#scheduledHealthCheck',
+  // adminHealth.ts#scheduledHealthCheck CAME OFF THIS LIST on 2026-08-24
+  // (error-tracking audit 21c / availability audit #2). It now returns a
+  // verdict: `ok: false` when an ops page it decided to send came back
+  // undelivered, or when the transition-alerting block itself threw. The list
+  // only ever shrinks — do not re-add it.
   'consensus.ts#consensusRefreshJob',
   'espnBracket.ts#scheduledBracketSync',
   'expertPicks.ts#syncExpertPicksJob',
