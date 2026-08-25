@@ -1,5 +1,19 @@
 # HANDOFF — Session entry point
 
+> ## 📌 2026-08-25 — **RULESET GOVERNANCE: ANY REVIEW REQUIREMENT ON `main` MUST KEEP "Repository admin" IN THE RULESET'S BYPASS LIST.**
+>
+> Measured on PR #585: the audit session's main ruleset required 1 approving
+> review with NO bypass actors. Every PR here is authored by the `kstruck`
+> account (sessions commit as Kevin), GitHub never lets an author approve their
+> own PR, and every session's tooling authenticates as that same account — so
+> the rule was **unsatisfiable and deadlocked every PR in the repo**, with all
+> 9 checks green. Kevin added Repository admin to the bypass list on
+> 2026-08-25 and bypass-merged #585/#583/#584. **Any future ruleset edit that
+> drops that bypass entry recreates the deadlock.** The required status checks
+> (secrets-scan, build-and-test, e2e-playwright, emulator-tests, lint) are the
+> hard gates; the review rule is a speed bump whose sign-off is Kevin's own
+> bypass-merge click.
+
 > ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED. POOL-PASSWORD HASHING IS BUILT BUT EXISTING POOLS ARE STILL PLAINTEXT UNTIL THE SWEEP RUNS. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
 >
 > Full detail: **[MORNING-2026-08-25-AUDIT-2.md](MORNING-2026-08-25-AUDIT-2.md)**.
