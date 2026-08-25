@@ -272,37 +272,119 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
     const poolId = event.params.poolId;
     const db = admin.firestore();
 
-    // Update indices for each found participant
-    const promises = [];
-    for (const [uid, data] of stats.entries()) {
-        const poolRef = db.collection("pools").doc(poolId);
+    // Nothing to index (every non-SQUARES pool, on every one of its writes) —
+    // return BEFORE the transaction below, so a pool with no squares pays no
+    // read. This trigger fires on `pools/{poolId}`, which on an NFL pool the
+    // scorer writes every five minutes.
+    if (stats.size === 0) return;
 
-        // 1. /pools/{poolId}/participants/{uid}
-        const pRef = poolRef.collection("participants").doc(uid);
-        promises.push(pRef.set({
-            uid,
-            squaresCount: data.count,
-            squareIds: data.ids,
-            paidCount: data.paid,
-            lastActiveAt: FieldValue.serverTimestamp() // approximate
-        }, { merge: true }));
+    const poolRef = db.collection("pools").doc(poolId);
 
-        // 2. /users/{uid}/participations/{poolId}
-        const uRef = db.collection("users").doc(uid).collection("participations").doc(poolId);
-        promises.push(uRef.set({
-            poolId,
-            poolName: after.name || "Unknown Pool",
-            squaresCount: data.count,
-            squareIds: data.ids,
-            role: "PARTICIPANT",
-            joinedAt: FieldValue.serverTimestamp() // This will update every time, maybe check existence?
-            // Actually `merge: true` preserves joinedAt if we don't send it? 
-            // But we want to preserve original joinedAt. 
-            // For now, let's just set updated fields.
-        }, { merge: true }));
-    }
+    /**
+     * 🛑 A UID THE POOL NO LONGER LISTS GETS NO INDEX DOC — CHECKED AGAINST THE
+     * LIVE POOL, INSIDE A TRANSACTION, NOT AGAINST THIS EVENT'S SNAPSHOT.
+     *
+     * Two separate hazards, and only the transaction closes both.
+     *
+     * 1. THE TRIGGER FIRES ON THE REMOVAL'S OWN WRITE. `applyMembershipRemoval`
+     *    (`lib/memberRecord.ts`) deletes `pools/{poolId}/participants/{uid}` and
+     *    `users/{uid}/participations/{poolId}` — and it deletes them by updating
+     *    the pool document, which wakes this trigger. Ungated, it rebuilt both
+     *    from `squares[]` within the same second, and ONLY on SQUARES pools,
+     *    which is exactly the data the cleanup targets. (codex r1.)
+     *
+     * 2. ⚠️ DELIVERY IS UNORDERED AND AT-LEAST-ONCE, SO THE EVENT'S OWN
+     *    SNAPSHOT IS NOT EVIDENCE ABOUT THE PRESENT. The first fix read
+     *    `event.data.after.participantIds`, which is the roster AS OF THAT
+     *    WRITE. A square write made BEFORE the removal can be delivered AFTER
+     *    it — or simply retried after it, since a failed invocation is
+     *    redelivered carrying the same snapshot — and that snapshot still lists
+     *    the departed uid. The removal's own event then correctly writes nothing
+     *    while the stale event happily recreates both documents. A guard that
+     *    consults the past cannot enforce a fact about the present.
+     *    (codex, round on the rebased diff.)
+     *
+     * The read of `poolRef` puts it in the transaction's read set, so a removal
+     * committing between this read and these writes forces a RETRY that re-reads
+     * the new roster — which a bare non-transactional re-read would NOT do. That
+     * is the whole reason this is a transaction and not just a fresher `get`.
+     *
+     * ⚠️ AN ABSENT ARRAY IS "UNKNOWN", NOT "NOT A MEMBER". A legacy pool with no
+     * `participantIds` keeps the old behaviour rather than silently losing its
+     * indexes — the same unknown-is-not-false discipline `lib/memberRecord.ts`
+     * applies to `hasPlayableEntry`. Every removal writes the array
+     * (`arrayRemove`), so the guard is always armed in the case it exists for.
+     *
+     * A MISSING POOL writes nothing: the document was deleted between the event
+     * and now, and rebuilding an index into a pool that no longer exists is the
+     * same resurrection this guard exists to stop.
+     *
+     * The guard also closes a laundering hop three other surfaces already refuse.
+     * `reserveSquare` never writes `reservedByUid` at all — it stores a display
+     * NAME — so the only writers are `claimMySquares` and `claimByCode` above,
+     * which prove ownership with a `guestDeviceKey` read straight off the
+     * world-readable pool document (SECURITY-CLAIM-SQUARES.md). Minting a
+     * membership index from that signal is what `backfillMemberRecords` refuses
+     * (its `applySquareUnits` gate), what `fixParticipantIds` refuses (its
+     * squares block was deleted), and what `shared/memberRecord.ts` review round
+     * 5 removed. This trigger was the last surface still doing it.
+     *
+     * WRITE BUDGET: a squares grid is 100 cells, so `stats` holds at most 100
+     * owners and this transaction issues at most 200 writes plus 1 read — inside
+     * Firestore's 500-write limit with room to spare.
+     *
+     * ⚠️ KNOWN, UNCHANGED, AND DELIBERATELY NOT FIXED HERE: the COUNTS written
+     * below (`squaresCount` / `squareIds` / `paidCount`) still come from the
+     * EVENT's `squares[]`, so an out-of-order delivery can still write an older
+     * count over a newer one for a member who IS still listed. That is a
+     * pre-existing lost-update in the squares index, not a membership bug, and
+     * this change neither introduces nor worsens it — the guard above decides
+     * WHO gets an index, not what it says. The fix would be to rebuild `stats`
+     * from `poolSnap.data().squares` instead, which also changes what the
+     * `stats.size === 0` early return means; that is a squares-subsystem change
+     * with its own blast radius and it is named as an open item in
+     * PLAN-MEMBER-REMOVAL-HARDENING rather than smuggled in here.
+     */
+    await db.runTransaction(async (tx) => {
+        const poolSnap = await tx.get(poolRef);
+        if (!poolSnap.exists) return;
+        const current = poolSnap.data() as Record<string, unknown> | undefined;
+        const roster: unknown = current?.participantIds;
+        const isListed = Array.isArray(roster)
+            ? (uid: string) => (roster as string[]).includes(uid)
+            : () => true;
+        // The pool NAME comes from the live document too. Taking it from the
+        // stale snapshot would stamp a renamed pool's OLD name onto the index —
+        // a smaller instance of the same bug.
+        const poolName = (typeof current?.name === 'string' ? current.name : undefined) || "Unknown Pool";
 
-    await Promise.all(promises);
+        for (const [uid, data] of stats.entries()) {
+            if (!isListed(uid)) continue;
+
+            // 1. /pools/{poolId}/participants/{uid}
+            tx.set(poolRef.collection("participants").doc(uid), {
+                uid,
+                squaresCount: data.count,
+                squareIds: data.ids,
+                paidCount: data.paid,
+                lastActiveAt: FieldValue.serverTimestamp() // approximate
+            }, { merge: true });
+
+            // 2. /users/{uid}/participations/{poolId}
+            tx.set(db.collection("users").doc(uid).collection("participations").doc(poolId), {
+                poolId,
+                poolName,
+                squaresCount: data.count,
+                squareIds: data.ids,
+                role: "PARTICIPANT",
+                // `merge: true` leaves a stored joinedAt in place only if we do
+                // not send one; this re-stamps it on every write, as it always
+                // has. Left as-is deliberately — changing it is a behaviour
+                // change outside this fix.
+                joinedAt: FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+    });
 });
 
 
