@@ -54,7 +54,8 @@ curl.exe -s https://www.marchmeleepools.com/ | Select-String "index-[A-Za-z0-9_-
 | Result | Reading | Go to |
 |---|---|---|
 | `200` + a bundle hash, **and the browser shows a permanent spinner / blank page** | ⚠️ **This is the S7b signature.** The shell is served fine and the app never comes alive — curl cannot see the difference, only the browser can | **Step 2** — do NOT skip to step 3 |
-| `200` + a bundle hash, **and the browser renders but something is wrong** | HTML and JS are fine; the failure is in what the app talks to | Step 3 |
+| `200` + a bundle hash, **and the browser renders but the LAYOUT/ASSETS are wrong** | Still a frontend problem — CSS, `index.html`, images and `nginx.conf` all ship independently of the entry JS | Step 2 |
+| `200` + a bundle hash, **and the browser renders correctly but the DATA is wrong or missing** | HTML and JS are fine; the failure is in what the app talks to | Step 3 |
 | `200` but NO bundle line | nginx is serving something that is not the SPA shell — a bad build, or a wrong container | Step 2 |
 | `502` / `503` / `504` | The container is not serving. Coolify build or container failure | Step 2 |
 | connection refused / DNS failure / Cloudflare error page | Edge or host problem, not a code problem. Check the Cloudflare dashboard and the Coolify host before deploying anything | Step 2 only after the edge is ruled out |
@@ -70,6 +71,14 @@ problem is how that outage costs an hour instead of a minute.
 good deploy recorded (`HANDOFF.md`'s live-state box carries it). A hash you do
 not recognise means a deploy landed. A hash that matches the last good one means
 the frontend did NOT change and the fault is behind it — jump to step 3.
+
+⚠️ **The entry-JS hash is ONE asset, not a checksum of the frontend.** An
+unchanged `index-*.js` does not mean the frontend is unchanged: the CSS bundle,
+`index.html` itself, images, and `nginx.conf` (headers, CSP, the `/pool/`
+crawler proxy) all ship in the same container and can change independently. So
+a matching hash narrows the search; it never clears the frontend. When the page
+renders but looks wrong, treat it as a frontend fault and go to step 2 even if
+the hash is familiar.
 
 ⚠️ Docs-only commits produce identical bundles (`*.md` is dockerignored since
 #553), so **two different commits can share a hash**. The hash proves a build

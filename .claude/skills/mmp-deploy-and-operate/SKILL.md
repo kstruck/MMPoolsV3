@@ -276,8 +276,21 @@ git status --porcelain
 Success: **empty output.** Do not proceed with a dirty tree — step 4's guard
 will stop you anyway, and finding out then costs incident minutes.
 
-If it does not: **commit the changes** (`git add -A; git commit -m "WIP"`), or
-stop and get the owner to resolve them.
+If it does not: **park the changes on a SCRATCH BRANCH, never on `main`**, or
+stop and get the owner to resolve them:
+
+```powershell
+git switch -c wip/incident-(Get-Date -Format yyyyMMdd-HHmm)
+git add -A
+git commit -m "WIP parked before functions rollback"
+git switch main
+```
+
+⚠️ **Committing straight onto local `main` breaks step 9.** The checkout is
+then one commit AHEAD of `origin/main`, so step 9's `git pull --ff-only` either
+fails on divergence or leaves the WIP sitting there — and the next deploy from
+that checkout ships it. A scratch branch keeps `main` exactly equal to
+`origin/main`, which is the only state step 9 can verify.
 
 🛑 **DO NOT `git stash`.** The stash is a **repository-global ref stack shared
 by every linked worktree** — this repo has dozens — so a `push` here and a `pop`
@@ -450,18 +463,34 @@ default and logs pulled from another project show a convincing-looking silence.
 ```powershell
 cd D:\march-melee-pools
 git switch main
+git fetch origin
 git pull --ff-only origin main
 npm --prefix functions ci
-git status --porcelain
+
+# The three-part proof. All three must hold.
+git status --porcelain                                    # expect EMPTY
+git rev-parse --abbrev-ref HEAD                           # expect: main
+if ((git rev-parse HEAD) -ne (git rev-parse origin/main)) { throw "checkout is NOT at origin/main - a later deploy will ship the wrong tree" }
 ```
 
-Success: on `main`, up to date with `origin`, clean tree.
-If it does not: **a main checkout left detached at an old commit is a loaded
-gun.** The next person to run the deploy ritual from it ships the rolled-back
-code over whatever fixed the incident, and it prints `Deploy complete!` while
-doing so. This is CLAUDE.md §3's failure with the rollback as the accidental
-payload. Do not end the incident until `git status` here is clean and on
-`main`.
+Success: clean tree, on `main`, and `HEAD` **exactly equal** to `origin/main`.
+Equality is the assertion that matters — "on main" alone is not enough, because
+a checkout that is one commit AHEAD of `origin/main` is still on `main` and
+still ships something `origin` has never seen.
+
+If it does not:
+
+- **`pull --ff-only` fails on divergence, or the equality check throws** — local
+  `main` has a commit `origin` does not. That is the WIP-on-main mistake step 1
+  warns about. Move it off: `git branch wip/incident-recovered`, then
+  `git reset --hard origin/main`. Do not deploy until the equality check passes.
+- **Still detached** — `git switch main` did not run, or failed. Re-run it.
+
+🛑 **A main checkout left detached at an old commit is a loaded gun.** The next
+person to run the deploy ritual from it ships the rolled-back code over whatever
+fixed the incident, and it prints `✔ Deploy complete!` while doing so. This is
+CLAUDE.md §3's failure with your rollback as the accidental payload. Do not end
+the incident until all three checks above pass.
 
 #### The faster path, UNVERIFIED — Cloud Run revisions
 
