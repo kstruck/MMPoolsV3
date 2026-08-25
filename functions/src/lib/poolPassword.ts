@@ -77,6 +77,16 @@ export interface StoredPoolSecret {
     hash?: string | null;
     /** Legacy PLAINTEXT still sitting on the world-readable pool doc. */
     plaintext?: string | null;
+    /**
+     * What the PRIVATE access doc held at read time — `null` when it was empty
+     * and `hash` above therefore came from a legacy public field.
+     *
+     * It exists for the rehash precondition (codex r7 P1): an upgrade must only
+     * land if nobody has written a NEW password in the meantime, and "unchanged"
+     * has to be judged against the access document specifically, not against
+     * whichever source happened to win the precedence contest.
+     */
+    privateHash?: string | null;
 }
 
 export interface VerifyResult {

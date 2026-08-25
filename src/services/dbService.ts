@@ -36,6 +36,48 @@ import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
 
 /**
+ * Set a just-created pool's password, retrying once, and FAILING LOUDLY with an
+ * actionable message if it still does not land.
+ *
+ * ⚠️ THIS IS A MITIGATION, NOT ATOMICITY, AND THE PR SAYS SO. Creation is now
+ * two calls — `createPool`, then `setPoolPassword` — because the password no
+ * longer rides the create payload onto the pool document. If the second call
+ * fails, the pool EXISTS and is unprotected while the commissioner is told the
+ * create failed (codex r7, P1). The atomic fix is to write the private secret
+ * inside the create callable's own transaction, which lives in
+ * `functions/src/poolOps.ts` / `nflPools.ts` — outside this PR's file scope in a
+ * parallel-stream session, so it is carried as a named finding rather than done
+ * badly.
+ *
+ * What this does instead: one retry (the realistic failure is a transient
+ * callable error, not a permanent one), and on final failure an error that says
+ * exactly what happened and what to do, instead of a generic create failure that
+ * leaves a silently open pool behind.
+ */
+async function applyPasswordAfterCreate(poolId: string, password?: string): Promise<void> {
+    if (!password) return;
+    try {
+        await dbService.setPoolPassword(poolId, password);
+        return;
+    } catch (first) {
+        logger.warn('[dbService] setPoolPassword failed after create, retrying', first);
+    }
+    try {
+        await dbService.setPoolPassword(poolId, password);
+    } catch (err) {
+        await errorHandler.handleError(err, {
+            severity: ErrorSeverity.HIGH,
+            context: { operation: 'applyPasswordAfterCreate', poolId },
+        });
+        throw new Error(
+            'Your pool was created, but the password could not be saved, so the pool is ' +
+            'currently OPEN to anyone with the link. Open the pool’s settings and set the ' +
+            'password there.',
+        );
+    }
+}
+
+/**
  * What `getPoolPicks` hands a commissioner (PLAN-COMMISSIONER-BLIND-PICKS T2).
  * Mirrors `PoolPicksResponse` in functions/src/nflPickReveal.ts.
  *
@@ -254,7 +296,7 @@ export const dbService = {
             const createPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createPool');
             const result = await createPoolFn(payload);
             const { poolId } = result.data;
-            if (password) await dbService.setPoolPassword(poolId, password);
+            await applyPasswordAfterCreate(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1681,7 +1723,7 @@ export const dbService = {
             const createNFLPoolFn = httpsCallable<Record<string, unknown>, { success: boolean; poolId: string }>(functions, 'createNFLPool');
             const result = await createNFLPoolFn(payload);
             const { poolId } = result.data;
-            if (password) await dbService.setPoolPassword(poolId, password);
+            await applyPasswordAfterCreate(poolId, password);
             return poolId;
         } catch (error) {
             await errorHandler.handleError(error, {

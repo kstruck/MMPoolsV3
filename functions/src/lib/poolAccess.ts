@@ -80,11 +80,13 @@ export async function readPoolSecret(
     poolData: Record<string, unknown> | undefined,
 ): Promise<StoredPoolSecret> {
     const snap = await accessDocRef(db, poolId).get();
-    const privateHash = snap.exists ? (snap.data()?.passwordHash as unknown) : undefined;
-    const hash = typeof privateHash === "string" && privateHash.length > 0
-        ? privateHash
-        : legacyHashOf(poolData);
-    return { hash, plaintext: legacyPlaintextOf(poolData) };
+    const stored = snap.exists ? (snap.data()?.passwordHash as unknown) : undefined;
+    const privateHash = typeof stored === "string" && stored.length > 0 ? stored : null;
+    return {
+        hash: privateHash ?? legacyHashOf(poolData),
+        plaintext: legacyPlaintextOf(poolData),
+        privateHash,
+    };
 }
 
 /**
@@ -218,13 +220,38 @@ export async function writePoolSecret(
  * legacy form — a bare sha256 hash, or plaintext on the public doc — so the
  * plaintext is in hand exactly once and is upgraded on the way through.
  *
- * Best-effort by design: a failure here must never turn a correct password into
- * a rejected one, so the caller logs and continues.
+ * ⚠️ CONDITIONAL, IN A TRANSACTION (codex r7, P1). Verification reads the
+ * secret, then this writes it, and in between a commissioner can call
+ * `setPoolPassword`. An unconditional write would replace their brand-new
+ * password with the OLD one the member just typed — a legacy value silently
+ * resurrected by the very code meant to retire it. `expectedPrivateHash` is what
+ * the ACCESS DOCUMENT held when the secret was read (`null` when it was empty
+ * and the match came from a legacy public field); if it has moved, the newer
+ * value wins and this does nothing.
+ *
+ * Judged against the access document specifically, NOT against whichever source
+ * won the precedence contest in `readPoolSecret` — a match on a legacy
+ * `pool.passwordHash` happens precisely when the access doc was empty, so
+ * comparing the winning `hash` would never agree with itself.
+ *
+ * Best-effort by design: the caller logs a failure and continues, because a
+ * failure here must never turn a correct password into a rejected one.
  */
 export async function rehashOnVerify(
     db: admin.firestore.Firestore,
     poolId: string,
     password: string,
-): Promise<void> {
-    await writePoolSecret(db, poolId, password);
+    expectedPrivateHash: string | null,
+): Promise<"rehashed" | "superseded"> {
+    const accessRef = accessDocRef(db, poolId);
+    const poolRef = db.collection("pools").doc(poolId);
+    return db.runTransaction(async (t) => {
+        const snap = await t.get(accessRef);
+        const stored = snap.exists ? (snap.data()?.passwordHash as unknown) : undefined;
+        const current = typeof stored === "string" && stored.length > 0 ? stored : null;
+        if (current !== expectedPrivateHash) return "superseded";
+        t.set(accessRef, { passwordHash: hashPoolPassword(password), updatedAt: Date.now() }, { merge: true });
+        t.update(poolRef, ...scrubUpdateArgs(true));
+        return "rehashed";
+    });
 }

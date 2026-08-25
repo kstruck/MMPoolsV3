@@ -399,6 +399,36 @@ describe('source invariants', () => {
         expect(block).toMatch(/writeAdminAudit\(/);
     });
 
+    it('the rehash is CONDITIONAL and transactional (codex r7 P1)', () => {
+        // Verification reads the secret, then the rehash writes it. In between,
+        // a commissioner can call setPoolPassword — and an unconditional write
+        // would resurrect the OLD password the member just typed, by the very
+        // code meant to retire it.
+        const src = strip(fs.readFileSync(path.join(SRC, 'lib/poolAccess.ts'), 'utf8'));
+        const fn = src.slice(src.indexOf('export async function rehashOnVerify'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+        expect(body).toMatch(/runTransaction\(/);
+        expect(body).toMatch(/expectedPrivateHash/);
+        expect(body).toMatch(/return "superseded"/);
+        // The precondition is judged against the ACCESS DOC, which is why
+        // readPoolSecret reports `privateHash` separately from the winning hash.
+        const read = src.slice(src.indexOf('export async function readPoolSecret'));
+        expect(read.slice(0, read.indexOf('\n}'))).toMatch(/privateHash,/);
+    });
+
+    it('the migration re-plans inside a transaction (codex r7 P1)', () => {
+        // A batch built from pre-transaction reads would overwrite a password
+        // set between the read and the write — the sweep silently rolling a
+        // live password back to the stale public copy it is deleting.
+        const src = strip(fs.readFileSync(path.join(SRC, 'migrations/migratePoolPasswords.ts'), 'utf8'));
+        const loop = src.slice(src.indexOf('for (const doc of snap.docs)'));
+        expect(loop).toMatch(/db\.runTransaction\(/);
+        expect(loop).toMatch(/t\.getAll\(doc\.ref, accessRef\)/);
+        // The plan is recomputed from the transaction's OWN read, not reused.
+        expect(loop).toMatch(/planForPool\(doc\.id, fresh, hasPrivate\)/);
+        expect(loop).not.toMatch(/db\.batch\(\)/);
+    });
+
     it('only the access-doc writers assign passwordHash — this list is a ratchet', () => {
         // Exact equality, not a subset: a NEW file writing `passwordHash:` fails
         // here and has to justify itself, which is the whole point. Each of
@@ -428,7 +458,8 @@ describe('source invariants', () => {
         // only a FieldPath can name a top-level field whose NAME has a dot.
         const src = strip(fs.readFileSync(path.join(SRC, 'lib/poolAccess.ts'), 'utf8'));
         const fn = src.slice(src.indexOf('export function scrubUpdateArgs'));
-        const body = fn.slice(0, fn.indexOf('\n}'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+
         expect(body).toMatch(/args\.push\("gridPassword", FieldValue\.delete\(\)\)/);
         expect(body).toMatch(/args\.push\(DOTTED_ACCESS_PASSWORD_FIELD, FieldValue\.delete\(\)\)/);
         expect(body).toMatch(/new admin\.firestore\.FieldPath\(DOTTED_ACCESS_PASSWORD_FIELD\)/);
@@ -438,15 +469,4 @@ describe('source invariants', () => {
         expect(body).toMatch(/args\.push\(HAS_POOL_PASSWORD_FIELD, hasPassword\)/);
     });
 
-    it('the migration commits its secret and its marker in one batch', () => {
-        // Same defect r4 found in writePoolSecret, repeated in the sweep: a
-        // private hash landing without the marker leaves a pool that HAS a
-        // password and renders UNGATED.
-        const src = strip(fs.readFileSync(path.join(SRC, 'migrations/migratePoolPasswords.ts'), 'utf8'));
-        const loop = src.slice(src.indexOf('for (const doc of snap.docs)'));
-        expect(loop).toMatch(/db\.batch\(\)/);
-        expect(loop).toMatch(/batch\.commit\(\)/);
-        expect(loop).not.toMatch(/await\s+accessDocRef\([^)]*\)\.set\(/);
-        expect(loop).not.toMatch(/await\s+doc\.ref\.update\(/);
-    });
 });

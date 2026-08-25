@@ -88,6 +88,46 @@ describe('client source invariants', () => {
     expect(src).toMatch(/dbService\.verifyPoolAccess\(/);
   });
 
+  it('the gate is hoisted ABOVE every pool-type branch, and covers PROPS (codex r7)', () => {
+    // It used to sit below the branches, so it was only ever reached for
+    // SQUARES — while the Props wizard has always offered an "Entry Password"
+    // and the create path has always stored it. A Props commissioner set one,
+    // was told the pool was protected, and every visitor walked in: the
+    // exposed-and-unenforced shape of item 13a, in a second place.
+    const src = strip(read('src/components/routes/PoolRoute.tsx'));
+    const gateAt = src.indexOf('if (isPasswordProtected');
+    expect(gateAt).toBeGreaterThan(-1);
+    // Before the FIRST per-type branch, so a new pool type cannot opt out.
+    const firstBranch = Math.min(
+      ...["if (pool.type === 'BRACKET')", "if (pool.type === 'PROPS')"]
+        .map((b) => src.indexOf(b))
+        .filter((i) => i > -1),
+    );
+    expect(firstBranch).toBeGreaterThan(-1);
+    expect(gateAt).toBeLessThan(firstBranch);
+    expect(src).toMatch(/PASSWORD_VIEW_GATED_TYPES\s*=\s*\['SQUARES',\s*'PROPS'\]/);
+    // BRACKET is deliberately absent: its password gates JOINING, server-side.
+    expect(src).not.toMatch(/PASSWORD_VIEW_GATED_TYPES[^\]]*BRACKET/);
+  });
+
+  it('a create whose password fails to save reports it instead of returning quietly', () => {
+    // Creation is two calls now, so a failed second call leaves an existing,
+    // UNPROTECTED pool. Not atomic — that fix belongs in the create callable —
+    // but it must never be silent (codex r7 P1).
+    const src = strip(read('src/services/dbService.ts'));
+    const fn = src.slice(src.indexOf('async function applyPasswordAfterCreate'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect(body).toMatch(/setPoolPassword\([\s\S]*setPoolPassword\(/); // one retry
+    expect(body).toMatch(/throw new Error\(/);
+    expect(body).toMatch(/OPEN to anyone with the link/);
+    // Both create wrappers go through it.
+    for (const fnName of ['createPool', 'createNFLPool']) {
+      const idx = src.indexOf(`${fnName}: async`);
+      expect(idx, `${fnName} wrapper not found`).toBeGreaterThan(-1);
+      expect(src.slice(idx, idx + 1500)).toMatch(/applyPasswordAfterCreate\(/);
+    }
+  });
+
   it('the bracket dashboard no longer writes accessControl.password (item 13a)', () => {
     const src = strip(read('src/components/BracketPoolDashboard/BracketPoolDashboard.tsx'));
     expect(src).not.toMatch(/['"]accessControl\.password['"]\s*:/);

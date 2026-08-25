@@ -116,8 +116,8 @@ export const verifyPoolAccess = validated(
             // Best-effort: a failure here must never turn a correct password
             // into a rejected one.
             try {
-                await rehashOnVerify(db, poolId, password);
-                logger.info("[poolPassword] rehashed legacy pool password", { poolId, from: result.matched });
+                const outcome = await rehashOnVerify(db, poolId, password, secret.privateHash ?? null);
+                logger.info("[poolPassword] legacy pool password rehash", { poolId, from: result.matched, outcome });
             } catch (err) {
                 logger.error("[poolPassword] rehash-on-verify failed", { poolId, error: String(err) });
             }

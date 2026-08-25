@@ -360,9 +360,9 @@ export const joinBracketPool = validated(
             // the private doc and the public copies are deleted. Best-effort: a
             // failure here must not turn a correct password into a failed join.
             try {
-                await rehashOnVerify(db, poolId, password);
-                logger.info("[bracketPools] rehashed legacy pool password on join", {
-                    poolId, from: verdict.matched,
+                const outcome = await rehashOnVerify(db, poolId, password, secret.privateHash ?? null);
+                logger.info("[bracketPools] legacy pool password rehash on join", {
+                    poolId, from: verdict.matched, outcome,
                 });
             } catch (err) {
                 logger.error("[bracketPools] rehash-on-join failed", { poolId, error: String(err) });

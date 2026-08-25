@@ -274,3 +274,55 @@ test that mints a literal dotted field with `setDoc`, then proves one
 `update()` removes BOTH it and the nested one without the two targets
 colliding. That behaviour had been reasoned about across four rounds and never
 measured.
+
+## Round 7
+
+VERDICT: REVISE. 4 findings (all P1). 3 accepted and fixed, 1 accepted and
+MITIGATED with the residue carried to the PR body.
+
+1. **(P1) The Props gate never existed. ACCEPTED, FIXED.** The password gate sat
+   BELOW the per-type branches in `PoolRoute`, so it was only ever reached for
+   SQUARES — while the Props wizard has always offered an "Entry Password" and
+   the create path has always stored it. A Props commissioner set a password,
+   now also got a `hasPoolPassword: true` marker saying the pool was protected,
+   and every visitor still walked straight in.
+
+   This is item 13a's exposed-and-unenforced shape in a second place, and it is
+   PRE-EXISTING — Props passwords were never enforced before this PR either.
+   What the PR added was the marker that made it look enforced, which is worse
+   than the old silence. The gate is hoisted above every branch and scoped to
+   `['SQUARES', 'PROPS']`, so a new pool type cannot silently opt out. BRACKET
+   is deliberately excluded: its password gates JOINING and is enforced
+   server-side in `joinBracketPool`.
+
+2. **(P1) The migration could roll a live password back. ACCEPTED, FIXED.** A
+   commissioner calling `setPoolPassword` between the sweep's read and its batch
+   commit would have their brand-new password overwritten by the stale public
+   plaintext — which the same commit then deletes, so the new password simply
+   stops working and the old one silently returns. Now a per-pool TRANSACTION
+   that re-reads both documents with `getAll` and re-plans inside; a concurrent
+   write becomes a retry. Counters are taken from what the transaction actually
+   did, not from the pre-read plan.
+
+3. **(P1) The rehash could resurrect an old password. ACCEPTED, FIXED.** Same
+   race, opposite direction: verification reads a legacy secret, a commissioner
+   changes the password, and the rehash then writes the OLD value the member
+   just typed — the legacy password restored by the code meant to retire it.
+   `rehashOnVerify` is now a transaction with an explicit precondition, and the
+   precondition is what the ACCESS DOC held at read time (`readPoolSecret` now
+   reports `privateHash` separately), because a match on a legacy public field
+   happens precisely when the access doc was empty — comparing the winning hash
+   would never have agreed with itself.
+
+4. **(P1) Create-then-set-password is not atomic. ACCEPTED, MITIGATED, CARRIED.**
+   The password no longer rides the create payload, so creation is two calls; if
+   the second fails, the pool EXISTS and is unprotected while the commissioner is
+   told creation failed. Codex is right, and the correct fix is to write the
+   private secret inside the create callable's own transaction — which lives in
+   `functions/src/poolOps.ts` and `nflPools.ts`, **outside this PR's file scope**
+   in a parallel-stream session where another stream is editing those files.
+
+   Mitigated rather than done badly: one retry, then an error that says exactly
+   what happened ("your pool was created, but the password could not be saved,
+   so the pool is currently OPEN…") instead of a generic failure that leaves a
+   silently open pool. The residue is CARRIED and named in the PR body.

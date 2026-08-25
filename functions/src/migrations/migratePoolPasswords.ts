@@ -44,11 +44,8 @@ import {
 import { readJobGate } from "../nflSchedule";
 
 /** What the sweep would do to one pool. `null` = nothing to do. */
-export type PoolPasswordPlan =
-    | { poolId: string; action: "hash-plaintext" }
-    | { poolId: string; action: "move-hash" }
-    | { poolId: string; action: "scrub-only" }
-    | null;
+export type PoolPasswordAction = "hash-plaintext" | "move-hash" | "scrub-only";
+export type PoolPasswordPlan = { poolId: string; action: PoolPasswordAction } | null;
 
 /**
  * PURE planner, so every branch is testable without an emulator.
@@ -147,53 +144,79 @@ export const migratePoolPasswords = validated(
             nextCursor: null as string | null,
         };
 
+        /** One place that maps an action to its counters, so dry and live agree. */
+        const countPlan = (poolId: string, action: PoolPasswordAction) => {
+            report.poolsChanged++;
+            if (action === "hash-plaintext") report.hashedPlaintext++;
+            else if (action === "move-hash") report.movedHash++;
+            else report.scrubbedOnly++;
+            if (report.plannedWrites.length < 200) report.plannedWrites.push({ poolId, action });
+        };
+
         for (const doc of snap.docs) {
             try {
-                const data = doc.data() as Record<string, unknown>;
-                const privateSnap = await accessDocRef(db, doc.id).get();
-                const existing = privateSnap.exists ? privateSnap.data()?.passwordHash : undefined;
-                const hasPrivate = typeof existing === "string" && existing.length > 0;
+                const accessRef = accessDocRef(db, doc.id);
 
-                const plan = planForPool(doc.id, data, hasPrivate);
-                if (!plan) continue;
+                if (dryRun) {
+                    const data = doc.data() as Record<string, unknown>;
+                    const privateSnap = await accessRef.get();
+                    const existing = privateSnap.exists ? privateSnap.data()?.passwordHash : undefined;
+                    const plan = planForPool(doc.id, data, typeof existing === "string" && existing.length > 0);
+                    if (!plan) continue;
+                    countPlan(doc.id, plan.action);
+                    if (typeof data[DOTTED_ACCESS_PASSWORD_FIELD] === "string") report.dottedFieldsRemoved++;
+                    continue;
+                }
 
-                report.poolsChanged++;
-                if (plan.action === "hash-plaintext") report.hashedPlaintext++;
-                else if (plan.action === "move-hash") report.movedHash++;
-                else report.scrubbedOnly++;
-                if (report.plannedWrites.length < 200) {
-                    report.plannedWrites.push({ poolId: plan.poolId, action: plan.action });
-                }
-                if (dryRun) continue;
+                // ⚠️ A TRANSACTION, NOT A BATCH (codex r7, P1). The plan is a
+                // function of two documents, and a commissioner can call
+                // `setPoolPassword` between the read and the write. A batch
+                // would then overwrite their BRAND-NEW password with the stale
+                // public plaintext and delete the only other copy — the sweep
+                // silently rolling a live password back. Re-reading inside the
+                // transaction makes a concurrent write a retry, not a loss.
+                //
+                // It also keeps r6's atomicity: the private secret, the legacy
+                // scrub and the marker still commit together or not at all.
+                const applied = await db.runTransaction(async (t) => {
+                    const [poolSnap, accessSnap] = await t.getAll(doc.ref, accessRef);
+                    if (!poolSnap.exists) return null;
+                    const fresh = poolSnap.data() as Record<string, unknown>;
+                    const stored = accessSnap.exists ? accessSnap.data()?.passwordHash : undefined;
+                    const hasPrivate = typeof stored === "string" && stored.length > 0;
 
-                // ⚠️ ONE BATCH (codex r6 P1). Writing the private hash first and
-                // the public scrub second leaves a window where the pool HAS a
-                // password and renders UNGATED, because the squares client
-                // decides from the marker alone — the same defect r4 found in
-                // `writePoolSecret`, repeated here. Both documents commit or
-                // neither does.
-                const batch = db.batch();
-                if (plan.action === "hash-plaintext") {
-                    batch.set(
-                        accessDocRef(db, doc.id),
-                        { passwordHash: hashPoolPassword(legacyPlaintextOf(data)!), migratedAt: Date.now() },
-                        { merge: true },
-                    );
-                } else if (plan.action === "move-hash") {
-                    batch.set(
-                        accessDocRef(db, doc.id),
-                        { passwordHash: legacyHashOf(data)!, migratedAt: Date.now() },
-                        { merge: true },
-                    );
-                }
-                // `scrub-only` writes no secret: one already exists (or only the
-                // marker was wrong). The marker then follows what IS stored.
-                const willBeProtected = plan.action === "scrub-only" ? hasPrivate : true;
-                batch.update(doc.ref, ...scrubUpdateArgs(willBeProtected));
-                if (typeof data[DOTTED_ACCESS_PASSWORD_FIELD] === "string") {
-                    report.dottedFieldsRemoved++;
-                }
-                await batch.commit();
+                    const plan = planForPool(doc.id, fresh, hasPrivate);
+                    if (!plan) return null;
+
+                    if (plan.action === "hash-plaintext") {
+                        t.set(
+                            accessRef,
+                            { passwordHash: hashPoolPassword(legacyPlaintextOf(fresh)!), migratedAt: Date.now() },
+                            { merge: true },
+                        );
+                    } else if (plan.action === "move-hash") {
+                        t.set(
+                            accessRef,
+                            { passwordHash: legacyHashOf(fresh)!, migratedAt: Date.now() },
+                            { merge: true },
+                        );
+                    }
+                    // `scrub-only` writes no secret: one already exists (or only
+                    // the marker was wrong). The marker follows what IS stored.
+                    const willBeProtected = plan.action === "scrub-only" ? hasPrivate : true;
+                    t.update(doc.ref, ...scrubUpdateArgs(willBeProtected));
+                    return {
+                        action: plan.action,
+                        dotted: typeof fresh[DOTTED_ACCESS_PASSWORD_FIELD] === "string",
+                    };
+                });
+
+                // Counted from what the transaction ACTUALLY did, never from the
+                // pre-read plan — otherwise the report describes a world that
+                // may have moved under it.
+                if (!applied) continue;
+                countPlan(doc.id, applied.action);
+                if (applied.dotted) report.dottedFieldsRemoved++;
             } catch (err: any) {
                 report.failures.push({ poolId: doc.id, error: String(err?.message || err) });
             }

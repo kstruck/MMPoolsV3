@@ -211,6 +211,86 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         setShowShareModal(true);
     };
 
+    /**
+     * PLAN-AUDIT-AUTH-HARDENING Phase B (audit item 1).
+     *
+     * This used to be `enteredPassword === squaresPool.gridPassword` — a compare
+     * in the BROWSER against a field on a document that is `allow get: if true`,
+     * so anyone holding the share link could read the password out of the
+     * network tab and never see this box at all. The check now runs in the
+     * `verifyPoolAccess` callable against a PBKDF2 record in
+     * `pools/{id}/private/access`, which rules close to every client.
+     *
+     * The callable is the authority in BOTH directions: a throttled or failed
+     * call returns false, so the gate fails CLOSED.
+     */
+    const handlePasswordSubmit = async () => {
+        if (checkingPassword) return;
+        // An empty box is not worth a round trip, and it would burn one of the
+        // caller's ten attempts against the throttle.
+        if (!enteredPassword) { setPasswordError('Enter the pool password.'); return; }
+        setCheckingPassword(true);
+        try {
+            const { ok, reason } = await dbService.verifyPoolAccess(gated.id, enteredPassword);
+            setIsUnlocked(ok);
+            setPasswordError(ok ? null
+                : reason === 'throttled' ? 'Too many attempts. Wait a few minutes and try again.'
+                : reason === 'error' ? 'Could not check the password right now. Try again.'
+                : 'Incorrect password.');
+        } finally {
+            setCheckingPassword(false);
+        }
+    };
+
+    /**
+     * Whether the gate renders. `hasPoolPassword` is the non-secret marker the
+     * server sets; `gridPassword` is the legacy plaintext, still present on pools
+     * the migration sweep has not reached — reading it here keeps those pools
+     * gated during the rollout without the value being trusted for anything.
+     *
+     * ⚠️ SQUARES **AND PROPS** (codex r7, P1). This gate used to live BELOW the
+     * per-type branches, so it was only ever reached for SQUARES — while the
+     * Props wizard has always offered an "Entry Password" field and the create
+     * path has always stored it. A Props commissioner set a password, was told
+     * the pool was protected, and every visitor walked straight in: the
+     * exposed-and-unenforced shape of audit item 13a, in a second place. It is
+     * hoisted above every branch now, so adding a pool type cannot silently
+     * opt out of it.
+     *
+     * BRACKET is deliberately NOT here: its password gates JOINING, not viewing,
+     * and that is enforced server-side in `joinBracketPool`. The NFL types have
+     * no password at all.
+     */
+    const PASSWORD_VIEW_GATED_TYPES = ['SQUARES', 'PROPS'];
+    const gated = pool as unknown as {
+        id: string; ownerId?: string; gridPassword?: string; hasPoolPassword?: boolean;
+    };
+    const isPasswordProtected = PASSWORD_VIEW_GATED_TYPES.includes(pool.type)
+        && Boolean(gated.hasPoolPassword || gated.gridPassword);
+
+
+    // Actually it was mainly for debug in header.
+
+    const renderPasswordGate = () => (
+        <div className="min-h-screen bg-page flex items-center justify-center p-4">
+            <div className="bg-card border border-line rounded-xl p-8 max-w-md w-full text-center shadow-card">
+                <div className="w-16 h-16 bg-page rounded-full flex items-center justify-center mx-auto mb-6 border border-line"><Lock size={32} className="text-gold-500" /></div>
+                <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Password Protected</h2>
+                <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
+                {passwordError && <div role="alert" className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">{passwordError}</div>}
+                <div className="flex gap-2">
+                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => { if (e.key === 'Enter') void handlePasswordSubmit(); }} />
+                    <Button variant="primary" disabled={checkingPassword} onClick={() => { void handlePasswordSubmit(); }}>{checkingPassword ? 'Checking…' : 'Unlock'}</Button>
+                </div>
+                <div className="mt-6 pt-6 border-t border-line"><p className="text-xs text-faint font-body">Contact the pool manager for access.</p></div>
+            </div>
+        </div>
+    );
+
+    if (isPasswordProtected && !isUnlocked && user?.id !== gated.ownerId) {
+        return withHelp(renderPasswordGate());
+    }
+
     if (pool.type === 'BRACKET') {
         return withHelp(
             <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
@@ -399,70 +479,6 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         }
     };
 
-    /**
-     * PLAN-AUDIT-AUTH-HARDENING Phase B (audit item 1).
-     *
-     * This used to be `enteredPassword === squaresPool.gridPassword` — a compare
-     * in the BROWSER against a field on a document that is `allow get: if true`,
-     * so anyone holding the share link could read the password out of the
-     * network tab and never see this box at all. The check now runs in the
-     * `verifyPoolAccess` callable against a PBKDF2 record in
-     * `pools/{id}/private/access`, which rules close to every client.
-     *
-     * The callable is the authority in BOTH directions: a throttled or failed
-     * call returns false, so the gate fails CLOSED.
-     */
-    const handlePasswordSubmit = async () => {
-        if (checkingPassword) return;
-        // An empty box is not worth a round trip, and it would burn one of the
-        // caller's ten attempts against the throttle.
-        if (!enteredPassword) { setPasswordError('Enter the pool password.'); return; }
-        setCheckingPassword(true);
-        try {
-            const { ok, reason } = await dbService.verifyPoolAccess(squaresPool.id, enteredPassword);
-            setIsUnlocked(ok);
-            setPasswordError(ok ? null
-                : reason === 'throttled' ? 'Too many attempts. Wait a few minutes and try again.'
-                : reason === 'error' ? 'Could not check the password right now. Try again.'
-                : 'Incorrect password.');
-        } finally {
-            setCheckingPassword(false);
-        }
-    };
-
-    /**
-     * Whether the gate renders. `hasPoolPassword` is the non-secret marker the
-     * server sets; `gridPassword` is the legacy plaintext, still present on pools
-     * the migration sweep has not reached — reading it here keeps those pools
-     * gated during the rollout without the value being trusted for anything.
-     */
-    const isPasswordProtected = Boolean(
-        (squaresPool as unknown as { hasPoolPassword?: boolean }).hasPoolPassword
-        || squaresPool.gridPassword,
-    );
-
-
-    // Actually it was mainly for debug in header.
-
-    const renderPasswordGate = () => (
-        <div className="min-h-screen bg-page flex items-center justify-center p-4">
-            <div className="bg-card border border-line rounded-xl p-8 max-w-md w-full text-center shadow-card">
-                <div className="w-16 h-16 bg-page rounded-full flex items-center justify-center mx-auto mb-6 border border-line"><Lock size={32} className="text-gold-500" /></div>
-                <h2 className="text-2xl font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-2">Password Protected</h2>
-                <p className="text-muted mb-6 font-body">This pool is private. Please enter the password to view it.</p>
-                {passwordError && <div role="alert" className="bg-brandred-600/10 border border-brandred-600/30 text-brandred-500 p-3 rounded-lg text-sm mb-4 font-body">{passwordError}</div>}
-                <div className="flex gap-2">
-                    <input type="password" value={enteredPassword} onChange={(e) => setEnteredPassword(e.target.value)} placeholder="Enter Password" className="flex-1 bg-page border border-line rounded-lg px-4 py-2 text-[color:var(--text)] font-body outline-none focus:ring-2 focus:ring-gold-500 placeholder:text-faint" onKeyDown={(e) => { if (e.key === 'Enter') void handlePasswordSubmit(); }} />
-                    <Button variant="primary" disabled={checkingPassword} onClick={() => { void handlePasswordSubmit(); }}>{checkingPassword ? 'Checking…' : 'Unlock'}</Button>
-                </div>
-                <div className="mt-6 pt-6 border-t border-line"><p className="text-xs text-faint font-body">Contact the pool manager for access.</p></div>
-            </div>
-        </div>
-    );
-
-    if (isPasswordProtected && !isUnlocked && user?.id !== squaresPool.ownerId) {
-        return withHelp(renderPasswordGate());
-    }
 
     const homeLogo = squaresPool.homeTeamLogo || getTeamLogo(squaresPool.homeTeam);
     const awayLogo = squaresPool.awayTeamLogo || getTeamLogo(squaresPool.awayTeam);
