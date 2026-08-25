@@ -89,8 +89,12 @@ describe('image perf budget', () => {
         expect(logo).toContain('height={128}');
         // The live-text wordmark is load-bearing: the artwork's own wordmark is
         // dark navy on permanently navy chrome. Do not let it be deleted.
-        expect(logo).toContain('withWordmark');
-        expect(logo).toContain('March Melee');
+        // Match the RENDERED spans, not the prop name or the alt text — both of
+        // those survive deleting the wordmark, which would make this pass on a
+        // component that no longer has one.
+        expect(logo).toMatch(/\{withWordmark\s*&&\s*\(/);
+        expect(logo).toMatch(/>March Melee<\/span>/);
+        expect(logo).toMatch(/>Pools<\/span>/);
     });
 
     it('the email logo keeps its path and 589x150 size class', () => {
