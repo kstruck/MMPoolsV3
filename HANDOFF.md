@@ -18,9 +18,13 @@
 > 🔴 **CORRECTED ON THE RECORD: the Gemini key WAS leaked** (public git
 > history since 2025-12-13, count-only check:
 > `git show 3340fff0^:.env | grep -c VITE_API_KEY`). The 2026-07-06 "NOT
-> leaked" owner claim was false; nine skill files corrected in #547. Rotation
-> stays Kevin's #1 owed action — same key, same rotation as the AI-commissioner
-> box below.
+> leaked" owner claim was false; nine skill files corrected in #547.
+> **ROTATION CLOSED 2026-08-24 (Kevin ruling, morning session):** the leaked
+> value returns `API_KEY_INVALID` when tested live, and full `.env` history
+> holds no other private key — the live key ("New MarchMeleePoolsAPI2",
+> Jan 2026) was never in git. Kevin had already rotated; the "STILL OWED:
+> rotate" lines in the boxes below are SUPERSEDED. History scrub (D5) drops
+> to cosmetic — the exposed value is dead.
 >
 > 🛑 **OWED, order matters:**
 > 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after

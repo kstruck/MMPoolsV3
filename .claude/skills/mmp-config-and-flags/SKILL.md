@@ -42,7 +42,7 @@ kill-switches live there.
 | `VITE_FIREBASE_STORAGE_BUCKET` | `src/firebase.ts:11` | |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | `src/firebase.ts:12` | |
 | `VITE_FIREBASE_APP_ID` | `src/firebase.ts:13` | |
-| `GEMINI_API_KEY` | `.agent/skills/front-end-skill` (nano-banana image-gen agent skill) — NOT the app | **CORRECTED 2026-08-23: the `.env` comment was RIGHT and the owner denial wrong** — `git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only — never reprint the value) in the public repo shows `VITE_API_KEY` (a Gemini key), exposed since 2025-12-13. Rotation is Kevin's owed action (HANDOFF). |
+| `GEMINI_API_KEY` | `.agent/skills/front-end-skill` (nano-banana image-gen agent skill) — NOT the app | **CORRECTED 2026-08-23: the `.env` comment was RIGHT and the owner denial wrong** — `git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only — never reprint the value) in the public repo shows `VITE_API_KEY` (a Gemini key), exposed since 2025-12-13. Rotation CLOSED 2026-08-24 (Kevin ruling, evidence-verified): the leaked value returns API_KEY_INVALID when tested live, and .env history contains no other private key — the live key ("New MarchMeleePoolsAPI2", Jan 2026) never touched git. Kevin had already rotated; no further action.. |
 
 Referenced in `src/` but NOT present in `.env` (as of 2026-07-06):
 

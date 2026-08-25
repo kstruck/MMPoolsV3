@@ -1,9 +1,6 @@
 # MORNING 2026-08-24 — Overnight audit-remediation session
 
-> 📌 **Second doc for this date.** This continues MORNING-2026-08-24.md
-> (the PLAN-WIZARD-BUYFLOW-FIXES overnight, session 08-23 22:00 → 08-24
-> 05:30 ET) rather than replacing it — different session, different work,
-> both still current. Read that one first for the buy-flow tickets.
+> This file CONTINUES [MORNING-2026-08-24.md](MORNING-2026-08-24.md) (the earlier doc for this date — previous effort's close-out); it does not supersede it. Different workstream: the six-audit remediation.
 
 Kevin's brief: work every finding from the six audits (DB/storage, backend
 API, auth, hosting/deploy, cloud/compute, VCS/CI) plus the 8/8-red Playwright
@@ -35,7 +32,10 @@ e2e **0/8 → 8/8**.
 since 2025-12-13. The 2026-07-06 "owner ground truth: NOT leaked" was false and
 had propagated into nine skill files — all corrected in #547. Rotation was
 ALREADY Kevin's owed action in HANDOFF; the audits independently rediscovered
-the same key. One rotation closes both.
+the same key. **CLOSED 2026-08-24 morning (Kevin ruling): rotation verified
+already done** — leaked value tested live → `API_KEY_INVALID`; `.env` history
+carries no other private key; the live key (Jan 2026) never touched git.
+Runbook Task 1 and decision D5's urgency are void — D5 is cosmetic now.
 
 ## Stale audit findings (no action needed)
 

@@ -528,7 +528,7 @@ PR #139 merged (`53d9872`); all Phase 3.1 functions (`onUserCreated`,
 ~~the Gemini API key was NOT leaked~~ **CORRECTED 2026-08-23: it WAS leaked.**
 `git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only — never reprint the value) in the PUBLIC repo shows `VITE_API_KEY` (a Gemini key,
 per the Dockerfile:24 removal note), exposed since 2025-12-13. The 2026-07-06
-owner statement was wrong. Rotation is Kevin's owed action (HANDOFF top box).
+owner statement was wrong. Rotation CLOSED 2026-08-24 (Kevin ruling, evidence-verified): the leaked value returns API_KEY_INVALID when tested live, and .env history contains no other private key — the live key ("New MarchMeleePoolsAPI2", Jan 2026) never touched git. Kevin had already rotated; no further action..
 
 ---
 

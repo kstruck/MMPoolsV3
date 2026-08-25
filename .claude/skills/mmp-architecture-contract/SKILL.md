@@ -253,7 +253,7 @@ deployed; tightened firestore.rules deployed; searchName backfill run;
 `autoClosePools` is LIVE past dry-run (actually closes pools daily). The Gemini
 key ~~was NOT leaked~~ **WAS leaked — corrected 2026-08-23.** `git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only —
 never reprint the value) in the public repo shows `VITE_API_KEY` (a Gemini key), exposed
-since 2025-12-13. Rotation is Kevin's owed action (HANDOFF top box).
+since 2025-12-13. Rotation CLOSED 2026-08-24 (Kevin ruling, evidence-verified): the leaked value returns API_KEY_INVALID when tested live, and .env history contains no other private key — the live key ("New MarchMeleePoolsAPI2", Jan 2026) never touched git. Kevin had already rotated; no further action..
 
 ---
 
