@@ -173,7 +173,9 @@ replace.
    ```
 
    Success: `.patch` files on disk, outside the repository. These re-apply onto
-   the rewritten history with `git am` afterwards.
+   the rewritten history with `git am` afterwards. (`-o` also creates missing
+   leading directories — same measurement as §6 step 1 — so
+   `D:\mmp-scrub-patches` needs no pre-creation either.)
 
 4. **Announce a freeze.** No commits, no merges, no deploys from any checkout
    between the mirror clone (§6 step 1) and the re-clone (§7). A commit made
@@ -211,6 +213,12 @@ git clone --mirror https://github.com/kstruck/MMPoolsV3.git D:\mmp-scrub\MMPools
 
 Success: a bare repo at that path. Verify it has the history:
 `git -C D:\mmp-scrub\MMPoolsV3.git rev-list --all --count`.
+
+ℹ️ **`D:\mmp-scrub` does not need to exist first.** `git clone` creates missing
+leading directories, so no `New-Item` step is needed — measured on this machine
+(git 2.52.0.windows.1): `git clone --mirror ./srcrepo ./deep/nested/path/mirror.git`
+into a path with three absent parents exits 0 and creates all of them. Noted
+because a review round raised the opposite as a defect; it is not one.
 
 **Step 2 — confirm the target is present before removing it** (count only):
 
