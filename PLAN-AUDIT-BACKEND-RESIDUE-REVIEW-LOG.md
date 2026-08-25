@@ -45,3 +45,43 @@ diff read is the only other opinion. It earned its keep:
 ## Round 2 — `codex exec review --base origin/main` (on the round-1 fixes)
 
 Required by §2c: the code written to close a finding has never been reviewed.
+
+**Verdict: CLEAN.** Zero findings. Self-review of the r1 fixes agreed, with one
+tidy-up carried to round 3: `userProfile.ts` still imported `onCall` after 17f
+removed its last use.
+
+## Round 3 — `codex exec review --base origin/main` (final diff)
+
+**Verdict: CLEAN.** "No discrete, actionable regressions were identified relative
+to the specified merge base. Type checking passes." (Its own attempt to run the
+suite hit a Windows EPERM spawn error inside its sandbox; the four gates were run
+directly instead — see the PR body.)
+
+---
+
+## Stopping
+
+Both conditions of the §2c rule are met — a clean codex round AND my own read of
+the diff agrees — and **no findings are carried**. 3 paid rounds of a cap of 10.
+qodo is DORMANT, so it is two conditions, not three.
+
+## Local-gate note (not a finding)
+
+`npm test` at the repo root reports 3 failures in `tests/addon-purchase.test.ts`.
+They are **not** from this change and are **not** weakened or worked around:
+
+- The branch never touches `functions/src/stripe.ts` — `git diff
+  origin/main...HEAD -- functions/src/stripe.ts` is empty and no commit on the
+  branch touches it.
+- The assertions are multi-line `toContain('… ,
+            purchaseKind,')`
+  substrings of that file, and this Windows worktree has `core.autocrlf=true`
+  with no `.gitattributes`, so every checked-out file has CRLF terminators.
+  Measured: both needles are `false` against the raw file and `true` against the
+  same bytes with `
+` normalized to `
+`.
+
+CI checks out LF on Linux, and CI is the authoritative gate (coordinator
+bulletin). Every test THIS PR adds is line-ending agnostic by construction —
+single-line regexes, or character classes that admit ``.
