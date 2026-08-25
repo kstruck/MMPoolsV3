@@ -361,9 +361,12 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `c37bbd37`.**
-⚠️ Updated 2026-08-12 (was <!-- deploy-state:ignore --> `main` @ `c7bdcf5`, which
-this file carried since 2026-08-09). Rules are at the same commit.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `809384d4`.**
+⚠️ Updated 2026-08-25, the multi-entry deploy
+(was <!-- deploy-state:ignore --> `main` @ `c37bbd37`, which this file carried
+since 2026-08-12 — four deploys stale). 🛑 **RULES ARE NO LONGER AT THE SAME COMMIT.** `firestore.rules` has not
+changed since #579 and its deploy is still owed; "functions are at X" is not
+"everything is at X".
 `HANDOFF.md`'s top box is the fuller statement, including the evidence for each
 surface.
 **Rules are deployed from that same commit. The FRONTEND has moved on: it is
