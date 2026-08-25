@@ -129,8 +129,20 @@ pressure:
 2. **True rollback:** app page → left sidebar → **Operations → Rollback** →
    *"Roll back to this image"* on the target commit's row. Restarts the old
    image, no rebuild, seconds.
-3. **Prove it moved:** re-run step 1's curl. The hash must flip. A rollback that
-   leaves the same hash did nothing.
+3. **Prove it moved — in this order.** (a) The Coolify deployment row now shows
+   the **target commit SHA** as running. (b) **The symptom is gone** in a
+   hard-refreshed browser. Those two are the verification. (c) The entry-bundle
+   curl from step 1 is *corroborating* evidence, not the test:
+
+   > ⚠️ **Do not require the hash to flip.** It only flips when the target
+   > commit changed the entry JS. A rollback whose difference is CSS,
+   > `index.html`, an image, `nginx.conf`, or a lazy-loaded chunk restores
+   > service with the **same** `index-*.js` hash — and docs-only commits produce
+   > byte-identical bundles either way. Declaring a working rollback ineffective
+   > because of an unchanged hash is how an incident responder rolls back a
+   > second time, past the good image. Use the hash flip as proof **only when
+   > the target commit is known to change entry-bundle code** — the same
+   > qualifier `mmp-deploy-and-operate` §2b carries.
 
 ⚠️ **Image retention is your rollback window** ("Images to keep" on that page).
 If the good image has been pruned, the recovery is roll-forward:

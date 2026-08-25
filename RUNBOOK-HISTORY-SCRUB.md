@@ -198,6 +198,11 @@ replace.
    # OR, if it truly cannot be committed: export it in TWO parts, because
    # one command does not cover both. `git diff HEAD` covers TRACKED changes
    # only and silently omits every untracked file.
+   #
+   # NOTE the New-Item: PowerShell's `>` redirection does NOT create missing
+   # parent directories and fails outright if they are absent. (Unlike `git
+   # clone` and `git format-patch -o`, which do create them - see §6 step 1.)
+   New-Item -ItemType Directory -Force D:\mmp-scrub-patches | Out-Null
    git -C <worktree-path> diff HEAD > D:\mmp-scrub-patches\<name>-dirty.patch
 
    # ...and then actually COPY the untracked files. `ls-files --others` only
