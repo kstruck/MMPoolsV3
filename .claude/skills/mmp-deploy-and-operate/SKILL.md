@@ -242,12 +242,13 @@ Tested sequence (2026-08-24, all verified):
    proof; a rollback that keeps the same hash did nothing.
 3. Roll forward: same page, "Roll back to this image" on the newest SHA
    (or `Actions → Redeploy`, which rebuilds HEAD — slower, same endpoint).
-4. Re-run the curl; expect the current hash again.
+4. Re-run the curl; expect the current hash again. (Kevin completed the full
+   round trip 2026-08-24: `BRP5Lf-B` → `BY2jRiDl` → `BRP5Lf-B`.)
 
 ⚠️ **Image retention is the rollback window.** The page's "Images to keep"
 setting was **2** at test time — one bad deploy plus one build could age out
-every known-good image. Kevin was asked to raise it to 5; verify the setting
-on the Rollback page before relying on this runbook.
+every known-good image. Kevin raised it to **5** on 2026-08-24 (confirmed);
+re-verify on the Rollback page before relying on this runbook.
 
 ⚠️ Docs-only commits produce identical bundles (`*.md` is dockerignored since
 #553), so two adjacent images can share a bundle hash — identify images by
