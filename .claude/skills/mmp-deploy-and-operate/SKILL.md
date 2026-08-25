@@ -219,6 +219,45 @@ Known-pending Coolify build-env misconfig (see §6): `VITE_FIREBASE_STORAGE_BUCK
 
 Firebase Hosting deploy (`npm run deploy:hosting`) still exists and would publish to the firebaseapp.com/web.app domains — deploying it does NOT update prod www. Don't use it expecting a prod release.
 
+### 2b. Rollback (TESTED live by Kevin, 2026-08-24 — Coolify v4.3.10)
+
+**The trap first: `Actions → Redeploy` rebuilds CURRENT `main` HEAD, no matter
+which deployment row you were looking at.** Measured: with `83b0186` live and
+`7d2e1a4` selected, Redeploy produced a build of `a7790b5` — the branch tip at
+click time. Deployment-history rows have NO per-row redeploy in this version.
+So "Redeploy" is roll-FORWARD only.
+
+**True rollback lives at: app page → left sidebar → Operations → Rollback.**
+That page lists retained container images, one per past deployment, tagged by
+commit SHA, each with a **"Roll back to this image"** button. It restarts the
+OLD image directly — no rebuild, ~seconds.
+
+Tested sequence (2026-08-24, all verified):
+1. Rollback page → "Roll back to this image" on `7d2e1a4` (23h-old build).
+2. Verify the bundle actually moved (PowerShell, any directory):
+   ```powershell
+   curl.exe -s https://www.marchmeleepools.com/ | Select-String "index-[A-Za-z0-9_-]*\.js"
+   ```
+   Hash flipped `index-BRP5Lf-B.js` → `index-BY2jRiDl.js`. That flip is the
+   proof; a rollback that keeps the same hash did nothing.
+3. Roll forward: same page, "Roll back to this image" on the newest SHA
+   (or `Actions → Redeploy`, which rebuilds HEAD — slower, same endpoint).
+4. Re-run the curl; expect the current hash again. (Kevin completed the full
+   round trip 2026-08-24: `BRP5Lf-B` → `BY2jRiDl` → `BRP5Lf-B`.)
+
+⚠️ **Image retention is the rollback window.** The page's "Images to keep"
+setting was **2** at test time — one bad deploy plus one build could age out
+every known-good image. Kevin raised it to **5** on 2026-08-24 (confirmed);
+re-verify on the Rollback page before relying on this runbook.
+
+⚠️ Docs-only commits produce identical bundles (`*.md` is dockerignored since
+#553), so two adjacent images can share a bundle hash — identify images by
+COMMIT SHA, and only use the hash flip as proof when the target commit is
+known to change frontend code.
+
+If the wanted image has been pruned: recovery is roll-forward —
+`git revert <bad-sha>` on `main`, then `Actions → Redeploy`.
+
 ---
 
 ## 3. Scheduled jobs inventory (all verified in `functions/src` + `functions:list`, 2026-07-06)
