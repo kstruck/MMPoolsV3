@@ -30,6 +30,33 @@
 // 12000). Each one is a billed read, so raise it deliberately.
 
 import admin from "firebase-admin";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PROJECT_ID = process.env.GCLOUD_PROJECT || "gridiron-gamble-uzuqo";
+
+// Same credential chain as firestore-census.mjs, so both scripts fail the same
+// way and with the same instructions.
+function initApp() {
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    admin.initializeApp({ projectId: PROJECT_ID });
+    return `EMULATOR ${process.env.FIRESTORE_EMULATOR_HOST} (project ${PROJECT_ID})`;
+  }
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId: PROJECT_ID });
+    return `PRODUCTION via GOOGLE_APPLICATION_CREDENTIALS (project ${PROJECT_ID})`;
+  }
+  const saPath = join(REPO_ROOT, "scripts", "service-account.json");
+  if (existsSync(saPath)) {
+    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync(saPath, "utf8"))), projectId: PROJECT_ID });
+    return `PRODUCTION via ${saPath}`;
+  }
+  console.error("No credentials. Set FIRESTORE_EMULATOR_HOST, or GOOGLE_APPLICATION_CREDENTIALS,");
+  console.error(`or place a service-account key at ${saPath} (and keep it out of git).`);
+  process.exit(1);
+}
 
 const args = process.argv.slice(2);
 const scanIdx = args.indexOf("--scan");
@@ -65,10 +92,10 @@ function stats(values) {
 }
 
 async function main() {
-  admin.initializeApp({ credential: admin.credential.applicationDefault() });
+  const target = initApp();
   const db = admin.firestore();
   const now = Date.now();
-  const out = { generatedAt: new Date(now).toISOString(), scanLimit: SCAN };
+  const out = { generatedAt: new Date(now).toISOString(), target, scanLimit: SCAN };
 
   // ---- 1. SYNC_GAME_STATUS history ----------------------------------------
   // A (type == X AND timestamp >= T) composite query needs an index this
