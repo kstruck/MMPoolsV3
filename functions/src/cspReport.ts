@@ -268,7 +268,10 @@ async function record(hour: string, v: Violation, dropped: number): Promise<void
     const db = admin.firestore();
     const ref = db.collection("system_logs").doc(`csp-violations-${hour}`);
     const key = signatureFor(v);
-    const inc = admin.firestore.FieldValue.increment;
+    // Called through the namespace rather than detached into a local: a static
+    // factory pulled off its class is the kind of thing that keeps working until
+    // the SDK version where it does not.
+    const inc = (n: number) => admin.firestore.FieldValue.increment(n);
 
     await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
@@ -317,7 +320,10 @@ async function record(hour: string, v: Violation, dropped: number): Promise<void
         } else {
             update.overflowCount = inc(1);
         }
-        tx.update(ref, update);
+        // Cast matches the repo's existing dynamic-update precedent
+        // (bracketEntries.ts:185) — the keys are field paths built above, not a
+        // literal whose shape the compiler can check.
+        tx.update(ref, update as admin.firestore.UpdateData<admin.firestore.DocumentData>);
     });
 }
 
