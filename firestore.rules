@@ -48,6 +48,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // POOL ACCESS ATTEMPT COUNTERS (PLAN-AUDIT-AUTH-HARDENING Phase B) — the
+    // per-(pool, principal) failure throttle behind the PUBLIC `verifyPoolAccess`
+    // callable. Server bookkeeping only: a client that could read it would learn
+    // how many guesses remain, and one that could write it would erase the cap.
+    match /pool_access_attempts/{attemptId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // SITE-WIDE CONSENSUS (ADR 0004) — server-written post-lock aggregate (counts only, never
     // individual picks), scoped by pool type. Public read; write server-only.
     match /consensus/{weekKey}/{poolType}/{gameId} {
@@ -400,6 +409,72 @@ service cloud.firestore {
                && (!isNfl || !changed.hasAny(['entryFee', 'payoutMode', 'maxEntriesPerUser', 'payouts']));
       }
 
+      // POOL PASSWORD MATERIAL IS SERVER-OWNED (PLAN-AUDIT-AUTH-HARDENING
+      // Phase B; audit item 13a).
+      //
+      // The bracket dashboard used to write `accessControl.password` in the
+      // CLEAR with a direct client `updateDoc`, onto a document that is
+      // `allow get: if true` — and `joinBracketPool` never read that field, so
+      // the value was simultaneously exposed and unenforced. The wizards did
+      // the same with `gridPassword`. Both now route through the
+      // `setPoolPassword` callable, which writes a PBKDF2 record to
+      // `pools/{id}/private/access`; this function is what makes that the ONLY
+      // path rather than merely the intended one.
+      //
+      // ⚠️ IT DENIES *CHANGING* THE VALUE, IN EITHER DIRECTION. An earlier
+      // version only refused a NON-EMPTY value, reasoning that a full-object
+      // wizard save legitimately carries `gridPassword: ''` (the empty default
+      // in src/constants.ts) once the field is gone from the document. That let
+      // an owner CLEAR a pre-migration pool's plaintext by submitting `''` —
+      // deleting the only value that makes the gate render, and silently opening
+      // the pool (codex r5 P1). Clearing is exactly as dangerous as setting, and
+      // in the fail-OPEN direction.
+      //
+      // So the test is equality, with `null`/absent/`''` treated as one value.
+      // What still passes: the wizard resending the SAME stored value; the
+      // wizard sending `''` for a pool that has no password; any edit to a
+      // sibling field of `accessControl` while the password rides along
+      // unchanged. What no longer passes: setting one, changing one, or clearing
+      // one. Removing a password is `setPoolPassword(poolId, null)`; removing a
+      // legacy plaintext is the migration. Both hold an Admin SDK handle, which
+      // rules never see.
+      //
+      // ⚠️ Applied OUTSIDE the disjunction below, like
+      // callableOnlySettingsUnchanged(): `isSuperAdmin()` short-circuits every
+      // check inside the manager branch, and a SUPER_ADMIN writing a plaintext
+      // password back onto the public document is the same leak by a different
+      // hand.
+      //
+      // `hasPoolPassword` is the non-secret marker the UI renders the lock
+      // from. It is server-written for the same reason `participantIds` is: a
+      // client that could clear it could make a gated pool render ungated.
+      // UNCHANGED, or empty on BOTH sides. `null` and `''` are the same thing
+      // here: an absent field reads as `''` through the default, and a client
+      // that sends `null` means the same as one that sends nothing.
+      function poolPasswordUnchanged(newVal, oldVal) {
+        return newVal == oldVal
+               || ((newVal == null || newVal == '') && (oldVal == null || oldVal == ''));
+      }
+
+      function poolPasswordNotWritten() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return poolPasswordUnchanged(
+                 request.resource.data.get('gridPassword', ''),
+                 resource.data.get('gridPassword', ''))
+               && poolPasswordUnchanged(
+                 request.resource.data.get('accessControl', {}).get('password', ''),
+                 resource.data.get('accessControl', {}).get('password', ''))
+               // `accessControl.password` here is a LITERAL top-level field name
+               // with a dot in it, NOT the nested path (codex r5 P1). The dotted
+               // OBJECT-KEY form of updateDoc is parsed by the SDK into the
+               // nested path and is caught by the clause above; but
+               // `updateDoc(ref, new FieldPath('accessControl.password'), v)`
+               // writes a genuine top-level field, `affectedKeys()` reports that
+               // literal key, and nothing above would have looked at it — the
+               // same bypass the create schema had to close.
+               && !changed.hasAny(['passwordHash', 'hasPoolPassword', 'accessControl.password']);
+      }
+
       // Pool is in an editable state.
       // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
@@ -425,7 +500,7 @@ service cloud.firestore {
       // disjunction, so it applies to the super-admin branch too. Every other
       // settings protection — `nflSettingsWriteBlocked()` included — is inside
       // the manager branch and is short-circuited by `isSuperAdmin()`.
-      allow update: if request.auth != null && callableOnlySettingsUnchanged() && (
+      allow update: if request.auth != null && callableOnlySettingsUnchanged() && poolPasswordNotWritten() && (
         (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );
@@ -435,6 +510,26 @@ service cloud.firestore {
       // simulator now creates through the real create callables with a
       // server-stamped simRunId trust anchor — no client path may mint pool docs.
       allow create: if false;
+
+      // POOL ACCESS SECRET (PLAN-AUDIT-AUTH-HARDENING Phase B).
+      //
+      // `pools/{poolId}/private/access` holds the PBKDF2 record for a pool's
+      // password and nothing else. BOTH doors are shut, to every principal
+      // including SUPER_ADMIN: the only legitimate reader is the
+      // `verifyPoolAccess` callable, which holds an Admin SDK handle and
+      // bypasses rules entirely, and nothing in the product ever needs to
+      // display a pool password back to anyone.
+      //
+      // ⚠️ This is the whole point of the phase. The material used to live on
+      // the PARENT document, which is `allow get: if true` for guest share
+      // links — so `gridPassword`, `accessControl.password` and `passwordHash`
+      // were readable by anyone holding a pool link. The wildcard covers the
+      // whole subcollection so a future private doc cannot be added under a
+      // laxer default.
+      match /private/{docId} {
+        allow read: if false;
+        allow write: if false;
+      }
 
       // WINNERS (Subcollection)
       match /winners/{winnerId} {

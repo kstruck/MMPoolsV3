@@ -257,7 +257,14 @@ describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () =
     // super-admin client and no other test in this repo would notice.
     const allow = rules.slice(rules.indexOf('allow update: if request.auth != null'));
     const header = allow.slice(0, allow.indexOf('||'));
-    expect(header).toContain('callableOnlySettingsUnchanged() && (');
+    // Matched loosely on purpose. The original assertion pinned the LITERAL
+    // `callableOnlySettingsUnchanged() && (`, which broke the moment a SECOND
+    // outside-the-disjunction guard was added next to it
+    // (`poolPasswordNotWritten()`, PLAN-AUDIT-AUTH-HARDENING Phase B) — a
+    // failure that says "the rule changed shape", not "the guard moved inside".
+    // What matters is that the call precedes the opening paren of the
+    // disjunction and precedes `isPoolManager()`; both are asserted below.
+    expect(header).toMatch(/callableOnlySettingsUnchanged\(\)(\s*&&\s*\w+\(\))*\s*&&\s*\(/);
     expect(header.indexOf('callableOnlySettingsUnchanged()')).toBeLessThan(header.indexOf('isPoolManager()'));
   });
 });
