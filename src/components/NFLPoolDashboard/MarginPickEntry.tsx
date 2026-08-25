@@ -191,7 +191,12 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
         // answers to one act. Both now take the default: the switcher PRE-FILLS
         // a name, so clearing it reads as "whatever you suggested", not as a
         // request to be refused.
-        ...(entryIndex && entryIndex > 1 && entryName?.trim() ? { entryName: entryName.trim() } : {}),
+        // EVERY entry may be named, INCLUDING #1 (Kevin, 2026-08-25). The server
+        // never gated this — `nflPools.ts:562` applies a requested name with no
+        // index condition — so the `> 1` here was the whole restriction.
+        // Still omitted when blank: the switcher pre-fills a name for an extra
+        // entry, and for entry #1 an empty field means "use my player name".
+        ...(entryName?.trim() ? { entryName: entryName.trim() } : {}),
         requestId: crypto.randomUUID()
       });
       setSubmittedAt(serverNow());

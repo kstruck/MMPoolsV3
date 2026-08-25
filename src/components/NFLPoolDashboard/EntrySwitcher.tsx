@@ -28,6 +28,30 @@ import { Plus, X } from 'lucide-react';
 import { ENTRY_NAME_MAX, defaultEntryName } from '@shared/multiEntry';
 import { sortOwnEntries, nextAddableEntryIndex, entryLabelOf, entryIndexOf, type OwnEntryLike } from '../../utils/entrySelection';
 
+/**
+ * 🛑 THEME TOKENS, NEVER A FIXED HEX — this card shipped WHITE ON WHITE.
+ *
+ * Kevin, 2026-08-25, first live use: *"the My entries card is white on white
+ * text."* Two independent instances of one mistake:
+ *
+ *   - the idle chip was `bg-cream` (`tailwind.config.js` — a FIXED `#F7F4EE`
+ *     that does not follow the theme) with `text-[color:var(--text)]`, which in
+ *     dark mode is `#EDF1F8`. Near-white on near-white.
+ *   - the name input was `bg-white` with no colour of its own, so it inherited
+ *     the same near-white `--text`.
+ *
+ * And the ACTIVE chip was `#142A4C` against a dark `--card` of `#152747` — all
+ * but the same colour, so the selected state vanished too.
+ *
+ * These are the values T10's Standings segmented control already ships
+ * (`NFLStandingsTab.tsx:129-130`), reused verbatim rather than re-invented.
+ * `tests/nfl-surface-invariants.test.ts` now forbids a fixed light background
+ * in this file, because the failure is invisible in whichever theme the author
+ * happens to be using.
+ */
+const CHIP_ACTIVE = 'bg-navy-700 text-white dark:bg-gold-500 dark:text-navy-900';
+const CHIP_IDLE = 'bg-page text-muted hover:text-[color:var(--text)]';
+
 export interface EntryDraft {
   entryIndex: number;
   entryName: string;
@@ -140,10 +164,8 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
             onClick={onSelectPrimarySlot}
             aria-pressed={primarySlotActive}
             data-testid="implicit-entry-1"
-            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-              primarySlotActive
-                ? 'bg-[#142A4C] text-white border-[#142A4C]'
-                : 'bg-cream text-[color:var(--text)] border-line hover:border-[#142A4C]'
+            className={`px-3 py-1.5 rounded-md text-sm font-medium border border-line transition-colors ${
+              primarySlotActive ? CHIP_ACTIVE : CHIP_IDLE
             }`}
           >
             Entry 1
@@ -157,10 +179,8 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
               type="button"
               onClick={() => onSelect(String(e.id))}
               aria-pressed={active}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                active
-                  ? 'bg-[#142A4C] text-white border-[#142A4C]'
-                  : 'bg-cream text-[color:var(--text)] border-line hover:border-[#142A4C]'
+              className={`px-3 py-1.5 rounded-md text-sm font-medium border border-line transition-colors ${
+                active ? CHIP_ACTIVE : CHIP_IDLE
               }`}
             >
               {entryLabelOf(e, `Entry ${entryIndexOf(e)}`)}
@@ -174,31 +194,33 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
             onClick={onStartDraft}
             disabled={isWeekLocked}
             title={isWeekLocked ? 'This week is locked — a new entry starts with its first pick.' : undefined}
-            className="px-3 py-1.5 rounded-md text-sm font-medium border border-dashed border-line text-muted hover:border-[#142A4C] hover:text-[color:var(--text)] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-md text-sm font-medium border border-dashed border-line bg-page text-muted hover:text-[color:var(--text)] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
           >
             <Plus size={14} /> Add entry
           </button>
         )}
       </div>
 
-      {draft && draft.entryIndex === 1 && (
+      {draft && (
         <div className="mt-3 pt-3 border-t border-line">
           {/*
-            Entry #1 takes NO name — `defaultEntryName` returns undefined for
-            index 1 and the pick sheets only send `entryName` for an extra
-            entry, so a field here would collect something the first save
-            discards. (codex r1/r3 on the T5 PR.)
-          */}
-          <p className="text-[12px] text-muted">
-            Entry 1 is created when you save its first pick, and it shows your player name.
-          </p>
-        </div>
-      )}
+            EVERY ENTRY IS NAMEABLE, INCLUDING #1 (Kevin, 2026-08-25: "users
+            must be able to name each entry, not just the ones after the 1st
+            one"). The server never gated this — `nflPools.ts:562` applies a
+            requested `entryName` with no index condition — the restriction was
+            purely this component and the three pick sheets.
 
-      {draft && draft.entryIndex > 1 && (
-        <div className="mt-3 pt-3 border-t border-line">
-          <span id="new-entry-name-label" className="block text-[11px] font-medium uppercase tracking-[0.06em] text-muted mb-1.5">
-            Name this entry
+            Entry #1 differs in ONE way, and it is a default rather than a
+            rule: it has no generated name (`defaultEntryName` returns
+            undefined for index 1), so leaving the field blank keeps today's
+            behaviour exactly — the row shows the player's own name.
+          */}
+          {/* A <span>, not a <label>: the cancel BUTTON sits in the same row, and
+              nesting it inside a label would make clicking it focus the input
+              instead. `aria-label` on the input carries the association, which
+              is also what `getByLabelText` resolves in the tests. */}
+          <span className="block text-[11px] font-medium uppercase tracking-[0.06em] text-muted mb-1.5">
+            Name this entry{draft.entryIndex === 1 ? ' (optional)' : ''}
           </span>
           <div className="flex items-center gap-2">
             <input
@@ -207,9 +229,9 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
               aria-label="Name this entry"
               value={draft.entryName}
               maxLength={ENTRY_NAME_MAX}
-              placeholder={defaultEntryName(userName, draft.entryIndex) ?? ''}
+              placeholder={defaultEntryName(userName, draft.entryIndex) ?? userName}
               onChange={(ev) => handleName(ev.target.value)}
-              className="flex-1 min-w-0 px-3 py-1.5 rounded-md border border-line bg-white text-sm"
+              className="flex-1 min-w-0 px-3 py-1.5 rounded-md border border-line bg-page text-[color:var(--text)] text-sm"
             />
             <button
               type="button"
@@ -221,13 +243,14 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
             </button>
           </div>
           {nameError && <p className="mt-1.5 text-[12px] text-[#B4232A]">{nameError}</p>}
-          {/* The honest statement of what has and has not happened. */}
           <p className="mt-2 text-[12px] text-muted">
             Entry {draft.entryIndex} is created when you save its first pick. Until then it does not exist,
             costs nothing, and nobody else can see it.
+            {draft.entryIndex === 1 && ' Leave the name blank to use your player name.'}
           </p>
         </div>
       )}
+
     </div>
   );
 };

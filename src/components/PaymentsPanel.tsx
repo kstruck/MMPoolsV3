@@ -3,7 +3,7 @@ import { DollarSign, CheckCircle2, AlertCircle, Receipt, History } from 'lucide-
 import type { Pool, User } from '../types';
 import { subscribeToPaymentLedger, type PaymentLedgerEvent } from '../services/paymentService';
 import { formatDeadline } from '../utils/formatTime';
-import { rosterPotStats } from '../utils/poolRoster';
+import { rosterPotStats, duesRates, memberOutstanding } from '../utils/poolRoster';
 import { Badge } from './ui';
 import { MyPrizes } from './MyPrizes';
 
@@ -52,10 +52,15 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     }, [pool.id]);
 
     const entryFee: number = castPool.settings?.entryFee ?? 0;
-    const rebuyCost: number = castPool.settings?.rebuyCost ?? entryFee;
     const paymentInstructions: string = castPool.settings?.paymentInstructions || '';
 
-    const myEntry = useMemo(() => entries.find(e => e.ownerUid === user.id) ?? null, [entries, user.id]);
+    // PLAN-MULTI-ENTRY: `.filter`, never `.find` (§0b.3). A member may hold
+    // several entries; this is used ONLY as a legacy fallback for `paidStatus`
+    // and `rebuysUsed`, both of which the Member Record answers better — so the
+    // FIRST entry is a deliberate, stated approximation rather than a guess
+    // about which entry the member means.
+    const myEntries = useMemo(() => entries.filter(e => e.ownerUid === user.id), [entries, user.id]);
+    const myEntry = myEntries[0] ?? null;
     // Deliberately NOT filtered through `canonicalMembers` (utils/poolRoster),
     // which is the one other reader of this collection. That filter keeps a
     // forged Member Record (#344) off the COMMISSIONER's roster and out of
@@ -66,17 +71,49 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
     // a pool they never joined, which is a worse answer, not a safer one.
     const myMember = useMemo(() => members.find(m => m.uid === user.id) ?? null, [members, user.id]);
     const isPaid = (myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID';
-    const myRebuys: number = myEntry?.rebuysUsed ?? 0;
-    // Rebuy dues settle INDEPENDENTLY of base dues (P3 / setPaidStatus
-    // settleRebuys): a STAMPED rebuyOwed is truth; a member record that never
-    // got the stamp (rebuy pre-dates the 2026-07-08 writer) derives the debt
-    // from the entry's rebuysUsed — the same legacy fallback the callable and
-    // the roster chip use (codex r3).
-    const myRebuyOwed: number = typeof myMember?.rebuyOwed === 'number'
-        ? myMember.rebuyOwed
-        : myRebuys * rebuyCost;
-    const myRebuyOutstanding = Math.max(0, myRebuyOwed - (myMember?.rebuyPaid ?? 0));
-    const myTotalDue = (isPaid ? 0 : entryFee) + myRebuyOutstanding;
+
+    /**
+     * 🛑 ONE DEFINITION OF WHAT A MEMBER OWES, SHARED WITH THE COMMISSIONER.
+     *
+     * Kevin, 2026-08-25, first live multi-entry pool: *"The payments page shows
+     * I owe $25 for a pool that I have two entries in. It should show that I owe
+     * $50."*
+     *
+     * This panel used to compute its own total from `settings.entryFee` — the
+     * price of ONE entry — while the commissioner's Buy-In Ledger used
+     * `memberOutstanding`, which reads the Member Record's `feeOwed`
+     * (`entryFee x max(joinLiability, playableEntryCount)`, PLAN-MULTI-ENTRY
+     * D2). So the commissioner's screen was right, the member's screen was
+     * wrong, and the two disagreed about the same debt.
+     *
+     * Fixed by DELETING the second definition rather than correcting it. The
+     * legacy fallbacks — `feeOwed` absent on a pre-ADR-0005 record, `rebuyOwed`
+     * absent on a pre-2026-07-08 rebuy — already live inside `memberOutstanding`
+     * and are not restated here.
+     *
+     * `rebuysUsed` is summed ACROSS the member's entries (D3): only consulted
+     * when no `rebuyOwed` is stamped, but one entry's count would under-report a
+     * member who rebought on their second.
+     */
+    const rates = useMemo(() => duesRates(pool), [pool]);
+    const myRow = useMemo(() => ({
+        feeOwed: myMember?.feeOwed,
+        paidStatus: (myMember?.paidStatus ?? myEntry?.paidStatus) as 'PAID' | 'UNPAID' | undefined,
+        rebuyOwed: myMember?.rebuyOwed,
+        rebuyPaid: myMember?.rebuyPaid,
+        rebuysUsed: myEntries.reduce((n, e) => n + (e?.rebuysUsed ?? 0), 0),
+    }), [myMember, myEntry, myEntries]);
+
+    const myFeeOwed: number = myRow.feeOwed ?? rates.entryFee;
+    const myRebuyOwed: number = typeof myRow.rebuyOwed === 'number'
+        ? myRow.rebuyOwed
+        : myRow.rebuysUsed * rates.rebuyCost;
+    const myRebuyOutstanding = Math.max(0, myRebuyOwed - (myRow.rebuyPaid ?? 0));
+    const myTotalDue = memberOutstanding(myRow as never, rates);
+    /** More than one entry's worth of dues — the line below explains the multiple. */
+    const myEntryCount: number = typeof myMember?.playableEntryCount === 'number'
+        ? myMember.playableEntryCount
+        : (myFeeOwed > 0 && rates.entryFee > 0 ? Math.round(myFeeOwed / rates.entryFee) : 1);
 
     // Pot: prefer the Member Record roster (everyone who joined) so the count and expected
     // dues are right even before members submit entries; fall back to entries pre-backfill.
@@ -122,7 +159,13 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                         {!isPaid && myTotalDue > 0 && (
                             <p className="text-sm font-body font-bold text-[color:var(--text)] mt-2">
                                 You owe <span className="text-gold-700 dark:text-gold-400 num">${myTotalDue}</span>
-                                {myRebuyOutstanding > 0 && <span className="text-muted num"> (${entryFee} entry + ${myRebuyOutstanding} rebuy dues)</span>}
+                                {myRebuyOutstanding > 0 && <span className="text-muted num"> (${myFeeOwed} entry + ${myRebuyOutstanding} rebuy dues)</span>}
+                                {/* On a multi-entry pool the figure is a MULTIPLE, and an
+                                    unexplained $50 on a $25 pool reads as a bug — which is
+                                    exactly how it was reported. Shown only when it applies. */}
+                                {myEntryCount > 1 && (
+                                    <span className="text-muted num"> — {myEntryCount} entries x ${entryFee}</span>
+                                )}
                                 {' '}to the commissioner.
                             </p>
                         )}
@@ -141,7 +184,13 @@ export const PaymentsPanel: React.FC<PaymentsPanelProps> = ({ pool, user, entrie
                     </div>
                     {entryFee > 0 && (
                         <div className="text-right">
-                            <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block">Entry Fee</span>
+                            {/* "Entry Fee $25" beside "You owe $50" reads as a
+                                contradiction unless the tile says which of the two
+                                it is. The pool's own invite page already says
+                                "per entry"; this matches it. */}
+                            <span className="font-display font-bold uppercase text-[12px] tracking-[0.16em] text-muted block">
+                                Entry Fee{myEntryCount > 1 ? ' (per entry)' : ''}
+                            </span>
                             <span className="font-display font-bold text-2xl text-gold-700 dark:text-gold-400 num">${entryFee}</span>
                         </div>
                     )}
