@@ -181,8 +181,24 @@ What still matches the grep, and why every one is correct:
   the multiplied sum. Renamed by T6's remainder; still allow-listed.
 - `NFLManagerView.tsx:865` `targetUid` — the proxy-pick/remind TARGET is a
   person. `proxyPick` takes an `entryIndex` alongside it (T2).
-- `PaymentsPanel.tsx:58` singular `myEntry` — ❌ **T6 remainder**, still
-  allow-listed in `tests/nfl-surface-invariants.test.ts`.
+- `PaymentsPanel.tsx:58` singular `myEntry` — ✅ **CLOSED 2026-08-25, and the
+  original classification here was WRONG.**
+
+  🛑 This row said *"dues come from the Member Record; the entry is only a
+  paidStatus fallback"* — and the file **never read the Member Record's fee at
+  all.** It computed `(isPaid ? 0 : settings.entryFee) + rebuys`, the price of
+  ONE entry, so a two-entry member was told they owed $25 while the
+  commissioner's ledger correctly chased them for $50. Kevin hit it on the first
+  live multi-entry pool, hours after this sweep was re-verified.
+
+  **The lesson for the next sweep: a "✅ per-member is right" verdict is a claim
+  about what the code READS, and it has to be checked against the code, not
+  against what the file is for.** Both PaymentsPanel and `poolRoster.ts` were
+  waved through on the same sentence; only one of them deserved it.
+
+  Now calls the shared `memberOutstanding` / `duesRates`, so there is one
+  definition of what a member owes and the two surfaces cannot disagree again.
+  Its `.find` is a `.filter`, and its allow-list entry is deleted.
 - `PaymentLedgerNFL.tsx:69` `entryOwner` — **new since the first sweep** and
   classified here: the ledger's payee is a person, so ✅.
 - `ReportsTab.tsx:123` — Bracket, out of scope.
