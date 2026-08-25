@@ -162,8 +162,11 @@ FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
         on TRANSITIONS only — a check flipping ok->fail, or a job NEWLY
         entering the stale set (diff against the previous snapshot; codex
         r3: findStaleJobs returns the same entry every hour, naive wiring
-        pages hourly until recovery). Continuing failures stay visible in
-        health/latest, not the pager.
+        pages hourly until recovery). Persist the "alerted" mark only on
+        a SENT dispatch outcome (codex r4: dispatchOpsAlert returns
+        "failed" without throwing — marking first and failing to send
+        means the page never goes out), with bounded retries. Continuing
+        failures stay visible in health/latest, not the pager.
     (d) PII: delete the full request.data dump at bracketPools.ts:37;
         apply sentrySanitize-style key redaction on the logClientError
         branch (errorHandler.ts:107 or server-side logClientError.ts).
