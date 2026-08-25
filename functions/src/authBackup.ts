@@ -104,7 +104,7 @@ export interface AuthUserLike {
             /** "phone" | "totp" in the Admin SDK's discriminated union. */
             factorId?: string;
             displayName?: string;
-            enrollmentTime?: string;
+            enrollmentTime?: string | null;
             /** PhoneMultiFactorInfo only. */
             phoneNumber?: string;
             /** TotpMultiFactorInfo only — no import representation. */
@@ -190,6 +190,28 @@ export function toEpochMsString(value: string | undefined): string | undefined {
 }
 
 /**
+ * A UTC display string back to RFC 3339, for `mfaInfo[].enrolledAt`.
+ *
+ * firebase-admin builds `enrollmentTime` as
+ * `new Date(response.enrolledAt).toUTCString()` — a display string like
+ * "Tue, 22 Jun 2021 12:00:00 GMT" — while the field it came from, and the
+ * `enrolledAt` the import API expects, is RFC 3339 ("2017-01-15T01:30:15.01Z").
+ * The SDK's own source comments say so. Copying the display string through
+ * would hand the import API a format it does not accept, and a rejected record
+ * takes the whole batch with it (codex R5). Unparseable input is dropped rather
+ * than emitted, same rule as `toEpochMsString`.
+ *
+ * Sub-second precision is lost, because `toUTCString()` already discarded it
+ * before this code ever sees the value. An enrolment timestamp a fraction of a
+ * second off is immaterial; a rejected import is not.
+ */
+export function toRfc3339(value: string | null | undefined): string | undefined {
+    if (!value) return undefined;
+    const t = Date.parse(value);
+    return Number.isFinite(t) ? new Date(t).toISOString() : undefined;
+}
+
+/**
  * One `UserRecord` -> one `firebase auth:import` record.
  *
  * The field names are the CLI's, not the Admin SDK's (`localId` not `uid`,
@@ -250,7 +272,7 @@ export function toAuthImportRecord(u: AuthUserLike): Record<string, unknown> {
                     mfaEnrollmentId: f.uid,
                     phoneInfo: f.phoneNumber,
                     displayName: f.displayName,
-                    enrolledAt: f.enrollmentTime,
+                    enrolledAt: toRfc3339(f.enrollmentTime),
                 }),
             )
             : undefined,

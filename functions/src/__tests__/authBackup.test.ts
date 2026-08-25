@@ -12,6 +12,7 @@ import {
     runAuthBackupCore,
     toAuthImportRecord,
     toEpochMsString,
+    toRfc3339,
     runAuthBackupSchema,
     backupProblem,
     isPasswordUserMissingHash,
@@ -299,6 +300,30 @@ describe("toAuthImportRecord — the CLI's field names, not the SDK's", () => {
             multiFactor: { enrolledFactors: [{ uid: "f1", factorId: "phone", phoneNumber: "+15551234567" }] },
         }));
         expect(r.mfaInfo).toEqual([{ mfaEnrollmentId: "f1", phoneInfo: "+15551234567" }]);
+    });
+
+    it("converts enrollmentTime back to RFC 3339 for enrolledAt (codex R5)", () => {
+        // firebase-admin builds enrollmentTime as new Date(enrolledAt).toUTCString(),
+        // a DISPLAY string; the import API wants RFC 3339 back.
+        const r = toAuthImportRecord(user("m", {
+            multiFactor: { enrolledFactors: [{
+                uid: "f1", factorId: "phone", phoneNumber: "+15551234567",
+                enrollmentTime: "Tue, 22 Jun 2021 12:00:00 GMT",
+            }] },
+        }));
+        expect((r.mfaInfo as Array<Record<string, unknown>>)[0].enrolledAt).toBe("2021-06-22T12:00:00.000Z");
+    });
+
+    it("drops an unparseable or null enrollmentTime rather than emitting it", () => {
+        expect(toRfc3339("not a date")).toBeUndefined();
+        expect(toRfc3339(null)).toBeUndefined();
+        expect(toRfc3339(undefined)).toBeUndefined();
+        const r = toAuthImportRecord(user("m", {
+            multiFactor: { enrolledFactors: [{
+                uid: "f1", factorId: "phone", phoneNumber: "+1555", enrollmentTime: "garbage",
+            }] },
+        }));
+        expect((r.mfaInfo as Array<Record<string, unknown>>)[0]).not.toHaveProperty("enrolledAt");
     });
 
     it("never emits a TOTP factor as a phone-shaped record (codex R4)", () => {
