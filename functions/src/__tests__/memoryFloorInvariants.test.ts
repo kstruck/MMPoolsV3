@@ -43,8 +43,13 @@ function memoryOptions(dir: string, out: { file: string; value: string }[] = [])
         }
         if (!entry.endsWith(".ts")) continue;
         const text = readFileSync(full, "utf8");
-        for (const m of text.matchAll(/memory:\s*"(\d+)(MiB|GiB)"/g)) {
-            out.push({ file: entry, value: `${m[1]}${m[2]}` });
+        // BOTH quote styles. codex r1 [P2]: the first version of this matched
+        // only double quotes, and four live options in this repo are
+        // single-quoted (nflSchedule.ts x2, nflAutoScore.ts, backfillProfileData.ts).
+        // A future `memory: '128MiB'` would have sailed past a guard that
+        // claimed a GLOBAL floor — a guard that looks like it guards and does not.
+        for (const m of text.matchAll(/memory:\s*(["'])(\d+)(MiB|GiB)\1/g)) {
+            out.push({ file: entry, value: `${m[2]}${m[3]}` });
         }
     }
     return out;
@@ -66,6 +71,15 @@ describe("Cloud Functions memory floor", () => {
         const found = memoryOptions(SRC);
         expect(found.length, "no memory: options found — this guard is inert").toBeGreaterThan(10);
         expect(found.some((f) => f.file === "cspReport.ts")).toBe(true);
+        // The single-quoted hole codex found, pinned so it cannot reopen: if the
+        // regex regresses to double-quotes-only, these files vanish from the scan
+        // and the floor check silently stops covering them.
+        for (const f of ["nflSchedule.ts", "nflAutoScore.ts", "backfillProfileData.ts"]) {
+            expect(
+                found.some((x) => x.file === f),
+                `${f} has a single-quoted memory option — the scanner must see it`,
+            ).toBe(true);
+        }
     });
 
     it("no function is sized below the 256MiB bundle floor", () => {
