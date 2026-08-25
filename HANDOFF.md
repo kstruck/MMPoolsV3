@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE IN PRODUCTION. SIX PRs MERGED (#587–#592). FUNCTIONS DEPLOYED AND VERIFIED BY NAME; FRONTEND REBUILT AND VERIFIED BY CHUNK CONTENT. THE RULES DEPLOY AND THE PASSWORD SWEEP ARE STILL OWED.**
+> ## 🟢 2026-08-25 (latest) — **MULTI-ENTRY IS LIVE IN PRODUCTION. FUNCTIONS, RULES AND THE FRONTEND ARE ALL DEPLOYED AND EACH VERIFIED SEPARATELY. THE PASSWORD SWEEP IS CLOSED. ONE ITEM LEFT: A SECOND COOLIFY REBUILD AFTER #529.**
 >
 > Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
 >
@@ -38,12 +38,28 @@
 > **Do not "verify" a future rebuild by the index hash alone** — a per-chunk
 > content check is what actually answers the question.
 >
-> 🛑 **STILL OWED, AND THEY ARE KEVIN'S:**
-> 1. **`npx firebase deploy --only firestore:rules`** — still owed from #579,
->    unchanged by this session. Not deployed here on purpose: this session was
->    scoped away from `firestore.rules` and a rules deploy is its own decision.
-> 2. The **pool-password migration sweep**, which the audit box says runs only
->    AFTER the Coolify rebuild — that precondition is now satisfied.
+> 🛑 **THE OWED LIST — ONE ITEM LEFT AS OF 2026-08-25 EVENING:**
+> 1. ~~`npx firebase deploy --only firestore:rules`~~ ✅ **DONE 2026-08-25**
+>    (Kevin ran it). #579's rules are live.
+> 2. ~~The pool-password migration sweep~~ ✅ **CLOSED 2026-08-25 — 23 pools
+>    scanned, 0 changed, NO live pass run or needed.** Kill-switch disarmed
+>    (`{enabled: false, dryRun: true}`, confirmed in the console).
+>
+>    The zero was **checked rather than accepted**, because "found nothing" and
+>    "looked in the wrong place" report identically: the scan is unfiltered
+>    (`collection("pools").orderBy(documentId())`, no `where`) and `nextCursor`
+>    came back null, so 23 IS the whole collection; and the planner reads all
+>    four legacy shapes including the exotic literal-dotted field.
+>
+>    ⚠️ **WHAT IT PROVES IS BOUNDED, AND THE BOUND MATTERS.** It proves that AT
+>    SCAN TIME no pool carried legacy public password material. It does **not**
+>    prove no pool ever had a password: a pool whose plaintext was cleared
+>    earlier, and a pool already holding a correct `private/access` secret, both
+>    produce the same empty result. So this closes the MIGRATION; it does not
+>    retire the historic-exposure question, and no claim here should be read as
+>    doing so. It also follows that `setPoolPassword` / `verifyPoolAccess` have
+>    never been exercised against production — the first commissioner to set a
+>    pool password is the first real test.
 > 3. **A SECOND COOLIFY REBUILD, AFTER #529 MERGES.** `POOLS_OPEN` is a frontend
 >    flag, so merging #529 changes nothing in production until another rebuild
 >    runs. The rebuild above happened BEFORE that merge, so it does not carry it.
