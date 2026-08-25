@@ -30,5 +30,18 @@ codex round ran:
 
 ## Round 1 — `codex exec review --base origin/main`
 
-See the PR body for the per-finding verdict table; findings and responses are
-recorded below as they land.
+**Verdict: CLEAN.** "No discrete, actionable regressions were identified in the
+changes relative to the specified merge base." Zero findings.
+
+§2c is explicit that a clean round 1 is not the review — "round 1 finds defects
+in the code, and rounds 2+ find defects in the fixes" — and with qodo dormant the
+diff read is the only other opinion. It earned its keep:
+
+| # | Finding (self-review after codex round 1) | Verdict |
+|---|---|---|
+| 0.6 | **`scoreNFLWeek`'s `userRole` has a SECOND consumer the audit's item text never mentioned**: the `ACTIVE_GAMES` gate 25 lines below the ownership check, which exempts SUPER_ADMIN from "all games must be FINAL". 17d's one-line change therefore also reaches a **scoring** bypass — the one that applies Survivor strikes and Margin -14s mid-week. | ACCEPTED as correct-and-intended (an unbacked claim losing a scoring bypass is strictly more restrictive; no principal gains anything), but it was **undeclared**. Named in the plan §0, which now classifies the change as authorization + prod data + **scoring**; pinned by a test asserting the gate reads the resolved role and that no second `userRole` binding shadows it. |
+| 0.7 | `jobSizing.test.ts` passed `text.search(re)` straight into `firstObjectLiteral`, so a failed search (-1) would make it read the FILE'S FIRST object literal and assert about the wrong thing — a guard that looks like it guards and does not. | ACCEPTED — the index is asserted `>= 0` before use, at both call sites. |
+
+## Round 2 — `codex exec review --base origin/main` (on the round-1 fixes)
+
+Required by §2c: the code written to close a finding has never been reviewed.

@@ -21,6 +21,16 @@ deliberately is not unchanged.
 Item 17(b) additionally touches **production data**: `backfillProfileData` is a
 prod migration callable.
 
+Item 17(d) additionally touches **scoring**, which the audit's item text did not
+say and self-review found (review log r0.6). `scoreNFLWeek`'s `userRole` has TWO
+consumers: the ownership gate the audit named, and — 25 lines later — the
+`ACTIVE_GAMES` gate, which exempts SUPER_ADMIN from "all games must be FINAL" so
+the button can score mid-week, applying Survivor strikes and Margin -14s while
+pick windows are still open. Resolving `userRole` once at the top reaches both.
+That is the intended direction (an unbacked claim loses the bypass, strictly more
+restrictive), but it means three of the four Rule-3 triggers fire on this change,
+not one.
+
 Items 14, 17(e) and 17(f) are ordinary on their own; they ride this plan because
 they ship in the same PR.
 
@@ -124,7 +134,7 @@ Six code sites, five callables:
 | `scoreUpdates.ts:1335` (`simulateGameUpdate`) | `const isSuperAdmin = request.auth?.token.role === 'SUPER_ADMIN'` |
 | `userProfile.ts:113` (`recomputeMyProfile`) | `request.auth.token?.role !== 'SUPER_ADMIN'` |
 | `userProfile.ts:138` (`getProfilePoolDetail`) | `const isAdmin = request.auth.token?.role === 'SUPER_ADMIN'` |
-| `nflPools.ts:2019` (`scoreNFLWeek`) | `token.role \|\| 'USER'` → `assertPoolOwnerOrSuperAdmin` |
+| `nflPools.ts:2019` (`scoreNFLWeek`) | `token.role \|\| 'USER'` → `assertPoolOwnerOrSuperAdmin` **and** the `ACTIVE_GAMES` scoring bypass 25 lines later (§0) |
 | `poolOps.ts:782` (`toggleWinnerPaid`) | same |
 
 `assertCallerRole` **throws**; a bypass branch needs a **boolean**. New

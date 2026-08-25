@@ -154,6 +154,22 @@ describe("17d: every named bypass branch consults the doc", () => {
         expect(helperCompares).toHaveLength(2);
     });
 
+    it("scoreNFLWeek's ACTIVE_GAMES bypass reads the SAME resolved role (self-review r0, not in the audit list)", () => {
+        // `userRole` has TWO consumers in scoreNFLWeek, and the audit named only the
+        // first. The second exempts SUPER_ADMIN from the "all games must be FINAL"
+        // gate — a SCORING bypass that applies Survivor strikes and Margin -14s
+        // mid-week. Pinned because a future edit that re-derives userRole from the
+        // raw claim for "just" this line would silently reopen it.
+        const src = code("nflPools.ts");
+        const fn = src.slice(src.indexOf("export const scoreNFLWeek"));
+        const resolvedAt = fn.indexOf("const userRole = await confirmedAdminClaim(request)");
+        const activeGamesAt = fn.indexOf("activeGamesCount > 0 && userRole !== 'SUPER_ADMIN'");
+        expect(resolvedAt).toBeGreaterThanOrEqual(0);
+        expect(activeGamesAt, "the ACTIVE_GAMES gate no longer reads userRole").toBeGreaterThan(resolvedAt);
+        // and no second, unresolved binding shadows it
+        expect(fn.slice(0, activeGamesAt).match(/const userRole =/g) ?? []).toHaveLength(1);
+    });
+
     it("scoreUpdates resolves it OUTSIDE the transaction (a plain get() inside re-runs on retry)", () => {
         const src = code("scoreUpdates.ts");
         const fn = src.slice(src.indexOf("export const simulateGameUpdate"));

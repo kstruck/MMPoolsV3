@@ -130,8 +130,12 @@ describe("scheduled job sizing (item 14)", () => {
         for (const name of REQUIRED) {
             const file = jobs.find((j) => j.name === name)!.file;
             const text = blankComments(readFileSync(join(SRC, file), "utf8"));
-            const re = new RegExp(`export\\s+const\\s+${name}\\s*=\\s*(?:functions\\.scheduler\\.)?onSchedule\\s*\\(`);
-            const opts = firstObjectLiteral(text, text.search(re));
+            const at = text.search(new RegExp(`export\\s+const\\s+${name}\\s*=\\s*(?:functions\\.scheduler\\.)?onSchedule\\s*\\(`));
+            // -1 would make firstObjectLiteral read the FILE'S FIRST object literal
+            // and quietly assert about the wrong thing — the exact shape of a guard
+            // that looks like it guards and does not.
+            expect(at, `${name}: declaration not found in ${file}`).toBeGreaterThanOrEqual(0);
+            const opts = firstObjectLiteral(text, at);
             const timeout = Number(opts.match(/timeoutSeconds\s*:\s*(\d+)/)?.[1]);
             expect(timeout, `${name}: could not read timeoutSeconds`).toBeGreaterThan(0);
             expect(
@@ -167,8 +171,9 @@ describe("scheduled job sizing (item 14)", () => {
         for (const name of REQUIRED) {
             const file = jobs.find((j) => j.name === name)!.file;
             const text = blankComments(readFileSync(join(SRC, file), "utf8"));
-            const re = new RegExp(`export\\s+const\\s+${name}\\s*=\\s*(?:functions\\.scheduler\\.)?onSchedule\\s*\\(`);
-            const opts = firstObjectLiteral(text, text.search(re));
+            const at = text.search(new RegExp(`export\\s+const\\s+${name}\\s*=\\s*(?:functions\\.scheduler\\.)?onSchedule\\s*\\(`));
+            expect(at, `${name}: declaration not found in ${file}`).toBeGreaterThanOrEqual(0);
+            const opts = firstObjectLiteral(text, at);
             expect(opts, `${name} names maxInstances inline, overriding the global cap`).not.toMatch(/maxInstances/);
         }
     });
