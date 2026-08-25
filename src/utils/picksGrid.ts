@@ -61,6 +61,12 @@ export function picksGridCell(args: {
     return {
         kind: 'PICK',
         team,
+        // `null` — ungraded — for a game that has not concluded AND for a
+        // FINAL the feed reported no scores for. That second case is the root
+        // fix carried over from #568: it was gated only in the pick sheet's
+        // `pickOutcome.ts`, so this grid used to show a W/L on an ATS game the
+        // scorer was still refusing to grade. It lives in `gradePick` now, so
+        // the grid and the sheet answer identically (NFL7-3).
         result: gradePick(game, team, pickMode),
         // Absent rather than 0: a confidence pool with no stored weight has not
         // told us the weight is zero, and 0 is a real (worst) weight.

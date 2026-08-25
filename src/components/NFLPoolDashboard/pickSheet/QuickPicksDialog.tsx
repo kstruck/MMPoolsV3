@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useOverlayOwner } from '../../ui/overlayStack';
+import { useFocusTrap } from '../../ui/useFocusTrap';
 import { Zap, Home, Plane, TrendingUp, TrendingDown, X } from 'lucide-react';
 import type { NFLGame } from '../../../types';
 import { planQuickPicks, type QuickPickStrategy } from './quickPicks';
@@ -17,10 +18,14 @@ import { planQuickPicks, type QuickPickStrategy } from './quickPicks';
  * ⚠️ NO "OPTIMAL PICKS" OPTION, by instruction (Kevin, 2026-08-12). Every
  * strategy here is a read of stored data, not a recommendation.
  *
- * ponytail: no focus trap. Escape closes, the backdrop closes, and the first
- * option takes focus on open — which is what the app's own confirm dialog does
- * (`ui/Toast.tsx`). A real trap belongs in a shared dialog primitive if this
- * app ever grows one, not in the second hand-rolled copy of one.
+ * FOCUS IS TRAPPED (a11y audit item 15a, the last of three). This block used to
+ * read "no focus trap… a real trap belongs in a shared dialog primitive if this
+ * app ever grows one, not in the second hand-rolled copy of one." That condition
+ * is now MET rather than waived: `components/ui/useFocusTrap.ts` is that shared
+ * primitive, and PRs #555 and #571 wired the other five `aria-modal` surfaces
+ * (AuthModal, ConfirmActionModal, PlayoffSettingsModal, ShareModal, HelpPanel's
+ * mobile branch) to it. This dialog declares `aria-modal="true"`, so it owes the
+ * containment that attribute promises; nothing is hand-rolled here.
  */
 
 interface QuickPicksDialogProps {
@@ -67,12 +72,19 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
   onClose,
 }) => {
   const firstRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // PLAN-HELP-SYSTEM T2: this one is rendered only while open (the caller
   // mounts it), so `active` is unconditionally true and the entry retracts with
   // the unmount. Escape still runs `onClose` — through the stack, so the Help
   // panel over the top of it closes alone.
   useOverlayOwner('quick-picks-dialog', { active: true, onEscape: onClose });
+  // `active: true` for the same reason as the line above — the caller mounts
+  // this component only while the dialog is open, so there is no closed-but-
+  // mounted state for the trap to leak into, and the listener retracts with the
+  // unmount. That is the ONE way this differs from ShareModal/AuthModal, which
+  // stay mounted and therefore pass `isOpen`.
+  useFocusTrap(dialogRef, true);
 
   useEffect(() => {
     firstRef.current?.focus();
@@ -94,6 +106,7 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="quick-picks-title"

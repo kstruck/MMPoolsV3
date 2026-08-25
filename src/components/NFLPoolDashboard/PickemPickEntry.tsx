@@ -627,9 +627,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             const result = gradePick(game, savedForGame, castPool.settings?.pickMode);
             // A PUSH or a VOID is neither a win nor a loss — `pickemOutcome`
             // maps both to `null`, so neither the card nor the badge claims the
-            // refunded pick was wrong. It is also handed the GAME, because
-            // `gradePick` alone will decide a scoreless FINAL in an ATS pool
-            // while the scorer is still refusing to grade it (codex round 1).
+            // refunded pick was wrong. It is also handed the GAME: that guard
+            // is now belt-and-braces — `gradePick` carries the scoreless-FINAL
+            // gate itself, so the grid tab agrees with this sheet — and the
+            // reasoning for keeping it is in `pickOutcome.ts`.
             const outcome = pickemOutcome(game, result);
 
             const homeAbbrev = game.homeTeam.abbreviation;

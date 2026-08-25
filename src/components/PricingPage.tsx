@@ -942,9 +942,17 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                             <div className="flex justify-between">Size Limit: <strong className="text-[color:var(--text)]">Unlimited players</strong></div>
                                         </div>
 
+                                        {/* ⚠️ NOT "billed annually" — that names a CADENCE and promises a
+                                            second charge next year. There is none: the Pass is a single
+                                            Checkout session (`functions/src/stripe.ts` mode:"payment"),
+                                            `mode:"subscription"` appears nowhere in `functions/`, and the
+                                            Pass stamps a one-off `termEndsAt` that simply expires
+                                            (DECISION-COMMERCE-MODEL.md §1/§3). The invoice card carries the
+                                            IDENTICAL qualifier string; `tests/commerce-copy-honesty.test.ts`
+                                            pins both, so the two surfaces cannot drift apart or drift back. */}
                                         <div className="pt-2 flex items-baseline gap-1.5">
                                             <span className="font-display font-extrabold text-3xl text-[color:var(--text)] num">${(config.packages?.unlimited_1yr ?? 129.00).toFixed(2)}</span>
-                                            <span className="font-display font-bold text-[10px] text-faint uppercase tracking-[0.08em]">billed annually</span>
+                                            <span className="font-display font-bold text-[10px] text-faint uppercase tracking-[0.08em]">one-time · 365 days</span>
                                         </div>
                                     </div>
                                     <div className="pt-6">
