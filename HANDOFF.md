@@ -26,6 +26,16 @@
 > rotate" lines in the boxes below are SUPERSEDED. History scrub (D5) drops
 > to cosmetic — the exposed value is dead.
 >
+> ✅ **ALL DEPLOYS DONE + VERIFIED, 2026-08-24 evening (Kevin ran the
+> runbook):** functions deployed (`notifyPasswordReset` in functions:list;
+> prod `readiness` now 405s POST — #547 live), Coolify rebuilt (bundle
+> `index-BRP5Lf-B.js`; `mmp-crest-small.webp` serving). GCP budget set
+> ($100/mo, alerts 50/80/100). GitHub required checks ON: build-and-test,
+> emulator-tests, security-audit, nginx-validate. Decisions D1–D7 all
+> answered — recorded in NEXT-SESSION-AUDIT-FIXES.md (headline: D1 = full
+> pool-password fix, D3 = mmp-logo-full becomes the site+email logo).
+> The owed-list below is KEPT for the record but is COMPLETE:
+>
 > 🛑 **OWED, order matters:**
 > 1. `npx firebase deploy --only functions` from `D:\march-melee-pools` after
 >    `git pull --ff-only origin main` + `npm --prefix functions ci` — #547,
