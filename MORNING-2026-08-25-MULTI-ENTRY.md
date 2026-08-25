@@ -1,8 +1,8 @@
 # MORNING — 2026-08-25, launch day: multi-entry is live
 
-**Five PRs merged (#587–#591). Functions deployed from `main` @ `809384d4` and
-verified by name. One Coolify rebuild is owed, and until it runs nothing a
-member can see has changed.**
+**Six PRs merged (#587–#592). Functions deployed from `main` @ `809384d4` and
+verified by name; the frontend rebuilt and verified by chunk content. The rules
+deploy and the pool-password sweep are still owed.**
 
 The mission was: make multi-entry playable end to end, flip it on, and merge the
 Standings/Results tabs. Four of the five build tickets were built; the fifth
@@ -61,19 +61,37 @@ and is invisible to others until a pick is saved.
 
 ---
 
-## 3. 🛑 What is owed, and it is all yours
+## 3. Deploy state, and what is still owed
 
-1. **Coolify `www` rebuild.** Every member-facing half of this is in the
-   frontend bundle. Until it runs, production serves the OLD client against the
-   NEW functions. That is safe — every server change is backward-compatible by
-   construction — but **the feature is invisible.**
-2. **`npx firebase deploy --only firestore:rules`** — still owed from #579,
-   untouched by this session. Deliberately not run here: this session was scoped
-   away from `firestore.rules`, and a rules deploy is its own decision.
-3. **The pool-password migration sweep**, which the audit box says runs only
-   after the Coolify rebuild.
+✅ **Functions** — deployed from `main` @ `809384d4`, verified by name (§4).
 
-The exact commands and order are in the closing chat message.
+✅ **Frontend** — Coolify rebuilt 2026-08-25, bundle
+`index-BRP5Lf-B.js` → **`index-CtqdBjX0.js`**, and **verified by CONTENT rather
+than by the hash.** That distinction earned its keep immediately: this app
+code-splits, so none of the multi-entry copy is in `index-*.js` at all. A
+first-pass check against the entry chunk reported the wizard toggle "MISSING",
+which would have been read as a failed build. Fetching all 109 referenced chunks
+found every string:
+
+| String | Chunk |
+|---|---|
+| `Allow more than one entry per player` | `buildNFLPayload-DbSxJbA6.js` |
+| `Entry 1 is created when you save its first pick` | `PoolRoute-DJtanu6e.js` |
+| `You already have an entry with that name` | `PoolRoute-DJtanu6e.js` |
+
+**The lesson for the next rebuild:** a changed index hash proves a build ran, not
+what it built, and the entry chunk is not where feature code lives. Check the
+chunk that owns the string.
+
+🛑 **STILL OWED, AND THEY ARE YOURS:**
+
+1. **`npx firebase deploy --only firestore:rules`** — owed from #579, untouched
+   by this session. Deliberately not run here: this session was scoped away from
+   `firestore.rules`, and a rules deploy is its own decision.
+2. **The pool-password migration sweep** — its precondition (the Coolify
+   rebuild) is now satisfied.
+3. **A SECOND Coolify rebuild after #529 merges.** `POOLS_OPEN` is a frontend
+   flag; the rebuild above ran BEFORE that merge and does not carry it.
 
 ---
 
