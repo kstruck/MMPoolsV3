@@ -10,7 +10,7 @@ nobody kept.
 
 ## S1 — `migratePoolPasswords` (Phase B)
 
-**Status: NOT RUN. Disarmed. Nothing in this PR mutates production data.**
+**Status: ✅ CLOSED 2026-08-25 — dry pass found NOTHING to migrate (23 scanned, 0 changed). No live pass was run or needed. Kill-switch disarmed. See the evidence log at the foot of this section.**
 
 ### What it does
 
@@ -127,4 +127,55 @@ handles either state, which is why the sweep is resumable rather than atomic.
 
 | Date | Mode | Pools scanned | Pools changed | audit doc | Notes |
 |---|---|---|---|---|---|
-| — | — | — | — | — | Not run. Disarmed at merge. |
+| 2026-08-25 | DRY | **23** | **0** | `OP_MIGRATEPOOLPASSWORDS` (success) | `plannedWrites: []`, `nextCursor: null`. **Nothing to migrate AT SCAN TIME — the live pass was never run and is not needed.** Kill-switch disarmed afterwards (`{enabled: false, dryRun: true}`, confirmed in the console). Does NOT establish that no pool ever had a password — see below. |
+
+### 2026-08-25 — S1 CLOSED WITHOUT A LIVE PASS
+
+Kevin ran the dry pass after the functions deploy (`809384d4`) and the Coolify
+rebuild, in that order. The report:
+
+```json
+{ "dryRun": true, "poolsScanned": 23, "poolsChanged": 0,
+  "hashedPlaintext": 0, "movedHash": 0, "scrubbedOnly": 0,
+  "dottedFieldsRemoved": 0, "plannedWrites": [], "failures": [],
+  "nextCursor": null }
+```
+
+🛑 **"FOUND NOTHING" AND "LOOKED IN THE WRONG PLACE" REPORT IDENTICALLY, so the
+zero was checked rather than accepted.** Two facts settle it:
+
+1. **The scan is UNFILTERED.** `migratePoolPasswords.ts:125-128` is
+   `collection("pools").orderBy(documentId()).limit(...)` — no `where`. With
+   `nextCursor: null`, **23 is the entire pool collection**, every document
+   visited.
+2. **The planner reads all four legacy shapes** (`lib/poolAccess.ts:43-69`):
+   `gridPassword`, the nested `accessControl.password`, the exotic LITERAL
+   top-level field whose name contains a dot, and `passwordHash`. There is no
+   shape a password could be hiding in that it walks past.
+
+**Conclusion, bounded to exactly what the report supports: AT SCAN TIME
+(2026-08-25), no pool carried legacy public password material requiring
+migration.** The migration is therefore complete by having nothing to do.
+
+🛑 **AN EARLIER DRAFT OF THIS ENTRY SAID "no pool has EVER had a pool password
+set". THAT IS NOT PROVABLE FROM A ZERO DRY RUN AND THE CORRECTION IS THE POINT**
+(codex, on the docs PR). Two different histories produce the identical empty
+report:
+
+- a pool whose `gridPassword` was **cleared or deleted at some earlier date** —
+  the exposure would have been real and historic, and this scan cannot see it;
+- a pool already holding a correct `private/access` secret with
+  `hasPoolPassword: true` — `planForPool` returns `null` for it by design, so it
+  is indistinguishable here from a pool that never had one.
+
+So this entry closes the **MIGRATION**. It does not retire the
+**historic-exposure** question, and nothing here should be cited as if it did.
+Answering that one needs a different instrument — document history or an audit
+trail — not a forward-looking scan.
+
+⚠️ **AND IT SAYS NOTHING ABOUT WHETHER THE NEW PATH WORKS.**
+`setPoolPassword` / `verifyPoolAccess` deployed on 2026-08-25 and, precisely
+because there was nothing to migrate, have never been exercised against
+production by anyone. The first commissioner to set a pool password is the first
+real test. Launch-readiness item, not a migration item; deliberately not claimed
+here.
