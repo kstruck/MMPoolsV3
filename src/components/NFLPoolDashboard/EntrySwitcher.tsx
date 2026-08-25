@@ -40,9 +40,13 @@ interface EntrySwitcherProps {
   maxEntries: number;
   /** The viewer's display name — the base for a new entry's default name. */
   userName: string;
-  /** The entry id currently selected, or `null` while the draft is selected. */
+  /** The entry id currently selected, or `null` while a draft/slot is selected. */
   activeEntryId: string | null;
+  /** The INDEX the pick sheet is currently submitting under (a draft's, or the active entry's). */
+  activeEntryIndex: number;
   onSelect: (entryId: string) => void;
+  /** Select the entry-#1 SLOT — the sheet that exists before any document does. */
+  onSelectPrimarySlot: () => void;
   /** The draft entry, when the member has started adding one. */
   draft: EntryDraft | null;
   onStartDraft: () => void;
@@ -57,7 +61,9 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
   maxEntries,
   userName,
   activeEntryId,
+  activeEntryIndex,
   onSelect,
+  onSelectPrimarySlot,
   draft,
   onStartDraft,
   onDraftNameChange,
@@ -77,7 +83,24 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
   // create entry #1 through this UI — holding fewer entries than the pool
   // advertises, permanently. Their first save creates entry #1 from the sheet
   // below; the button appears the moment it exists.
-  const canAdd = !draft && sorted.length > 0 && sorted.length < maxEntries
+  /**
+   * 🛑 ENTRY #1 IS ALWAYS A SLOT, EVEN WHEN NO DOCUMENT EXISTS FOR IT.
+   *
+   * `nextAddableEntryIndex` never returns 1 (a member does not "add" their
+   * primary — it is the sheet they already have), so entry #1 has to be
+   * reachable some other way or it is not reachable at all. Two members hit
+   * that: one who has never submitted, and — the case codex r3 found — one whom
+   * a commissioner proxy-created ONLY an entry #2 for, an explicitly supported
+   * non-contiguous shape. Gating "Add entry" on `sorted.length > 0` left the
+   * second one able to create #3 and #4 but never their own #1.
+   *
+   * So the slot is rendered whenever no owned entry carries index 1, and
+   * selecting it points the sheet at index 1 with no document behind it — the
+   * same state a brand-new member is in by default.
+   */
+  const hasPrimary = sorted.some(e => entryIndexOf(e) === 1);
+  const primarySlotActive = !hasPrimary && activeEntryIndex === 1;
+  const canAdd = !draft && sorted.length < maxEntries
     && nextAddableEntryIndex(sorted, maxEntries) !== null;
 
   const handleName = (value: string) => {
@@ -107,18 +130,20 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
           Without this chip the strip would show only "Add entry" and read as
           though they had to create something before they could pick.
         */}
-        {sorted.length === 0 && !draft && (
-          <>
-            <span
-              className="px-3 py-1.5 rounded-md text-sm font-medium border bg-[#142A4C] text-white border-[#142A4C]"
-              data-testid="implicit-entry-1"
-            >
-              Entry 1
-            </span>
-            <span className="text-[12px] text-muted">
-              Save your first pick to start Entry 1 — you can add another after that.
-            </span>
-          </>
+        {!hasPrimary && (
+          <button
+            type="button"
+            onClick={onSelectPrimarySlot}
+            aria-pressed={primarySlotActive}
+            data-testid="implicit-entry-1"
+            className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+              primarySlotActive
+                ? 'bg-[#142A4C] text-white border-[#142A4C]'
+                : 'bg-cream text-[color:var(--text)] border-line hover:border-[#142A4C]'
+            }`}
+          >
+            Entry 1
+          </button>
         )}
         {sorted.map((e) => {
           const active = !draft && e.id === activeEntryId;
@@ -152,7 +177,21 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
         )}
       </div>
 
-      {draft && (
+      {draft && draft.entryIndex === 1 && (
+        <div className="mt-3 pt-3 border-t border-line">
+          {/*
+            Entry #1 takes NO name — `defaultEntryName` returns undefined for
+            index 1 and the pick sheets only send `entryName` for an extra
+            entry, so a field here would collect something the first save
+            discards. (codex r1/r3 on the T5 PR.)
+          */}
+          <p className="text-[12px] text-muted">
+            Entry 1 is created when you save its first pick, and it shows your player name.
+          </p>
+        </div>
+      )}
+
+      {draft && draft.entryIndex > 1 && (
         <div className="mt-3 pt-3 border-t border-line">
           <span id="new-entry-name-label" className="block text-[11px] font-medium uppercase tracking-[0.06em] text-muted mb-1.5">
             Name this entry

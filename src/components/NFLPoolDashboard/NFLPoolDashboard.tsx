@@ -1167,6 +1167,13 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                           maxEntries={maxEntriesPerUser}
                           userName={user?.name || 'Entry'}
                           activeEntryId={ownEntry?.id ?? null}
+                          activeEntryIndex={activeEntryIndex}
+                          onSelectPrimarySlot={() => setEntryDraft({
+                            poolId: pool.id,
+                            uid: user?.id || '',
+                            // Entry #1 takes no name — see EntrySwitcher.
+                            draft: { entryIndex: 1, entryName: '' },
+                          })}
                           onSelect={(entryId) => {
                             setEntryDraft(null);
                             setActiveEntrySel({ poolId: pool.id, uid: user?.id || '', entryId });

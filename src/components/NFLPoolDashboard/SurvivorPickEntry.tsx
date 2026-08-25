@@ -235,7 +235,14 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
         // Sent only for an extra entry: `undefined` keeps the payload — and the
         // server's own default — byte-for-byte what a single-entry pool sends.
         ...(entryIndex && entryIndex > 1 ? { entryIndex } : {}),
-        ...(entryIndex && entryIndex > 1 && entryName ? { entryName } : {}),
+        // ⚠️ A BLANK NAME IS NOT A NAME, AND `''` AND `'   '` MUST MEAN THE SAME
+        // THING (codex r3 on the T5 PR). A whitespace-only string is truthy, so
+        // it used to reach the server and come back ENTRY_NAME_EMPTY, while an
+        // empty one was dropped and silently took the generated default — two
+        // answers to one act. Both now take the default: the switcher PRE-FILLS
+        // a name, so clearing it reads as "whatever you suggested", not as a
+        // request to be refused.
+        ...(entryIndex && entryIndex > 1 && entryName?.trim() ? { entryName: entryName.trim() } : {}),
         requestId: crypto.randomUUID()
       });
       setSubmittedAt(serverNow());

@@ -23,7 +23,9 @@ const baseProps = {
   maxEntries: 3,
   userName: 'Kevin',
   activeEntryId: null as string | null,
+  activeEntryIndex: 1,
   onSelect: () => {},
+  onSelectPrimarySlot: () => {},
   draft: null,
   onStartDraft: () => {},
   onDraftNameChange: () => {},
@@ -102,22 +104,49 @@ describe('<EntrySwitcher>', () => {
     cleanup();
   });
 
-  it('shows an implicit "Entry 1" chip for a member who holds nothing yet', () => {
+  it('shows a selectable "Entry 1" SLOT for a member who holds nothing yet', () => {
     // Their sheet IS entry #1; it is created by their first save. A strip with
     // only "Add entry" would read as "create something before you can pick".
-    render(<EntrySwitcher {...baseProps} ownEntries={[]} />);
-    expect(screen.getByTestId('implicit-entry-1').textContent).toBe('Entry 1');
-    // ...and "Add entry" is WITHHELD until entry #1 actually exists (codex r2
-    // P2): `nextAddableEntryIndex` never returns 1, so a member who added from
-    // nothing would create entry #2 and could never create their primary.
-    expect(screen.queryByText('Add entry')).toBeNull();
-    expect(screen.getByText(/Save your first pick to start Entry 1/i)).toBeTruthy();
+    render(<EntrySwitcher {...baseProps} ownEntries={[]} activeEntryIndex={1} />);
+    const slot = screen.getByTestId('implicit-entry-1');
+    expect(slot.textContent).toBe('Entry 1');
+    expect(slot.getAttribute('aria-pressed')).toBe('true');
     cleanup();
   });
 
-  it('offers "Add entry" as soon as entry #1 exists', () => {
+  it('🛑 keeps entry #1 REACHABLE for a member who was proxy-created only an entry #2', () => {
+    // codex r3 P2. `nextAddableEntryIndex` never returns 1, so without this slot
+    // that owner could create #3 and #4 but never their own primary — and the
+    // non-contiguous shape is explicitly supported by the server.
+    const onSelectPrimarySlot = vi.fn();
+    render(<EntrySwitcher
+      {...baseProps}
+      ownEntries={[e('e2:kevin', 2, 'Kevin B')]}
+      activeEntryId="e2:kevin"
+      activeEntryIndex={2}
+      onSelectPrimarySlot={onSelectPrimarySlot}
+    />);
+    const slot = screen.getByTestId('implicit-entry-1');
+    expect(slot.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(slot);
+    expect(onSelectPrimarySlot).toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('drops the "Entry 1" slot once a real entry #1 exists', () => {
     render(<EntrySwitcher {...baseProps} ownEntries={[e('kevin', 1)]} activeEntryId="kevin" />);
+    expect(screen.queryByTestId('implicit-entry-1')).toBeNull();
     expect(screen.getByText('Add entry')).toBeTruthy();
+    cleanup();
+  });
+
+  it('the entry-#1 draft collects NO name', () => {
+    // `defaultEntryName` returns undefined for index 1 and the sheets only send
+    // `entryName` for an extra entry, so a field here would collect something
+    // the first save discards. (codex r1/r3.)
+    render(<EntrySwitcher {...baseProps} ownEntries={[]} draft={{ entryIndex: 1, entryName: '' }} />);
+    expect(screen.queryByLabelText('Name this entry')).toBeNull();
+    expect(screen.getByText(/shows your player name/i)).toBeTruthy();
     cleanup();
   });
 
