@@ -452,7 +452,8 @@ export function scoreMarginWeek(
  * 2. Lowest Negative Burden (sum of absolute values of negative margins).
  * 3. Most Positive Weeks (score > 0).
  * 4. Highest Single-Week margin.
- * 5. Deterministic tie-break based on userId comparison.
+ * 5. Deterministic tie-break on the ENTRY id (PLAN-MULTI-ENTRY D4) — one
+ *    player's two entries must not compare equal.
  */
 export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
   return [...entries].sort((a, b) => {
@@ -476,8 +477,17 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
       return b.bestWeek - a.bestWeek;
     }
 
-    // 5. Tie-breaker fallback (deterministic UUID sorting)
-    return a.ownerUid.localeCompare(b.ownerUid);
+    // 5. Tie-breaker fallback: the ENTRY id, never the owner's uid
+    //     (PLAN-MULTI-ENTRY D4 / sweeps S6).
+    //
+    // 🛑 `ownerUid` HERE WOULD COMPARE TWO ENTRIES OF ONE PLAYER AS EQUAL, and
+    // `Array.prototype.sort` is only guaranteed stable, not deterministic across
+    // inputs — so their ranks would fall out of whatever order Firestore
+    // happened to return the documents in, and could swap between two scoring
+    // passes over identical data. The entry id is unique per row by
+    // construction (`entryIdFor`), so the cascade always terminates on a
+    // distinct value.
+    return String(a.id ?? a.ownerUid).localeCompare(String(b.id ?? b.ownerUid));
   });
 }
 
@@ -889,8 +899,13 @@ export function buildWeeklyRecap(params: {
   poolId: string;
   week: number;
   poolType: string;
-  sharpUser: { uid: string; name: string; val: number } | null;
-  closestTie: { uid: string; name: string; diff: number } | null;
+  /**
+   * PLAN-MULTI-ENTRY D4 — `entryId` is the ROW the callout names and `name` is
+   * already `entryName ?? userName`; `uid` stays the owner. Optional so the sim
+   * harness and older callers keep compiling.
+   */
+  sharpUser: { uid: string; entryId?: string; name: string; val: number } | null;
+  closestTie: { uid: string; entryId?: string; name: string; diff: number } | null;
   aliveCount: number;
   /**
    * The tie-broken winner set (PLAN-WEEKLY-TIEBREAKERS §8b). Omitted from the
@@ -924,10 +939,20 @@ export function buildWeeklyRecap(params: {
     createdAt: nowMs,
   };
   if (sharpUser) {
-    recap.sharpOfWeek = { userId: sharpUser.uid, userName: sharpUser.name, score: sharpUser.val };
+    recap.sharpOfWeek = {
+      userId: sharpUser.uid,
+      ...(sharpUser.entryId ? { entryId: sharpUser.entryId } : {}),
+      userName: sharpUser.name,
+      score: sharpUser.val,
+    };
   }
   if (closestTie) {
-    recap.closestTiebreaker = { userId: closestTie.uid, userName: closestTie.name, diff: closestTie.diff };
+    recap.closestTiebreaker = {
+      userId: closestTie.uid,
+      ...(closestTie.entryId ? { entryId: closestTie.entryId } : {}),
+      userName: closestTie.name,
+      diff: closestTie.diff,
+    };
   }
   if (weeklyWinners && weeklyWinners.length > 0) {
     recap.weeklyWinners = weeklyWinners;

@@ -294,9 +294,16 @@ export interface WeeklyRecap {
   id: string;
   poolId: string;
   week: number;
-  sharpOfWeek?: { userId: string; userName: string; score: number };
+  /**
+   * `userName` is the ENTRY's label (`entryName ?? userName`) and `entryId` the
+   * row it names — PLAN-MULTI-ENTRY D4. `entryId` is absent on recaps written
+   * before multi-entry; `userId` stays the owner, which is what the payee side
+   * of every recap reader means by it.
+   */
+  sharpOfWeek?: { userId: string; entryId?: string; userName: string; score: number };
   biggestUpsetPick?: { userId: string; userName: string; gameId: string; teamName: string };
-  closestTiebreaker?: { userId: string; userName: string; diff: number };
+  /** Same entry-vs-owner split as `sharpOfWeek` (PLAN-MULTI-ENTRY D4). */
+  closestTiebreaker?: { userId: string; entryId?: string; userName: string; diff: number };
   mostContrarianPick?: { userId: string; userName: string; gameId: string; teamName: string };
   /**
    * Who won the week, after the pool's tie-breaker rule

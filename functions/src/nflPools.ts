@@ -1270,6 +1270,15 @@ export function weeklyPlacesPublication(
  * serialize, so no caller can forget to. A pass that finds the lease held returns
  * `leaseBusy: true` having read and written NOTHING.
  */
+/**
+ * The label a recap callout shows for one entry (PLAN-MULTI-ENTRY §0b.4).
+ * `entryName ?? userName` — the same rule every row surface uses, so "Sharp of
+ * the Week" names the entry that earned it rather than a player who holds two.
+ */
+function entryLabel(entry: { userName?: string; entryName?: string }): string {
+  return (typeof entry.entryName === 'string' && entry.entryName) ? entry.entryName : (entry.userName ?? '');
+}
+
 export async function scoreNFLWeekInternal(
   db: admin.firestore.Firestore,
   poolId: string,
@@ -1498,9 +1507,15 @@ async function scoreWeekPass(
   };
 
   // Recaps highlighting metrics
-  let sharpUser: { uid: string; name: string; val: number } | null = null;
+  // PLAN-MULTI-ENTRY D4 — the recap callouts name an ENTRY, not a player.
+  // `uid` stays the owner (it is the payee side of the recap and every reader
+  // treats it as a person), `entryId` identifies the row, and `name` is
+  // `entryName ?? userName` so a two-entry player's two rows are told apart on
+  // the card. Without the name change a recap reading "Kevin" would be true of
+  // both his entries and identify neither.
+  let sharpUser: { uid: string; entryId: string; name: string; val: number } | null = null;
   const biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
-  let closestTie: { uid: string; name: string; diff: number } | null = null;
+  let closestTie: { uid: string; entryId: string; name: string; diff: number } | null = null;
 
   // WEEKLY WINNER candidates (PLAN-WEEKLY-TIEBREAKERS §8). One per SCORED entry
   // for the types that have a weekly score — Pick'em and Margin. Survivor has
@@ -1571,7 +1586,7 @@ async function scoreWeekPass(
 
       // Sharp calculation
       if (!sharpUser || points > sharpUser.val) {
-        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: points };
+        sharpUser = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), val: points };
       }
 
       // Tiebreaker
@@ -1579,7 +1594,7 @@ async function scoreWeekPass(
         const prediction = entry.weeklyTiebreakers?.[week] ?? 0;
         const diff = Math.abs(prediction - mnfTotalScore);
         if (!closestTie || diff < closestTie.diff) {
-          closestTie = { uid: entry.ownerUid, name: entry.userName, diff };
+          closestTie = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), diff };
         }
       }
 
@@ -1747,7 +1762,7 @@ async function scoreWeekPass(
       // `attritionCount` only for NFL_SURVIVOR — so `buildWeeklyRecap` emitted a
       // recap with no fields and the client rendered an empty card.
       if (pick && (!sharpUser || weekScore > sharpUser.val)) {
-        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: weekScore };
+        sharpUser = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), val: weekScore };
       }
 
       // Weekly-winner candidate, gated on `pick` for the same reason the sharp
@@ -1785,7 +1800,12 @@ async function scoreWeekPass(
     // Write standings back
     for (let index = 0; index < ranked.length; index++) {
       const r = ranked[index];
-      const docRef = poolRef.collection('entries').doc(r.ownerUid);
+      // 🛑 `r.id`, NEVER `r.ownerUid` (PLAN-MULTI-ENTRY D4, sweeps S1a).
+      // `entries/{ownerUid}` is entry #1's document, so a player's second entry
+      // would write ITS rank over entry #1's and leave its own doc rankless —
+      // the silent-merge failure R1 names. `readScoredEntries` stamps `id` from
+      // the document id on both the live and dry-run paths.
+      const docRef = poolRef.collection('entries').doc(r.id);
       await stage(docRef, { rank: index + 1 });
     }
   }

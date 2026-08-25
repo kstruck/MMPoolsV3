@@ -61,20 +61,45 @@ export interface PoolPicksResponse {
     weekRevealed: boolean;
     /** Every game in the week's slate, so the client can size completeness. */
     weekGameIds: string[];
-    /** uid → how many of this week's games they have saved a pick for. */
+    /**
+     * ENTRY id → how many of this week's games that entry has saved a pick for.
+     *
+     * 🛑 KEYED BY THE ENTRY DOCUMENT ID, NOT THE OWNER'S UID (PLAN-MULTI-ENTRY
+     * D5). For entry #1 the two are the same string, so every existing pool and
+     * every existing client read is byte-for-byte unchanged; for a player's
+     * second entry (`e2:{uid}`) a uid key would silently overwrite the first —
+     * the invisible merge R1 names. Clients index these maps by `row.id`
+     * (enforced by `tests/nfl-surface-invariants.test.ts`).
+     */
     counts: Record<string, number>;
-    /** uid → { gameId|week → team }, revealed keys only. */
+    /** entry id → { gameId|week → team }, revealed keys only. */
     picks: Record<string, Record<string, string>>;
-    /** uid → { gameId → points }, revealed keys only. Pick'em confidence mode. */
+    /** entry id → { gameId → points }, revealed keys only. Pick'em confidence mode. */
     confidence: Record<string, Record<string, number>>;
     /**
-     * uid → this week's MNF tiebreaker guess. Included ONLY once the whole week
+     * entry id → this week's MNF tiebreaker guess. Included ONLY once the whole week
      * is revealed: a predicted combined score is a per-week secret with no game
      * to attach it to, so a partly-locked week must not carry it. It is excluded
      * from the standings projection by allowlist for the same reason
      * (`buildStandingsRows`), which is why it has to come through this door.
      */
     tiebreakers: Record<string, number>;
+    /**
+     * entry id → who owns it and what it is called (PLAN-MULTI-ENTRY D5).
+     * Additive: absent for every principal that is not entitled to it.
+     *
+     * 🛑 GATED ON THE REVEAL FOR A PARTICIPANT, ALWAYS PRESENT FOR THE
+     * COMMISSIONER AND SUPER_ADMIN. Enumerating which of a rival's entries
+     * exist — and what they are named — before the week reveals is per-entry
+     * metadata a participant has no claim on (D5 / the T3 acceptance row).
+     * A participant already learns entry EXISTENCE from the Member Record
+     * roster map, which is a different fact from "these ids are in this
+     * week's reveal payload", and nothing here renders blank without it.
+     *
+     * ⚠️ This is a WHO gate, never a WHEN one: `weekRevealFor` is untouched and
+     * remains the single definition of the boundary.
+     */
+    entries?: Record<string, { ownerUid: string; entryName?: string }>;
     /**
      * The pool-wide completion fraction — "12 of 16 players have their picks in".
      * `PLAN-MEMBER-PICK-PROGRESS`.
@@ -287,7 +312,10 @@ export const getPoolPicks = validated(
         // light up for people who have already picked. The emulator suite covers
         // both pool shapes for exactly that reason.
         const FieldPath = admin.firestore.FieldPath;
-        const fields: Array<string | InstanceType<typeof FieldPath>> = ['ownerUid'];
+        // `entryName` rides the mask so the `entries` roster below can be built
+        // from the same masked read (PLAN-MULTI-ENTRY D5) — it is a display
+        // label, never pick content.
+        const fields: Array<string | InstanceType<typeof FieldPath>> = ['ownerUid', 'entryName'];
         if (pool.type === 'NFL_PICKEM') {
             for (const id of weekGameIds) {
                 fields.push(new FieldPath('picks', id));
@@ -331,15 +359,23 @@ export const getPoolPicks = validated(
         const picks: Record<string, Record<string, string>> = {};
         const confidence: Record<string, Record<string, number>> = {};
         const tiebreakers: Record<string, number> = {};
+        const entries: Record<string, { ownerUid: string; entryName?: string }> = {};
 
         for (const doc of entriesSnap.docs) {
             const entry = doc.data() as {
                 ownerUid?: string;
+                entryName?: string;
                 picks?: Record<string, unknown>;
                 confidence?: Record<string, unknown>;
                 weeklyTiebreakers?: Record<string, unknown>;
             };
             const memberUid = entry.ownerUid || doc.id;
+            // 🛑 THE MAP KEY IS THE ENTRY, THE FILTER SUBJECT IS THE PERSON
+            // (PLAN-MULTI-ENTRY D5). `memberUid` still decides departure and
+            // still keys `progress`; `entryKey` is what every returned map is
+            // filed under. They are the same string for entry #1, which is why
+            // no existing pool changes shape.
+            const entryKey = doc.id;
 
             // D7/K8 — skip entirely, so a departed player is absent from EVERY
             // map rather than merely from `picks`. Their presence in `counts`
@@ -375,25 +411,29 @@ export const getPoolPicks = validated(
             // ⚠️ THE `stillAMember` FILTER ABOVE MUST KEEP RUNNING FIRST. A
             // departed player appearing in `counts` alone would still say "this
             // person is playing" (D7/K8).
-            counts[memberUid] = weekPickCount(pool.type, entry.picks as Record<string, unknown>, week, weekGameIds);
+            counts[entryKey] = weekPickCount(pool.type, entry.picks as Record<string, unknown>, week, weekGameIds);
+            entries[entryKey] = {
+                ownerUid: memberUid,
+                ...(typeof entry.entryName === 'string' && entry.entryName ? { entryName: entry.entryName } : {}),
+            };
 
             const revealedPicks: Record<string, string> = {};
             for (const key of allowedKeys) {
                 const value = entry.picks?.[key];
                 if (typeof value === 'string' && value) revealedPicks[key] = value;
             }
-            if (Object.keys(revealedPicks).length > 0) picks[memberUid] = revealedPicks;
+            if (Object.keys(revealedPicks).length > 0) picks[entryKey] = revealedPicks;
 
             const revealedConfidence: Record<string, number> = {};
             for (const key of allowedKeys) {
                 const value = entry.confidence?.[key];
                 if (typeof value === 'number') revealedConfidence[key] = value;
             }
-            if (Object.keys(revealedConfidence).length > 0) confidence[memberUid] = revealedConfidence;
+            if (Object.keys(revealedConfidence).length > 0) confidence[entryKey] = revealedConfidence;
 
             if (reveal.weekRevealed) {
                 const tb = entry.weeklyTiebreakers?.[String(week)];
-                if (typeof tb === 'number') tiebreakers[memberUid] = tb;
+                if (typeof tb === 'number') tiebreakers[entryKey] = tb;
             }
         }
 
@@ -407,6 +447,10 @@ export const getPoolPicks = validated(
             picks,
             confidence,
             tiebreakers,
+            // D5 — a participant gets the entry roster only once the week has
+            // revealed. Commissioner and SUPER_ADMIN always get it: chasing
+            // missing picks is their job and they already see `counts`.
+            ...(!isParticipant || reveal.weekRevealed ? { entries } : {}),
             progress,
         };
     },
