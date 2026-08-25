@@ -369,13 +369,22 @@ changed since #579 and its deploy is still owed; "functions are at X" is not
 "everything is at X".
 `HANDOFF.md`'s top box is the fuller statement, including the evidence for each
 surface.
-**Rules are deployed from that same commit. The FRONTEND has moved on: it is
-rebuilt from `d6bae3f4` (#417, 2026-08-13), bundle `index-BB2oOzrg.js`** —
-verified by the 106-asset chunk-graph crawl in HANDOFF's 2026-08-13 box, not by
-the hash alone. The split is deliberate and owes nothing: #416/#418/#417 touched
-no `functions/`, `shared/`, `firestore.rules` or `firestore.indexes.json`
-(measured — that diff is empty across all three merges), so functions and rules
-correctly remain at `c37bbd37` while the frontend carries the newer commit.
+⚠️ **THE PARAGRAPH BELOW IS THE 2026-08-13 RECORD AND ITS "OWES NOTHING" CLAIM
+IS NO LONGER TRUE.** It is kept because the chunk-graph evidence is still the
+best statement of how the frontend was verified — but as of 2026-08-25 the
+deploy queue is NOT empty: a Coolify rebuild, #579's rules deploy and the
+pool-password sweep are all owed (HANDOFF's top box). Read the queue there, not
+here. (codex, on the docs PR.)
+
+> *(2026-08-13, HISTORY)* **Rules are deployed from that same commit. The
+> FRONTEND has moved on: it is rebuilt from `d6bae3f4` (#417, 2026-08-13),
+> bundle `index-BB2oOzrg.js`** — verified by the 106-asset chunk-graph crawl in
+> HANDOFF's 2026-08-13 box, not by the hash alone. The split was deliberate and
+> owed nothing AT THAT DATE: #416/#418/#417 touched no `functions/`, `shared/`,
+> `firestore.rules` or `firestore.indexes.json` (measured — that diff is empty
+> across all three merges), so functions and rules correctly remained at
+> <!-- deploy-state:ignore --> `main` @ `c37bbd37` while the frontend carried the
+> newer commit.
 ⚠️ **An all-`Skipped` certification pass was NOT run for the 2026-08-12 deploy**,
 so byte-identity to `c37bbd37` is not claimed anywhere. What IS proven is that
 `functions:list` returns `getPoolPicks`, the callable #414 adds and which was
