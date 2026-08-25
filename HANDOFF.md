@@ -30,8 +30,12 @@
 > runbook):** functions deployed (`notifyPasswordReset` in functions:list;
 > prod `readiness` now 405s POST — #547 live), Coolify rebuilt (bundle
 > `index-BRP5Lf-B.js`; `mmp-crest-small.webp` serving). GCP budget set
-> ($100/mo, alerts 50/80/100). GitHub required checks ON: build-and-test,
-> emulator-tests, security-audit, nginx-validate. Decisions D1–D7 all
+> ($100/mo, alerts 50/80/100). ~~GitHub required checks ON~~ **CORRECTED by
+> the 2026-08-24 re-audit: the required-checks config NEVER SAVED** (ruleset
+> 11714546 unchanged since January; classic protection 404s). Kevin is
+> redoing it as a main-scoped ruleset — verify via
+> `gh api repos/kstruck/MMPoolsV3/rulesets` before trusting it
+> (NEXT-SESSION item 19). Decisions D1–D7 all
 > answered — recorded in NEXT-SESSION-AUDIT-FIXES.md (headline: D1 = full
 > pool-password fix, D3 = mmp-logo-full becomes the site+email logo).
 > The owed-list below is KEPT for the record but is COMPLETE:

@@ -69,7 +69,12 @@ securityNotices.ts). Gemini rotation CLOSED with evidence (PR #559).
 
 RE-AUDIT RESULTS (all six re-run 2026-08-24 evening by parallel auditors at
 7e265e20; scores: frontend 2->4, backend 5->6, auth 4->5, hosting 3->5,
-cloud 1.5->4.5, VCS 5->5; total 20.5->29.5 of 36). Remaining FAILs are
+cloud 1.5->4.5, VCS 5->5; total 20.5->29.5 of 36). NAMING NOTE: what Kevin's
+original message labeled "database and storage" carried FRONTEND-quality
+results (organization/mobile/a11y/consistency/speed/forms) — that is the
+"frontend" line here. A TRUE database/storage audit (Firestore schema,
+indexes, backups) has never been run; it is on Kevin's remaining-audits
+list, not this one. Remaining FAILs are
 either queued (D1, SuperAdmin split, tokenization, job sizing) or settled
 (D2 pipeline). NEW findings from the re-audit, all queued below:
 
