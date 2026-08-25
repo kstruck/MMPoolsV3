@@ -60,6 +60,13 @@ items, in priority order — work them one PR at a time per CLAUDE.md §2c/§2d
    was INCORRECT, (c) highlight the whole game card green for correct / red
    for incorrect. Pending/unscored games get neither mark nor highlight.
    Theme-safe (light+dark), and ships with tests per the standing rule.
+SETTLED — do NOT reopen (Kevin 2026-08-24): D2 auto-deploy webhook REJECTED
+as recommended (frontend auto-deploy breaks the functions-first ordering —
+the #539 double-charge hazard; manual Coolify trigger IS the safety
+mechanism). D6 Identity Platform blocking-functions upgrade DEFERRED until
+after season launch (best-effort reset notice stands, limits documented in
+securityNotices.ts). Gemini rotation CLOSED with evidence (PR #559).
+
 12. Re-audits I want re-run to verify the fixes: [FILL IN which of the six,
    or "none"]. Re-run each audit prompt verbatim from the originals and diff
    the scores against: DB/storage 3/6 → expect ~5/6; backend 5/6 → 6/6;
