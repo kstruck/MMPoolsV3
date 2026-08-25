@@ -167,27 +167,33 @@ export function scrubPatch(hasPassword: boolean): Record<string, unknown> {
 /**
  * Store (or clear) a pool's password. `null` CLEARS it.
  *
- * Order matters: the private doc is written FIRST, then the public doc is
- * scrubbed. If the second write fails the pool is still gated (the private hash
- * exists) and the legacy plaintext is still there — no worse than before. The
- * reverse order would leave a window where the gate is armed with nothing
- * behind it.
+ * ⚠️ ONE BATCH, NOT TWO WRITES (codex r4, P1). The secret and the marker live on
+ * different documents, and an earlier version wrote them sequentially with a
+ * comment claiming a partial failure was "no worse than before". It was not: on
+ * a pool with no legacy plaintext, a private hash landing while
+ * `hasPoolPassword` stayed false leaves a pool that HAS a password and renders
+ * UNGATED — the squares route decides purely from the marker. A `WriteBatch`
+ * commits both or neither.
+ *
+ * The batch also carries the legacy-field scrub, so the plaintext never outlives
+ * the switchover either.
  */
 export async function writePoolSecret(
     db: admin.firestore.Firestore,
     poolId: string,
     password: string | null,
 ): Promise<{ hasPassword: boolean }> {
-    const ref = accessDocRef(db, poolId);
     const now = Date.now();
-    if (password === null) {
-        await ref.set({ passwordHash: FieldValue.delete(), updatedAt: now }, { merge: true });
-        await db.collection("pools").doc(poolId).update(scrubPatch(false));
-        return { hasPassword: false };
-    }
-    await ref.set({ passwordHash: hashPoolPassword(password), updatedAt: now }, { merge: true });
-    await db.collection("pools").doc(poolId).update(scrubPatch(true));
-    return { hasPassword: true };
+    const hasPassword = password !== null;
+    const batch = db.batch();
+    batch.set(
+        accessDocRef(db, poolId),
+        { passwordHash: hasPassword ? hashPoolPassword(password) : FieldValue.delete(), updatedAt: now },
+        { merge: true },
+    );
+    batch.update(db.collection("pools").doc(poolId), scrubPatch(hasPassword));
+    await batch.commit();
+    return { hasPassword };
 }
 
 /**

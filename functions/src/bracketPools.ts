@@ -7,6 +7,7 @@ import * as logger from "firebase-functions/logger";
 import { assertPoolCreationAllowed } from "./lib/systemGuards";
 import { hashPoolPassword, hasSecret, verifyPoolPassword } from "./lib/poolPassword";
 import { accessDocRef, publishPasswordPlan, readPoolSecret, rehashOnVerify, scrubPatch } from "./lib/poolAccess";
+import { chargeAccessAttempt, refundAccessAttempt } from "./lib/poolAttempts";
 import { computeLaunchMode, estimatedPlayersFromPayload } from "./poolOps";
 import { normalizeAddonSelection } from "./lib/launchFields";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
@@ -337,10 +338,19 @@ export const joinBracketPool = validated(
         if (!password) {
             throw new HttpsError("permission-denied", "Password required.");
         }
+        // ⚠️ THROTTLED, SAME AS THE PUBLIC GATE (codex r4, P2). This endpoint
+        // requires auth, but "authenticated" is a free account — so without a
+        // cap it is the same unbounded online guessing oracle as
+        // `verifyPoolAccess`, and each guess buys a PBKDF2 derivation, making it
+        // a CPU amplifier too. Moving the hash off the public document
+        // accomplishes nothing if either endpoint will grade unlimited guesses
+        // against it. Per (pool, uid), failures only, refunded on success.
+        await chargeAccessAttempt(db, poolId, uid);
         const verdict = verifyPoolPassword(password, secret);
         if (!verdict.ok) {
             throw new HttpsError("permission-denied", "Incorrect password.");
         }
+        await refundAccessAttempt(db, poolId, uid);
         if (verdict.needsRehash) {
             // Item 13c — rehash-on-successful-join. This is the one moment the
             // plaintext is in hand, so the legacy form is upgraded to PBKDF2 in

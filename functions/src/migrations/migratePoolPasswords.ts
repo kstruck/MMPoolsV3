@@ -95,6 +95,19 @@ export const migratePoolPasswords = validated(
         const dryRun = input.dryRun || gate.dryRun;
 
         if (!gate.enabled) {
+            // Audited even though nothing ran (codex r4, P2). The doc header
+            // promises an `admin_audit` row on EVERY run, and the arming
+            // checklist's step 1 is deliberately a disarmed call whose whole
+            // purpose is to watch the gate refuse — evidence that lives only in
+            // a returned object nobody kept is not evidence.
+            await writeAdminAudit({
+                actorUid: request.auth!.uid,
+                actorEmail: request.auth!.token.email as string | undefined,
+                action: "MIGRATE_POOL_PASSWORDS",
+                targetType: "pool",
+                metadata: { skipped: "kill-switch off", dryRun: true, poolsScanned: 0, poolsChanged: 0 },
+                status: "success",
+            });
             return {
                 skipped: "kill-switch off (system/config.poolPasswordMigration.enabled !== true)",
                 dryRun: true,

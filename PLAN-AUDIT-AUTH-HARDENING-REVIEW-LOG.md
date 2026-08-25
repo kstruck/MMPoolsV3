@@ -174,3 +174,34 @@ VERDICT: REVISE. 1 finding (P1), ACCEPTED in full:
 
    Codex's run also emitted `vitest --runInBand` and a vite `EPERM` from its own
    sandbox. Environment noise, not findings.
+
+## Round 4
+
+VERDICT: REVISE. 3 findings (1 P1, 2 P2), ALL ACCEPTED:
+
+1. **(P1) The secret and its marker were written sequentially.**
+   `writePoolSecret` wrote the private hash, then updated the public document,
+   with a comment of mine claiming a partial failure was "no worse than before".
+   It was not. On a pool with no legacy plaintext, the private hash landing while
+   `hasPoolPassword` stayed false leaves a pool that HAS a password and renders
+   UNGATED — the squares route decides from the marker alone. Fixed with a
+   `WriteBatch`: hash, legacy scrub and marker commit together or not at all.
+   Pinned by a test that also refuses any un-batched write inside that function.
+
+   Worth naming the pattern: this is the SECOND finding in this phase where a
+   comment of mine asserted a safety property instead of establishing one
+   (round 2 was the other). Both were in the fail-OPEN direction.
+
+2. **(P2) `joinBracketPool` bypassed the new throttle.** It requires auth — but
+   "authenticated" is a free account, so it was the same unbounded online
+   guessing oracle as the public gate, against the same private secret, with a
+   PBKDF2 derivation per guess (a CPU amplifier as well). Moving the hash off
+   the public document buys nothing if either endpoint grades unlimited guesses.
+   The throttle moved into `lib/poolAttempts.ts` and BOTH endpoints now charge
+   and refund through it; a test asserts both files do.
+
+3. **(P2) The disarmed migration path wrote no audit row.** The module header
+   promises an `admin_audit` row on every run, and the arming checklist's step 1
+   is deliberately a DISARMED call whose whole purpose is to watch the gate
+   refuse — evidence that lives only in a returned object nobody kept is not
+   evidence. Row now written before the early return. Pinned by a test.

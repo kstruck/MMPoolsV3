@@ -363,6 +363,42 @@ describe('source invariants', () => {
         expect(assignersOf('gridPassword').filter((f) => f !== 'lib/poolAccess.ts')).toEqual([]);
     });
 
+    it('BOTH verification endpoints are throttled (codex r4 P2)', () => {
+        // `joinBracketPool` requires auth, but "authenticated" is a free
+        // account — so an unthrottled join endpoint is the same unbounded
+        // guessing oracle (and PBKDF2 CPU amplifier) as the public gate, and
+        // moving the hash off the public document buys nothing.
+        for (const file of ['bracketPools.ts', 'poolPassword.ts']) {
+            const src = strip(fs.readFileSync(path.join(SRC, file), 'utf8'));
+            expect(src, `${file} must charge an attempt`).toMatch(/chargeAccessAttempt\(/);
+            expect(src, `${file} must refund on success`).toMatch(/refundAccessAttempt\(/);
+        }
+    });
+
+    it('the secret and its marker are committed together, never sequentially', () => {
+        // Two sequential writes leave a window where a pool HAS a password and
+        // renders UNGATED, because the squares route decides from the marker
+        // alone (codex r4 P1).
+        const src = strip(fs.readFileSync(path.join(SRC, 'lib/poolAccess.ts'), 'utf8'));
+        const fn = src.slice(src.indexOf('export async function writePoolSecret'));
+        const body = fn.slice(0, fn.indexOf('\n}'));
+        expect(body).toMatch(/db\.batch\(\)/);
+        expect(body).toMatch(/batch\.commit\(\)/);
+        // No un-batched write may remain in that function.
+        expect(body).not.toMatch(/await\s+\w*[Rr]ef\.set\(/);
+        expect(body).not.toMatch(/\.update\(scrubPatch/);
+    });
+
+    it('the migration writes an audit row even when the kill-switch refuses', () => {
+        // The arming checklist's step 1 is a DISARMED call whose purpose is to
+        // watch the gate refuse. Evidence that lives only in a returned object
+        // nobody kept is not evidence.
+        const src = strip(fs.readFileSync(path.join(SRC, 'migrations/migratePoolPasswords.ts'), 'utf8'));
+        const guard = src.slice(src.indexOf('if (!gate.enabled) {'));
+        const block = guard.slice(0, guard.indexOf('\n        }'));
+        expect(block).toMatch(/writeAdminAudit\(/);
+    });
+
     it('only the access-doc writers assign passwordHash — this list is a ratchet', () => {
         // Exact equality, not a subset: a NEW file writing `passwordHash:` fails
         // here and has to justify itself, which is the whole point. Each of

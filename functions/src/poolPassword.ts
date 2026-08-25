@@ -29,17 +29,9 @@ import * as logger from "firebase-functions/logger";
 import { validated } from "./lib/validated";
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 import { setPoolPasswordSchema, verifyPoolAccessSchema } from "./schemas/poolPassword";
-import {
-    ATTEMPT_MAX_FAILURES,
-    attemptKey,
-    evaluateAttempt,
-    hasSecret,
-    verifyPoolPassword,
-} from "./lib/poolPassword";
+import { hasSecret, verifyPoolPassword } from "./lib/poolPassword";
 import { readPoolSecret, rehashOnVerify, writePoolSecret } from "./lib/poolAccess";
-
-/** Server-only throttle store for the public verify endpoint. */
-export const ATTEMPTS_COLLECTION = "pool_access_attempts";
+import { attemptsRemaining, chargeAccessAttempt, refundAccessAttempt } from "./lib/poolAttempts";
 
 /**
  * SUPER_ADMIN with CLAIM AND DOC agreement (the C5 shape). `assertCallerRole`
@@ -104,36 +96,19 @@ export const verifyPoolAccess = validated(
 
         // Throttle key: uid when signed in, else the request IP. `unknown` is
         // the shared bucket for the case where neither is available — it
-        // throttles harder than it should rather than not at all.
+        // throttles harder than it should rather than not at all. The same
+        // helper guards `joinBracketPool` (codex r4 P2).
         const ip = (request.rawRequest as { ip?: string } | undefined)?.ip;
         const principal = request.auth?.uid || ip || "unknown";
-        const attemptRef = db.collection(ATTEMPTS_COLLECTION).doc(attemptKey(poolId, principal));
-
-        const decision = await db.runTransaction(async (t) => {
-            const snap = await t.get(attemptRef);
-            const d = evaluateAttempt(snap.exists ? snap.data() : null, Date.now());
-            if (!d.allowed) return d;
-            // The slot is charged BEFORE the compare and refunded on success.
-            // Charging afterwards means a caller that hangs up mid-verify never
-            // pays for the guess.
-            t.set(attemptRef, { ...d.next, updatedAt: Date.now() }, { merge: true });
-            return d;
-        });
-
-        if (!decision.allowed) {
-            throw new HttpsError(
-                "resource-exhausted",
-                `Too many attempts. Try again in ${Math.ceil(decision.retryAfterMs / 60000)} minute(s).`,
-            );
-        }
+        const decision = await chargeAccessAttempt(db, poolId, principal);
 
         const result = verifyPoolPassword(password, secret);
         if (!result.ok) {
-            return { ok: false, protected: true, attemptsRemaining: Math.max(0, ATTEMPT_MAX_FAILURES - decision.next.failures) };
+            return { ok: false, protected: true, attemptsRemaining: attemptsRemaining(decision) };
         }
 
         // Refund the charged slot — only FAILURES should count toward the cap.
-        await attemptRef.delete().catch(() => undefined);
+        await refundAccessAttempt(db, poolId, principal);
 
         if (result.needsRehash) {
             // Item 13c: a legacy bare-sha256 hash or a plaintext still on the
