@@ -1,5 +1,9 @@
 # MORNING 2026-08-24 — Overnight audit-remediation session
 
+> Sibling doc: [MORNING-2026-08-24.md](MORNING-2026-08-24.md) is the EARLIER
+> doc for this date (previous effort's close-out). This file CONTINUES it —
+> it does not supersede it; different workstream (the six-audit remediation).
+
 Kevin's brief: work every finding from the six audits (DB/storage, backend
 API, auth, hosting/deploy, cloud/compute, VCS/CI) plus the 8/8-red Playwright
 suite. This file is the repo copy; the chat message is the delivery (per the
