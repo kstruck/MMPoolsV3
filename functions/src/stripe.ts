@@ -31,7 +31,7 @@ import { withHeartbeat } from "./lib/heartbeat";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
 import { captureMonetizationAlert } from "./lib/sentryServer";
-import { dispatchOpsAlert } from "./lib/opsAlertDispatcher";
+import { dispatchOpsAlert, type OpsAlertType } from "./lib/opsAlertDispatcher";
 import {
     writeBillingChargeTxn,
     type BillingCharge,
@@ -69,22 +69,233 @@ const db = admin.firestore();
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
+// =============================================================================
+// FAIL-CLOSED STRIPE CONFIG (PLAN-STRIPE-FAIL-CLOSED.md)
+//
+// The mock-checkout branch below used to fire on ONE input — "is the key
+// missing or a placeholder" — with no environment condition at all. In a
+// deployed function that meant a deleted/never-created/placeholder secret
+// version granted paid pool state and real bundle entitlements, ledger rows
+// included, for free. The environment is now part of the decision, and it is
+// read ONLY from variables the Firebase emulator sets on itself — never from a
+// Firestore config field, a request field, or anything a caller can flip.
+// =============================================================================
+
+/** Placeholder spellings seen in setup docs/scaffolds. Checked case-insensitively. */
+const PLACEHOLDER_KEY_PATTERN = /^(placeholder|changeme|change[-_ ]me|dummy|example|todo|xxx+|your[-_ ]?)/i;
+
+/** Stripe issues secret ("sk_") and restricted ("rk_") API keys. Nothing else. */
+const STRIPE_SECRET_KEY_PREFIX = /^(sk|rk)_/;
+
+export type StripeKeyVerdict = "usable" | "missing" | "placeholder" | "malformed";
+
+/**
+ * True only inside the local Firebase emulator suite. `FUNCTIONS_EMULATOR` is
+ * set to "true" by the Functions emulator and `FIRESTORE_EMULATOR_HOST` by the
+ * Firestore emulator; neither exists in a deployed function. Anything else —
+ * NODE_ENV, a `devMode` field, a config doc — is deliberately ignored, because
+ * a caller-settable dev switch is the same hazard with an extra step.
+ */
+export function isEmulatedEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+    return env.FUNCTIONS_EMULATOR === "true" || !!env.FIRESTORE_EMULATOR_HOST;
+}
+
+/** Classifies the configured secret WITHOUT calling Stripe. A well-formed but
+ *  wrong key is "usable" here — Stripe rejects it at session-create and the
+ *  existing catch releases the reservation. */
+export function classifyStripeKey(raw: string | undefined | null): StripeKeyVerdict {
+    const key = typeof raw === "string" ? raw.trim() : "";
+    if (!key) return "missing";
+    if (PLACEHOLDER_KEY_PATTERN.test(key)) return "placeholder";
+    if (!STRIPE_SECRET_KEY_PREFIX.test(key)) return "malformed";
+    return "usable";
+}
+
+export type StripeMode =
+    | { mode: "live" }
+    | { mode: "mock"; verdict: StripeKeyVerdict }
+    | { mode: "refuse"; verdict: StripeKeyVerdict };
+
+/** The whole policy in one place: usable ⇒ live; unusable + emulated ⇒ mock;
+ *  unusable + deployed ⇒ refuse. */
+export function resolveStripeMode(
+    raw: string | undefined | null,
+    env: NodeJS.ProcessEnv = process.env,
+): StripeMode {
+    const verdict = classifyStripeKey(raw);
+    if (verdict === "usable") return { mode: "live" };
+    if (isEmulatedEnvironment(env)) return { mode: "mock", verdict };
+    return { mode: "refuse", verdict };
+}
+
+/** Reads the secret without throwing when the binding is absent. */
+export function readStripeSecret(): string | undefined {
+    try {
+        return stripeSecretKey.value();
+    } catch {
+        return undefined;
+    }
+}
+
+export const STRIPE_UNAVAILABLE_MESSAGE =
+    "Card payments are temporarily unavailable, so this purchase was not started. " +
+    "You have not been charged and nothing about your pool was changed. " +
+    "Please try again shortly — we have been alerted.";
+
+// -----------------------------------------------------------------------------
+// Alert throttling (codex r1 [P2]).
+//
+// The refusal fires on EVERY checkout attempt for as long as the secret is
+// broken, and `dispatchOpsAlert` writes one mail doc per recipient with no
+// dedupe of its own. Unthrottled, the fix for a config outage would bury the
+// on-call inbox during that same outage. So: one page per cooldown window.
+//
+// Two layers, because neither alone is enough. The in-process gate is free and
+// stops the per-instance flood; the persisted marker stops a cold-start
+// stampede across instances from paging once per instance. The REFUSAL is never
+// throttled — only the paging is.
+// -----------------------------------------------------------------------------
+
+const STRIPE_CONFIG_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+
+export interface AlertThrottle {
+    /** True when the caller may page; false when a page already went out inside the window. */
+    tryClaim(now: number): boolean;
+    reset(): void;
+}
+
+export function makeAlertThrottle(cooldownMs: number): AlertThrottle {
+    let lastAt = Number.NEGATIVE_INFINITY;
+    return {
+        tryClaim(now: number): boolean {
+            if (now - lastAt < cooldownMs) return false;
+            lastAt = now;
+            return true;
+        },
+        reset() {
+            lastAt = Number.NEGATIVE_INFINITY;
+        },
+    };
+}
+
+const stripeConfigAlertThrottle = makeAlertThrottle(STRIPE_CONFIG_ALERT_COOLDOWN_MS);
+
+/** Cross-instance dedupe marker. Also gives Kevin a doc showing the outage. */
+async function claimStripeConfigAlertPersisted(now: number, verdict: StripeKeyVerdict): Promise<boolean> {
+    try {
+        return await db.runTransaction(async (t) => {
+            const ref = db.collection("monetization_alerts").doc("STRIPE_CONFIG_INVALID");
+            const snap = await t.get(ref);
+            const lastAt = (snap.data()?.lastAlertedAt as number) ?? Number.NEGATIVE_INFINITY;
+            const claim = now - lastAt >= STRIPE_CONFIG_ALERT_COOLDOWN_MS;
+            t.set(
+                ref,
+                {
+                    type: "PAYMENT_FAILED",
+                    reason: "STRIPE_CONFIG_INVALID",
+                    verdict,
+                    status: "open",
+                    updatedAt: now,
+                    ...(claim ? { lastAlertedAt: now, createdAt: (snap.data()?.createdAt as number) ?? now } : {}),
+                    refusalCount: FieldValue.increment(1),
+                },
+                { merge: true },
+            );
+            return claim;
+        });
+    } catch (err) {
+        // Firestore itself is unhappy. Page — the in-process gate above already
+        // caps this instance at one page per window, so this cannot flood.
+        console.error("[Stripe] Could not persist the Stripe-config alert marker:", err);
+        return true;
+    }
+}
+
+/**
+ * THE MONEY GATE. In a deployed environment an unusable STRIPE_SECRET_KEY
+ * refuses the purchase with `failed-precondition` and pages ops — it never
+ * falls through to the mock grant. Injectable so the negative tests exercise
+ * this decision itself rather than a copy of it.
+ */
+export async function assertStripePaymentAllowed(opts: {
+    context: Record<string, unknown>;
+    env?: NodeJS.ProcessEnv;
+    readKey?: () => string | undefined;
+    dispatch?: (input: { type: OpsAlertType; title: string; message: string; context?: Record<string, unknown> }) => Promise<unknown>;
+    throttle?: AlertThrottle;
+    /** Cross-instance claim. `null` skips it (used by the unit tests). */
+    persistClaim?: ((now: number, verdict: StripeKeyVerdict) => Promise<boolean>) | null;
+    now?: number;
+} ): Promise<StripeMode> {
+    const env = opts.env ?? process.env;
+    const readKey = opts.readKey ?? readStripeSecret;
+    const resolution = resolveStripeMode(readKey(), env);
+    if (resolution.mode !== "refuse") return resolution;
+
+    console.error(
+        `[Stripe] REFUSING purchase: STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed environment.`,
+        opts.context,
+    );
+
+    // ⚠️ Everything from here to the throw is BEST EFFORT. Paging must never be
+    // the reason the refusal fails to happen — that is the whole point of the
+    // guard, and a thrown alert would restore the hazard.
+    try {
+        const now = opts.now ?? Date.now();
+        const throttle = opts.throttle ?? stripeConfigAlertThrottle;
+        const persistClaim = opts.persistClaim === undefined ? claimStripeConfigAlertPersisted : opts.persistClaim;
+        if (throttle.tryClaim(now) && (persistClaim === null || (await persistClaim(now, resolution.verdict)))) {
+            const dispatch =
+                opts.dispatch ?? ((input) => dispatchOpsAlert(db, input as Parameters<typeof dispatchOpsAlert>[1]));
+            await dispatch({
+                type: "PAYMENT_FAILED",
+                title: "Stripe is not configured — checkout refused",
+                message:
+                    `A purchase was refused because STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed ` +
+                    "environment. Nothing was granted: no pool activation, no entitlement, no ledger row, no " +
+                    `coupon use. Further refusals in the next ${STRIPE_CONFIG_ALERT_COOLDOWN_MS / 60000} minutes ` +
+                    "are counted on monetization_alerts/STRIPE_CONFIG_INVALID rather than paged. " +
+                    "Set the secret and redeploy functions.",
+                context: { verdict: resolution.verdict, ...opts.context },
+            });
+        }
+    } catch (err) {
+        console.error("[Stripe] Ops alert for invalid Stripe config failed to dispatch:", err);
+    }
+    throw new HttpsError("failed-precondition", STRIPE_UNAVAILABLE_MESSAGE);
+}
+
+/** Mock session ids minted by the emulator-only checkout branches. */
+const MOCK_SESSION_PREFIX = "mock_";
+
+/**
+ * Backstop invariant on the two functions that actually WRITE paid state: in a
+ * deployed environment, a `mock_` session id can never produce a grant, by any
+ * route. Cheap, and it holds even if a future edit moves or drops a gate above.
+ */
+export function assertNotMockSessionInDeployedEnv(
+    sessionId: string | undefined | null,
+    env: NodeJS.ProcessEnv = process.env,
+): void {
+    if (typeof sessionId !== "string" || !sessionId.startsWith(MOCK_SESSION_PREFIX)) return;
+    if (isEmulatedEnvironment(env)) return;
+    console.error(`[Stripe] REFUSING to grant paid state for mock session '${sessionId}' in a deployed environment.`);
+    throw new HttpsError("failed-precondition", STRIPE_UNAVAILABLE_MESSAGE);
+}
+
 // Stripe will be initialized at function invocation time
 let stripeInstance: any = null;
 function getStripe() {
     if (!stripeInstance) {
-        let key = "";
-        try {
-            key = stripeSecretKey.value();
-        } catch (e) {
-            console.warn("[Stripe] STRIPE_SECRET_KEY is not defined in this environment.");
+        const key = readStripeSecret();
+        if (classifyStripeKey(key) !== "usable") {
+            // Unusable key. The CALLER decides what that means — the guards
+            // above refuse in a deployed environment; only the emulator is
+            // allowed to read this as "mock mode".
+            console.warn(`[Stripe] STRIPE_SECRET_KEY is ${classifyStripeKey(key)} in this environment.`);
+            return null;
         }
-
-        if (!key || key.startsWith("placeholder") || key === "") {
-            return null; // Signal mockup bypass mode
-        }
-
-        stripeInstance = new Stripe(key, { apiVersion: "2024-12-18.acacia" as any });
+        stripeInstance = new Stripe(key as string, { apiVersion: "2024-12-18.acacia" as any });
     }
     return stripeInstance;
 }
@@ -503,6 +714,21 @@ export const createCheckoutSession = validated(
     // =====================================================================
     // PAID PATH — reserve coupon + set pending idempotency, THEN create session
     // =====================================================================
+
+    // ⚠️ THE MONEY GATE, AND IT MUST STAY THE FIRST STATEMENT OF THIS BLOCK.
+    // Everything above is reads and pure quoting; the reservation transaction
+    // below is the paid path's FIRST WRITE. Refusing here means a deployed
+    // environment with an unusable STRIPE_SECRET_KEY mutates nothing at all —
+    // no coupon reservation, no billing.pendingSessionId, no checkoutSessions
+    // doc — and hands back no redirect URL. (PLAN-STRIPE-FAIL-CLOSED.md)
+    //
+    // The $0 path above is intentionally NOT gated: it never calls Stripe even
+    // when the key is perfect, and it is separately gated on a validated
+    // credit / free-tier eligibility / 100% coupon.
+    await assertStripePaymentAllowed({
+        context: { path: "pool", poolId, userId, purchaseKind, amount: serverPrice },
+    });
+
     const reservationId = randomUUID();
     // Only a coupon that actually applied a discount is reserved + carried in
     // metadata (so the webhook confirms exactly the reservation we made). A
@@ -592,6 +818,12 @@ export const createCheckoutSession = validated(
     };
 
     if (!stripe) {
+        // Defence in depth. The gate at the top of the paid path has already
+        // refused a deployed environment, so this can only be the emulator —
+        // but the branch that GRANTS carries its own refusal regardless.
+        await assertStripePaymentAllowed({
+            context: { path: "pool-mock-branch", poolId, userId, purchaseKind, amount: serverPrice },
+        });
         // Mock dev sandbox: emulate a completed session inline (activate now).
         console.log(`[Stripe Mockup] Missing/placeholder key — mock checkout for pool ${poolId}.`);
         const mockSessionId = `mock_local_dev_session_${Date.now()}`;
@@ -657,6 +889,13 @@ async function createBundleCheckout(
     origin: string,
     email: string | undefined
 ): Promise<{ sessionUrl: string | null }> {
+    // ⚠️ THE MONEY GATE, AND IT MUST STAY THE FIRST STATEMENT OF THIS FUNCTION.
+    // A bundle is a durable entitlement (credits / an unlimited pass) granted to
+    // ANY signed-in caller — there is no ownership gate on this path — so a
+    // deployed environment with an unusable STRIPE_SECRET_KEY must refuse before
+    // anything is read or written. (PLAN-STRIPE-FAIL-CLOSED.md)
+    await assertStripePaymentAllowed({ context: { path: "bundle", bundleType, userId } });
+
     // Authoritative bundle price from billing_config.
     let serverPrice: number | undefined;
     let dynamicBundle: any = null;
@@ -676,6 +915,8 @@ async function createBundleCheckout(
 
     const stripe = getStripe();
     if (!stripe) {
+        // Defence in depth — see the pool mock branch.
+        await assertStripePaymentAllowed({ context: { path: "bundle-mock-branch", bundleType, userId } });
         console.log(`[Stripe Mockup] Mock bundle checkout for ${bundleType}.`);
         const mockSessionId = `mock_bundle_session_${Date.now()}`;
         // grantBundle writes the canonical bundle + credit docs + ledger row in
@@ -771,6 +1012,10 @@ async function grantBundle(
     bundleType: string,
     opts: { stripeSessionId?: string; paymentIntentId?: string; amount?: number } = {}
 ): Promise<void> {
+    // Backstop: a `mock_` session id may never grant an entitlement in a
+    // deployed environment, whatever route got here.
+    assertNotMockSessionInDeployedEnv(opts.stripeSessionId);
+
     const pkg = await resolveBundlePackage(bundleType);
     if (!pkg) {
         throw new HttpsError("internal", `Unable to resolve bundle '${bundleType}' for entitlement grant.`);
@@ -833,6 +1078,11 @@ async function finalizePoolPayment(args: {
     metadata: Record<string, string>;
 }): Promise<void> {
     const { sessionId, paymentIntentId, amountTotalCents, metadata } = args;
+    // Backstop: a `mock_` session id may never activate a pool, write a ledger
+    // row, or confirm a coupon in a deployed environment, whatever route got
+    // here. (PLAN-STRIPE-FAIL-CLOSED.md)
+    assertNotMockSessionInDeployedEnv(sessionId);
+
     const poolId = metadata.poolId;
     const userId = metadata.userId;
     const reservationId = metadata.reservationId;
@@ -1133,6 +1383,34 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
         return;
     }
     const stripe = getStripe();
+    if (!stripe) {
+        // Without a usable key there is no way to VERIFY the signature, so this
+        // must never fall through to `stripe.webhooks.constructEvent` — which
+        // it used to, dereferencing null and returning a 500 that reads as a
+        // crash rather than the configuration failure it is. 503 keeps Stripe
+        // retrying, which is right: the config can be repaired.
+        console.error("[Stripe Webhook] REFUSING: STRIPE_SECRET_KEY is not usable in this environment.");
+        // Stripe retries a 503 on its own schedule, so this path repeats for as
+        // long as the outage lasts — same throttle as the checkout refusal
+        // (codex r1 [P2]). Best effort: a paging failure must not stop the 503.
+        try {
+            const now = Date.now();
+            if (stripeConfigAlertThrottle.tryClaim(now) && (await claimStripeConfigAlertPersisted(now, classifyStripeKey(readStripeSecret())))) {
+                await dispatchOpsAlert(db, {
+                    type: "WEBHOOK_FAILED",
+                    title: "Stripe webhook refused — secret key not configured",
+                    message:
+                        "A Stripe webhook could not be verified because STRIPE_SECRET_KEY is missing, a placeholder, " +
+                        "or malformed. Nothing was processed and Stripe will retry. Set the secret and redeploy functions.",
+                    context: { verdict: classifyStripeKey(readStripeSecret()) },
+                });
+            }
+        } catch (err) {
+            console.error("[Stripe Webhook] Ops alert for invalid Stripe config failed to dispatch:", err);
+        }
+        res.status(503).send("Stripe is not configured");
+        return;
+    }
     const sig = req.headers["stripe-signature"] as string;
     if (!sig) {
         console.error("[Stripe Webhook] Missing stripe-signature header");
