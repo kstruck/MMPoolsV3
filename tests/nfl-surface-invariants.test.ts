@@ -853,7 +853,6 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
   // if either line is left behind, which is what makes deleting them mandatory
   // rather than tidy.
   const ALLOW: Record<string, RegExp[]> = {
-    'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
     'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
   };
   const FORBIDDEN: Array<[string, RegExp]> = [
@@ -1458,5 +1457,53 @@ describe('the multi-entry offer implies the capability (PLAN-MULTI-ENTRY flip)',
     // The manager control still renders for a pool that ALREADY took the offer,
     // so turning the flag off never strands one (`|| currentMaxEntries > 1`).
     expect(manager).toContain('{(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (');
+  });
+});
+
+
+/**
+ * 🛑 NO FIXED LIGHT BACKGROUND ON A THEME-COLOURED SURFACE.
+ *
+ * The "My Entries" card shipped WHITE ON WHITE and Kevin hit it on first live
+ * use. `bg-cream` is a FIXED `#F7F4EE` in `tailwind.config.js` and `bg-white` is
+ * fixed by definition, while `--text` is `#131B2B` in light mode and `#EDF1F8`
+ * in dark — so a fixed light background plus the theme's text colour is legible
+ * in exactly one theme, and invisible in the other.
+ *
+ * ⚠️ THE REASON THIS NEEDS A TEST RATHER THAN CARE: the author sees only the
+ * theme they happen to be running. The bug is not subtle once seen and cannot
+ * be seen at all otherwise. `NFLStandingsTab.tsx:129-130` already ships the
+ * correct pair, so there is a house answer to copy.
+ *
+ * Scoped to the entry surfaces this plan added. Widening it to every component
+ * would be a separate, larger cleanup — several older files use `bg-cream`
+ * deliberately on surfaces that are light in both themes.
+ */
+describe('entry surfaces use theme tokens, not fixed light backgrounds', () => {
+  const FILES = [
+    'src/components/NFLPoolDashboard/EntrySwitcher.tsx',
+  ];
+
+  it.each(FILES)('%s has no bg-white / bg-cream', file => {
+    const code = readFileSync(resolve(root, file), 'utf8');
+    expect(code.match(new RegExp(String.raw`bg-(white|cream)`, 'g')) ?? []).toEqual([]);
+  });
+
+  it.each(FILES)('%s states a text colour wherever it states a background', file => {
+    const code = readFileSync(resolve(root, file), 'utf8');
+    // Every `bg-` utility in this file must be one of the theme-following ones.
+    // A raw hex background is what made the ACTIVE chip vanish against the dark
+    // card (`#142A4C` on `#152747`).
+    expect(code.match(new RegExp(String.raw`bg-\[#[0-9A-Fa-f]{3,8}\]`, 'g')) ?? []).toEqual([]);
+  });
+
+  it('the active/idle pair matches the one the Standings tab already ships', () => {
+    // Two components inventing two answers to the same question is how a design
+    // drifts. If NFLStandingsTab changes, this fails and both move together.
+    const switcher = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/EntrySwitcher.tsx'), 'utf8');
+    const tab = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLStandingsTab.tsx'), 'utf8');
+    const ACTIVE = 'bg-navy-700 text-white dark:bg-gold-500 dark:text-navy-900';
+    expect(switcher).toContain(ACTIVE);
+    expect(tab).toContain(ACTIVE);
   });
 });
