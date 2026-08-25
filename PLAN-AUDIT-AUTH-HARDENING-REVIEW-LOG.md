@@ -138,3 +138,39 @@ VERDICT: REVISE. 1 finding (P1), ACCEPTED in full:
    `TS5107 moduleResolution=node10 deprecated`. NOT a finding on this diff — it
    is what the raw invocation does; the repo's own `npm --prefix functions run
    typecheck` passes. No action.
+
+## Round 3
+
+VERDICT: REVISE. 1 finding (P1), ACCEPTED in full:
+
+1. **(P1) The dotted key bypassed the choke point.** `stripPoolPasswordFields`
+   removed the NESTED `accessControl.password` and the top-level `gridPassword`,
+   but not a key literally named `"accessControl.password"`. The create handlers
+   SPREAD the parsed payload into the pool document with `set()`, and `set()`
+   treats an object key as a literal field name — dots and all. So
+   `createPool({"accessControl.password": "secret"})` wrote the plaintext onto
+   the world-readable document as a top-level field with a dot in its name,
+   straight past the choke point this phase is built on.
+
+   It is worse than a curiosity for two reasons. It is the exact form the old
+   bracket dashboard used (`updateDoc(ref, {'accessControl.password': …})`), so
+   it is the first thing anyone reading that code would try. And
+   `legacyPlaintextOf` did not recognise it either, so the migration would have
+   walked past such a pool and left the plaintext there permanently.
+
+   Fix, three layers: the transform deletes the dotted key (stops new ones);
+   `legacyPlaintextOf` reads it, ranked below the two normal shapes (so an
+   existing one still verifies and IS counted by the planner); and the migration
+   deletes it through a `FieldPath` — an `update()` object key with a dot is
+   parsed as a PATH into the nested map and would miss the field entirely, which
+   is why `scrubPatch` cannot do this one and it gets its own call and its own
+   `dottedFieldsRemoved` counter. Four new assertions.
+
+   NOTE ON REACH: no shipped client has ever sent that key, so a pool carrying
+   one could only come from a hand-crafted callable payload. The fix is still
+   worth its size — the choke point's whole claim is that no wizard, present or
+   future, can persist a password, and a claim with a documented hole in it is
+   the thing §2c exists to catch.
+
+   Codex's run also emitted `vitest --runInBand` and a vite `EPERM` from its own
+   sandbox. Environment noise, not findings.

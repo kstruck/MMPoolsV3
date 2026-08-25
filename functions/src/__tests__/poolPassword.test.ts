@@ -177,6 +177,32 @@ describe('create choke point (item 13b)', () => {
         expect(parsed).toEqual({ name: 'My Pool', accessControl: { requireEmail: true } });
     });
 
+    it('strips the DOTTED form too (codex r3 P1 — this was a live bypass)', () => {
+        // The create handlers spread the parsed payload into the pool doc with
+        // `set()`, and `set()` treats an object key as a LITERAL field name —
+        // dots included. So this key landed on the world-readable document as a
+        // top-level field named `accessControl.password`, past a strip that only
+        // looked at the nested shape. It is also exactly the form the old
+        // bracket dashboard used.
+        expect(createPoolPermissiveSchema.parse({
+            name: 'P', 'accessControl.password': 'secret',
+        })).toEqual({ name: 'P' });
+        expect(updatePoolSettingsSchema.parse({
+            poolId: 'p1', updates: { 'accessControl.password': 'secret', name: 'P' },
+        }).updates).toEqual({ name: 'P' });
+    });
+
+    it('a pool carrying the dotted field is still read, and still planned for', () => {
+        // Belt and braces: the strip stops NEW ones, these two stop an existing
+        // one being silently walked past.
+        expect(legacyPlaintextOf({ 'accessControl.password': 'old' })).toBe('old');
+        expect(planForPool('p1', { 'accessControl.password': 'old' }, false))
+            .toEqual({ poolId: 'p1', action: 'hash-plaintext' });
+        // …and it ranks BELOW the two normal shapes.
+        expect(legacyPlaintextOf({ gridPassword: 'g', 'accessControl.password': 'd' })).toBe('g');
+        expect(legacyPlaintextOf({ accessControl: { password: 'a' }, 'accessControl.password': 'd' })).toBe('a');
+    });
+
     it('leaves a payload with no password fields untouched', () => {
         const input = { name: 'Plain', type: 'SQUARES', accessControl: { requireEmail: false } };
         expect(createPoolPermissiveSchema.parse(input)).toEqual(input);

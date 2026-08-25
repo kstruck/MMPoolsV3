@@ -46,6 +46,15 @@ export function stripPoolPasswordFields(data: Record<string, unknown>): Record<s
     // and a client-supplied value would be an attacker-chosen hash.
     delete out.passwordHash;
     delete out.hasPoolPassword;
+    // ⚠️ THE DOTTED FORM IS A REAL BYPASS, NOT A CURIOSITY (codex r3, P1). The
+    // create handlers SPREAD this payload into the pool document with `set()`,
+    // and `set()` treats an object key as a LITERAL field name — dots and all.
+    // So `{"accessControl.password": "secret"}` sailed past a strip that only
+    // looked at the nested form and landed on the world-readable doc as a
+    // top-level field literally named `accessControl.password`. It is also the
+    // exact shape the old bracket dashboard used, so it is the first thing a
+    // reader of that code would try.
+    delete out["accessControl.password"];
     const ac = out.accessControl;
     if (ac && typeof ac === "object" && !Array.isArray(ac) && "password" in (ac as object)) {
         const copy: Record<string, unknown> = { ...(ac as Record<string, unknown>) };

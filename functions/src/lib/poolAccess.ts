@@ -46,7 +46,37 @@ export function legacyPlaintextOf(poolData: Record<string, unknown> | undefined)
     if (typeof grid === "string" && grid.length > 0) return grid;
     const ac = poolData.accessControl as { password?: unknown } | undefined;
     if (ac && typeof ac.password === "string" && ac.password.length > 0) return ac.password;
+    // The exotic DOTTED form — a top-level field whose NAME contains a dot.
+    // `set()` writes object keys literally, so before the create-schema strip
+    // (codex r3 P1) a caller could mint one. Read here so such a pool still
+    // verifies and so the migration counts it instead of walking past it.
+    const dotted = poolData[DOTTED_ACCESS_PASSWORD_FIELD];
+    if (typeof dotted === "string" && dotted.length > 0) return dotted;
     return null;
+}
+
+/**
+ * A LITERAL top-level field name containing a dot. Deleting it needs a
+ * `FieldPath` — an `update({ "accessControl.password": … })` object key is
+ * parsed as a PATH into the nested map and would miss this field entirely.
+ */
+export const DOTTED_ACCESS_PASSWORD_FIELD = "accessControl.password";
+
+/**
+ * Delete the exotic dotted field if the pool is carrying one. Separate from
+ * `scrubPatch` because it cannot be expressed as an object key — see above.
+ * No-ops (no write at all) for the overwhelmingly normal case.
+ */
+export async function scrubDottedLegacyField(
+    ref: admin.firestore.DocumentReference,
+    poolData: Record<string, unknown> | undefined,
+): Promise<boolean> {
+    if (typeof poolData?.[DOTTED_ACCESS_PASSWORD_FIELD] !== "string") return false;
+    await ref.update(
+        new admin.firestore.FieldPath(DOTTED_ACCESS_PASSWORD_FIELD),
+        FieldValue.delete(),
+    );
+    return true;
 }
 
 /** The legacy hash a pool document may still be carrying (bracket publish path). */

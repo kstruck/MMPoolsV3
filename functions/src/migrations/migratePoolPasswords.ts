@@ -34,7 +34,7 @@ import { validated } from "../lib/validated";
 import { writeAdminAudit } from "../lib/adminAudit";
 import { migratePoolPasswordsSchema } from "../schemas/poolPassword";
 import { hashPoolPassword } from "../lib/poolPassword";
-import { accessDocRef, legacyHashOf, legacyPlaintextOf, scrubPatch } from "../lib/poolAccess";
+import { accessDocRef, legacyHashOf, legacyPlaintextOf, scrubDottedLegacyField, scrubPatch } from "../lib/poolAccess";
 import { readJobGate } from "../nflSchedule";
 
 /** What the sweep would do to one pool. `null` = nothing to do. */
@@ -120,6 +120,7 @@ export const migratePoolPasswords = validated(
             hashedPlaintext: 0,
             movedHash: 0,
             scrubbedOnly: 0,
+            dottedFieldsRemoved: 0,
             // Per-pool plan so a dry run is reviewable evidence. NEVER carries a
             // password or a hash — only the pool id and the verb.
             plannedWrites: [] as { poolId: string; action: string }[],
@@ -165,6 +166,12 @@ export const migratePoolPasswords = validated(
                     // set the marker to match what is actually stored.
                     await doc.ref.update(scrubPatch(hasPrivate));
                 }
+                // The exotic dotted field cannot be removed by `scrubPatch` —
+                // an object key with a dot is parsed as a PATH, so it would
+                // miss a top-level field literally NAMED `accessControl.password`
+                // (codex r3). Needs a FieldPath, hence its own call. No-ops for
+                // every normal pool.
+                if (await scrubDottedLegacyField(doc.ref, data)) report.dottedFieldsRemoved++;
             } catch (err: any) {
                 report.failures.push({ poolId: doc.id, error: String(err?.message || err) });
             }
@@ -184,6 +191,7 @@ export const migratePoolPasswords = validated(
                 hashedPlaintext: report.hashedPlaintext,
                 movedHash: report.movedHash,
                 scrubbedOnly: report.scrubbedOnly,
+                dottedFieldsRemoved: report.dottedFieldsRemoved,
                 plannedWrites: report.plannedWrites.slice(0, 100),
                 failures: report.failures.slice(0, 50),
                 nextCursor: report.nextCursor,
