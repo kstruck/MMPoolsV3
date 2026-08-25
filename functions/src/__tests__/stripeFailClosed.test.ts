@@ -196,6 +196,20 @@ describe('assertStripePaymentAllowed — the money gate', () => {
       }),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
   });
+
+  it('does NOT refuse and does NOT page when the key is usable', async () => {
+    const g = gate('sk_live_51abcdef', DEPLOYED);
+    await expect(g.run()).resolves.toMatchObject({ mode: 'live' });
+    expect(g.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does NOT refuse under the emulator — local mock checkout survives', async () => {
+    for (const env of [FUNCTIONS_EMU, FIRESTORE_EMU]) {
+      const g = gate(undefined, env);
+      await expect(g.run()).resolves.toMatchObject({ mode: 'mock', verdict: 'missing' });
+      expect(g.dispatch).not.toHaveBeenCalled();
+    }
+  });
 });
 
 /**
@@ -253,20 +267,6 @@ describe('ops-alert throttling during a config outage', () => {
       }),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
     expect(dispatch).not.toHaveBeenCalled();
-  });
-
-  it('does NOT refuse and does NOT page when the key is usable', async () => {
-    const g = gate('sk_live_51abcdef', DEPLOYED);
-    await expect(g.run()).resolves.toMatchObject({ mode: 'live' });
-    expect(g.dispatch).not.toHaveBeenCalled();
-  });
-
-  it('does NOT refuse under the emulator — local mock checkout survives', async () => {
-    for (const env of [FUNCTIONS_EMU, FIRESTORE_EMU]) {
-      const g = gate(undefined, env);
-      await expect(g.run()).resolves.toMatchObject({ mode: 'mock', verdict: 'missing' });
-      expect(g.dispatch).not.toHaveBeenCalled();
-    }
   });
 });
 
