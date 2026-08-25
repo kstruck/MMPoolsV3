@@ -69,6 +69,7 @@ import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -2015,8 +2016,14 @@ export const scoreNFLWeek = validated(
 
     const pool = poolSnap.data() as any;
 
-    // RBAC checks
-    const userRole = request.auth!.token.role || 'USER';
+    // RBAC checks. CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d):
+    // assertPoolOwnerOrSuperAdmin short-circuits on `userRole === 'SUPER_ADMIN'`,
+    // so feeding it the raw claim let a demoted admin score any pool's week.
+    // confirmedAdminClaim strips an UNCONFIRMED SUPER_ADMIN claim to undefined
+    // and passes every other value through untouched — the helper branches on
+    // SUPER_ADMIN and nothing else, so 'USER' vs undefined is not a distinction
+    // it can see.
+    const userRole = await confirmedAdminClaim(request);
     try {
       assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
     } catch {
@@ -2038,7 +2045,15 @@ export const scoreNFLWeek = validated(
       throw new HttpsError('failed-precondition', `No games found to score for ${weekLabelFor(pool, week)}.`);
     }
 
-    // Confirm all games are final
+    // Confirm all games are final.
+    //
+    // ⚠️ SECOND CONSUMER of `userRole`, and it is a SCORING bypass, not just an
+    // authorization one — exempting SUPER_ADMIN here lets the button score
+    // mid-week, applying Survivor strikes and Margin -14s while pick windows are
+    // still open (see the `provisional` note below). 17d's claim+doc resolution
+    // therefore reaches this gate too, which is the intended direction: a
+    // SUPER_ADMIN claim the users doc does not back no longer gets the bypass.
+    // Strictly more restrictive; no principal gains anything.
     const activeGamesCount = games.filter(g => g.status !== 'FINAL' && g.status !== 'CANCELLED').length;
     if (activeGamesCount > 0 && userRole !== 'SUPER_ADMIN') {
       throw new HttpsError('failed-precondition', `ACTIVE_GAMES: Cannot score the week while ${activeGamesCount} games are still active.`);

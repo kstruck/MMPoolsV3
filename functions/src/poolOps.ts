@@ -29,6 +29,7 @@ import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from 
 import { entryCountWrite } from './lib/multiEntry';
 import { memberLiableEntries } from './shared/memberRecord';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
+import { confirmedAdminClaim } from './lib/confirmedRole';
 
 /**
  * Is `uid` the pool's owner or its legacy designated manager?
@@ -778,8 +779,11 @@ export const toggleWinnerPaid = validated(
     // The helper is defined above: assertPoolOwnerOrSuperAdmin(pool: any, uid: string, userRole?: string)
     // We can fetch user role optionally or assume owner check is enough for most.
 
-    // Fetch user role if we want to support SuperAdmin override properly
-    const userRole = request.auth!.token.role || 'USER';
+    // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): the SuperAdmin override below
+    // used to ride on the JWT claim alone. confirmedAdminClaim strips an
+    // UNCONFIRMED SUPER_ADMIN claim to undefined; any other claim passes through
+    // unchanged, and assertPoolOwnerOrSuperAdmin branches on SUPER_ADMIN alone.
+    const userRole = await confirmedAdminClaim(request);
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);
