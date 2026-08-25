@@ -1480,21 +1480,54 @@ describe('the multi-entry offer implies the capability (PLAN-MULTI-ENTRY flip)',
  * deliberately on surfaces that are light in both themes.
  */
 describe('entry surfaces use theme tokens, not fixed light backgrounds', () => {
+  // Non-global on purpose: `.test()` on a /g regex advances `lastIndex` and the
+  // second call would answer about the wrong position.
+  const FORBIDDEN_BG_SAMPLE = new RegExp(String.raw`\bbg-(white|cream)\b`);
+  const stripComments = (src: string) => src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(new RegExp(String.raw`(^|[^:])\/\/[^\n]*`, 'g'), '$1');
   const FILES = [
     'src/components/NFLPoolDashboard/EntrySwitcher.tsx',
   ];
 
   it.each(FILES)('%s has no bg-white / bg-cream', file => {
-    const code = readFileSync(resolve(root, file), 'utf8');
-    expect(code.match(new RegExp(String.raw`bg-(white|cream)`, 'g')) ?? []).toEqual([]);
+    // COMMENTS STRIPPED FIRST. The header of EntrySwitcher.tsx explains this
+    // very defect and therefore NAMES `bg-cream` and `bg-white` in prose — and
+    // the guard caught it, correctly by its own rule and uselessly in fact.
+    // Deleting the explanation to satisfy a regex would trade the reason for
+    // the rule; stripping comments keeps both. Same convention as the §0b guard.
+    const code = stripComments(readFileSync(resolve(root, file), 'utf8'));
+    const FORBIDDEN_BG = new RegExp(String.raw`\bbg-(white|cream)\b`, 'g');
+    expect(code.match(FORBIDDEN_BG) ?? []).toEqual([]);
   });
 
   it.each(FILES)('%s states a text colour wherever it states a background', file => {
-    const code = readFileSync(resolve(root, file), 'utf8');
+    const code = stripComments(readFileSync(resolve(root, file), 'utf8'));
     // Every `bg-` utility in this file must be one of the theme-following ones.
     // A raw hex background is what made the ACTIVE chip vanish against the dark
     // card (`#142A4C` on `#152747`).
     expect(code.match(new RegExp(String.raw`bg-\[#[0-9A-Fa-f]{3,8}\]`, 'g')) ?? []).toEqual([]);
+  });
+
+  it('🛑 the forbidden-background regex MATCHES THE SHAPE IT WAS WRITTEN TO CATCH', () => {
+    // GUARD THE GUARD, and this one earned it the hard way: the first three
+    // versions of the line above carried LITERAL BACKSPACE characters (U+0008)
+    // where `\\b` was intended, because the tooling that wrote the file
+    // interpreted the escape. The test passed, the file was clean, and the
+    // regex could only ever have matched a class name wrapped in backspaces —
+    // a guard that looked like it guarded and did not. Codex found it; two
+    // rounds of eyeballing the rendered line did not.
+    //
+    // A regex that matches nothing is indistinguishable from one that passes,
+    // so it is now asserted against a sample instead of trusted.
+    expect(FORBIDDEN_BG_SAMPLE.test('className="bg-cream text-[color:var(--text)]"')).toBe(true);
+    expect(FORBIDDEN_BG_SAMPLE.test('className="rounded-md bg-white text-sm"')).toBe(true);
+    // ...and does NOT fire on the theme-following utilities it must permit.
+    expect(FORBIDDEN_BG_SAMPLE.test('className="bg-page text-muted"')).toBe(false);
+    expect(FORBIDDEN_BG_SAMPLE.test('className="bg-card border-line"')).toBe(false);
+    // The literal-backspace form the real bug had, proving the sample would
+    // have caught it: a backspace is not a word boundary.
+    expect(new RegExp(String.raw`\u0008bg-(white|cream)\u0008`).test('bg-cream')).toBe(false);
   });
 
   it('the active/idle pair matches the one the Standings tab already ships', () => {
