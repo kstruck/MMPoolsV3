@@ -1,6 +1,6 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED AND POOL PASSWORDS ARE HASHED. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
+> ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED. POOL-PASSWORD HASHING IS BUILT BUT EXISTING POOLS ARE STILL PLAINTEXT UNTIL THE SWEEP RUNS. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
 >
 > Full detail: **[MORNING-2026-08-25-AUDIT-2.md](MORNING-2026-08-25-AUDIT-2.md)**.
 > Worked [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md) items 1–24 plus a
@@ -16,10 +16,15 @@
 > checkout called `grantBundle(...)` **with no ownership gate at all**. Both now return
 > `failed-precondition` with zero mutations in deployed environments.
 >
-> 🔴 **POOL PASSWORDS ARE NO LONGER PLAINTEXT (#579, Kevin's D1 Option 2).** PBKDF2 in
-> `pools/{id}/private/access` (`allow read: if false`), join via callable, migration
-> sweep kill-switched OFF and dry-run by default. **10 codex rounds, 17 findings,
-> 16 of them fail-OPEN.** Stated ceiling: this fixes the PASSWORD, not the POOL —
+> 🔴 **POOL-PASSWORD HASHING IS BUILT (#579, Kevin's D1 Option 2) — BUT THE EXPOSURE IS
+> NOT REMEDIATED YET.** NEWLY SET passwords go to PBKDF2 in `pools/{id}/private/access`
+> (`allow read: if false`) and joins run through a callable. **EXISTING pools still
+> carry `gridPassword` / `accessControl.password` / `passwordHash` in plaintext on the
+> publicly readable parent document** until the migration sweep runs — and the sweep is
+> deliberately kill-switched OFF and dry-run by default, and HAS NOT BEEN RUN. Step 4
+> of the deploy order below is what actually closes this. Do not treat #579 alone as
+> the fix. **10 codex rounds, 17 findings, 16 of them fail-OPEN.**
+> Stated ceiling even after the sweep: this fixes the PASSWORD, not the POOL —
 > `pools/{id}` stays `allow get: if true` for guest links, so the gate governs what the
 > app renders, not what Firestore serves.
 >

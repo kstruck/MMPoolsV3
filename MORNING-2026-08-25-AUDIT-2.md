@@ -52,7 +52,11 @@ checkout called `grantBundle(...)` — and **had no ownership gate at all**, so 
 signed-in user could take it. Triage also found the webhook dereferenced a
 possibly-null `stripe`, a 500 crash loop on the same config state.
 
-**2. Pool passwords, sixteen fail-OPEN defects in ten rounds (#579).**
+**2. Pool passwords, sixteen fail-OPEN defects in ten rounds (#579) — and the
+exposure is NOT closed yet.** NEWLY set passwords are hashed; EXISTING pools still
+carry plaintext on the publicly readable parent document until the migration sweep
+runs, and the sweep is kill-switched OFF and has not been run. Step 4 of the deploy
+order is what actually closes it.
 Round 1 came back clean; the stream's own read then found four, including a
 literal NUL byte in source. Later rounds found publish deleting a draft's
 password, a dotted key bypassing the choke point, rules that allowed *clearing* a
