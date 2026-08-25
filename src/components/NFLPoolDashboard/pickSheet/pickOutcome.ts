@@ -1,5 +1,5 @@
 import type { NFLGame } from '../../../types';
-import type { PickemResult } from '../../../utils/pickemResult';
+import { hasReportedScores, type PickemResult } from '../../../utils/pickemResult';
 
 /**
  * "Did my pick turn out right?" — the ONE definition the three NFL pick sheets
@@ -50,22 +50,28 @@ export type PickOutcome = 'CORRECT' | 'INCORRECT' | null;
  *
  * PUSH and VOID deliberately answer `null`: both are scored, neither is a loss.
  *
- * ⚠️ `game` IS NOT DECORATION — it closes a real gap in `gradePick` (codex,
- * round 1 of this change). `gradePickemGames` opens with
+ * ⚠️ `game` IS BELT-AND-BRACES, AND IT STAYS. `gradePickemGames` opens with
  *
  *     if (game.status === 'FINAL' && !hasReportedScores(game)) continue;
  *
- * and `gradePick` has no such line: it falls straight to `scores?.home ?? 0`.
- * On a scoreless FINAL that reads 0-0, which is a harmless PUSH straight-up but
- * a decided **W or L in ATS**, because the spread moves the adjusted home score
- * off the tie. So on an ATS pool the sheet would have told a member their pick
- * was right or wrong off a payload the scorer is still refusing to grade — and
- * a FINAL landing before its scores is the ordinary shape of this feed, not a
- * corner case (engine defect NFL7-3).
+ * and `gradePick` had no such line: it fell straight to `scores?.home ?? 0`. On
+ * a scoreless FINAL that reads 0-0, which is a harmless PUSH straight-up but a
+ * decided **W or L in ATS**, because the spread moves the adjusted home score
+ * off the tie — a verdict on a payload the scorer is still refusing to grade
+ * (engine defect NFL7-3). A FINAL landing before its scores is the ordinary
+ * shape of this feed, not a corner case.
  *
- * Gated HERE rather than in `gradePick` because that function is shared with
- * `src/utils/picksGrid.ts`, which this change does not own or test; see the PR
- * body for the residual.
+ * The pick-feedback PR gated it HERE only, because `gradePick` is shared with
+ * `src/utils/picksGrid.ts`, which that PR did not own — leaving the pool grid
+ * still labelling such a game W/L. **`gradePick` now carries the gate itself**
+ * (`src/utils/pickemResult.ts`), which is what fixed the grid, so this line is
+ * no longer the only thing standing between an ATS member and a false verdict.
+ *
+ * It is kept anyway: it is one finite check, it is asserted directly by
+ * `tests/pick-outcome.test.ts`, and `pickemOutcome` takes a `PickemResult` from
+ * whatever caller it is handed rather than computing one — so a future caller
+ * that grades some other way still cannot paint a scoreless FINAL green or red
+ * through this function.
  */
 export function pickemOutcome(game: NFLGame, result: PickemResult): PickOutcome {
   if (game.status === 'FINAL' && !hasReportedScores(game)) return null;
@@ -75,16 +81,8 @@ export function pickemOutcome(game: NFLGame, result: PickemResult): PickOutcome 
 }
 
 /**
- * Mirror of the engine's `hasReportedScores`. "The feed dropped the field" and
- * "the team scored zero" are different facts, and `?? 0` collapses them.
- */
-function hasReportedScores(game: NFLGame): boolean {
-  return Number.isFinite(game.scores?.home) && Number.isFinite(game.scores?.away);
-}
-
-/**
- * Both `hasReportedScores` and the "is this game gradeable at all" gate, mirrored
- * from the engine.
+ * The "is this game gradeable at all" gate for the SCORE-reading graders below,
+ * mirrored from the engine — `hasReportedScores` included.
  *
  * A FINAL carrying no scores reads 0-0, which is a real tie to every rule below —
  * and a tie is a Survivor strike by default. That is engine defect NFL7-3/NFL7-4,

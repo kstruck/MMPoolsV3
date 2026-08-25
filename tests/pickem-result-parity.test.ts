@@ -39,12 +39,32 @@ function game(over: Record<string, unknown> = {}) {
 // Home/away scores chosen to straddle every boundary the two rules can differ
 // on: outright blowouts, one-point games, exact ties, and — for ATS — a spread
 // that lands exactly on the margin (a PUSH).
-const SCORES = [
+//
+// ⚠️ `undefined` AND `{ home: 24 }` ARE IN THIS LIST ON PURPOSE, AND REMOVING
+// THEM RE-OPENS A REAL DEFECT. Every entry used to supply BOTH scores, and that
+// is exactly why this matrix could not see the one place the two rules
+// disagreed: `gradePickemGames` opens with
+//
+//     if (game.status === 'FINAL' && !hasReportedScores(game)) continue;
+//
+// and `gradePick` had no equivalent, falling straight to `scores?.home ?? 0`.
+// A scoreless FINAL therefore read 0-0 — a harmless PUSH straight-up, but a
+// decided W or L in ATS, because the spread moves the adjusted home score off
+// the tie. The pool grid (`src/utils/picksGrid.ts`) labelled such a game W/L
+// while the standings showed nothing (engine defect NFL7-3). A FINAL landing
+// before its scores is the ordinary shape of this feed, not a corner case.
+//
+// The one-sided `{ home: 24 }` is not redundant with `undefined`: the engine's
+// predicate requires BOTH fields finite, and a half-populated payload is what a
+// partial feed write actually looks like.
+const SCORES: ({ home?: number; away?: number } | undefined)[] = [
   { home: 24, away: 17 }, // home wins by 7
   { home: 17, away: 24 }, // away wins by 7
   { home: 20, away: 20 }, // tie
   { home: 21, away: 20 }, // home by 1
   { home: 20, away: 21 }, // away by 1
+  undefined,              // FINAL, no scores reported at all
+  { home: 24 },           // FINAL, only one side reported
 ];
 const SPREADS = [undefined, -7, -6.5, -3, 0, 3, 7, 7.5];
 const PICKS = ['ARI', 'CAR'];
@@ -53,6 +73,7 @@ const MODES = ['STRAIGHT', 'ATS', undefined];
 describe('gradePick parity (client sheet vs the real scorer)', () => {
   it('agrees with gradePickemGames on every score × spread × pick × mode', () => {
     let checked = 0;
+    let sawServerSkip = false;
     for (const scores of SCORES) {
       for (const spreadValue of SPREADS) {
         for (const pick of PICKS) {
@@ -65,6 +86,7 @@ describe('gradePick parity (client sheet vs the real scorer)', () => {
             const entry = { picks: { g1: pick } } as never;
 
             const serverGrade = gradePickemGames(entry, [g], pool).g1?.result ?? null;
+            if (serverGrade === null) sawServerSkip = true;
             const clientGrade = gradePick(g, pick, pickMode);
 
             expect(
@@ -76,8 +98,36 @@ describe('gradePick parity (client sheet vs the real scorer)', () => {
         }
       }
     }
-    // Guard the guard: an empty or collapsed matrix would pass vacuously.
+    // Guard the guard: an empty or collapsed matrix would pass vacuously, and so
+    // would one in which the server never once declined to grade — which is the
+    // whole case the scoreless rows were added for.
     expect(checked).toBe(SCORES.length * SPREADS.length * PICKS.length * MODES.length);
+    expect(sawServerSkip).toBe(true);
+  });
+
+  it('grades nothing on a FINAL the feed reported no scores for', () => {
+    // The exact shape codex named: ATS, FINAL, no scores, a real line. `?? 0`
+    // would read 0-0, and -6.5 pushes the adjusted home score off the tie, so
+    // the un-gated rule returned a confident 'L' here.
+    const pool = { settings: { pickMode: 'ATS' } } as never;
+    const entry = { picks: { g1: 'ARI' } } as never;
+
+    for (const scores of [undefined, { home: 24 }, { away: 17 }]) {
+      const g = game({ scores, spread: { value: -6.5, locked: true } });
+      expect(gradePick(g, 'ARI', 'ATS'), JSON.stringify(scores)).toBeNull();
+      // The server does not merely grade it differently — it records NO grade.
+      expect(gradePickemGames(entry, [g], pool).g1, JSON.stringify(scores)).toBeUndefined();
+    }
+  });
+
+  it('still grades a genuine 0-0 FINAL, which is a different fact', () => {
+    // `hasReportedScores` is a finite check, not a truthiness check: a real
+    // scoreless tie IS reported and IS gradeable. Collapsing the two is the
+    // defect wearing the other hat.
+    const g = game({ scores: { home: 0, away: 0 } });
+    expect(gradePick(g, 'ARI', 'STRAIGHT')).toBe('PUSH');
+    expect(gradePickemGames({ picks: { g1: 'ARI' } } as never, [g], { settings: { pickMode: 'STRAIGHT' } } as never).g1?.result)
+      .toBe('PUSH');
   });
 
   it('agrees that a CANCELLED game is VOID, whatever the score says', () => {
