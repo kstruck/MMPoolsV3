@@ -286,6 +286,13 @@
 > run it rather than reason about it, then check the AI-volume tile. The tell
 > that it is missing is a `9 FAILED_PRECONDITION` on that count.
 >
+> ⚠️ **The top box's "ALL DEPLOYS DONE + VERIFIED" does NOT cover this one.**
+> Kevin's 2026-08-24 evening runbook ran `--only functions` and a Coolify
+> rebuild; `--only firestore:indexes` was in neither, and no functions deploy
+> ships an index. Reading the top box as covering this is exactly the
+> inference that left this effort's status wrong for two days in the other
+> direction.
+>
 > The original three-surface sequence is kept below for the record, and it is
 > still the correct order for any FUTURE cost-controls deploy (Phase 1 owes one):
 >
