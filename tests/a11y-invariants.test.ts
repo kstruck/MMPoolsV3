@@ -7,20 +7,110 @@ import * as path from 'path';
 const ROOT = path.join(__dirname, '..');
 const read = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
-describe('a11y source invariants', () => {
-    it('every aria-modal dialog component wires useFocusTrap', () => {
-        for (const f of [
-            'src/components/modals/AuthModal.tsx',
-            'src/components/modals/PlayoffSettingsModal.tsx',
-            'src/components/admin/ConfirmActionModal.tsx',
-            // Audit item 15a — the residual aria-modal surfaces.
-            'src/components/modals/ShareModal.tsx',
-            'src/components/help/HelpPanel.tsx',
-        ]) {
-            const text = read(f);
-            expect(text, `${f} declares aria-modal`).toContain('aria-modal');
-            expect(text, `${f} must use useFocusTrap`).toContain('useFocusTrap(');
+/**
+ * Every `aria-modal` surface under `src/components/`, DISCOVERED rather than
+ * listed (audit item 15a, closing pass).
+ *
+ * The hand-maintained array this replaced could only ever pin the surfaces
+ * somebody remembered to add to it — and `QuickPicksDialog` is the proof that
+ * the remembering fails: it declared `aria-modal` and trapped nothing, and the
+ * green suite said the invariant held. A walker cannot be forgotten.
+ *
+ * ⚠️ COMMENTS ARE STRIPPED FIRST, so this finds files that DECLARE the
+ * attribute rather than files that merely talk about it. Four of the eight
+ * matches today are prose (`OverlayRoot` and `HelpPanel` explain the rule in
+ * comments, and `QuickPicksDialog`'s own header quotes it); on a raw scan a file
+ * that only *mentioned* `aria-modal` would be conscripted into the invariant and
+ * would have to be given an exemption it does not need.
+ */
+const stripComments = (s: string) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+const ariaModalComponents = (() => {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+        for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+            const rel = `${dir}/${e.name}`;
+            if (e.isDirectory()) { walk(rel); continue; }
+            if (!e.name.endsWith('.tsx') || e.name.endsWith('.test.tsx')) continue;
+            if (stripComments(read(rel)).includes('aria-modal')) out.push(rel);
         }
+    };
+    walk('src/components');
+    return out.sort();
+})();
+
+/**
+ * Two surfaces carry `aria-modal` and do NOT call the shared hook. Both are
+ * named here with the reason, so an exemption is a decision on the record
+ * rather than an omission — and the assertions below fail if a reason stops
+ * being true.
+ */
+const TRAP_EXEMPT: Record<string, string> = {
+    // Has a trap, just not this one: an older inline implementation predating
+    // the shared hook. Unifying them is a real cleanup and a separate change.
+    'src/components/ui/OverlayRoot.tsx': 'carries its own inline wrap-around trap',
+    // RESIDUAL, deliberately left: the confirm dialog is untrapped. Escape and
+    // the backdrop close it and it focuses its own control, so it is the mildest
+    // instance — but it IS an instance, and it is written down here rather than
+    // being invisible.
+    'src/components/ui/Toast.tsx': 'confirm dialog is untrapped — known residual',
+};
+
+describe('a11y source invariants', () => {
+    it('the comment stripper keeps declarations and drops prose about them', () => {
+        // Guard the stripper in both directions, on real files. If it ate JSX
+        // the walker would return [] and every assertion below would pass
+        // vacuously; if it left comments in place it would conscript files that
+        // only discuss the attribute.
+        expect(stripComments(read('src/components/modals/ShareModal.tsx')))
+            .toContain('aria-modal="true"');
+        expect(stripComments('  // a11y audit: aria-modal promises containment\n'))
+            .not.toContain('aria-modal');
+        expect(stripComments('/**\n * declares `aria-modal="true"`, so it owes containment\n */\n'))
+            .not.toContain('aria-modal');
+    });
+
+    it('the aria-modal walker actually found the surfaces', () => {
+        // Guard the guard: a walker that silently returns [] passes every
+        // assertion below without reading a line of source.
+        expect(ariaModalComponents).toContain('src/components/modals/AuthModal.tsx');
+        expect(ariaModalComponents).toContain('src/components/help/HelpPanel.tsx');
+        expect(ariaModalComponents)
+            .toContain('src/components/NFLPoolDashboard/pickSheet/QuickPicksDialog.tsx');
+        // A floor, not a census: naming three files above is the real guard,
+        // and hard-coding today's exact count would fail the day a modal is
+        // legitimately deleted.
+        expect(ariaModalComponents.length).toBeGreaterThanOrEqual(6);
+    });
+
+    it('every aria-modal dialog component wires useFocusTrap', () => {
+        for (const f of ariaModalComponents) {
+            if (f in TRAP_EXEMPT) continue;
+            const text = read(f);
+            expect(text, `${f} must use useFocusTrap (or be listed in TRAP_EXEMPT with a reason)`)
+                .toContain('useFocusTrap(');
+        }
+    });
+
+    it('no exemption is stale — each still exists and still declares aria-modal', () => {
+        for (const [f, why] of Object.entries(TRAP_EXEMPT)) {
+            expect(ariaModalComponents, `${f} is exempt "${why}" but no longer an aria-modal surface`)
+                .toContain(f);
+        }
+        // And the one exemption that claims to have a trap of its own must
+        // still have it, or it is an untrapped modal wearing an excuse.
+        expect(read('src/components/ui/OverlayRoot.tsx')).toContain("event.key !== 'Tab'");
+    });
+
+    it('the QuickPicks dialog traps unconditionally — it is mounted only while open', () => {
+        // Behavioural proof: src/__tests__/quickPicksDialogFocusTrap.test.tsx.
+        // `true`, not an `isOpen` prop, because the caller unmounts it to close;
+        // a stale `isOpen` here would be a trap that never retracts.
+        const text = read('src/components/NFLPoolDashboard/pickSheet/QuickPicksDialog.tsx');
+        expect(text).toContain('useFocusTrap(dialogRef, true)');
+        expect(text).toContain('ref={dialogRef}');
     });
 
     it('the HelpPanel trap is gated on the SAME condition as its aria-modal', () => {

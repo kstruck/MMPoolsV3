@@ -1059,9 +1059,15 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                         <p className="text-[11px] text-muted leading-normal">
                                             Host unlimited pools of any format with unlimited participants for a full 365 days. Perfect for corporate leagues and multi-format clubs.
                                         </p>
+                                        {/* ⚠️ NOT "billed annually" — see the twin of this comment in
+                                            `PricingPage.tsx`. One-time commerce: nothing renews, so naming a
+                                            billing cadence here promised a charge the product cannot make.
+                                            The qualifier string is character-for-character the pricing
+                                            page's on purpose — `tests/commerce-copy-honesty.test.ts` fails
+                                            if the two surfaces disagree about what the same product costs. */}
                                         <div className="pt-1 flex items-baseline gap-1">
                                             <span className="text-xl font-display font-bold num text-gold-700 dark:text-gold-400">${(config.packages?.unlimited_1yr ?? 129.00).toFixed(2)}</span>
-                                            <span className="text-[9px] text-muted font-medium num">billed annually</span>
+                                            <span className="text-[9px] text-muted font-medium num">one-time · 365 days</span>
                                         </div>
                                     </div>
                                     <div className="pt-3">
