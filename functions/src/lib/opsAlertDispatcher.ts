@@ -183,6 +183,17 @@ export async function dispatchOpsAlert(
         if (cfg.readFailed) return "failed";
         if (cfg.emailRecipients.length === 0 && cfg.smsRecipients.length === 0) return "no-recipients";
 
+        // An SMS-ONLY config is a real shape, and for an email-only alert type it
+        // means nothing can be attempted at all. Without this, `emailOk` is
+        // vacuously true (no email recipients to fail) and `smsOk` stays true (the
+        // SMS branch is skipped for non-high-priority types), so the dispatcher
+        // returned "sent" having sent nothing. Any caller that treats "sent" as
+        // confirmation — the health check marks the condition alerted and stops
+        // retrying — would then lose the notification entirely. codex round 3.
+        const willSendEmail = cfg.emailRecipients.length > 0;
+        const willSendSMS = HIGH_PRIORITY_TYPES.has(input.type) && cfg.smsRecipients.length > 0;
+        if (!willSendEmail && !willSendSMS) return "no-recipients";
+
         const detailLines = input.context
             ? Object.entries(input.context).map(([k, v]) => `${k}: ${String(v)}`).join("\n")
             : "";

@@ -25,7 +25,11 @@ vi.stubGlobal('window', { location: { href: 'https://mmp.app/pool/p1?email=kevin
 const captureSentryException = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock('../sentry', () => ({ captureSentryException }));
 
-const callable = vi.hoisted(() => vi.fn(async () => ({ data: { ok: true } })));
+// The payload parameter is declared even though the mock ignores it: `tsc -b`
+// compiles everything under src/, and a zero-arg mock makes `mock.calls[0][0]`
+// a TS2493 error — which fails the Docker build's `RUN npx tsc -b` layer, not
+// just the test (codex round 3).
+const callable = vi.hoisted(() => vi.fn(async (_payload?: unknown) => ({ data: { ok: true } })));
 vi.mock('firebase/functions', () => ({ httpsCallable: () => callable }));
 vi.mock('../firebase', () => ({ functions: {} }));
 vi.mock('../utils/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
