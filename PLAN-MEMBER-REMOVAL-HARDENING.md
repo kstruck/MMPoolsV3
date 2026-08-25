@@ -124,12 +124,26 @@ a decision and not an oversight: a write-only membership index is exactly what
 acquires a reader later, and the cost of including it is one no-op delete.
 
 **And a roster guard in `syncParticipantIndices`** (`functions/src/participant.ts`),
-without which the cleanup above is undone within the same second. That trigger
-fires on EVERY `pools/{poolId}` write — including the one the removal makes —
-and rebuilt both index docs from `squares[]` with no membership check. A uid not
-in `after.participantIds` now gets no index doc. Found by codex round 1; the
-full verification, the consumer trace for both documents, and why the guard is
-also the right thing on its own merits are in the review log.
+without which the cleanup above is undone. That trigger fires on EVERY
+`pools/{poolId}` write — including the one the removal makes — and rebuilt both
+index docs from `squares[]` with no membership check.
+
+The guard took two rounds to get right, and the second one is the interesting
+half. Codex round 1 caught the trigger firing on the removal's own write; the
+fix read `event.data.after.participantIds`. Codex round 3, on the rebased diff,
+caught that this is still the wrong source: trigger delivery is **unordered and
+at-least-once**, so a square write made before the removal can be delivered — or
+retried — after it, carrying a snapshot that still lists the departed uid. A
+guard that consults the past cannot enforce a fact about the present.
+
+The check now reads the LIVE pool inside a transaction. `tx.get(poolRef)` puts
+the pool in the transaction's read set, so a removal committing mid-flight forces
+a retry against the new roster — which a bare fresher `get` would not. Missing
+pool writes nothing; absent `participantIds` keeps the old behaviour; `poolName`
+comes from the live document too; and the handler returns before the read when
+there is nothing to index, so non-SQUARES pools pay nothing. Full verification,
+the consumer trace for both documents, and the demonstration that the new test
+fails against the round-1 guard are in the review log.
 
 Collapsing the two byte-identical copies into one definition is part of the fix,
 not tidying: the duplication is how both copies came to miss the same two
@@ -304,6 +318,16 @@ Not built here, and each is named so it is not mistaken for covered:
    another workstream tonight.
 5. **`fixParticipantIds` pruning** — the repair callable adds only. Adding a
    prune arm is a production-data change and needs its own dry-run gate.
+6. **Stale COUNTS in the squares index** (open finding, carried by this PR).
+   `syncParticipantIndices` computes `squaresCount` / `squareIds` / `paidCount`
+   from the EVENT's `squares[]`, so an out-of-order delivery can write an older
+   count over a newer one for a member who IS still listed. The r3 guard decides
+   who gets an index, not what it says. Pre-existing, orthogonal to member
+   removal, and identical before and after this PR. The fix — rebuild the stats
+   from the live `squares` inside the same transaction — also changes what the
+   `stats.size === 0` early return means, so it is a squares-subsystem change
+   with its own blast radius. Named in the code, the review log and the PR body
+   rather than smuggled in.
 
 ---
 
@@ -316,7 +340,7 @@ Not built here, and each is named so it is not mistaken for covered:
 | `npm --prefix functions run test:emulator` | 35 files passed, 1 skipped; **516 passed**, 2 expected-fail, 10 skipped — includes the 12 new cases in `memberRemoval.emulator.test.ts` |
 | `npm --prefix functions run test:rules` | **12/12 files passed**, all 22 assertions in the new `memberRemoval.rules.test.mjs` green |
 | `npx tsc -b` | clean |
-| `npm test` (root) | 135/136 files; the ONLY failures are the 3 known CRLF assertions in `tests/addon-purchase.test.ts` (Windows-only, green in CI, owned by another workstream — not touched here) |
+| `npm test` (root) | **2357/2357 passed, 0 failures.** The 3 `tests/addon-purchase.test.ts` CRLF failures are gone: #576 landed a `.gitattributes` LF normalisation, and since `.gitattributes` does not rewrite files already in the working tree, a `git rm --cached -r . && git reset --hard` from a clean tree in this worktree renormalised them. No repository content changed — `git status` clean before and after. |
 | `npm run build:static` | **not run** — no frontend file was touched |
 
 `test:rules` was run even though `firestore.rules` is unchanged, because a rules

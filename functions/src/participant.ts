@@ -332,6 +332,18 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
      * WRITE BUDGET: a squares grid is 100 cells, so `stats` holds at most 100
      * owners and this transaction issues at most 200 writes plus 1 read — inside
      * Firestore's 500-write limit with room to spare.
+     *
+     * ⚠️ KNOWN, UNCHANGED, AND DELIBERATELY NOT FIXED HERE: the COUNTS written
+     * below (`squaresCount` / `squareIds` / `paidCount`) still come from the
+     * EVENT's `squares[]`, so an out-of-order delivery can still write an older
+     * count over a newer one for a member who IS still listed. That is a
+     * pre-existing lost-update in the squares index, not a membership bug, and
+     * this change neither introduces nor worsens it — the guard above decides
+     * WHO gets an index, not what it says. The fix would be to rebuild `stats`
+     * from `poolSnap.data().squares` instead, which also changes what the
+     * `stats.size === 0` early return means; that is a squares-subsystem change
+     * with its own blast radius and it is named as an open item in
+     * PLAN-MEMBER-REMOVAL-HARDENING rather than smuggled in here.
      */
     await db.runTransaction(async (tx) => {
         const poolSnap = await tx.get(poolRef);

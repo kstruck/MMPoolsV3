@@ -107,9 +107,106 @@ turned up one defect codex did not flag.
    away. Corrected in both the code comment and the plan doc, with the negative
    fact ("it is NOT the My Pools list") written down explicitly.
 
+## Round 3 — 2026-08-25, on the REBASED diff
+
+The coordinator rebased this branch onto `origin/main` after #579 (pool
+passwords) landed — the two PRs collided in `functions/scripts/run-rules-tests.mjs`,
+both having bumped `MIN_FILES`. Resolved to `MIN_FILES = 13` with both
+rationales kept; `ls functions/scripts/*.rules.test.mjs | wc -l` = 13, verified
+here after pulling. Per CLAUDE.md §2c a rebase is code codex has not seen, so a
+round was run on it.
+
+VERDICT: REVISE. 1 finding (P2), **ACCEPTED**.
+
+1. **(P2) Revalidate the live roster before rebuilding indexes.**
+   `functions/src/participant.ts:289`.
+
+   > When a square update event generated before a member's removal is delivered
+   > after the removal event, this check uses that older event snapshot, where
+   > the UID is still listed, and recreates both deleted index documents.
+   > Firestore-trigger delivery is asynchronous and does not guarantee ordering,
+   > so the removal event's guard writes nothing but the delayed square event
+   > still executes its `set`s.
+
+   **Verified against the code, not taken on trust.** The r1 guard read
+   `event.data.after.participantIds` — the roster **as of the write that
+   produced the event** — and the two `set`s ran outside any transaction with
+   nothing re-checking the stored document. Two independent ways to reach it:
+
+   - **Ordering.** Cloud Functions v2 Firestore triggers carry no ordering
+     guarantee. A square write W1 (Alice listed) and the removal W2 produce E1
+     and E2; E2 can be processed first, write nothing, and E1 then arrives
+     carrying a snapshot that still lists Alice.
+   - **Retries**, which are the likelier path. Delivery is at-least-once: a
+     failed or timed-out invocation is redelivered **with the original
+     snapshot**, so a pre-removal event can legitimately execute after the
+     removal without any ordering exotica.
+
+   `pools/{poolId}` is written by many paths (settings, squares, scores,
+   billing), so a backlog is ordinary rather than contrived. The finding is
+   exact and it is the same defect class as r1 reached by a different route:
+   **a guard that consults the past cannot enforce a fact about the present.**
+
+   **Fix.** The roster check moved off the snapshot and into a transaction that
+   reads the live pool:
+   - `tx.get(poolRef)` puts the pool document in the transaction's **read set**,
+     so a removal committing between the read and the writes forces a RETRY
+     against the new roster. A bare non-transactional re-read would have shrunk
+     the window without closing it; this is why it is a transaction and not just
+     a fresher `get`.
+   - The snapshot-based `isListed` is **deleted**, not kept alongside — one
+     authoritative definition rather than two sources that can disagree.
+   - Missing pool document → write nothing (deleted between event and delivery).
+   - Absent `participantIds` → old behaviour preserved (unknown ≠ not-a-member).
+   - `poolName` now also comes from the live document; taking it from the stale
+     snapshot stamps a renamed pool's old name onto the index, a smaller
+     instance of the same bug.
+   - Early return when `stats.size === 0`, **before** the read, so every
+     non-SQUARES pool pays nothing — this trigger fires on `pools/{poolId}`,
+     which the NFL scorer writes every five minutes.
+
+   **Test that fails without the fix, demonstrated rather than asserted.** H3
+   `out-of-order delivery: a PRE-removal event delivered AFTER the removal
+   writes nothing` — event snapshot lists Alice, stored document does not. The
+   guard was temporarily reverted to its r1 snapshot form and the suite re-run:
+   **that one test failed and nothing else did**, so it isolates exactly this
+   defect. Fix restored, suite green.
+
+   H3 was rewritten around the live/snapshot distinction (6 cases): normal path,
+   the out-of-order case, both-agree, legacy pool with no `participantIds`,
+   pool deleted between event and delivery, and live pool name.
+
+## Round 4
+
+VERDICT: **CLEAN.** No findings.
+
+> No actionable correctness issues were found in the diff. The new
+> transaction-based cleanup and live-roster guard are consistent with the
+> surrounding Firestore code; type checking passes.
+
+## Own read of the rebased diff — 1 finding, NAMED AND NOT FIXED
+
+1. **The index CONTENTS are still snapshot-derived.** `squaresCount`,
+   `squareIds` and `paidCount` are computed from the EVENT's `squares[]`, so an
+   out-of-order delivery can still write an older count over a newer one **for a
+   member who is still listed**. The r3 guard decides WHO gets an index, not
+   what it says.
+
+   **Not fixed here, deliberately.** It is a pre-existing lost-update in the
+   squares index, orthogonal to member removal, and this PR neither introduces
+   nor worsens it — the behaviour is identical before and after. The fix would
+   be to rebuild `stats` from `poolSnap.data().squares` inside the transaction,
+   which also changes what the `stats.size === 0` early return means; that is a
+   squares-subsystem change with its own blast radius and it does not belong in
+   a member-removal PR. Written into the code beside the transaction and carried
+   as a named open item here and in the PR body, per CLAUDE.md §2c — **this PR
+   carries it**, and it is Kevin's call whether it earns its own ticket.
+
 ## Stopping
 
 Two conditions, per CLAUDE.md §2c with §2b DORMANT: a codex round came back
-clean (round 2) **and** my own read of the diff agrees, after the one defect
-above was fixed. **2 rounds, well under the cap of 10.** No findings are carried
-open.
+clean (round 4) **and** my own read of the diff agrees. **4 rounds, under the
+cap of 10** — rounds 3–4 were forced by the coordinator's rebase, which
+introduced code no earlier round had seen. One finding is carried open and named
+above; it is pre-existing and out of scope, not an unresolved defect in this
+change.
