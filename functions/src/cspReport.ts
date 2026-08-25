@@ -237,6 +237,33 @@ export function takeWriteSlot(
 /** Module-scoped budget: one per warm instance, reset on cold start. */
 const budget: BudgetState = { hour: "", used: 0, dropped: 0 };
 
+/**
+ * Spends the budget over one parsed batch.
+ *
+ * NOTE THE `continue`, NOT `break` (codex r1, P2): stopping at the first refusal
+ * would leave the rest of the batch uncounted, so a five-report batch that
+ * exhausts the budget on report one would be reported as ONE drop instead of
+ * five — the collector would understate its own incompleteness, which is the
+ * precise failure this whole file is built to avoid. Iterating the remainder is
+ * free: the batch is already capped at MAX_REPORTS_PER_REQUEST and a refused
+ * slot performs no I/O.
+ *
+ * Extracted from the handler so the bound is testable without a Firestore.
+ */
+export async function ingest(
+    reports: Violation[],
+    hour: string,
+    state: BudgetState,
+    write: (hour: string, v: Violation, dropped: number) => Promise<void>,
+    limit: number = MAX_WRITES_PER_HOUR,
+): Promise<void> {
+    for (const v of reports) {
+        const slot = takeWriteSlot(state, hour, limit);
+        if (!slot.allowed) continue;
+        await write(hour, v, slot.droppedToRecord);
+    }
+}
+
 async function record(hour: string, v: Violation, dropped: number): Promise<void> {
     const db = admin.firestore();
     const ref = db.collection("system_logs").doc(`csp-violations-${hour}`);
@@ -341,12 +368,7 @@ export const cspReport = onRequest(
             const raw = bodyText(req);
             if (raw !== null) {
                 const reports = parseReports(raw).slice(0, MAX_REPORTS_PER_REQUEST);
-                const hour = hourKey(Date.now());
-                for (const v of reports) {
-                    const slot = takeWriteSlot(budget, hour);
-                    if (!slot.allowed) break;
-                    await record(hour, v, slot.droppedToRecord);
-                }
+                await ingest(reports, hourKey(Date.now()), budget, record);
             }
         } catch (e) {
             // A collector that fails must never become the incident.

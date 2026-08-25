@@ -5,6 +5,7 @@ import {
     MAX_SIGNATURES,
     MAX_WRITES_PER_HOUR,
     hourKey,
+    ingest,
     normalizeBlockedUri,
     normalizeDirective,
     normalizeDocumentPath,
@@ -182,6 +183,37 @@ describe("cspReport — the write budget is the cost bound", () => {
         s.hour = "2026-08-25T06";
         s.used = 0;
         expect(takeWriteSlot(s, "2026-08-25T06", 1).droppedToRecord).toBe(0);
+    });
+
+    it("counts EVERY refused report in a batch, not just the first (codex r1)", async () => {
+        // The handler used to `break` out of the batch at the first refusal, so a
+        // five-report batch that exhausted the budget on report one recorded ONE
+        // drop instead of five. Understating its own incompleteness is exactly the
+        // failure this collector exists to avoid, so the fix gets an assertion.
+        const s = fresh();
+        const writes: Array<{ dropped: number }> = [];
+        const batch = Array.from({ length: 5 }, () => ({
+            directive: "img-src",
+            blockedUri: "https://cdn.example.com",
+            documentPath: "/",
+        }));
+
+        await ingest(batch, "2026-08-25T05", s, async (_h, _v, dropped) => {
+            writes.push({ dropped });
+        }, 1);
+
+        expect(writes).toHaveLength(1);
+        expect(writes[0].dropped).toBe(0);
+        // 4 refusals recorded, not 1.
+        expect(s.dropped).toBe(4);
+
+        // ...and they surface on the next accepted write.
+        s.used = 0;
+        const later: number[] = [];
+        await ingest(batch.slice(0, 1), "2026-08-25T05", s, async (_h, _v, d) => {
+            later.push(d);
+        }, 1);
+        expect(later).toEqual([4]);
     });
 
     it("the declared bounds are finite and small", () => {
