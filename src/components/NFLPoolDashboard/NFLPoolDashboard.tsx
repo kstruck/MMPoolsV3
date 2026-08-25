@@ -278,10 +278,29 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   const [activeEntrySel, setActiveEntrySel] = useState<{ poolId: string; uid: string; entryId: string } | null>(null);
   /** The draft entry the member is naming, before its first pick creates it. */
   const [entryDraft, setEntryDraft] = useState<{ poolId: string; uid: string; draft: EntryDraft } | null>(null);
-  const draft = entryDraft && entryDraft.poolId === pool.id && entryDraft.uid === (user?.id || '')
+  const pendingDraft = entryDraft && entryDraft.poolId === pool.id && entryDraft.uid === (user?.id || '')
     ? entryDraft.draft : null;
 
   const sortedOwnEntries = useMemo(() => sortOwnEntries(ownEntries), [ownEntries]);
+
+  /**
+   * 🛑 A DRAFT IS OVER THE MOMENT ITS ENTRY EXISTS (codex r2 P2 on the T5 PR).
+   *
+   * The draft's first successful submit CREATES the entry, and the entries
+   * subscription delivers the new document a beat later. Without this the draft
+   * would still be "live" — and `draft` forces `ownEntry` and `myEntry` to
+   * `null`, so the sheet would keep behaving as an unsaved draft and HIDE the
+   * saved state of the entry the member just created, until they happened to
+   * click its tab.
+   *
+   * Derived rather than cleared in an effect: an effect would set state during
+   * a snapshot-driven render and reintroduce exactly the one-paint lag the
+   * `entries` memo above was rewritten to remove.
+   */
+  const fulfilledDraftEntry = pendingDraft
+    ? sortedOwnEntries.find(e => (typeof e?.entryIndex === 'number' ? e.entryIndex : 1) === pendingDraft.entryIndex)
+    : undefined;
+  const draft = fulfilledDraftEntry ? null : pendingDraft;
   /**
    * The ACTIVE entry: the member's explicit choice when it still names an entry
    * they hold, otherwise their primary (lowest `entryIndex`).
@@ -293,7 +312,10 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
    */
   const ownEntry = draft
     ? null
-    : (sortedOwnEntries.find(e => e.id === (activeEntrySel && activeEntrySel.poolId === pool.id && activeEntrySel.uid === (user?.id || '') ? activeEntrySel.entryId : null))
+    : (fulfilledDraftEntry
+        // The entry the member has just created stays selected — anything else
+        // would bounce them back to entry #1 the instant their pick saved.
+        ?? sortedOwnEntries.find(e => e.id === (activeEntrySel && activeEntrySel.poolId === pool.id && activeEntrySel.uid === (user?.id || '') ? activeEntrySel.entryId : null))
         ?? sortedOwnEntries[0]
         ?? null);
   /** The index the pick sheet submits under: the draft's, or the active entry's. */

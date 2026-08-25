@@ -71,7 +71,14 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
   // one-tab strip, so a single-entry pool looks exactly as it did before T5.
   if (maxEntries <= 1) return null;
 
-  const canAdd = !draft && sorted.length < maxEntries && nextAddableEntryIndex(sorted, maxEntries) !== null;
+  // 🛑 ENTRY #1 MUST EXIST BEFORE AN EXTRA CAN BE STARTED (codex r2 P2 on the
+  // T5 PR). `nextAddableEntryIndex` never returns 1, so a member with NO
+  // entries who used "Add entry" would create entry #2 and could then never
+  // create entry #1 through this UI — holding fewer entries than the pool
+  // advertises, permanently. Their first save creates entry #1 from the sheet
+  // below; the button appears the moment it exists.
+  const canAdd = !draft && sorted.length > 0 && sorted.length < maxEntries
+    && nextAddableEntryIndex(sorted, maxEntries) !== null;
 
   const handleName = (value: string) => {
     const trimmed = value.trim();
@@ -101,12 +108,17 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
           though they had to create something before they could pick.
         */}
         {sorted.length === 0 && !draft && (
-          <span
-            className="px-3 py-1.5 rounded-md text-sm font-medium border bg-[#142A4C] text-white border-[#142A4C]"
-            data-testid="implicit-entry-1"
-          >
-            Entry 1
-          </span>
+          <>
+            <span
+              className="px-3 py-1.5 rounded-md text-sm font-medium border bg-[#142A4C] text-white border-[#142A4C]"
+              data-testid="implicit-entry-1"
+            >
+              Entry 1
+            </span>
+            <span className="text-[12px] text-muted">
+              Save your first pick to start Entry 1 — you can add another after that.
+            </span>
+          </>
         )}
         {sorted.map((e) => {
           const active = !draft && e.id === activeEntryId;

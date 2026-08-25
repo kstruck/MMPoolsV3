@@ -107,7 +107,16 @@ describe('<EntrySwitcher>', () => {
     // only "Add entry" would read as "create something before you can pick".
     render(<EntrySwitcher {...baseProps} ownEntries={[]} />);
     expect(screen.getByTestId('implicit-entry-1').textContent).toBe('Entry 1');
-    // ...and "Add entry" offers entry 2, not a second entry 1.
+    // ...and "Add entry" is WITHHELD until entry #1 actually exists (codex r2
+    // P2): `nextAddableEntryIndex` never returns 1, so a member who added from
+    // nothing would create entry #2 and could never create their primary.
+    expect(screen.queryByText('Add entry')).toBeNull();
+    expect(screen.getByText(/Save your first pick to start Entry 1/i)).toBeTruthy();
+    cleanup();
+  });
+
+  it('offers "Add entry" as soon as entry #1 exists', () => {
+    render(<EntrySwitcher {...baseProps} ownEntries={[e('kevin', 1)]} activeEntryId="kevin" />);
     expect(screen.getByText('Add entry')).toBeTruthy();
     cleanup();
   });
