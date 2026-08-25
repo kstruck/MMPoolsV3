@@ -152,3 +152,5 @@ export { siteAveragesJob, refreshSiteAverages } from "./siteAverages";
 // --- EXPERT PROFILES (ADR 0005 Phase 6) — experts rendered through the same projection ---
 export { gradeExpertProfilesJob, refreshExpertProfiles } from "./expertProfiles";
 
+// --- FIREBASE AUTH BACKUP (PLAN-BACKUPS-PHASE3 item 18) — kill-switched, dry-run-default ---
+export { authBackupJob, runAuthBackup } from "./authBackup";
