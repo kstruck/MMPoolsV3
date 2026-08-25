@@ -273,22 +273,58 @@ cd D:\march-melee-pools
 git status --porcelain
 ```
 
-Success: **empty output.** If it does not: stash or commit first
-(`git stash push -u`). Do not proceed with a dirty tree — step 4's guard will
-stop you anyway, and finding out then costs incident minutes.
+Success: **empty output.** Do not proceed with a dirty tree — step 4's guard
+will stop you anyway, and finding out then costs incident minutes.
 
-**Step 2 — record what is live now, so you can prove the rollback moved.**
-Command:
+If it does not: **commit the changes** (`git add -A; git commit -m "WIP"`), or
+stop and get the owner to resolve them.
+
+🛑 **DO NOT `git stash`.** The stash is a **repository-global ref stack shared
+by every linked worktree** — this repo has dozens — so a `push` here and a `pop`
+in any other worktree operate on the same stack. **Measured 2026-08-25:** a
+stash round trip in one worktree returned a different workstream's uncommitted
+changes, and the original files were recoverable only via
+`git fsck --unreachable`. During an incident, with other sessions live, that is
+a second outage on top of the one you are fixing. Committing costs nothing and
+cannot cross-contaminate.
+
+**Step 2 — establish what is ACTUALLY LIVE. This is harder than it looks and
+getting it wrong picks the wrong rollback target.**
 
 ```powershell
 npx firebase functions:list --project gridiron-gamble-uzuqo | Select-String "<theFunctionName>"
-git -C D:\march-melee-pools rev-parse --short HEAD
 ```
 
-Success: the function is listed, and you have written down the current HEAD
-short SHA — that is your roll-FORWARD target for step 9.
+Success: the function is listed.
 If it does not: a function missing from `functions:list` was never deployed;
 you are not rolling back, you are deploying for the first time.
+
+🛑 **`functions:list` proves a function EXISTS. It does not tell you which
+source revision is serving — and neither does your local `HEAD`.** In this repo
+those two routinely differ: functions deploy by a **manual** ritual, so
+`origin/main` carries merged-but-undeployed function changes as its normal
+resting state (every "🛑 OWED: `npx firebase deploy --only functions`" box in
+`HANDOFF.md` is an instance). Assuming HEAD is what is live is how you "roll
+back" to a commit that was never deployed, and how the roll-forward target you
+wrote down in this step turns out to be a version prod has never run.
+
+Establish the live revision from something that observed the deploy, in this
+order of trust:
+
+1. **`HANDOFF.md`'s live-state box.** This repo maintains a deployed-SHA claim
+   there precisely for this question, and `tests/docs-state-invariants.test.ts`
+   enforces that the claim is tagged, agreeing across the entry-point docs, and
+   a real commit on `origin/main`. It is the cheapest reliable answer.
+2. **The Cloud Run revision list** (v2 functions only — see the v1 caveat
+   below): GCP console → Cloud Run → the service → **Revisions**. The serving
+   revision's creation timestamp is a hard fact about when code last shipped;
+   correlate it with `git log` timestamps.
+3. **The deploy log / terminal scrollback** from the last deploy, if the
+   incident is recent enough that somebody still has it.
+
+Write down whatever you establish as **the roll-FORWARD target for step 9**,
+and if you cannot establish it with confidence, say so out loud before touching
+prod rather than proceeding on the assumption.
 
 **Step 3 — move the working tree to the target commit.**
 Command:

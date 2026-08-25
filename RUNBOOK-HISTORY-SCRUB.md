@@ -123,9 +123,13 @@ This is the section that decides whether to do it at all.
    that request completes, the scrub has not achieved its only goal.** Factor
    the support round-trip into the decision.
 8. **Branch protection blocks the push.** `main` protection / rulesets must be
-   temporarily lifted and then restored. Note that the required-checks config on
-   this repo was already found not to have saved once — verify the restore with
-   `gh api repos/kstruck/MMPoolsV3/rulesets`, do not assume it took.
+   temporarily lifted and then restored. **Verify the restore with
+   `gh api repos/kstruck/MMPoolsV3/rulesets`, never by looking at the UI** — a
+   required-checks config on this repo was once believed saved and had not been.
+   Ruleset `11714546` is the one that matters; as measured on 2026-08-25 it is
+   main-scoped, enforcement active, and carries `required_status_checks` for
+   `build-and-test`, `emulator-tests`, `security-audit` and `nginx-validate`.
+   Restoring it means getting all of that back, not just re-enabling the rule.
 
 ---
 
