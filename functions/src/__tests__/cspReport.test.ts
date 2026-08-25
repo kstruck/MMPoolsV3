@@ -245,6 +245,32 @@ describe("cspReport — the write budget is the cost bound", () => {
         expect(later).toEqual([4]);
     });
 
+    it("reserves the refusal count so overlapping requests cannot double-report it (codex r4)", async () => {
+        // A v2 instance serves up to 80 concurrent requests off ONE module-scoped
+        // budget. If the counter were only zeroed after the await, two overlapping
+        // requests would both read the same pending count and both increment
+        // droppedCount by it — an aggregate that overstates rather than understates.
+        const s = fresh();
+        const one = [{ directive: "img-src", blockedUri: "https://c.example", documentPath: "/" }];
+        takeWriteSlot(s, "2026-08-25T05", 0);
+        takeWriteSlot(s, "2026-08-25T05", 0);
+        expect(s.dropped).toBe(2);
+        s.used = 0;
+
+        const seen: number[] = [];
+        let release!: () => void;
+        const gate = new Promise<void>((r) => { release = r; });
+        const slow = async (_h: string, _v: unknown, d: number) => { seen.push(d); await gate; };
+
+        const a = ingest(one, "2026-08-25T05", s, slow, 5);
+        const b = ingest(one, "2026-08-25T05", s, slow, 5);
+        release();
+        await Promise.all([a, b]);
+
+        // Exactly one carries the debt; the other sees a clean slate.
+        expect(seen).toEqual([2, 0]);
+    });
+
     it("the declared bounds are finite and small", () => {
         // A change that removes a bound by setting it to Infinity/0 fails here
         // rather than at 3am on the billing dashboard.

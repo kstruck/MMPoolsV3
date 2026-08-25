@@ -210,11 +210,17 @@ export interface BudgetState {
  * transaction, and — when it may — how many refusals accumulated since the last
  * accepted write, so the stored document can admit to being incomplete.
  *
- * It does NOT clear the refusal counter (codex r3): the caller clears it with
- * `clearDropped` only once the write has actually persisted. Clearing here would
- * lose the incompleteness signal whenever the transaction fails — a Firestore
- * outage, or retries exhausted — and the very next successful report would then
- * store `droppedCount: 0` and claim the aggregate is complete.
+ * It RESERVES the refusal counter — takes the pending count and zeroes it in the
+ * same synchronous step — and the caller hands it back with `restoreDropped` if
+ * the write fails. Both halves are load-bearing:
+ *   - reserving synchronously (codex r4) is what makes this safe under the v2
+ *     default of 80 concurrent requests per instance. Reading the counter and
+ *     zeroing it only after an `await` would let two overlapping requests both
+ *     see the same pending count, both increment `droppedCount` by it, and
+ *     overstate the total;
+ *   - restoring on failure (codex r3) is what stops a Firestore outage from
+ *     erasing the incompleteness signal, which would let the next successful
+ *     report store `droppedCount: 0` and claim the aggregate is complete.
  */
 export function takeWriteSlot(
     state: BudgetState,
@@ -235,12 +241,16 @@ export function takeWriteSlot(
         return { allowed: false, droppedToRecord: 0 };
     }
     state.used += 1;
-    return { allowed: true, droppedToRecord: state.dropped };
+    const droppedToRecord = state.dropped;
+    state.dropped = 0; // reserved by this caller — see the doc comment above
+    return { allowed: true, droppedToRecord };
 }
 
-/** Consume refusals ONLY after the write that carried them actually persisted. */
-export function clearDropped(state: BudgetState, n: number): void {
-    state.dropped = Math.max(0, state.dropped - n);
+/** Hand a reservation back when the write that was carrying it did not persist. */
+export function restoreDropped(state: BudgetState, n: number): void {
+    if (n <= 0) return;
+    if (state.dropped > Number.MAX_SAFE_INTEGER - n) return;
+    state.dropped += n;
 }
 
 /** Module-scoped budget: one per warm instance, reset on cold start. */
@@ -269,11 +279,13 @@ export async function ingest(
     for (const v of reports) {
         const slot = takeWriteSlot(state, hour, limit);
         if (!slot.allowed) continue;
-        await write(hour, v, slot.droppedToRecord);
-        // Only after the write actually landed (codex r3). If `write` throws, the
-        // error propagates to the handler's catch with `state.dropped` intact, so
-        // the refusals are still owed to the next successful write.
-        clearDropped(state, slot.droppedToRecord);
+        try {
+            await write(hour, v, slot.droppedToRecord);
+        } catch (e) {
+            // The reservation is only spent by a write that landed (codex r3).
+            restoreDropped(state, slot.droppedToRecord);
+            throw e;
+        }
     }
 }
 
