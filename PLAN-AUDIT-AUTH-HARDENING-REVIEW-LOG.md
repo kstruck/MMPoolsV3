@@ -376,3 +376,35 @@ hoisted in round 7 — the fix's own defects again.
    and SUPER_ADMIN), the predicate the rest of the file already trusts for this
    question. Note this REPLICATES the pre-existing squares behaviour's bug
    rather than inventing one; it is fixed on the way past.
+
+## Round 10 — final
+
+VERDICT: CLEAN. *"No discrete, actionable regressions were identified in the
+changes relative to the specified merge base."*
+
+(The first four invocations of this round returned `ERROR: Selected model is at
+capacity` — a provider outage, not a review result. Re-run until it completed;
+an interrupted review is not a clean one.)
+
+RESOLUTION: CONVERGED at the cap. **10 rounds, 17 findings** — 9 P1 + 1 P2 in
+rounds 2–9 plus round 1's own-read set. 16 accepted and fixed, 1 (r7 #4)
+accepted, first mitigated and then CLOSED by compensation in r8; 0 carried.
+Own read of the final diff agrees.
+
+### What this run says about the review rule
+
+Round 1 came back CLEAN. Everything below it — a fail-open publish path, two
+bypasses of the create choke point, two write races, a gate that covered one
+pool type of two, an unlock that leaked across pools, a non-atomic secret/marker
+pair in two separate places — was found in rounds 2 through 9. §2c's "a clean
+round 1 is not the review" was the load-bearing sentence of this PR.
+
+Three of those rounds found defects in the FIX from the previous round (r5 in
+r3's guard, r6 in r3's runtime helper, r9 in r7's hoisted gate). The recurring
+shape is worth naming once: **a fix applied at one layer, or by most callers,
+reads as complete and is not.** The dotted-field bypass took three rounds to
+close because the first two fixes each closed one path and left a sibling open.
+
+Every finding but one was in the fail-OPEN direction — a pool that has a
+password and does not act like it. That is the direction to look first if this
+code is touched again.
