@@ -13,6 +13,10 @@ import {
     toAuthImportRecord,
     toEpochMsString,
     runAuthBackupSchema,
+    backupProblem,
+    isPasswordUserMissingHash,
+    toStandardBase64,
+    IMPORTABLE_PROVIDER_IDS,
     type AuthBackupDeps,
     type AuthBackupPage,
     type AuthUserLike,
@@ -28,13 +32,21 @@ import {
  * here against injected deps, no emulator required.
  */
 
+/**
+ * Fixture hashes are REAL base64, because `auth:import` validates them as such
+ * and a fixture that could never appear in a live export would let the
+ * validator tests pass on data the CLI would reject.
+ */
+const hashOf = (uid: string) => Buffer.from(`hash-${uid}`).toString("base64");
+const saltOf = (uid: string) => Buffer.from(`salt-${uid}`).toString("base64");
+
 const user = (uid: string, over: Partial<AuthUserLike> = {}): AuthUserLike => ({
     uid,
     email: `${uid}@example.com`,
     emailVerified: true,
     disabled: false,
-    passwordHash: `hash-${uid}`,
-    passwordSalt: `salt-${uid}`,
+    passwordHash: hashOf(uid),
+    passwordSalt: saltOf(uid),
     metadata: { creationTime: "Tue, 22 Jun 2021 12:00:00 GMT", lastSignInTime: "Wed, 23 Jun 2021 12:00:00 GMT" },
     providerData: [{ providerId: "password", uid: `${uid}@example.com`, email: `${uid}@example.com` }],
     ...over,
@@ -217,8 +229,8 @@ describe("what the export actually contains", () => {
         const r = await runAuthBackupCore(deps, { dryRun: false });
         const manifest = uploads[1].body;
         expect(manifest).not.toContain("alice@example.com");
-        expect(manifest).not.toContain("hash-alice");
-        expect(manifest).not.toContain("salt-alice");
+        expect(manifest).not.toContain(hashOf("alice"));
+        expect(manifest).not.toContain(saltOf("alice"));
         expect(JSON.parse(manifest)).toMatchObject({ users: 1, complete: true, usersObject: r.objectPath });
     });
 
@@ -240,8 +252,8 @@ describe("toAuthImportRecord — the CLI's field names, not the SDK's", () => {
         const r = toAuthImportRecord(user("abc123"));
         // localId is what makes the restored account own its Firestore data.
         expect(r.localId).toBe("abc123");
-        expect(r.passwordHash).toBe("hash-abc123");
-        expect(r.salt).toBe("salt-abc123");
+        expect(r.passwordHash).toBe(hashOf("abc123"));
+        expect(r.salt).toBe(saltOf("abc123"));
         expect(r.uid).toBeUndefined();
         expect(r.passwordSalt).toBeUndefined();
     });
@@ -291,6 +303,146 @@ describe("toAuthImportRecord — the CLI's field names, not the SDK's", () => {
     it("drops undefined fields instead of emitting nulls", () => {
         const r = toAuthImportRecord({ uid: "bare" });
         expect(Object.keys(r).sort()).toEqual(["localId", "providerUserInfo"]);
+    });
+});
+
+/**
+ * The CLI's own validator, transcribed from firebase-tools 15.26.0
+ * `lib/accountImporter.js`. Running the export through the real rules is the
+ * only way to know a restore would actually work — codex R3 found a defect here
+ * that made EVERY backup unrestorable, and reading the CLI source found three
+ * more of the same class.
+ */
+const ALLOWED_JSON_KEYS = ["localId", "email", "emailVerified", "passwordHash", "salt", "displayName",
+    "photoUrl", "createdAt", "lastSignedInAt", "providerUserInfo", "phoneNumber", "disabled",
+    "customAttributes", "mfaInfo"];
+const ALLOWED_PROVIDER_USER_INFO_KEYS = ["providerId", "rawId", "email", "displayName", "photoUrl"];
+const ALLOWED_PROVIDER_IDS = ["google.com", "facebook.com", "twitter.com", "github.com", "apple.com",
+    "microsoft.com", "gc.apple.com", "playgames.google.com", "linkedin.com", "yahoo.com"];
+
+function isValidBase64(str: string): boolean {
+    const expected = Buffer.from(str, "base64").toString("base64");
+    if (str.length < expected.length && !str.endsWith("=")) str += "=".repeat(expected.length - str.length);
+    return expected === str;
+}
+
+/** null when `auth:import` would accept this record, else the reason it rejects. */
+function cliWouldReject(rec: Record<string, any>): string | null {
+    const bad = Object.keys(rec).filter((k) => !ALLOWED_JSON_KEYS.includes(k));
+    if (bad.length) return `unsupported keys: ${bad.join(",")}`;
+    for (const p of rec.providerUserInfo ?? []) {
+        if (!ALLOWED_PROVIDER_IDS.includes(p.providerId)) return `unsupported providerId: ${p.providerId}`;
+        const pbad = Object.keys(p).filter((k) => !ALLOWED_PROVIDER_USER_INFO_KEYS.includes(k));
+        if (pbad.length) return `unsupported provider keys: ${pbad.join(",")}`;
+    }
+    if (rec.passwordHash && !isValidBase64(rec.passwordHash)) return "passwordHash not base64";
+    if (rec.salt && !isValidBase64(rec.salt)) return "salt not base64";
+    return null;
+}
+
+describe("firebase auth:import would ACCEPT the export (codex R3 P1)", () => {
+    it("strips the `password` provider entry every email/password user carries", () => {
+        // THE defect: the Admin SDK's providerData includes a `password` entry
+        // that the CLI's ALLOWED_PROVIDER_IDS does not accept, and one bad record
+        // rejects the WHOLE file. Every account in this project is a password
+        // account, so the backup was unrestorable for all of them.
+        const r = toAuthImportRecord(user("kev"));
+        expect(r.providerUserInfo).toEqual([]);
+        expect(cliWouldReject(r)).toBeNull();
+    });
+
+    it("keeps federated links, and only the five keys the CLI allows", () => {
+        const r = toAuthImportRecord(user("g", {
+            providerData: [
+                { providerId: "password", uid: "g@example.com", email: "g@example.com" },
+                { providerId: "phone", uid: "+15551234567", phoneNumber: "+15551234567" },
+                {
+                    providerId: "google.com", uid: "gid", email: "g@example.com",
+                    displayName: "G", photoURL: "http://x/y.png", phoneNumber: "+15551234567",
+                },
+            ],
+        }));
+        expect(r.providerUserInfo).toEqual([
+            { providerId: "google.com", rawId: "gid", email: "g@example.com", displayName: "G", photoUrl: "http://x/y.png" },
+        ]);
+        // phoneNumber inside a provider entry is its own "unsupported keys" rejection.
+        expect(cliWouldReject(r)).toBeNull();
+    });
+
+    it("never emits tenantId — absent from ALLOWED_JSON_KEYS", () => {
+        const r = toAuthImportRecord(user("t", { tenantId: "tenant-1" }));
+        expect(r).not.toHaveProperty("tenantId");
+        expect(cliWouldReject(r)).toBeNull();
+    });
+
+    it("converts web-safe base64 hashes to standard base64", () => {
+        // Identity Toolkit returns these web-safe; the CLI validates for STANDARD
+        // base64 and does its own web-safe conversion on the wire. A single `-`
+        // or `_` would fail the file with 'Password hash should be base64 encoded'.
+        const raw = Buffer.from([0xff, 0xef, 0xbf, 0xfb, 0xef, 0xbe, 0xff, 0xff, 0x3f]).toString("base64");
+        // The fixture must actually contain both characters, or this test passes
+        // without exercising the conversion at all.
+        expect(raw, "fixture no longer exercises + and /").toMatch(/\+/);
+        expect(raw).toMatch(/\//);
+        const webSafe = raw.replace(/\+/g, "-").replace(/\//g, "_");
+        expect(webSafe).toMatch(/[-_]/);
+        const r = toAuthImportRecord(user("h", { passwordHash: webSafe, passwordSalt: webSafe }));
+        expect(r.passwordHash).not.toMatch(/[-_]/);
+        expect(isValidBase64(r.passwordHash as string)).toBe(true);
+        expect(cliWouldReject(r)).toBeNull();
+        expect(toStandardBase64(undefined)).toBeUndefined();
+    });
+
+    it("every record of a realistic mixed tenant passes the CLI validator", () => {
+        const users = [
+            user("pw"),
+            user("goog", { passwordHash: undefined, passwordSalt: undefined,
+                providerData: [{ providerId: "google.com", uid: "gid", email: "g@example.com" }] }),
+            user("adm", { customClaims: { role: "SUPER_ADMIN" } }),
+            { uid: "minimal" } as AuthUserLike,
+        ];
+        for (const u of users) {
+            const r = toAuthImportRecord(u);
+            expect(cliWouldReject(r), `${u.uid}: ${cliWouldReject(r)}`).toBeNull();
+        }
+    });
+
+    it("the allowlist in the source matches the CLI's", () => {
+        expect([...IMPORTABLE_PROVIDER_IDS].sort()).toEqual([...ALLOWED_PROVIDER_IDS].sort());
+    });
+});
+
+describe("redacted password hashes — the export that imports cleanly and locks everyone out", () => {
+    it("counts password users whose hash came back empty", () => {
+        expect(isPasswordUserMissingHash(user("ok"))).toBe(false);
+        expect(isPasswordUserMissingHash(user("redacted", { passwordHash: undefined }))).toBe(true);
+    });
+
+    it("does NOT flag a federated-only account with no hash", () => {
+        // A Google-only user legitimately has no password hash; flagging it would
+        // make the signal cry wolf on every mixed tenant.
+        expect(isPasswordUserMissingHash({
+            uid: "g", providerData: [{ providerId: "google.com", uid: "gid" }],
+        })).toBe(false);
+    });
+
+    it("reports the count and makes the run a PROBLEM, not a success", async () => {
+        const { deps, uploads } = harness([{
+            users: [user("a"), user("b", { passwordHash: undefined })],
+        }]);
+        const r = await runAuthBackupCore(deps, { dryRun: false });
+        expect(r.passwordUsersMissingHash).toBe(1);
+        expect(backupProblem(r)).toMatch(/cannot read password hashes/);
+        expect(JSON.parse(uploads[1].body)).toMatchObject({ passwordUsersMissingHash: 1 });
+    });
+
+    it("a healthy complete run has no problem", async () => {
+        const { deps } = harness([{ users: [user("a")] }]);
+        expect(backupProblem(await runAuthBackupCore(deps, { dryRun: true }))).toBeNull();
+    });
+
+    it("truncation is reported ahead of the hash gap", () => {
+        expect(backupProblem({ complete: false, passwordUsersMissingHash: 5 })).toMatch(/truncated/);
     });
 });
 

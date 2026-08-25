@@ -453,7 +453,9 @@ so the automated version is a Cloud Function rather than a wrapped CLI call.
 | `authBackupJob` | Scheduled weekly, **Sunday 03:15 ET** (`15 3 * * 0`, `America/New_York`), `timeoutSeconds: 540`, `memory: 512MiB`. Heartbeat-wrapped (`system/heartbeats.authBackupJob`). |
 | `runAuthBackup` | On-demand callable, **SUPER_ADMIN** via the shared `assertCallerRole` claim+doc gate (through `validated({ role: "SUPER_ADMIN" })`). Input `{ dryRun?: boolean }`, **defaults to `dryRun: true`**. |
 | Pagination | `admin.auth().listUsers(1000, pageToken)` in a loop that follows `nextPageToken` to exhaustion. Capped at 250 pages (250k accounts) and at a repeated cursor; a run that stops before the tenant is exhausted is reported `complete: false`, named `-PARTIAL` in the filename, and marked `ok:false` on the heartbeat. **A truncated export that looks whole is worse than no export**, because it is only discovered on the day it is needed. |
-| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>-<runid>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>-<runid>.manifest.json` — counts, page count, byte size, completeness, run id, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** The six-character run id makes every run's objects unique, so the job only ever CREATES and never overwrites — which is what lets the bucket grant be create-only (see the PII section). Timestamp leads, so names still sort chronologically. |
+| Objects written | `auth/auth-backup-<YYYYMMDD-HHMMSSZ>-<runid>.json` — exactly `{"users":[…]}`, the shape `firebase auth:import` consumes, with no transformation step at restore time. Then `auth/auth-backup-<stamp>-<runid>.manifest.json` — counts, page count, byte size, completeness, run id, `passwordUsersMissingHash`, **and no PII**. Users file first, manifest second: **a users object with no sibling manifest is a run that died mid-flight, not a backup.** The six-character run id makes every run's objects unique, so the job only ever CREATES and never overwrites — which is what lets the bucket grant be create-only (see the PII section). Timestamp leads, so names still sort chronologically. |
+| Import-shape fidelity | The record mapping is written against firebase-tools' actual validator (`lib/accountImporter.js`), not against the Admin SDK's shape, and a test transcribes that validator and runs every exported record through it. This is not pedantry: `auth:import` rejects the **entire file** on one bad record, and the Admin SDK's `providerData` carries a `password` entry the CLI does not accept — which every email/password account in this project has. Caught by codex R3. |
+| Hash-readability signal | `passwordUsersMissingHash` counts accounts that have a `password` provider but no hash — the signature of a runtime service account that cannot read password hashes. Such an export **imports perfectly and leaves every member unable to sign in**, so any value above zero makes the run report `ok:false` and writes an `error` audit row. |
 | Audit | One `admin_audit` row per run (`action: "AUTH_BACKUP"`), counts and object path only. |
 
 ### SAFETY posture (Rule 1 — kill switch + dry-run default)
@@ -624,7 +626,13 @@ authBackup: { enabled: false, dryRun: true, bucket: "mmpools-auth-backups" }
 
 Then call `runAuthBackup` with `{ "dryRun": true }`. **Expect** a result whose
 `users` count roughly matches the Firebase console's Authentication tab,
-`complete: true`, and `uploaded: false`. **If `users` is 0** or the call fails
+`complete: true`, `uploaded: false`, `passwordUsersMissingHash: 0` and
+`problem: null`.
+
+**If `passwordUsersMissingHash` is above 0**, the runtime service account cannot
+read password hashes. Do NOT arm the job — an armed job in that state produces
+weekly exports that import cleanly and lock every member out. Fix the service
+account's Firebase Auth permissions and re-run the dry run first. **If `users` is 0** or the call fails
 with a permission error, the runtime service account cannot read Auth — stop and
 fix that before arming anything; a dry run failing here is the whole point of
 running it.
@@ -733,9 +741,20 @@ confirm it says `"complete": true`:
 gcloud storage cat gs://mmpools-auth-backups/auth/auth-backup-<stamp>-<runid>.manifest.json
 ```
 
-**Expect:** a small JSON with `"complete": true` and a `users` count. **If the
-manifest is missing**, that run died mid-flight — the users object beside it is
-not a finished backup. **A `-PARTIAL` file is a last resort, not a restore.**
+**Expect:** a small JSON with `"complete": true`, `"passwordUsersMissingHash": 0`
+and a `users` count.
+
+**If the manifest is missing**, that run died mid-flight — the users object
+beside it is not a finished backup. **A `-PARTIAL` file is a last resort, not a
+restore.**
+
+🛑 **If `passwordUsersMissingHash` is anything but 0, DO NOT restore from this
+file expecting people to be able to sign in.** That count means the export was
+taken by a service account that could not read password hashes, so those
+accounts come back with no password at all. The accounts import fine — which is
+exactly why this has to be checked here, before the import, rather than
+discovered by a member who cannot log in. Take a fresh export (Step 6b) after
+fixing the service account's Auth permissions.
 
 ### 6d.2 — Download it to your machine (PowerShell)
 
@@ -858,6 +877,12 @@ State these before an incident, not during one:
   domains, App Check registrations, custom SMTP.** All project configuration,
   none of it in this export.
 - **`lastRefreshTime`.** Not exported; `lastSignedInAt` is.
+- **The `password` and `phone` entries of `providerData`.** Deliberately dropped:
+  `auth:import` accepts only the ten federated provider ids and rejects the whole
+  file otherwise. Nothing is lost — a password account is reconstituted from
+  `passwordHash`/`salt`, and `phoneNumber` is a top-level field.
+- **`tenantId`.** Deliberately dropped for the same reason (not in the CLI's
+  allowed keys). Single-tenant project, so nothing is lost.
 - **Anything Firestore.** `users/{uid}` profile docs, roles, entries, picks and
   member records live in Firestore and come back through PITR / the Firestore
   export (Steps 2, 4, 5). The Auth export's job is to make the `uid`s match so

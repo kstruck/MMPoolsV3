@@ -109,6 +109,53 @@ export interface AuthUserLike {
     };
 }
 
+/**
+ * The ONLY provider ids `firebase auth:import` accepts inside
+ * `providerUserInfo`, copied from firebase-tools 15.26.0
+ * `lib/accountImporter.js` (`ALLOWED_PROVIDER_IDS`).
+ *
+ * 🛑 `password` and `phone` are NOT on this list, and that is the whole point.
+ * The Admin SDK's `UserRecord.providerData` DOES include a `password` entry for
+ * every email/password account — which is every account in this project — while
+ * the Firebase CLI's own `auth:export` never emits one. Copying `providerData`
+ * through verbatim therefore produces a file that `auth:import` REJECTS
+ * WHOLESALE with "has unsupported providerId", so the backup would have been
+ * unrestorable by its own documented restore command, for every user.
+ * Found by codex R3 [P1] and verified against the CLI source.
+ */
+export const IMPORTABLE_PROVIDER_IDS = new Set([
+    "google.com",
+    "facebook.com",
+    "twitter.com",
+    "github.com",
+    "apple.com",
+    "microsoft.com",
+    "gc.apple.com",
+    "playgames.google.com",
+    "linkedin.com",
+    "yahoo.com",
+]);
+
+/**
+ * Web-safe base64 -> standard base64.
+ *
+ * The Identity Toolkit `downloadAccount` response carries `passwordHash` and
+ * `salt` in WEB-SAFE base64 (`-` and `_`), and firebase-admin passes both
+ * through untouched. `auth:import` validates the file with
+ * `Buffer.from(str,"base64").toString("base64") === str`, which only holds for
+ * STANDARD base64 — it does its own web-safe conversion afterwards, on the
+ * wire. So a hash containing a single `-` or `_` fails validation with
+ * "Password hash should be base64 encoded" and takes the whole file with it.
+ * At 32 random bytes that is most accounts.
+ *
+ * Padding is deliberately not added: the CLI's validator pads unpadded input
+ * itself before comparing.
+ */
+export function toStandardBase64(value: string | undefined): string | undefined {
+    if (value === undefined) return undefined;
+    return value.replace(/-/g, "+").replace(/_/g, "/");
+}
+
 /** Drop undefined values so the emitted JSON has no null-ish noise. */
 function compact(obj: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
@@ -158,22 +205,28 @@ export function toAuthImportRecord(u: AuthUserLike): Record<string, unknown> {
         photoUrl: u.photoURL,
         phoneNumber: u.phoneNumber,
         disabled: u.disabled,
-        passwordHash: u.passwordHash,
-        salt: u.passwordSalt,
-        tenantId: u.tenantId,
+        passwordHash: toStandardBase64(u.passwordHash),
+        salt: toStandardBase64(u.passwordSalt),
+        // `tenantId` is deliberately NOT emitted: it is absent from the CLI's
+        // ALLOWED_JSON_KEYS, so including it fails the file with "has
+        // unsupported keys". This project is single-tenant, so nothing is lost.
         customAttributes: u.customClaims ? JSON.stringify(u.customClaims) : undefined,
         createdAt: toEpochMsString(u.metadata?.creationTime),
         lastSignedInAt: toEpochMsString(u.metadata?.lastSignInTime),
-        providerUserInfo: (u.providerData ?? []).map((p) =>
-            compact({
-                providerId: p.providerId,
-                rawId: p.uid,
-                email: p.email,
-                displayName: p.displayName,
-                photoUrl: p.photoURL,
-                phoneNumber: p.phoneNumber,
-            }),
-        ),
+        // Federated links ONLY, and only the five keys the CLI allows
+        // (ALLOWED_PROVIDER_USER_INFO_KEYS) — `phoneNumber` here is an
+        // "unsupported keys" rejection, same fatal class as the provider id.
+        providerUserInfo: (u.providerData ?? [])
+            .filter((p) => p.providerId !== undefined && IMPORTABLE_PROVIDER_IDS.has(p.providerId))
+            .map((p) =>
+                compact({
+                    providerId: p.providerId,
+                    rawId: p.uid,
+                    email: p.email,
+                    displayName: p.displayName,
+                    photoUrl: p.photoURL,
+                }),
+            ),
         mfaInfo: factors.length
             ? factors.map((f) =>
                 compact({
@@ -280,6 +333,23 @@ export function manifestPathFor(objectPath: string): string {
     return objectPath.replace(/\.json$/, ".manifest.json");
 }
 
+/**
+ * A password account whose hash came back EMPTY — the signature of a service
+ * account that cannot read password hashes.
+ *
+ * firebase-admin clears `passwordHash` to `undefined` when the Identity Toolkit
+ * returns its redaction sentinel (see `B64_REDACTED` in
+ * firebase-admin `lib/auth/user-record.js`). That produces an export which
+ * imports PERFECTLY and leaves every member unable to sign in — a backup that
+ * looks like a backup right up until the day it is needed. A Google-only or
+ * phone-only account legitimately has no hash, so the check is narrow: the user
+ * has a `password` provider entry AND no hash.
+ */
+export function isPasswordUserMissingHash(u: AuthUserLike): boolean {
+    const hasPasswordProvider = (u.providerData ?? []).some((p) => p.providerId === "password");
+    return hasPasswordProvider && !u.passwordHash;
+}
+
 export interface AuthBackupPage {
     users: AuthUserLike[];
     /** Present when more pages remain. */
@@ -306,6 +376,12 @@ export interface AuthBackupResult {
     bytes: number;
     /** false on a dry run, or when the loop was cut short before any upload. */
     uploaded: boolean;
+    /**
+     * Password accounts exported with NO hash. Anything above zero means the
+     * runtime service account cannot read password hashes, and this export
+     * restores accounts nobody can sign in to.
+     */
+    passwordUsersMissingHash: number;
 }
 
 /**
@@ -332,11 +408,15 @@ export async function runAuthBackupCore(
     let pageToken: string | undefined;
     let pages = 0;
     let complete = false;
+    let passwordUsersMissingHash = 0;
 
     while (pages < maxPages) {
         const page = await deps.listUsers(pageSize, pageToken);
         pages++;
-        for (const u of page.users ?? []) records.push(toAuthImportRecord(u));
+        for (const u of page.users ?? []) {
+            if (isPasswordUserMissingHash(u)) passwordUsersMissingHash++;
+            records.push(toAuthImportRecord(u));
+        }
 
         const next = page.pageToken;
         // No token means the tenant is exhausted — the ONLY way this loop is
@@ -389,6 +469,7 @@ export async function runAuthBackupCore(
             users: records.length,
             pages,
             complete,
+            passwordUsersMissingHash,
             bytes,
             runId,
             usersObject: objectPath,
@@ -407,6 +488,7 @@ export async function runAuthBackupCore(
         manifestPath,
         bytes,
         uploaded: false,
+        passwordUsersMissingHash,
     };
 
     if (opts.dryRun) return result;
@@ -462,6 +544,20 @@ function depsFor(gate: AuthBackupGate, dryRun: boolean): AuthBackupDeps {
     };
 }
 
+/**
+ * What is wrong with a finished run, or null when nothing is. One definition so
+ * the heartbeat, the audit row and the callable's result can never disagree
+ * about whether a backup is trustworthy.
+ */
+export function backupProblem(result: Pick<AuthBackupResult, "complete" | "passwordUsersMissingHash">): string | null {
+    if (!result.complete) return "export truncated before the tenant was exhausted";
+    if (result.passwordUsersMissingHash > 0) {
+        return `${result.passwordUsersMissingHash} password account(s) exported with NO hash — ` +
+            "the runtime service account cannot read password hashes; this export restores accounts nobody can sign in to";
+    }
+    return null;
+}
+
 /** Audit + log a finished run. Counts and paths only — never a user record. */
 async function recordRun(
     result: AuthBackupResult,
@@ -471,7 +567,7 @@ async function recordRun(
     console.log(
         `[authBackup] ${result.dryRun ? "DRY-RUN" : "LIVE"}: ${result.users} account(s) over ` +
         `${result.pages} page(s), ${result.bytes} bytes, complete=${result.complete}, ` +
-        `uploaded=${result.uploaded}, object=${result.objectPath}`,
+        `uploaded=${result.uploaded}, hashless=${result.passwordUsersMissingHash}, object=${result.objectPath}`,
     );
     await writeAdminAudit({
         actorUid: actor.uid,
@@ -484,12 +580,13 @@ async function recordRun(
             pages: result.pages,
             complete: result.complete,
             uploaded: result.uploaded,
+            passwordUsersMissingHash: result.passwordUsersMissingHash,
             bytes: result.bytes,
             object: result.objectPath,
             bucket: gate.bucket ?? "(unset)",
         },
-        status: result.complete ? "success" : "error",
-        error: result.complete ? undefined : "export truncated before the tenant was exhausted",
+        status: backupProblem(result) ? "error" : "success",
+        error: backupProblem(result) ?? undefined,
     });
 }
 
@@ -560,9 +657,10 @@ export const authBackupJob = onSchedule(
         try {
             const result = await runAuthBackupCore(depsFor(gate, gate.dryRun), { dryRun: gate.dryRun });
             await recordRun(result, { uid: "system" }, gate);
+            const problem = backupProblem(result);
             return {
-                ok: result.complete,
-                error: result.complete ? undefined : "export truncated before the tenant was exhausted",
+                ok: problem === null,
+                error: problem ?? undefined,
                 detail: {
                     enabled: true,
                     dryRun: result.dryRun,
@@ -570,6 +668,7 @@ export const authBackupJob = onSchedule(
                     pages: result.pages,
                     complete: result.complete,
                     uploaded: result.uploaded,
+                    passwordUsersMissingHash: result.passwordUsersMissingHash,
                     bytes: result.bytes,
                 },
             };
@@ -650,6 +749,9 @@ export const runAuthBackup = validated(
             ...result,
             enabled: gate.enabled,
             bucket: gate.bucket,
+            // Returned rather than thrown: the export DID happen and the operator
+            // needs the object path — but they must not read this as a clean run.
+            problem: backupProblem(result),
         };
     },
 );
