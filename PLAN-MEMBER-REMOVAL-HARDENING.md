@@ -104,9 +104,11 @@ only). `fixParticipantIds` (`poolOps.ts:818`) is add-only — `toAdd` with
 **Why that matters concretely, not theoretically.** `backfillMemberRecords`
 reads `pools/{id}/participants` as a name source, so a surviving index doc lets
 the next backfill run rebuild a removed member's record. And
-`recomputeUserProfile` plus the client's own pool-discovery query both read
-`users/{uid}/participations`, so a removed member's profile keeps counting the
-pool and their pool list keeps offering a door that now 403s.
+`recomputeUserProfile` and `getMyParticipations` (the player profile's
+shared-pool lookup) both read `users/{uid}/participations`, so a removed
+member's public profile keeps counting the pool. It is **not** the "My Pools"
+list — checked, and recorded so the next reader does not chase a navigation bug
+that does not exist.
 
 ### The fix
 

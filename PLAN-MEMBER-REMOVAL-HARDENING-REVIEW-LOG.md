@@ -78,6 +78,38 @@ VERDICT: REVISE. 1 finding (P2), **ACCEPTED**.
    its verdict (it passed for the wrong reason on the first run, then failed
    once the guard worked). `wipe()` now sweeps that path directly.
 
-## Round 2
+## Round 2 — 2026-08-25
 
-VERDICT: (recorded below after the round on the amended diff.)
+VERDICT: **CLEAN.** No findings.
+
+> The removal helper now atomically clears the reciprocal membership indexes,
+> and the participant-index trigger guard prevents Squares ownership data from
+> recreating those indexes after a removal. Type checking passes; emulator tests
+> could not be run locally because Java is unavailable.
+
+The emulator caveat is codex's own sandbox, not this repo: `test:emulator` and
+`test:rules` were run here and are green (gate table in the plan doc).
+
+## Own read of the diff — 1 finding, fixed
+
+CLAUDE.md §2c: a clean codex round is not the review. Reading the diff myself
+turned up one defect codex did not flag.
+
+1. **An overstated comment in the fix's own documentation.** The header on
+   `applyMembershipRemoval` said `users/{uid}/participations/{poolId}` feeds
+   "the client's own pool-discovery query" and that a stale one leaves "their
+   pool list offering a door that now 403s". My round-1 consumer trace had
+   already established that is false — the only client caller is
+   `getMyParticipations` (`dbService.ts:668`), used by `PlayerProfile.tsx:130`
+   for shared-pool lookup, and it is NOT the "My Pools" list. A comment that
+   overstates a consumer is how the next reader chases a navigation bug that
+   does not exist, and it contradicted this repo's own review log two files
+   away. Corrected in both the code comment and the plan doc, with the negative
+   fact ("it is NOT the My Pools list") written down explicitly.
+
+## Stopping
+
+Two conditions, per CLAUDE.md §2c with §2b DORMANT: a codex round came back
+clean (round 2) **and** my own read of the diff agrees, after the one defect
+above was fixed. **2 rounds, well under the cap of 10.** No findings are carried
+open.

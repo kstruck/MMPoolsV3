@@ -283,10 +283,12 @@ export function ensureMemberRecord(
  *        next backfill RESURRECT a removed member's name onto a rebuilt record.
  *      • `users/{uid}/participations/{poolId}` — written by the NFL-season join
  *        and create paths (`nflPools.ts`, `lib/poolCreation.ts`) and read by
- *        `recomputeUserProfile` (`userProfile.ts`) and the client's own
- *        pool-discovery query (`src/services/dbService.ts`). Leaving it means a
- *        removed member's profile keeps counting the pool and their pool list
- *        keeps offering it — a door that now 403s.
+ *        `recomputeUserProfile` (`userProfile.ts`) and by `getMyParticipations`
+ *        (`src/services/dbService.ts`, whose one caller is the player profile's
+ *        shared-pool lookup). Leaving it means a removed member's public profile
+ *        keeps counting the pool. ⚠️ It is NOT the "My Pools" list — that was
+ *        checked, and saying so here stops the next reader assuming a
+ *        navigation bug that does not exist.
  *      • `users/{uid}/joinedPools/{poolId}` — the bracket password-join index
  *        (`bracketPools.ts`). NOTHING reads it today, and it is deleted anyway:
  *        a write-only membership index is precisely the kind of thing that
