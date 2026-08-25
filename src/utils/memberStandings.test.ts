@@ -33,7 +33,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('kevin', 'Kevin Struck'), member('ron', 'Ron Johnson')],
             standingsRows: [scored('kevin', 'Kevin Struck')], // written before Ron joined
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows.map(r => r.ownerUid)).toEqual(['kevin', 'ron']);
     });
@@ -43,7 +43,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('ron', 'Ron Johnson')],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows).toHaveLength(1);
         expect(rows[0].unscored).toBe(true);
@@ -59,7 +59,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('johnny', 'Johnny Football'), member('kevin', 'Kevin Struck')],
             standingsRows: [scored('johnny', 'Johnny Football'), scored('kevin', 'Kevin Struck')],
-            ownEntry: own,
+            ownEntries: [own],
         });
         expect(rows[0].ownerUid).toBe('johnny');
         expect(rows[0].picks).toEqual({ 2: 'ATL' }); // grafted onto the scored row
@@ -72,7 +72,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('kevin', 'Kevin Struck')],
             standingsRows: [scored('kevin', 'Kevin Struck', { strikesUsed: 2, status: 'ELIMINATED' })],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows[0].strikesUsed).toBe(2);
         expect(rows[0].status).toBe('ELIMINATED');
@@ -86,7 +86,7 @@ describe('buildMemberStandings', () => {
             pool: { participantIds: ['kevin', 'legacy'] },
             members: [member('kevin', 'Kevin Struck')],
             standingsRows: [scored('kevin', 'Kevin Struck'), scored('legacy', 'Legacy Player')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows.map(r => r.ownerUid).sort()).toEqual(['kevin', 'legacy']);
     });
@@ -98,7 +98,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [],
             standingsRows: [scored('kevin', 'Kevin Struck'), scored('legacy', 'Legacy Player')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(noRoster.map(r => r.ownerUid).sort()).toEqual(['kevin', 'legacy']);
 
@@ -110,7 +110,7 @@ describe('buildMemberStandings', () => {
             pool: { participantIds: ['kevin'] }, // 'removed' is no longer a participant
             members: [member('kevin', 'Kevin Struck')],
             standingsRows: [scored('kevin', 'Kevin Struck'), scored('removed', 'Removed Player')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(withRoster.map(r => r.ownerUid)).toEqual(['kevin']);
     });
@@ -120,7 +120,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('gone', 'Removed', { present: false })],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
         })).toEqual([]);
         // A REMOVED player: the same transaction that deletes the Member Record also
         // drops the uid from participantIds, so the projection's stale copy of them
@@ -129,9 +129,9 @@ describe('buildMemberStandings', () => {
             pool: { participantIds: ['kevin'] },
             members: [member('gone', 'Removed', { present: false })],
             standingsRows: [scored('gone', 'Removed')],
-            ownEntry: null,
+            ownEntries: [],
         })).toEqual([]);
-        expect(buildMemberStandings({ pool: POOL, members: [], standingsRows: [], ownEntry: null })).toEqual([]);
+        expect(buildMemberStandings({ pool: POOL, members: [], standingsRows: [], ownEntries: [] })).toEqual([]);
     });
 
     // codex: a Member Record's existence proves nothing — the pre-#344 claim path
@@ -141,7 +141,7 @@ describe('buildMemberStandings', () => {
             pool: { participantIds: ['kevin'] },
             members: [member('kevin', 'Kevin Struck'), member('forged', 'Forged Member')],
             standingsRows: [scored('kevin', 'Kevin Struck')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows.map(r => r.ownerUid)).toEqual(['kevin']);
 
@@ -151,7 +151,7 @@ describe('buildMemberStandings', () => {
             pool: { participantIds: ['legacy'] },
             members: [member('forged', 'Forged Member')],
             standingsRows: [scored('legacy', 'Legacy Player')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(onlyForged.map(r => r.ownerUid)).toEqual(['legacy']);
 
@@ -161,7 +161,7 @@ describe('buildMemberStandings', () => {
             pool: {},
             members: [],
             standingsRows: [scored('legacy', 'Legacy Player')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(noIds.map(r => r.ownerUid)).toEqual(['legacy']);
     });
@@ -178,7 +178,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('ron', 'Ron Johnson')],
             standingsRows: [],
-            ownEntry: own,
+            ownEntries: [own],
         });
         expect(rows[0].unscored).toBe(true);
         expect(rows[0].picks).toEqual({ 2: 'PIT' });
@@ -195,7 +195,7 @@ describe('buildMemberStandings', () => {
                 { uid: 'kevin', userName: 'Kevin Struck', hasPlayableEntry: false }, // host, no entry
             ],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows.map(r => r.ownerUid)).toEqual(['ron']);
     });
@@ -205,7 +205,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [{ uid: 'kevin', userName: 'Kevin Struck' }], // pre-latch record
             standingsRows: [scored('kevin', 'Kevin Struck')],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows.map(r => r.ownerUid)).toEqual(['kevin']);
     });
@@ -216,7 +216,7 @@ describe('buildMemberStandings', () => {
             pool: POOL,
             members: [member('aaron', 'Aaron A'), member('johnny', 'Johnny Football')],
             standingsRows: [],
-            ownEntry: own,
+            ownEntries: [own],
         });
         expect(rows[0].ownerUid).toBe('johnny');
     });
@@ -232,7 +232,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('ron', 'Ron Johnson', { pickedWeeks: [1, 2] })],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows[0].pickedWeeks).toEqual([1, 2]);
     });
@@ -248,7 +248,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('ron', 'Ron Johnson')],   // legacy record, no field
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect('pickedWeeks' in rows[0]).toBe(true);
         expect(rows[0].pickedWeeks).toBeUndefined();
@@ -259,7 +259,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('ron', 'Ron Johnson', { pickedWeeks: [] })],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
         });
         expect(rows[0].pickedWeeks).toEqual([]);
     });
@@ -269,7 +269,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('ron', 'Ron Johnson', { pickedWeeks: [4] })],
             standingsRows: [scored('ron', 'Ron Johnson')],
-            ownEntry: null,
+            ownEntries: [],
             reveal: { week: 4, picks: { ron: { 4: 'KC' } }, confidence: {}, tiebreakers: { ron: 41 } },
         });
         expect(rows[0].picks).toEqual({ 4: 'KC' });
@@ -281,7 +281,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('ron', 'Ron Johnson', { pickedWeeks: [4] })],
             standingsRows: [scored('ron', 'Ron Johnson')],
-            ownEntry: null,
+            ownEntries: [],
             reveal: { week: 4, picks: {}, confidence: {}, tiebreakers: {} },
         });
         expect(rows[0].picks).toBeUndefined();
@@ -296,7 +296,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('johnny', 'Johnny Football', { pickedWeeks: [4, 5] })],
             standingsRows: [],
-            ownEntry: own,
+            ownEntries: [own],
             reveal: { week: 4, picks: { johnny: { 4: 'KC' } }, confidence: {}, tiebreakers: {} },
         });
         expect(rows[0].picks).toEqual({ 4: 'SF', 5: 'DAL' });
@@ -320,7 +320,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [member('kevin', 'Kevin Struck', { pickedWeeks: [4] })],
             standingsRows: [row],
-            ownEntry: null,
+            ownEntries: [],
             reveal: { week: 4, picks: { kevin: { 4: 'KC' } }, confidence: {}, tiebreakers: {} },
         });
         // The returned row carries the graft...
@@ -340,7 +340,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
             pool: POOL,
             members: [],
             standingsRows: [row],
-            ownEntry: null,
+            ownEntries: [],
             reveal: { week: 4, picks: { legacy: { 4: 'KC' } }, confidence: {}, tiebreakers: {} },
         });
         expect(rows[0].picks).toEqual({ 4: 'KC' });
@@ -352,7 +352,7 @@ describe('buildMemberStandings — pickedWeeks marker and the reveal graft', () 
         // The additive-merge half of the same defect: run week 4, then week 5,
         // over the SAME input array, exactly as a week change does.
         const input = [scored('kevin', 'Kevin Struck')];
-        const args = { pool: POOL, members: [member('kevin', 'Kevin Struck')], standingsRows: input, ownEntry: null };
+        const args = { pool: POOL, members: [member('kevin', 'Kevin Struck')], standingsRows: input, ownEntries: [] };
         buildMemberStandings({ ...args, reveal: { week: 4, picks: { kevin: { 4: 'KC' } }, confidence: {}, tiebreakers: {} } });
         const week5 = buildMemberStandings({ ...args, reveal: { week: 5, picks: { kevin: { 5: 'SF' } }, confidence: {}, tiebreakers: {} } });
         expect(week5[0].picks).toEqual({ 5: 'SF' });
@@ -371,7 +371,7 @@ describe('weeklyReveals — the multi-week grid must not print "no pick" for a r
             pool: POOL,
             members: [member('kevin', 'Kevin Struck'), member('ron', 'Ron Johnson')],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
             reveal: { week: 3, picks: { ron: { 3: 'KC' } }, confidence: {}, tiebreakers: {} },
             weeklyReveals: [
                 { week: 1, picks: { ron: { 1: 'SF' } }, confidence: {}, tiebreakers: {} },
@@ -387,7 +387,7 @@ describe('weeklyReveals — the multi-week grid must not print "no pick" for a r
             pool: POOL,
             members: [member('ron', 'Ron Johnson')],
             standingsRows: [],
-            ownEntry: null,
+            ownEntries: [],
             reveal: { week: 3, picks: { ron: { 3: 'KC' } }, confidence: {}, tiebreakers: {} },
         });
         expect(rows.find(r => r.ownerUid === 'ron').picks).toEqual({ 3: 'KC' });
@@ -399,10 +399,164 @@ describe('weeklyReveals — the multi-week grid must not print "no pick" for a r
             pool: POOL,
             members: [member('johnny', 'Johnny Football')],
             standingsRows: [],
-            ownEntry: own,
+            ownEntries: [own],
             reveal: null,
             weeklyReveals: [{ week: 1, picks: { johnny: { 1: 'KC' } }, confidence: {}, tiebreakers: {} }],
         });
         expect(rows[0].picks).toEqual({ 1: 'SF' });
+    });
+});
+
+/**
+ * PLAN-MULTI-ENTRY T4 — ONE ROW PER ENTRY.
+ *
+ * This is the behaviour test §0b.6 promised as the compensating check for the
+ * regex guard in `tests/nfl-surface-invariants.test.ts`: an alias
+ * (`const key = row.ownerUid`) is out of a regex's reach, and two rows sharing
+ * an `ownerUid` is the thing that actually breaks when one appears. It was
+ * written red-then-green with this ticket, exactly as the plan says.
+ *
+ * The roster of a member's entries comes from the Member Record `entries` map
+ * (D2) — the authorization-safe list a participant may read — never from the
+ * entry documents, which participants cannot read.
+ */
+describe('buildMemberStandings — one row per ENTRY (PLAN-MULTI-ENTRY T4/D6)', () => {
+    // Kevin holds two entries; the second is named. Note `hasPlayableEntry` and
+    // `pickedWeeks` stay PER MEMBER — the record carries no per-entry weeks.
+    const twoEntryMember = {
+        uid: 'kevin',
+        userName: 'Kevin Struck',
+        hasPlayableEntry: true,
+        playableEntryCount: 2,
+        entries: {
+            kevin: { entryIndex: 1 },
+            'e2:kevin': { entryIndex: 2, name: 'Kevin B' },
+        },
+    };
+
+    it('emits two rows for one uid, distinct by entry id', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [twoEntryMember, member('ron', 'Ron Johnson')],
+            standingsRows: [scored('kevin', 'Kevin Struck'), { ...scored('e2:kevin', 'Kevin Struck'), ownerUid: 'kevin', entryName: 'Kevin B' }],
+            ownEntries: [],
+        });
+        const kevins = rows.filter(r => r.ownerUid === 'kevin');
+        expect(kevins).toHaveLength(2);
+        expect(kevins.map(r => r.id)).toEqual(['kevin', 'e2:kevin']);   // entryIndex order
+        expect(rows).toHaveLength(3);
+    });
+
+    it("gives an UNSCORED second entry its own placeholder row, carrying the entry's name", () => {
+        // The second entry exists in the roster map but the last scoring pass
+        // predates it — precisely the case the projection alone cannot answer.
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [twoEntryMember],
+            standingsRows: [scored('kevin', 'Kevin Struck')],
+            ownEntries: [],
+        });
+        expect(rows).toHaveLength(2);
+        const second = rows[1];
+        expect(second.id).toBe('e2:kevin');
+        expect(second.ownerUid).toBe('kevin');
+        expect(second.entryName).toBe('Kevin B');
+        expect(second.unscored).toBe(true);
+        // It must NOT claim a status, a strike count or a rebuy count.
+        expect(second.status).toBeUndefined();
+        expect(second.strikesUsed).toBeUndefined();
+    });
+
+    it('renders BOTH of the viewer\'s own entries, each with its own picks', () => {
+        const own1 = { id: 'kevin', ownerUid: 'kevin', userName: 'Kevin Struck', entryIndex: 1, picks: { 2: 'ATL' } };
+        const own2 = { id: 'e2:kevin', ownerUid: 'kevin', userName: 'Kevin Struck', entryIndex: 2, entryName: 'Kevin B', picks: { 2: 'BUF' } };
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [twoEntryMember],
+            standingsRows: [],
+            // Deliberately out of index order: the fold must not depend on the
+            // order Firestore returned the query in.
+            ownEntries: [own2, own1],
+        });
+        expect(rows).toHaveLength(2);
+        expect(rows.map(r => r.id).sort()).toEqual(['e2:kevin', 'kevin']);
+        expect(rows.find(r => r.id === 'kevin')!.picks).toEqual({ 2: 'ATL' });
+        expect(rows.find(r => r.id === 'e2:kevin')!.picks).toEqual({ 2: 'BUF' });
+    });
+
+    it('grafts revealed picks per ENTRY — the two rows do not get the same sheet', () => {
+        // 🛑 THE REGRESSION THIS PINS. A uid-keyed graft hands every one of a
+        // player's rows the SAME picks, so entry #2 renders entry #1's sheet —
+        // worse than rendering nothing, because it is a confident lie.
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [twoEntryMember],
+            standingsRows: [scored('kevin', 'Kevin Struck'), { ...scored('e2:kevin', 'Kevin Struck'), ownerUid: 'kevin' }],
+            ownEntries: [],
+            reveal: {
+                week: 2,
+                picks: { kevin: { 2: 'ATL' }, 'e2:kevin': { 2: 'BUF' } },
+                confidence: {},
+                tiebreakers: { kevin: 41, 'e2:kevin': 55 },
+            },
+        });
+        expect(rows.find(r => r.id === 'kevin')!.picks).toEqual({ 2: 'ATL' });
+        expect(rows.find(r => r.id === 'e2:kevin')!.picks).toEqual({ 2: 'BUF' });
+        expect(rows.find(r => r.id === 'kevin')!.weeklyTiebreakers).toEqual({ 2: 41 });
+        expect(rows.find(r => r.id === 'e2:kevin')!.weeklyTiebreakers).toEqual({ 2: 55 });
+    });
+
+    it('copies the member-level pickedWeeks onto EVERY row that member holds', () => {
+        // D2 — `pickedWeeks` is the UNION across a member's entries and stays
+        // per member on purpose: a per-entry map on a participant-readable
+        // record would leak which specific entry has an unrevealed week's pick.
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [{ ...twoEntryMember, pickedWeeks: [1, 2] }],
+            standingsRows: [scored('kevin', 'Kevin Struck'), { ...scored('e2:kevin', 'Kevin Struck'), ownerUid: 'kevin' }],
+            ownEntries: [],
+        });
+        expect(rows.map(r => r.pickedWeeks)).toEqual([[1, 2], [1, 2]]);
+    });
+
+    it('a Member Record with NO entries map is one row keyed by the uid (every pool today)', () => {
+        // The legacy shape. Returning zero rows here would empty the standings
+        // table of every pool in production.
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [member('ron', 'Ron Johnson')],
+            standingsRows: [],
+            ownEntries: [],
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0].id).toBe('ron');
+        expect(rows[0].ownerUid).toBe('ron');
+        expect(rows[0].unscored).toBe(true);
+    });
+
+    it('an empty entries map falls back to the one uid-keyed row too', () => {
+        const rows = buildMemberStandings({
+            pool: POOL,
+            members: [{ uid: 'ron', userName: 'Ron Johnson', hasPlayableEntry: true, entries: {} }],
+            standingsRows: [],
+            ownEntries: [],
+        });
+        expect(rows.map(r => r.id)).toEqual(['ron']);
+    });
+
+    it('a scored second entry whose OWNER left the roster is dropped, not kept by entry id', () => {
+        // Membership is a question about the PERSON. Asking `participantIds`
+        // for `e2:gone` would answer "no" for every extra entry of every member,
+        // so the check reads `ownerUid` while the row stays keyed by its id.
+        const rows = buildMemberStandings({
+            pool: { participantIds: ['kevin'] },
+            members: [],
+            standingsRows: [
+                { ...scored('e2:kevin', 'Kevin Struck'), ownerUid: 'kevin' },
+                { ...scored('e2:stranger', 'Stranger'), ownerUid: 'stranger' },
+            ],
+            ownEntries: [],
+        });
+        expect(rows.map(r => r.id)).toEqual(['e2:kevin']);
     });
 });

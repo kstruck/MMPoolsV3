@@ -2141,7 +2141,7 @@ export const dbService = {
     // `callback([])` — i.e. rendering a populated pool as an empty one.
     //
     // What replaced it: `subscribeToNFLStandings` + `subscribeToPoolMembers` +
-    // `subscribeToMyNFLEntry` for the rows, and `getPoolPicks` below for pick
+    // `subscribeToMyNFLEntries` for the rows, and `getPoolPicks` below for pick
     // content past the reveal boundary. Do not reinstate it to fix a manager
     // surface — that reopens every week of the season to the commissioner.
 
@@ -2236,12 +2236,30 @@ export const dbService = {
     // On error we now keep the last known state rather than overwriting it with
     // a claim we cannot support. A member who genuinely has no entry is still
     // told so, by the success path, which is the only path that knows.
-    subscribeToMyNFLEntry: (poolId: string, uid: string, callback: (entry: any | null) => void) => {
-        const ref = doc(db, 'pools', poolId, 'entries', uid);
-        return onSnapshot(ref, (snap) => {
-            callback(snap.exists() ? { ...snap.data(), id: snap.id } : null);
+    /**
+     * EVERY entry the viewer owns in this pool (PLAN-MULTI-ENTRY T4/D6).
+     *
+     * Replaces `subscribeToMyNFLEntry`, which read `entries/{uid}` — entry #1's
+     * document (D1) — and therefore could never see a second entry.
+     *
+     * ⚠️ NO RULES CHANGE, AND THAT IS NOT LUCK. The entries read rule is already
+     * `request.auth.uid == resource.data.ownerUid` (firestore.rules), so this
+     * query asks Firestore exactly the question the rule already answers. It is
+     * also why a hypothetical entry document with no `ownerUid` is not a gap
+     * here: that document was never readable by its own owner either.
+     *
+     * ⚠️ The error path deliberately does NOT call back. Reporting a read
+     * failure as an empty array would tell a member with a full sheet that they
+     * have not picked; the dashboard distinguishes "not arrived" from "does not
+     * exist" with its own loaded flag, and only a successful snapshot licenses
+     * the second claim.
+     */
+    subscribeToMyNFLEntries: (poolId: string, uid: string, callback: (entries: any[]) => void) => {
+        const q = query(collection(db, 'pools', poolId, 'entries'), where('ownerUid', '==', uid));
+        return onSnapshot(q, (snap) => {
+            callback(snap.docs.map(d => ({ ...d.data(), id: d.id })));
         }, (error) => {
-            logger.error("Error subscribing to own NFL entry:", error);
+            logger.error("Error subscribing to own NFL entries:", error);
         });
     },
 

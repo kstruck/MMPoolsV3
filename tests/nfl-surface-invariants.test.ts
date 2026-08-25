@@ -842,11 +842,18 @@ describe('NFL row/reveal surfaces key by ENTRY id, never by owner uid (PLAN-MULT
   ];
   // Residue the plan's T4/T5 remove. Exact symbol per file; nothing else in
   // that file is exempt.
+  //
+  // 🛑 TWO LINES DIED WITH T4 AND THEIR ABSENCE IS ITSELF ASSERTED. The
+  // `memberStandings.ts` entry named the whole uid-keyed fold — `uidOf`,
+  // `scoredByUid`, and four `reveal.*?.[uid]` lookups — and T4 replaced every
+  // one of them with the entry id. The `NFLPoolDashboard.tsx` entry named the
+  // singular `entries.find(… ownerUid === user.id)`, now a `.filter` (§0b.3).
+  // The "allow-list names only files that still carry residue" test below FAILS
+  // if either line is left behind, which is what makes deleting them mandatory
+  // rather than tidy.
   const ALLOW: Record<string, RegExp[]> = {
-    'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],  // myEntry — T5
     'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/], // myEntry — T5
     'src/components/PaymentsPanel.tsx': [/entries\.find\(e => e\.ownerUid === user\.id/],                     // myEntry — T6
-    'src/utils/memberStandings.ts': [/const uidOf = /, /scoredByUid/, /r\.picks\?\.\[uid\]/, /reveal\.picks\?\.\[uid\]/, /reveal\.confidence\?\.\[uid\]/, /reveal\.tiebreakers\?\.\[uid\]/], // the fold — T4
     'src/utils/poolRoster.ts': [/const uidOf = /, /entryByUid/],                                              // dues per MEMBER are correct; renamed by T6
   };
   const FORBIDDEN: Array<[string, RegExp]> = [
@@ -1014,29 +1021,34 @@ describe('row-click picks (EntryWeekPicks) — the reveal boundary stays the ser
 });
 
 /**
- * A FAILED READ OF THE MEMBER'S OWN ENTRY IS NOT "THEY HAVE NO ENTRY".
+ * A FAILED READ OF THE MEMBER'S OWN ENTRIES IS NOT "THEY HAVE NO ENTRY".
  *
- * `subscribeToMyNFLEntry` is the single source for the viewer's own picks on
+ * `subscribeToMyNFLEntries` is the single source for the viewer's own picks on
  * every NFL surface — the pick sheets, the checklist banners, and the grid's own
- * row (which bypasses the reveal because that document IS its source). Its
- * success path already distinguishes an absent document from a present one, so
- * an error handler that also calls back with `null` collapses "the read failed"
- * into "you have not picked".
+ * row (which bypasses the reveal because those documents ARE its source). Its
+ * success path already distinguishes an absent entry from a present one, so an
+ * error handler that also called back would collapse "the read failed" into
+ * "you have not picked".
  *
  * That is not cosmetic: Firestore's `onSnapshot` TERMINATES a listener on error,
  * so a single errored snapshot leaves the member reading "picks not in yet" over
  * a completed sheet until they reload the page. A behavioural test would need a
- * Firestore double for a three-line subscription; this coarse grep pins the one
+ * Firestore double for a four-line subscription; this coarse grep pins the one
  * thing that matters — the error path does not invent state.
+ *
+ * ⚠️ RENAMED AND PLURALISED BY PLAN-MULTI-ENTRY T4 (`subscribeToMyNFLEntry` →
+ * `subscribeToMyNFLEntries`, doc-get → `where('ownerUid','==',uid)` query).
+ * The rule did not change: an empty ARRAY is now the "no entry" claim that the
+ * error path must not make, exactly as `null` was.
  */
-describe('subscribeToMyNFLEntry — an error must not be reported as "no entry"', () => {
+describe('subscribeToMyNFLEntries — an error must not be reported as "no entries"', () => {
   const src = readFileSync(resolve(root, 'src/services/dbService.ts'), 'utf8');
-  const body = src.slice(src.indexOf('subscribeToMyNFLEntry:'));
+  const body = src.slice(src.indexOf('subscribeToMyNFLEntries:'));
   const handler = body.slice(0, body.indexOf('subscribeToWeeklyRecaps:'));
 
   it('parsed the subscription out of the source', () => {
-    // Guard the guard: a mis-parse would make the assertion below vacuous.
-    expect(handler).toContain("Error subscribing to own NFL entry:");
+    // Guard the guard: a mis-parse would make the assertions below vacuous.
+    expect(handler).toContain("Error subscribing to own NFL entries:");
     expect(handler.length).toBeGreaterThan(0);
     expect(handler.length).toBeLessThan(src.length);
   });
@@ -1044,13 +1056,20 @@ describe('subscribeToMyNFLEntry — an error must not be reported as "no entry"'
   it('the error handler logs and calls back with nothing', () => {
     const errorHandler = handler.slice(handler.indexOf('}, (error) => {'));
     expect(errorHandler).toContain('logger.error');
-    // The removed line, verbatim. Keeping the last known state is the fix.
+    // The removed line, verbatim, and its plural equivalent.
     expect(errorHandler).not.toContain('callback(null)');
+    expect(errorHandler).not.toContain('callback([])');
   });
 
-  it('the success path still reports a genuinely absent entry as null', () => {
-    expect(handler).toContain('snap.exists() ?');
-    expect(handler).toContain(': null');
+  it('it asks for EVERY entry this viewer owns, by ownerUid', () => {
+    // T4: a doc-get on `entries/{uid}` is entry #1 and can never see a second
+    // entry. The query is also exactly what firestore.rules already permits,
+    // which is why this ticket changes no rule.
+    expect(handler).toContain("where('ownerUid', '==', uid)");
+    expect(handler).not.toContain("doc(db, 'pools', poolId, 'entries', uid)");
+    // Each row carries its own document id — the ENTRY id every downstream
+    // surface keys on (§0b.1).
+    expect(handler).toContain('id: d.id');
   });
 });
 
@@ -1068,10 +1087,12 @@ describe('NFLPoolDashboard stamps the own-entry snapshot with pool AND uid', () 
   const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'), 'utf8');
 
   it('the subscription callback records which pool and which uid it came from', () => {
-    expect(src).toContain('setOwnEntryState({ poolId: pool.id, uid: user.id, entry })');
+    // T4 pluralised the payload (`entry` → `entries`); the STAMP is unchanged
+    // and is the thing this guards.
+    expect(src).toContain('setOwnEntryState({ poolId: pool.id, uid: user.id, entries })');
     // The pre-change shape: the setter handed straight to the subscription, so
     // nothing recorded the source.
-    expect(src).not.toContain('subscribeToMyNFLEntry(pool.id, user.id, setOwnEntry)');
+    expect(src).not.toContain('subscribeToMyNFLEntries(pool.id, user.id, setOwnEntryState)');
   });
 
   it('and it is checked at render, not in an effect', () => {
