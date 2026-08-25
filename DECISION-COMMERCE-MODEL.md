@@ -77,6 +77,20 @@ Stripe Billing / Subscriptions in any form; auto-renew on the Unlimited Pass;
 monthly or annual recurring plans; seat-based or per-player recurring pricing;
 metered/usage billing; a customer billing portal for managing recurrences.
 
+### One-time does not mean low-risk — a measured example
+
+Being subscription-free removes a whole class of billing machinery; it does not
+make the remaining charge path safe by itself. Measured and closed the same
+night this decision was recorded (**PR #570**): a missing or placeholder
+`STRIPE_SECRET_KEY` let **both** the pool-activation checkout and the bundle
+checkout grant full paid state **with no money taken**, and the bundle path
+carried **no ownership gate at all**. Both now fail closed.
+
+The relevance to this decision is direct: the argument for Option A is that the
+one-time path is small enough to hold correct, and that argument only earns its
+keep if the small path is actually held correct. A recurring model would have
+had the same hole plus dunning and proration on top of it.
+
 ### What would reopen this
 
 A commissioner-side product that genuinely runs continuously (e.g. a hosted
