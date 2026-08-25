@@ -150,12 +150,20 @@ FOUR NEW AUDITS RUN 2026-08-24 late evening (error-tracking 2/6, security
         the values in Coolify (his console list below); code half ships
         regardless.
     (b) src/main.tsx: register window 'error' + 'unhandledrejection'
-        handlers funneling into errorHandler.handleError (rate-limited) —
-        non-render JS errors currently vanish.
+        handlers — non-render JS errors currently vanish. DESIGN (codex
+        r3): when Sentry is live its GlobalHandlers integration already
+        captures both, so these handlers must feed ONLY the logClientError
+        sink, must be skipped (or Sentry-aware) when Sentry initialized,
+        and MUST carry their own dedupe/rate limit — handleError has none
+        today, and a recurring rejection would otherwise write unbounded
+        callable/Firestore traffic.
     (c) ALERTING GAP (also the availability audit's #2): make
         scheduledHealthCheck (adminHealth.ts:236) call dispatchOpsAlert
-        when a check flips to fail or findStaleJobs returns entries —
-        today the hourly probe pages nobody.
+        on TRANSITIONS only — a check flipping ok->fail, or a job NEWLY
+        entering the stale set (diff against the previous snapshot; codex
+        r3: findStaleJobs returns the same entry every hour, naive wiring
+        pages hourly until recovery). Continuing failures stay visible in
+        health/latest, not the pager.
     (d) PII: delete the full request.data dump at bracketPools.ts:37;
         apply sentrySanitize-style key redaction on the logClientError
         branch (errorHandler.ts:107 or server-side logClientError.ts).
