@@ -164,7 +164,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                             </div>
                         )}
                         {status === 'error' && (
-                            <div className="mb-6 bg-brandred-600/15 border border-brandred-600/35 rounded-xl p-5 flex items-start gap-3">
+                            <div role="alert" className="mb-6 bg-brandred-600/15 border border-brandred-600/35 rounded-xl p-5 flex items-start gap-3">
                                 <AlertCircle className="text-brandred-500 shrink-0 mt-0.5" size={20} />
                                 <div>
                                     <h3 className="font-display font-bold uppercase text-[color:var(--text)] mb-1">Something went wrong</h3>
