@@ -1066,10 +1066,18 @@ describe('subscribeToMyNFLEntries — an error must not be reported as "no entri
     // entry. The query is also exactly what firestore.rules already permits,
     // which is why this ticket changes no rule.
     expect(handler).toContain("where('ownerUid', '==', uid)");
-    expect(handler).not.toContain("doc(db, 'pools', poolId, 'entries', uid)");
     // Each row carries its own document id — the ENTRY id every downstream
     // surface keys on (§0b.1).
     expect(handler).toContain('id: d.id');
+  });
+
+  it('and it still finds an UNSTAMPED legacy entry, but only when the query is empty', () => {
+    // A `where` clause cannot match a document that lacks the field. The probe
+    // is gated on `rows.length > 0` returning first, so the common path pays no
+    // extra read. (codex r2 on the T4 PR.)
+    expect(handler).toContain('if (rows.length > 0) { callback(rows); return; }');
+    expect(handler).toContain("getDoc(doc(db, 'pools', poolId, 'entries', uid))");
+    expect(handler).toContain("data.ownerUid === undefined");
   });
 });
 

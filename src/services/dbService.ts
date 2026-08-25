@@ -2256,8 +2256,39 @@ export const dbService = {
      */
     subscribeToMyNFLEntries: (poolId: string, uid: string, callback: (entries: any[]) => void) => {
         const q = query(collection(db, 'pools', poolId, 'entries'), where('ownerUid', '==', uid));
+        // Out-of-order protection: the legacy probe below is async, so a later
+        // snapshot must always win over an earlier probe's result.
+        let seq = 0;
         return onSnapshot(q, (snap) => {
-            callback(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+            const mine = seq += 1;
+            const rows = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+            if (rows.length > 0) { callback(rows); return; }
+            // ⚠️ ZERO HITS IS THE ONE CASE A QUERY CANNOT ANSWER (codex r2 on
+            // the T4 PR). A `where` clause cannot match a document that lacks
+            // the field, so a hypothetical pre-2026-05-25 `entries/{uid}` with
+            // no `ownerUid` — which the old doc-get COULD read once a pool
+            // reached FINAL/COMPLETED, via the participant branch of the
+            // entries rule — would read as "you have no entry" and blank that
+            // member's own picks.
+            //
+            // Probed ONLY when the query came back empty, so the common path
+            // pays no extra read (PLAN-COST-CONTROLS), and probed once per
+            // snapshot rather than subscribed: an unstamped document is by
+            // definition not being written any more — the moment anything
+            // submits, `ownerUid` is stamped and the QUERY above picks it up
+            // live.
+            //
+            // The probe FAILING is the normal outcome for a member who simply
+            // has no entry (the rule reads `resource.data.ownerUid` and a
+            // missing document has no `resource`), so it is not logged as an
+            // error and an empty list is still delivered.
+            getDoc(doc(db, 'pools', poolId, 'entries', uid))
+                .then((legacy) => {
+                    if (mine !== seq) return;
+                    const data = legacy.exists() ? (legacy.data() as Record<string, unknown>) : null;
+                    callback(data && data.ownerUid === undefined ? [{ ...data, id: legacy.id }] : []);
+                })
+                .catch(() => { if (mine === seq) callback([]); });
         }, (error) => {
             logger.error("Error subscribing to own NFL entries:", error);
         });
