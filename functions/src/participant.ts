@@ -249,12 +249,44 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
     // Simple diff check (could be optimized)
     const afterSquares = after?.squares || [];
 
+    /**
+     * 🛑 A UID THE POOL NO LONGER LISTS GETS NO INDEX DOC.
+     *
+     * This trigger fires on EVERY pool-document write, including the one a
+     * removal makes. Without this guard it would rebuild
+     * `pools/{poolId}/participants/{uid}` and `users/{uid}/participations/{poolId}`
+     * from `squares[]` immediately after `applyMembershipRemoval`
+     * (`lib/memberRecord.ts`) deleted them — so removal's index cleanup would
+     * be undone within the same second, and ONLY for SQUARES pools, which is
+     * exactly the data it targets. (codex r1 on PLAN-MEMBER-REMOVAL-HARDENING.)
+     *
+     * It also closes a laundering hop that three other surfaces already refuse.
+     * `reserveSquare` never writes `reservedByUid` at all — it stores a display
+     * NAME — so the only writers are `claimMySquares` and `claimByCode` above,
+     * which prove ownership with a `guestDeviceKey` read straight off the
+     * world-readable pool document (SECURITY-CLAIM-SQUARES.md). Minting a
+     * membership index from that signal is what `backfillMemberRecords` refuses
+     * (its `applySquareUnits` gate), what `fixParticipantIds` refuses (its
+     * squares block was deleted), and what `shared/memberRecord.ts` review round
+     * 5 removed. This trigger was the last surface still doing it.
+     *
+     * ⚠️ AN ABSENT ARRAY IS "UNKNOWN", NOT "NOT A MEMBER". A legacy pool with no
+     * `participantIds` keeps the old behaviour rather than silently losing its
+     * indexes — same unknown-is-not-false discipline as `hasPlayableEntry` in
+     * `lib/memberRecord.ts`. Every removal writes the array (`arrayRemove`), so
+     * the guard is always armed in the case it exists for.
+     */
+    const roster: unknown = after?.participantIds;
+    const isListed = Array.isArray(roster)
+        ? (uid: string) => (roster as string[]).includes(uid)
+        : () => true;
+
     // We need to Map<Uid, { count, ids }>
     const stats = new Map<string, { count: number, ids: string[], paid: number }>();
 
     afterSquares.forEach((s: any, idx: number) => {
         const ownerUid = s.reservedByUid || s.paidByUid;
-        if (ownerUid) {
+        if (ownerUid && isListed(ownerUid)) {
             if (!stats.has(ownerUid)) {
                 stats.set(ownerUid, { count: 0, ids: [], paid: 0 });
             }

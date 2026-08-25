@@ -121,22 +121,44 @@ that carries none of the three indexes pays three cheap no-op deletes.
 a decision and not an oversight: a write-only membership index is exactly what
 acquires a reader later, and the cost of including it is one no-op delete.
 
+**And a roster guard in `syncParticipantIndices`** (`functions/src/participant.ts`),
+without which the cleanup above is undone within the same second. That trigger
+fires on EVERY `pools/{poolId}` write — including the one the removal makes —
+and rebuilt both index docs from `squares[]` with no membership check. A uid not
+in `after.participantIds` now gets no index doc. Found by codex round 1; the
+full verification, the consumer trace for both documents, and why the guard is
+also the right thing on its own merits are in the review log.
+
 Collapsing the two byte-identical copies into one definition is part of the fix,
 not tidying: the duplication is how both copies came to miss the same two
 deletes, and a future fix applied to one would not have reached the other.
 
 ### Blast radius
 
-**Zero in production.** No production caller exists (§0), so this code cannot
-execute against prod Firestore until the removal callable is wired — which is
-exactly when it needs to be right. Within tests, `memberRecord.emulator.test.ts`
-already wipes `participants` and `participations` between cases, so no existing
-suite depends on those docs surviving a removal.
+**`lib/memberRecord.ts`: zero in production.** No production caller exists (§0),
+so this code cannot execute against prod Firestore until the removal callable is
+wired — which is exactly when it needs to be right. Within tests,
+`memberRecord.emulator.test.ts` already wipes `participants` and
+`participations` between cases, so no existing suite depends on those docs
+surviving a removal.
+
+**`participant.ts` (the trigger guard): live, and narrow.** This one DOES run in
+production, on every pool write. It changes behaviour in exactly one case — a
+uid that owns a square via `reservedByUid`/`paidByUid` but is NOT in
+`participantIds` stops getting an index doc. `reserveSquare` never writes
+`reservedByUid` (it stores a display name), so the only uids in that case are
+`claimMySquares`/`claimByCode` claimants, whose signal three other surfaces
+already refuse as membership. Both affected documents were traced to their last
+reader and neither has a reachable consumer for a non-participant — see the
+review log. A pool with no `participantIds` keeps the old behaviour.
 
 ### Rollback
 
-Revert the PR. The helpers return to the three-write shape; nothing in prod
-changes either way because nothing calls them.
+Revert the PR and redeploy functions. The helpers return to the three-write
+shape (no prod effect either way — nothing calls them) and the trigger returns
+to writing an index for every square owner. No data migration is involved in
+either direction: the guard only stops FUTURE writes, and no existing document
+is deleted by it.
 
 ---
 
@@ -285,9 +307,17 @@ Not built here, and each is named so it is not mistaken for covered:
 
 ## 6. Gate evidence
 
-Recorded in the PR body: `typecheck`, `functions test`, `test:emulator`,
-`test:rules` (required — a rules test was added, though `firestore.rules` itself
-is unchanged), `npx tsc -b`, root `npm test`. `build:static` not run — no
-frontend file was touched.
+| Gate | Result |
+|---|---|
+| `npm --prefix functions run typecheck` | clean |
+| `npm --prefix functions test` | 130 files, 2066 passed |
+| `npm --prefix functions run test:emulator` | 35 files passed, 1 skipped; **516 passed**, 2 expected-fail, 10 skipped — includes the 12 new cases in `memberRemoval.emulator.test.ts` |
+| `npm --prefix functions run test:rules` | **12/12 files passed**, all 22 assertions in the new `memberRemoval.rules.test.mjs` green |
+| `npx tsc -b` | clean |
+| `npm test` (root) | 135/136 files; the ONLY failures are the 3 known CRLF assertions in `tests/addon-purchase.test.ts` (Windows-only, green in CI, owned by another workstream — not touched here) |
+| `npm run build:static` | **not run** — no frontend file was touched |
+
+`test:rules` was run even though `firestore.rules` is unchanged, because a rules
+test file was ADDED and `run-rules-tests.mjs` `MIN_FILES` moved 10 → 11.
 
 Codex rounds and per-finding verdicts: `PLAN-MEMBER-REMOVAL-HARDENING-REVIEW-LOG.md`.

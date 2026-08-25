@@ -4,6 +4,7 @@ import ftest from 'firebase-functions-test';
 import './setup';
 import { voidMemberRecord, reconcileMembership } from '../../lib/memberRecord';
 import { getPoolPicks } from '../../nflPickReveal';
+import { syncParticipantIndices } from '../../participant';
 
 /**
  * PLAN-MEMBER-REMOVAL-HARDENING — the two halves of removal that only a live
@@ -103,6 +104,13 @@ async function wipe() {
     }
     await p.ref.delete();
   }
+  // H3 drives the trigger with a SYNTHETIC event, so it writes
+  // `pools/{POOL}/participants/*` under a pool document that does not exist.
+  // `collection('pools').get()` never returns a missing parent, so the loop
+  // above cannot reach those — sweep the path directly. (Found by running it:
+  // test 1's write survived into test 2 and inverted its verdict.)
+  const orphans = await db.collection('pools').doc(POOL).collection('participants').get();
+  await Promise.all(orphans.docs.map((d) => d.ref.delete()));
   for (const uid of [OWNER, ALICE, BOB]) {
     for (const sub of ['participations', 'joinedPools']) {
       const s = await db.collection('users').doc(uid).collection(sub).get();
@@ -319,5 +327,58 @@ describe('H2 a removed member\'s NEXT callable request fails on a token minted w
       .rejects.toThrow(/members can read/i);
     await expect(wGetPicks({ data: { poolId: POOL, week: 1 }, auth: bobStaleToken } as never))
       .resolves.toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H3 — the trigger must not undo the cleanup
+// ---------------------------------------------------------------------------
+/**
+ * `syncParticipantIndices` fires on EVERY `pools/{poolId}` write, including the
+ * one `applyMembershipRemoval` makes. Before the roster guard it rebuilt both
+ * index docs from `squares[]` straight after the removal transaction deleted
+ * them — so the cleanup was undone within the same second, and only for SQUARES
+ * pools, which is the data it most needed to work on. (codex r1.)
+ *
+ * The trigger is driven directly here rather than through the emulator: only the
+ * FIRESTORE emulator runs in this suite (`functions/package.json` test:emulator),
+ * so nothing dispatches trigger events. Driving the handler with a synthetic
+ * event tests the same code the deployed trigger runs, against the same live
+ * Firestore its writes would land in.
+ */
+describe("H3 syncParticipantIndices does not resurrect a removed member's indexes", () => {
+  const wSync = test.wrap(syncParticipantIndices) as (event: unknown) => Promise<unknown>;
+
+  const squaresPool = (participantIds: string[]) => ({
+    name: 'Removal', type: 'SQUARES', ownerId: OWNER, participantIds, status: 'OPEN',
+    squares: [{ id: 0, owner: 'Alice', reservedByUid: ALICE, isPaid: false }],
+  });
+
+  const fire = async (participantIds: string[]) => {
+    const snap = test.firestore.makeDocumentSnapshot(squaresPool(participantIds), `pools/${POOL}`);
+    await wSync({
+      data: test.makeChange(snap, snap),
+      params: { poolId: POOL },
+    });
+  };
+
+  it('still indexes a uid the pool DOES list (no collateral on the normal path)', async () => {
+    await fire([OWNER, ALICE]);
+    expect((await participantIndex(ALICE)).exists).toBe(true);
+    expect((await participationIndex(ALICE)).exists).toBe(true);
+  });
+
+  it('writes NOTHING for a uid the pool no longer lists', async () => {
+    await fire([OWNER]);
+    expect((await participantIndex(ALICE)).exists).toBe(false);
+    expect((await participationIndex(ALICE)).exists).toBe(false);
+  });
+
+  it('a legacy pool with NO participantIds keeps the old behaviour (unknown is not "not a member")', async () => {
+    const legacy: Record<string, unknown> = squaresPool([]);
+    delete legacy.participantIds;
+    const snap = test.firestore.makeDocumentSnapshot(legacy, `pools/${POOL}`);
+    await wSync({ data: test.makeChange(snap, snap), params: { poolId: POOL } });
+    expect((await participantIndex(ALICE)).exists).toBe(true);
   });
 });
