@@ -144,7 +144,7 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
                     <span className={`font-bold flex items-center gap-2 ${
                         game.winnerTeamId === game.awayTeamId ? 'text-gold-600' : 'text-[color:var(--text)]'
                     }`}>
-                        <img src={game.awayTeam?.logoUrl || '/placeholder-team.png'} alt="" className="w-5 h-5 object-contain" />
+                        <img src={game.awayTeam?.logoUrl || '/placeholder-team.png'} alt="" loading="lazy" width={20} height={20} className="w-5 h-5 object-contain" />
                         {game.awayTeam?.name || 'TBD'}
                     </span>
                     <span className="num font-display font-bold text-[color:var(--text)]">{game.awayScore}</span>
@@ -153,7 +153,7 @@ export const LiveScoreTicker: React.FC<LiveScoreTickerProps> = ({ tournament }) 
                     <span className={`font-bold flex items-center gap-2 ${
                         game.winnerTeamId === game.homeTeamId ? 'text-gold-600' : 'text-[color:var(--text)]'
                     }`}>
-                        <img src={game.homeTeam?.logoUrl || '/placeholder-team.png'} alt="" className="w-5 h-5 object-contain" />
+                        <img src={game.homeTeam?.logoUrl || '/placeholder-team.png'} alt="" loading="lazy" width={20} height={20} className="w-5 h-5 object-contain" />
                         {game.homeTeam?.name || 'TBD'}
                     </span>
                     <span className="num font-display font-bold text-[color:var(--text)]">{game.homeScore}</span>

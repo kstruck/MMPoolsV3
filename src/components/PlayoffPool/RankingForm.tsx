@@ -417,9 +417,9 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                         type="checkbox"
                                         checked={liabilityAccepted}
                                         onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                                        className="peer h-5 w-5 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600"
+                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                                     />
-                                    <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                                    <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                                 </div>
                                 <p className="text-xs font-body text-muted leading-relaxed group-hover:text-[color:var(--text)] transition-colors">
                                     By checking this box and submitting, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.

@@ -148,7 +148,10 @@ export const BracketPoolGuideArticle: React.FC = () => {
 
                     <figure className="my-12">
                         <img
-                            src="/images/bracket-pool-features.png"
+                            src="/images/bracket-pool-features.webp"
+                            loading="lazy"
+                            width={896}
+                            height={1200}
                             alt="Infographic visualizing 5 key features of a March Madness Bracket Pool."
                             className="w-full h-auto rounded-xl border border-[rgba(230,206,150,0.16)] shadow-lg"
                         />

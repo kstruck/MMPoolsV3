@@ -89,6 +89,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                     src="/hero-ui.webp"
                                     alt="Interactive 10x10 Super Bowl squares grid with live scoring and player names on March Melee Pools"
                                     loading="lazy"
+                                    width={1024}
+                                    height={591}
                                     className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent opacity-60"></div>
@@ -114,6 +116,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             <img
                                 src="/feature-live-grid.webp"
                                 loading="lazy"
+                                width={1024}
+                                height={591}
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -138,6 +142,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             <img
                                 src="/feature-scoreboard.webp"
                                 loading="lazy"
+                                width={1024}
+                                height={517}
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -162,6 +168,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             <img
                                 src="/feature-scenarios.webp"
                                 loading="lazy"
+                                width={1024}
+                                height={541}
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -186,6 +194,8 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             <img
                                 src="/feature-setup-wizard.webp"
                                 loading="lazy"
+                                width={996}
+                                height={986}
                                 alt="AI commissioner chat for customizing Super Bowl pool rules"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />

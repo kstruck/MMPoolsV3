@@ -134,6 +134,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                   src="/nfl-pools-hero.webp"
                   alt="March Melee Pools NFL Survivor and Weekly Pick'em Dashboard"
                   loading="lazy"
+                  width={1024}
+                  height={1024}
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent opacity-60"></div>
