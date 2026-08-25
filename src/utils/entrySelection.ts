@@ -54,3 +54,25 @@ export function nextAddableEntryIndex(entries: readonly OwnEntryLike[] | null | 
 export function entryLabelOf(entry: OwnEntryLike | null | undefined, fallback: string): string {
     return (typeof entry?.entryName === 'string' && entry.entryName) ? entry.entryName : fallback;
 }
+
+/**
+ * 🛑 WHAT A ROW IS CALLED ON EVERY NFL ROW SURFACE (§0b.4) — `entryName ??
+ * userName`.
+ *
+ * Under multi-entry one PLAYER owns several rows, and a surface that prints
+ * `userName` alone renders them as indistinguishable duplicates: two "Kevin
+ * Struck" lines, both wearing the "Me" badge, with no way to tell which score
+ * or which sheet belongs to which entry. `entryName` is set on an extra entry
+ * at creation (`freeDefaultEntryName`, default `"Kevin #2"`), is carried
+ * through the standings projection allowlist and the reveal, and is ABSENT on
+ * entry #1 by contract — so a single-entry pool prints exactly what it always
+ * did.
+ *
+ * ⚠️ THIS IS THE DISPLAY NAME, NEVER THE IDENTITY. Rows key on `row.id` and
+ * the profile link keys on `row.ownerUid`; nothing may key on this.
+ */
+export function rowDisplayName(row: { entryName?: unknown; userName?: unknown } | null | undefined): string {
+    const name = row?.entryName;
+    if (typeof name === 'string' && name.trim()) return name;
+    return typeof row?.userName === 'string' ? row.userName : '';
+}

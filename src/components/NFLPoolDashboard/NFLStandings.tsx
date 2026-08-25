@@ -10,6 +10,7 @@ import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/
 import { useTopicShort } from '../../help/scope';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { EntryWeekPicks } from './EntryWeekPicks';
+import { rowDisplayName } from '../../utils/entrySelection';
 
 interface NFLStandingsProps {
   pool: Pool;
@@ -125,7 +126,9 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     const rank = (list: any[]) => {
       const scored = list.filter(e => !e.unscored);
       const unscored = list.filter(e => e.unscored)
-        .sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+        // Sorted by what the row DISPLAYS, so a player's two entries do not
+        // tie on a shared `userName` and fall back to array order (§0b.4).
+        .sort((a, b) => rowDisplayName(a).localeCompare(rowDisplayName(b)));
       return [...sortByType(scored), ...unscored];
     };
 
@@ -135,7 +138,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
     // (codex, 2026-08-23). The alphabetical fallback stays HERE: it is a
     // display stabiliser for genuinely tied rows, not a ranking fact.
     const sortByType = (copy: any[]) =>
-      copy.sort((a, b) => seasonCompare(type, a, b) || (a.userName || '').localeCompare(b.userName || ''));
+      copy.sort((a, b) => seasonCompare(type, a, b) || rowDisplayName(a).localeCompare(rowDisplayName(b)));
 
     return rank([...entries]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,10 +275,10 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                           className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
                           title="View player profile"
                         >
-                          {entry.userName}
+                          {rowDisplayName(entry)}
                         </button>
                       ) : (
-                        entry.userName
+                        rowDisplayName(entry)
                       )}
                       {isMyEntry && (
                         <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">

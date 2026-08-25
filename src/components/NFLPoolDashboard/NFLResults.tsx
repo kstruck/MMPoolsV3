@@ -7,6 +7,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import type { PoolPicksReveal } from '../../services/dbService';
 import { EntryWeekPicks } from './EntryWeekPicks';
+import { rowDisplayName } from '../../utils/entrySelection';
 import {
   rankByWeek,
   rankBySeason,
@@ -134,10 +135,10 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
           className="hover:text-gold-700 dark:hover:text-gold-400 hover:underline underline-offset-2 transition-colors text-left"
           title="View player profile"
         >
-          {row.userName}
+          {rowDisplayName(row)}
         </button>
       ) : (
-        row.userName
+        rowDisplayName(row)
       )}
       {!!viewerUid && (row.ownerUid ?? row.id) === viewerUid && (
         <span className="ml-1.5 inline-flex items-center rounded-full bg-brandred-600 px-2 py-0.5 leading-none font-display font-bold uppercase text-[11px] tracking-[0.08em] text-white">

@@ -13,7 +13,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { EntrySwitcher } from '../components/NFLPoolDashboard/EntrySwitcher';
-import { sortOwnEntries, nextAddableEntryIndex, entryLabelOf } from '../utils/entrySelection';
+import { sortOwnEntries, nextAddableEntryIndex, entryLabelOf, rowDisplayName } from '../utils/entrySelection';
 
 const e = (id: string, entryIndex: number, entryName?: string) =>
   ({ id, ownerUid: 'kevin', entryIndex, ...(entryName ? { entryName } : {}) });
@@ -206,5 +206,29 @@ describe('<EntrySwitcher>', () => {
     fireEvent.change(screen.getByLabelText('Name this entry'), { target: { value: 'x'.repeat(60) } });
     expect(onDraftNameChange.mock.calls[0][0]).toHaveLength(30);   // ENTRY_NAME_MAX
     cleanup();
+  });
+});
+
+/**
+ * PLAN-MULTI-ENTRY T6a — what a ROW is called.
+ *
+ * The failure this prevents is not a crash: it is two identical "Kevin Struck"
+ * lines, both wearing the "Me" badge, on the standings and both grids — a
+ * member who cannot tell which score or which sheet belongs to which entry.
+ */
+describe('rowDisplayName (§0b.4)', () => {
+  it('prefers the entry name and falls back to the player name', () => {
+    expect(rowDisplayName({ entryName: 'Kevin B', userName: 'Kevin Struck' })).toBe('Kevin B');
+    expect(rowDisplayName({ userName: 'Kevin Struck' })).toBe('Kevin Struck');
+  });
+
+  it('treats a blank or whitespace entry name as absent, not as a name', () => {
+    expect(rowDisplayName({ entryName: '', userName: 'Kevin Struck' })).toBe('Kevin Struck');
+    expect(rowDisplayName({ entryName: '   ', userName: 'Kevin Struck' })).toBe('Kevin Struck');
+  });
+
+  it('never throws on a row that carries neither', () => {
+    expect(rowDisplayName(null)).toBe('');
+    expect(rowDisplayName({})).toBe('');
   });
 });
