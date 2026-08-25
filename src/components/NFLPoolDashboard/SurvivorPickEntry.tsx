@@ -14,6 +14,7 @@ import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
+import { survivorOutcome, pickOutcomeCardClass, pickOutcomeLabel } from './pickSheet/pickOutcome';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { survivorModeRulesCopy } from '../../utils/survivorRules';
@@ -394,8 +395,28 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             const awayAbbrev = game.awayTeam.abbreviation;
             const split = consensus[game.id];
 
+            // How the SAVED pick turned out, graded the way the scorer grades
+            // it. Deliberately the saved pick and not `selectedTeam`: the mark
+            // is a statement about what was submitted, and the local selection
+            // is only a proposal until it is.
+            const outcome = survivorOutcome(game, savedPick ?? undefined, {
+              pickLosersMode,
+              tieCountsAs,
+              // An exempt week could not strike, so it cannot be "wrong".
+              exempt: Array.isArray(entry?.exemptWeeks) && entry.exemptWeeks.includes(week),
+            });
+
             return (
-              <div key={game.id} className="bg-card border border-line rounded-xl p-4 shadow-card space-y-2">
+              <div
+                key={game.id}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
+              >
+                {/* Text half of the card highlight — see PickemPickEntry. */}
+                {outcome && (
+                  <span className="sr-only">
+                    {`${awayAbbrev} at ${homeAbbrev}: ${pickOutcomeLabel(outcome)}`}
+                  </span>
+                )}
                 <GameMeta game={game} locked={locked && game.status === 'SCHEDULED'} />
 
                 <div className="flex items-stretch gap-3">
@@ -406,6 +427,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     consensusPct={split?.awayPct}
                     selected={selectedTeam === awayAbbrev}
                     saved={savedPick === awayAbbrev}
+                    outcome={savedPick === awayAbbrev ? outcome : null}
                     disabled={locked || blockedTeams.has(awayAbbrev) || isEliminated}
                     badge={usedBadgeLabel(awayAbbrev)}
                     title={pickHighlightLabel(selectedTeam === awayAbbrev, savedPick === awayAbbrev) || undefined}
@@ -445,6 +467,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     consensusPct={split?.homePct}
                     selected={selectedTeam === homeAbbrev}
                     saved={savedPick === homeAbbrev}
+                    outcome={savedPick === homeAbbrev ? outcome : null}
                     disabled={locked || blockedTeams.has(homeAbbrev) || isEliminated}
                     badge={usedBadgeLabel(homeAbbrev)}
                     title={pickHighlightLabel(selectedTeam === homeAbbrev, savedPick === homeAbbrev) || undefined}

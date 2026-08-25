@@ -110,9 +110,22 @@ describe('the sheet consults the shared rule rather than re-deriving it', () => 
     'utf8',
   );
 
-  it('calls gradePick', () => {
+  it('calls gradePick on the pick the SERVER holds', () => {
     expect(src).toMatch(/utils\/pickemResult/);
-    expect(src).toMatch(/gradePick\(game, savedForGame \?\? myPick, castPool\.settings\?\.pickMode\)/);
+    // ⚠️ `savedForGame` alone. This assertion used to name
+    // `savedForGame ?? myPick`, and the fallback was a defect (codex round 2 of
+    // the pick-feedback change): `picks` is seeded from a local DRAFT as well as
+    // from the entry, so a game that went FINAL with an unsubmitted draft still
+    // in the browser graded the draft — and the sheet then showed a verdict on a
+    // pick the pool never received. Survivor and Margin have always graded
+    // `savedPick`; this is Pick'em joining them.
+    expect(src).toMatch(/gradePick\(game, savedForGame, castPool\.settings\?\.pickMode\)/);
+    expect(src).not.toMatch(/gradePick\([^)]*savedForGame \?\? myPick/);
+  });
+
+  it('that grep matches the expression it was written to catch', () => {
+    const removed = 'const result = gradePick(game, savedForGame ?? myPick, castPool.settings?.pickMode);';
+    expect(removed).toMatch(/gradePick\([^)]*savedForGame \?\? myPick/);
   });
 
   it('no longer colours from the raw score', () => {
@@ -126,9 +139,22 @@ describe('the sheet consults the shared rule rather than re-deriving it', () => 
   });
 
   it('does not paint a PUSH as a loss', () => {
-    // `isGraded` gates the colouring so a refunded pick stays neutral.
-    expect(src).toMatch(/const isGraded = result === 'W' \|\| result === 'L'/);
-    expect(src).toMatch(/isGraded\s*\n?\s*\? isCorrect/);
+    // ⚠️ THE GATE MOVED, IT DID NOT GO AWAY (2026-08-24, pick-feedback change).
+    //
+    // This used to assert an inline `isGraded = result === 'W' || result === 'L'`
+    // ternary. The green/red pair now lives in `pickSheet/pickOutcome.ts`, which
+    // all three sheets share, and `pickemOutcome` maps PUSH and VOID to `null` —
+    // a STRONGER form of the same guarantee, because Survivor and Margin get it
+    // too rather than Pick'em owning a private copy.
+    //
+    // The behaviour ("a PUSH renders neutral") is asserted directly in
+    // `tests/pick-outcome.test.ts`; this stays a wiring check, so the sheet
+    // cannot quietly re-derive a colour from the raw grade again.
+    expect(src).toMatch(/pickSheet\/pickOutcome/);
+    expect(src).toMatch(/const outcome = pickemOutcome\(game, result\)/);
+    expect(src).toMatch(/pickOutcomeCardClass\(outcome\)/);
+    // No hand-rolled W/L gate may come back alongside it.
+    expect(src).not.toMatch(/result === 'W' \|\| result === 'L'/);
   });
 
   it("matches the server's spread gate exactly — cancelled games included", () => {

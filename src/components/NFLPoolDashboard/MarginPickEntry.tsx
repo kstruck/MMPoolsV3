@@ -13,6 +13,7 @@ import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { GameMeta } from './pickSheet/GameMeta';
 import { TeamPickButton } from './pickSheet/TeamPickButton';
+import { marginOutcome, pickOutcomeCardClass, pickOutcomeLabel } from './pickSheet/pickOutcome';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 
@@ -313,8 +314,23 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
             const awayAbbrev = game.awayTeam.abbreviation;
             const split = consensus[game.id];
 
+            // A Margin week scores as a NUMBER, so "correct" is the sign of the
+            // margin `scoreMarginWeek` would record: a win adds to the season
+            // total, a loss subtracts. A tie or a cancelled game nets 0 and gets
+            // neither mark nor highlight.
+            const outcome = marginOutcome(game, savedPick ?? undefined);
+
             return (
-              <div key={game.id} className="bg-card border border-line rounded-xl p-4 shadow-card space-y-2">
+              <div
+                key={game.id}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
+              >
+                {/* Text half of the card highlight — see PickemPickEntry. */}
+                {outcome && (
+                  <span className="sr-only">
+                    {`${awayAbbrev} at ${homeAbbrev}: ${pickOutcomeLabel(outcome)}`}
+                  </span>
+                )}
                 <GameMeta game={game} locked={locked && game.status === 'SCHEDULED'} />
 
                 <div className="flex items-stretch gap-3">
@@ -325,6 +341,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
                     consensusPct={split?.awayPct}
                     selected={selectedTeam === awayAbbrev}
                     saved={savedPick === awayAbbrev}
+                    outcome={savedPick === awayAbbrev ? outcome : null}
                     disabled={locked || usedTeams.has(awayAbbrev)}
                     badge={usedTeams.has(awayAbbrev) ? 'Used' : null}
                     title={pickHighlightLabel(selectedTeam === awayAbbrev, savedPick === awayAbbrev) || undefined}
@@ -362,6 +379,7 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
                     consensusPct={split?.homePct}
                     selected={selectedTeam === homeAbbrev}
                     saved={savedPick === homeAbbrev}
+                    outcome={savedPick === homeAbbrev ? outcome : null}
                     disabled={locked || usedTeams.has(homeAbbrev)}
                     badge={usedTeams.has(homeAbbrev) ? 'Used' : null}
                     title={pickHighlightLabel(selectedTeam === homeAbbrev, savedPick === homeAbbrev) || undefined}

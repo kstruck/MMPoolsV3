@@ -1,7 +1,8 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import type { NFLGame } from '../../../types';
 import { teamColorStyle } from '../../../utils/nflTeamColors';
+import { pickOutcomeLabel, type PickOutcome } from './pickOutcome';
 
 /** One side of a matchup. `NFLGame` declares these inline, so it is named here. */
 export type PickTeam = NFLGame['homeTeam'];
@@ -41,8 +42,22 @@ export interface TeamPickButtonProps {
   /** Percentage of site-wide picks on this team, 0-100. Omitted when unknown. */
   consensusPct?: number;
   selected: boolean;
-  /** The pick the SERVER holds. Drives the "saved" vs "unsaved change" badge. */
+  /** The pick the SERVER holds. Drives the "Saved" vs "Unsaved" word badge. */
   saved?: boolean;
+  /**
+   * How this pick turned out, once the game has been graded — `null` on
+   * everything that is still pending, was not picked, or graded to neither
+   * (a Pick'em PUSH, a cancelled game, an exempt Survivor week).
+   *
+   * ⚠️ ONLY the picked team may receive this. Callers pass `null` for the other
+   * side of the matchup; a cross on the team you did NOT pick would read as a
+   * verdict on the game rather than on your sheet.
+   *
+   * Kevin, 2026-08-24: the check glyph now means CORRECT and nothing else. It
+   * used to mean "your selection is stored", which testers read as "I won this
+   * game" — see `pickOutcome.ts` for the whole story.
+   */
+  outcome?: PickOutcome;
   disabled?: boolean;
   /** Small pill in the top-left, e.g. "Used" / "2/3 used" on Survivor. */
   badge?: string | null;
@@ -57,6 +72,7 @@ export const TeamPickButton: React.FC<TeamPickButtonProps> = ({
   consensusPct,
   selected,
   saved = false,
+  outcome = null,
   disabled = false,
   badge,
   onSelect,
@@ -103,14 +119,47 @@ export const TeamPickButton: React.FC<TeamPickButtonProps> = ({
         </span>
       )}
 
-      {selected && (
+      {/* RESULT BADGE — the ONLY thing in this component allowed to draw a
+          check. Green tick = the pick was correct, red cross = it was not.
+          The glyphs differ in SHAPE as well as colour (WCAG 1.4.1) and each
+          carries the same words in an `sr-only` span and in `title`, so the
+          verdict survives a screen reader, a colour-blind member and a
+          greyscale screenshot alike.
+
+          `outcome` is non-null only on a GRADED game, so a pending matchup gets
+          no badge at all — which is the whole point of the change. */}
+      {outcome && (
         <span
           className={`absolute top-1.5 right-1.5 z-10 p-0.5 rounded-full ${
-            saved ? 'bg-[#0F7B4A] text-white' : 'bg-gold-500 text-navy-900'
+            outcome === 'CORRECT'
+              ? 'bg-[#0F7B4A] text-white dark:bg-[#4CC38A] dark:text-ink'
+              : 'bg-brandred-600 text-white dark:bg-brandred-500 dark:text-ink'
+          }`}
+          title={pickOutcomeLabel(outcome)}
+        >
+          {outcome === 'CORRECT' ? (
+            <Check size={10} className="stroke-[4]" aria-hidden="true" />
+          ) : (
+            <X size={10} className="stroke-[4]" aria-hidden="true" />
+          )}
+          <span className="sr-only">{pickOutcomeLabel(outcome)}</span>
+        </span>
+      )}
+
+      {/* SAVED STATE — a WORD, never a tick. This used to be a check badge and
+          testers read the green one as "I won this game"; the word cannot be
+          misread that way, and it still distinguishes a stored pick from an
+          unsaved tap. Suppressed once a result badge is showing: on a graded
+          game the sheet is locked, so "saved" is no longer news and the corner
+          belongs to the verdict. */}
+      {selected && !outcome && (
+        <span
+          className={`absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded-full text-[8px] font-display font-bold uppercase tracking-[0.12em] ${
+            saved ? 'bg-[#0F7B4A] text-white dark:bg-[#4CC38A] dark:text-ink' : 'bg-gold-500 text-navy-900'
           }`}
           title={saved ? 'Saved' : 'Not saved yet'}
         >
-          <Check size={10} className="stroke-[4]" aria-hidden="true" />
+          {saved ? 'Saved' : 'Unsaved'}
         </span>
       )}
 
