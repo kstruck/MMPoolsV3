@@ -400,6 +400,35 @@ export function failingCheckKeys(snapshot: HealthSnapshot): string[] {
 const SELF_JOB_NAME = "scheduledHealthCheck";
 
 /**
+ * Per-source off switch: `system/config.healthAlerts.enabled`.
+ *
+ * The only existing way to silence this would be to empty `opsAlerts`
+ * recipients, which turns off EVERY ops page — Stripe webhook failures, stat
+ * corrections, unlocked NFL spreads. A new self-firing path needs its own
+ * switch, per this repo's first safety rail, so a noisy night costs a Firestore
+ * edit rather than a deploy or a blanket blackout.
+ *
+ * DEFAULTS TO ON, including when the read FAILS. Every kill-switched job here
+ * fails safe by staying OFF, and that is right for a job that spends money or
+ * mutates data. This is the opposite case: a pager that goes silent on a
+ * transient config read is a pager that is not there on the night it matters,
+ * and nothing here is destructive. Only an explicit `enabled: false` stops it.
+ */
+export function healthAlertsEnabledFromConfig(raw: unknown): boolean {
+  const cfg = raw as { enabled?: unknown } | undefined;
+  return cfg?.enabled !== false;
+}
+
+async function healthAlertsEnabled(db: admin.firestore.Firestore): Promise<boolean> {
+  try {
+    return healthAlertsEnabledFromConfig((await db.doc("system/config").get()).data()?.healthAlerts);
+  } catch (e) {
+    console.warn("[adminHealth] healthAlerts config read failed; paging stays ENABLED (fail-open):", e);
+    return true;
+  }
+}
+
+/**
  * Which stale jobs are worth PAGING about, as opposed to worth showing on the
  * Ops Health card. Two exclusions, both from codex round 2:
  *
@@ -521,6 +550,10 @@ async function alertOnHealthTransitions(
   snapshot: HealthSnapshot,
   prev: HealthAlertState | undefined,
 ): Promise<HeartbeatVerdict> {
+  if (!(await healthAlertsEnabled(db))) {
+    console.log("[adminHealth] health paging disabled via system/config.healthAlerts.enabled; snapshot still persisted.");
+    return { detail: { pagingDisabled: true } };
+  }
   const now = Date.now();
   const heartbeats = await readHeartbeats(db);
   const stale =

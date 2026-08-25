@@ -32,6 +32,7 @@ import {
   failingCheckKeys,
   staleJobKeys,
   pageableStaleJobs,
+  healthAlertsEnabledFromConfig,
   MAX_ALERT_ATTEMPTS,
   type HealthAlertState,
   type HealthSnapshot,
@@ -202,6 +203,25 @@ describe('pageableStaleJobs — what is worth a page vs worth a card (codex roun
     ];
     const out = pageableStaleJobs(stale, NOW - 30 * 24 * HOUR, NOW, EXPECT);
     expect(out.map((s) => s.jobName)).toEqual(['daily']);
+  });
+});
+
+describe('healthAlertsEnabledFromConfig — the per-source off switch', () => {
+  it('is ON by default: unset config, empty config, or a missing flag', () => {
+    expect(healthAlertsEnabledFromConfig(undefined)).toBe(true);
+    expect(healthAlertsEnabledFromConfig({})).toBe(true);
+    expect(healthAlertsEnabledFromConfig({ other: 1 })).toBe(true);
+  });
+
+  it('is OFF only on an explicit false — not on a truthy-ish or garbage value', () => {
+    expect(healthAlertsEnabledFromConfig({ enabled: false })).toBe(false);
+    expect(healthAlertsEnabledFromConfig({ enabled: true })).toBe(true);
+    // A pager must not be silenced by a typo. Anything that is not exactly
+    // `false` leaves it on, deliberately unlike the money-path kill switches
+    // that fail safe by staying off.
+    expect(healthAlertsEnabledFromConfig({ enabled: 'false' })).toBe(true);
+    expect(healthAlertsEnabledFromConfig({ enabled: 0 })).toBe(true);
+    expect(healthAlertsEnabledFromConfig({ enabled: null })).toBe(true);
   });
 });
 
