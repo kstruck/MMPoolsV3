@@ -26,7 +26,7 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { ENTRY_NAME_MAX, defaultEntryName } from '@shared/multiEntry';
-import { sortOwnEntries, nextFreeEntryIndex, entryLabelOf, entryIndexOf, type OwnEntryLike } from '../../utils/entrySelection';
+import { sortOwnEntries, nextAddableEntryIndex, entryLabelOf, entryIndexOf, type OwnEntryLike } from '../../utils/entrySelection';
 
 export interface EntryDraft {
   entryIndex: number;
@@ -71,7 +71,7 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
   // one-tab strip, so a single-entry pool looks exactly as it did before T5.
   if (maxEntries <= 1) return null;
 
-  const canAdd = !draft && sorted.length < maxEntries && nextFreeEntryIndex(sorted, maxEntries) !== null;
+  const canAdd = !draft && sorted.length < maxEntries && nextAddableEntryIndex(sorted, maxEntries) !== null;
 
   const handleName = (value: string) => {
     const trimmed = value.trim();
@@ -94,6 +94,20 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {/*
+          A member who has never submitted holds NO entry document, but the
+          sheet below is already entry #1 — it is created by their first save.
+          Without this chip the strip would show only "Add entry" and read as
+          though they had to create something before they could pick.
+        */}
+        {sorted.length === 0 && !draft && (
+          <span
+            className="px-3 py-1.5 rounded-md text-sm font-medium border bg-[#142A4C] text-white border-[#142A4C]"
+            data-testid="implicit-entry-1"
+          >
+            Entry 1
+          </span>
+        )}
         {sorted.map((e) => {
           const active = !draft && e.id === activeEntryId;
           return (

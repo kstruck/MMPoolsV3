@@ -86,8 +86,11 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   // only, not in the load effect below (which also fires on the post-submit
   // entry refresh and would wipe the fresh receipt). Twin of MarginPickEntry.
   useEffect(() => {
+    // ⚠️ THE ENTRY IS PART OF THE RECEIPT'S SCOPE (PLAN-MULTI-ENTRY T5). The
+    // receipt says "saved just now" about ONE entry's sheet; carrying it across
+    // an entry switch would tell a member their brand-new entry #2 is saved.
     setSubmittedAt(null);
-  }, [week]);
+  }, [week, entryIndex]);
 
   // Load existing pick for this week when entry or week changes
   useEffect(() => {

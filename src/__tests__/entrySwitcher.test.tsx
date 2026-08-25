@@ -13,7 +13,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { EntrySwitcher } from '../components/NFLPoolDashboard/EntrySwitcher';
-import { sortOwnEntries, nextFreeEntryIndex, entryLabelOf } from '../utils/entrySelection';
+import { sortOwnEntries, nextAddableEntryIndex, entryLabelOf } from '../utils/entrySelection';
 
 const e = (id: string, entryIndex: number, entryName?: string) =>
   ({ id, ownerUid: 'kevin', entryIndex, ...(entryName ? { entryName } : {}) });
@@ -30,7 +30,7 @@ const baseProps = {
   onCancelDraft: () => {},
 };
 
-describe('nextFreeEntryIndex', () => {
+describe('nextAddableEntryIndex', () => {
   it('is the lowest index not already held, NOT count + 1', () => {
     // 🛑 THE DEFECT THIS PINS. Indexes are not guaranteed contiguous — the
     // manager's proxy path can create an entry at any index the cap allows — so
@@ -38,19 +38,24 @@ describe('nextFreeEntryIndex', () => {
     // server resolves an existing index by RETURNING that entry rather than
     // creating one, so the member would silently be editing entry #3's sheet
     // while the UI told them they were making a new one.
-    expect(nextFreeEntryIndex([e('kevin', 1), e('e3:kevin', 3)], 3)).toBe(2);
+    expect(nextAddableEntryIndex([e('kevin', 1), e('e3:kevin', 3)], 3)).toBe(2);
   });
 
-  it('is 1 when the member holds nothing', () => {
-    expect(nextFreeEntryIndex([], 3)).toBe(1);
+  it('is 2, never 1, even when the member holds nothing at all', () => {
+    // Entry #1 is the sheet they already have — created by their first
+    // ordinary submit — and it carries no `entryName` by contract. Offering it
+    // as an addable slot would invite a name the first save discards.
+    // (codex r1 P2 on the T5 PR.)
+    expect(nextAddableEntryIndex([], 3)).toBe(2);
+    expect(nextAddableEntryIndex([], 1)).toBeNull();
   });
 
   it('is null once every index up to the cap is held', () => {
-    expect(nextFreeEntryIndex([e('kevin', 1), e('e2:kevin', 2)], 2)).toBeNull();
+    expect(nextAddableEntryIndex([e('kevin', 1), e('e2:kevin', 2)], 2)).toBeNull();
   });
 
   it('treats an entry with no entryIndex as #1 (the legacy shape)', () => {
-    expect(nextFreeEntryIndex([{ id: 'kevin' }], 2)).toBe(2);
+    expect(nextAddableEntryIndex([{ id: 'kevin' }], 2)).toBe(2);
   });
 });
 
@@ -94,6 +99,16 @@ describe('<EntrySwitcher>', () => {
     render(<EntrySwitcher {...baseProps} ownEntries={[e('kevin', 1), e('e2:kevin', 2, 'Kevin B')]} activeEntryId="kevin" onSelect={onSelect} />);
     fireEvent.click(screen.getByText('Kevin B'));
     expect(onSelect).toHaveBeenCalledWith('e2:kevin');
+    cleanup();
+  });
+
+  it('shows an implicit "Entry 1" chip for a member who holds nothing yet', () => {
+    // Their sheet IS entry #1; it is created by their first save. A strip with
+    // only "Add entry" would read as "create something before you can pick".
+    render(<EntrySwitcher {...baseProps} ownEntries={[]} />);
+    expect(screen.getByTestId('implicit-entry-1').textContent).toBe('Entry 1');
+    // ...and "Add entry" offers entry 2, not a second entry 1.
+    expect(screen.getByText('Add entry')).toBeTruthy();
     cleanup();
   });
 

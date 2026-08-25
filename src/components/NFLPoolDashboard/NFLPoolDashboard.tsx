@@ -17,7 +17,7 @@ import { PickemPickEntry } from './PickemPickEntry';
 import { SurvivorPickEntry } from './SurvivorPickEntry';
 import { MarginPickEntry } from './MarginPickEntry';
 import { EntrySwitcher, type EntryDraft } from './EntrySwitcher';
-import { sortOwnEntries, nextFreeEntryIndex } from '../../utils/entrySelection';
+import { sortOwnEntries, nextAddableEntryIndex } from '../../utils/entrySelection';
 import { effectiveMaxEntriesPerUser, defaultEntryName } from '@shared/multiEntry';
 import { NFLStandingsTab } from './NFLStandingsTab';
 import { NFLPoolRules } from './NFLPoolRules';
@@ -1151,7 +1151,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                           }}
                           draft={draft}
                           onStartDraft={() => {
-                            const next = nextFreeEntryIndex(ownEntries, maxEntriesPerUser);
+                            const next = nextAddableEntryIndex(ownEntries, maxEntriesPerUser);
                             if (next === null) return;
                             setEntryDraft({
                               poolId: pool.id,

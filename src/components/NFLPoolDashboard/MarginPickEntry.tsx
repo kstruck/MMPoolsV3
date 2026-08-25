@@ -70,8 +70,11 @@ export const MarginPickEntry: React.FC<MarginPickEntryProps> = ({
   // snapshot refreshes right after a successful submit, and would wipe the
   // receipt it just earned. Same shape as PickemPickEntry (codex r1).
   useEffect(() => {
+    // ⚠️ THE ENTRY IS PART OF THE RECEIPT'S SCOPE (PLAN-MULTI-ENTRY T5). The
+    // receipt says "saved just now" about ONE entry's sheet; carrying it across
+    // an entry switch would tell a member their brand-new entry #2 is saved.
     setSubmittedAt(null);
-  }, [week]);
+  }, [week, entryIndex]);
 
   // Load existing selection for this week when entry or week changes
   useEffect(() => {

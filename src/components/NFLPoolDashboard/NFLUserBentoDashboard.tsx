@@ -245,11 +245,16 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   );
 
   const userRank = useMemo(() => {
-    if (!user || entries.length === 0) return 'N/A';
+    if (!user || entries.length === 0 || !myEntry) return 'N/A';
     const sorted = [...entries].sort(bySeason);
-    const rankIndex = sorted.findIndex(e => e.ownerUid === user.id || e.id === user.id);
+    // 🛑 THE RANK OF THE ACTIVE ENTRY, NOT OF THE FIRST ROW THIS PERSON OWNS
+    // (codex r1 P2 on the T5 PR). Every other number on this card already
+    // switches with the selected entry, so a uid-matched rank would show entry
+    // #2's record beside entry #1's position — and the percentile below is
+    // derived from it, so the error compounds rather than merely misleading.
+    const rankIndex = sorted.findIndex(e => e.id === myEntry.id);
     return rankIndex !== -1 ? `#${rankIndex + 1}` : 'N/A';
-  }, [entries, user, bySeason]);
+  }, [entries, user, myEntry, bySeason]);
 
   // Full slate for the selected week (used to list every game, not just the focus game).
   const weeklyGames = useMemo(() => {

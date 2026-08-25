@@ -97,7 +97,16 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // change the sheet ignored it, so an approved extension never reopened
   // anything for the member it was granted for.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, week);
-  const draftKey = `pickem:${pool.id}:${week}`;
+  // 🛑 THE ENTRY IS PART OF THE DRAFT'S IDENTITY (PLAN-MULTI-ENTRY T5,
+  // codex r1 P1). A local draft is restored into the sheet and then SUBMITTED
+  // under whatever `entryIndex` is active — so a key of pool+week alone would
+  // restore unsaved picks made on entry #1 into entry #2's empty sheet and save
+  // them there. One entry's picks written onto another is the multi-entry
+  // failure this whole plan exists to prevent, arriving through localStorage.
+  //
+  // Entry #1 keeps the ORIGINAL key, so a draft saved before this shipped is
+  // still restored for the entry it was made on.
+  const draftKey = `pickem:${pool.id}:${week}${entryIndex && entryIndex > 1 ? `:e${entryIndex}` : ''}`;
 
   // Re-evaluate lock state every 30s so the UI flips to locked in place at T-0
   // instead of accepting taps the server will reject
@@ -126,7 +135,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     // (gated on !validationError). Margin/Survivor clear theirs in the load
     // effect; Pick'em never did (qodo, on this PR).
     setValidationError(null);
-  }, [week]);
+    // ⚠️ AND ON THE ENTRY (PLAN-MULTI-ENTRY T5). The receipt says "saved just
+    // now" about ONE entry's sheet, so carrying it across an entry switch would
+    // tell a member their brand-new entry #2 is already saved. `entryIndex` is
+    // a number, not the snapshot, so this still does not fire on the
+    // post-submit entry refresh the comment above is about.
+  }, [week, entryIndex]);
 
   useEffect(() => {
     dirtyRef.current = false;

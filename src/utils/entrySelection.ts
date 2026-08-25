@@ -27,8 +27,8 @@ export function sortOwnEntries<T extends OwnEntryLike>(entries: readonly T[] | n
 }
 
 /**
- * The index a NEW entry would take: the lowest positive integer this member
- * does not already hold, or `null` when they hold every index up to the cap.
+ * The index a NEW entry would take: the lowest index this member does not
+ * already hold, or `null` when they hold every index up to the cap.
  *
  * 🛑 NOT `count + 1`. Indexes are not guaranteed contiguous — an entry created
  * through the manager's proxy path can arrive at any index the cap allows — and
@@ -36,10 +36,17 @@ export function sortOwnEntries<T extends OwnEntryLike>(entries: readonly T[] | n
  * an existing index by RETURNING that entry rather than creating one
  * (`resolveOwnedEntry`), so the member would silently be editing a sheet they
  * did not choose, and their first save would overwrite it.
+ *
+ * 🛑 AND NEVER 1. Entry #1 is not something a member ADDS — it is the sheet
+ * they already have, created by their first ordinary submit, and by contract it
+ * carries no `entryName` (it displays their user name; `defaultEntryName`
+ * returns undefined for index 1 and `submitNFLPicks` is only sent a name for an
+ * extra entry). Offering it as an addable slot would invite a member to type a
+ * name that the first save then silently discards. (codex r1 P2 on the T5 PR.)
  */
-export function nextFreeEntryIndex(entries: readonly OwnEntryLike[] | null | undefined, maxEntries: number): number | null {
+export function nextAddableEntryIndex(entries: readonly OwnEntryLike[] | null | undefined, maxEntries: number): number | null {
     const taken = new Set((entries ?? []).map(entryIndexOf));
-    for (let i = 1; i <= maxEntries; i++) if (!taken.has(i)) return i;
+    for (let i = 2; i <= maxEntries; i++) if (!taken.has(i)) return i;
     return null;
 }
 
