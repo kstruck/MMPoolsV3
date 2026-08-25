@@ -65,7 +65,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-brandred-600/15 border border-brandred-600/35 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <span className="flex h-2 w-2 rounded-full bg-brandred-500 animate-live-pulse"></span>
-            <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-brandred-500">2026 NFL Season Pools Coming Soon</span>
+            {/* G1/D6 — the ONE launch-status line on the front door that was
+                unconditional. With creation open, "coming soon" sits directly
+                above an enabled "Create an NFL Pool" button and next to the
+                invite traffic it is meant to convert. `POOL_CREATION_ENABLED`,
+                not `canCreate`: this is a statement about the product, not
+                about the visitor (a super admin must not read a different
+                launch status from everyone else). */}
+            <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-brandred-500">
+              {POOL_CREATION_ENABLED ? '2026 NFL Season Pools Are Open' : '2026 NFL Season Pools Coming Soon'}
+            </span>
           </div>
 
           <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
