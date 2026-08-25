@@ -139,7 +139,16 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // Password Gate (Local) moved to top
     const [enteredPassword, setEnteredPassword] = useState('');
     const [passwordError, setPasswordError] = useState<string | null>(null);
-    const [isUnlocked, setIsUnlocked] = useState(false);
+    /**
+     * WHICH POOL was unlocked, not WHETHER one was (codex r9, P1).
+     *
+     * This route stays MOUNTED across pool navigation — the `key` note on the
+     * NFL branch below exists for exactly that reason — so a boolean survived
+     * into the next pool, and unlocking one protected pool then opened every
+     * other protected pool the user navigated to, gate and all. Storing the id
+     * makes the unlock a statement about a specific pool.
+     */
+    const [unlockedPoolId, setUnlockedPoolId] = useState<string | null>(null);
     const [checkingPassword, setCheckingPassword] = useState(false);
 
     // Quarterly Payouts (Moved to top)
@@ -232,7 +241,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         setCheckingPassword(true);
         try {
             const { ok, reason } = await dbService.verifyPoolAccess(gated.id, enteredPassword);
-            setIsUnlocked(ok);
+            setUnlockedPoolId(ok ? gated.id : null);
             setPasswordError(ok ? null
                 : reason === 'throttled' ? 'Too many attempts. Wait a few minutes and try again.'
                 : reason === 'error' ? 'Could not check the password right now. Try again.'
@@ -287,7 +296,12 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         </div>
     );
 
-    if (isPasswordProtected && !isUnlocked && user?.id !== gated.ownerId) {
+    // `isManager`, not `ownerId` (codex r9, P2). A pool whose `managerUid`
+    // differs from `ownerId` has a designated manager who can administer the
+    // password server-side but would otherwise be shown the gate and locked out
+    // of their own dashboard; `isPoolManager` is the predicate the rest of this
+    // file already trusts for exactly that question, and it admits SUPER_ADMIN.
+    if (isPasswordProtected && unlockedPoolId !== gated.id && !isManager) {
         return withHelp(renderPasswordGate());
     }
 

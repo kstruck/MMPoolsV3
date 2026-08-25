@@ -354,3 +354,25 @@ and now CLOSED rather than carried.
    still out of this PR's file scope. It is now an IMPROVEMENT rather than an
    open exposure, and is recorded in the plan's follow-ups instead of the PR's
    carried findings.
+
+## Round 9
+
+VERDICT: REVISE. 2 findings (1 P1, 1 P2), BOTH ACCEPTED. Both are in the gate
+hoisted in round 7 — the fix's own defects again.
+
+1. **(P1) The unlock was not bound to a pool.** `isUnlocked` was a boolean, and
+   this route stays MOUNTED across pool navigation — the `key` note on the NFL
+   branch exists for precisely that reason and I moved code past it without
+   applying it. So unlocking ONE protected pool then opened every other
+   protected pool the user navigated to. Round 7's hoist made this strictly
+   worse by extending the gate to Props. Fixed: the state is
+   `unlockedPoolId: string | null` and the gate compares it to `gated.id`.
+
+2. **(P2) The exemption was narrower than the app's own authorization model.**
+   The gate exempted `ownerId` only, so a pool whose `managerUid` differs — a
+   designated manager who can administer the password server-side — was shown
+   the gate and locked out of their own dashboard, as was any SUPER_ADMIN. It
+   now uses `isManager` (`isPoolManager`, which admits `ownerId`, `managerUid`
+   and SUPER_ADMIN), the predicate the rest of the file already trusts for this
+   question. Note this REPLICATES the pre-existing squares behaviour's bug
+   rather than inventing one; it is fixed on the way past.

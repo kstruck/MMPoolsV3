@@ -110,6 +110,21 @@ describe('client source invariants', () => {
     expect(src).not.toMatch(/PASSWORD_VIEW_GATED_TYPES[^\]]*BRACKET/);
   });
 
+  it('an unlock is bound to ONE pool, and managers are exempt (codex r9)', () => {
+    const src = strip(read('src/components/routes/PoolRoute.tsx'));
+    // This route stays MOUNTED across pool navigation, so a boolean
+    // `isUnlocked` survived into the next pool: unlocking one protected pool
+    // then opened every other one the user navigated to, gate and all.
+    expect(src).not.toMatch(/const \[isUnlocked/);
+    expect(src).toMatch(/const \[unlockedPoolId, setUnlockedPoolId\] = useState<string \| null>/);
+    expect(src).toMatch(/unlockedPoolId !== gated\.id/);
+    // The exemption is the manager predicate the rest of the file already
+    // trusts — it admits `managerUid` and SUPER_ADMIN — not a bare ownerId
+    // compare, which locked a designated manager out of their own dashboard.
+    expect(src).toMatch(/isPasswordProtected && unlockedPoolId !== gated\.id && !isManager/);
+    expect(src).not.toMatch(/isPasswordProtected .* user\?\.id !==/);
+  });
+
   it('a create whose password fails to save leaves no unprotected pool behind', () => {
     // Creation is two calls now, so a failed second call would otherwise leave
     // an existing, UNPROTECTED pool while the commissioner is told creation
