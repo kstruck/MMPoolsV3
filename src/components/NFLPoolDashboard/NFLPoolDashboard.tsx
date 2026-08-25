@@ -639,9 +639,24 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     // the wrong entry.
     if (draft) return null;
     if (ownEntry) return ownEntry;
+    //
+    // 🛑 AND ON A MULTI-ENTRY POOL, NEVER GUESS (codex r6, P1).
+    //
+    // Below this line the own-entry snapshot has NOT landed, and the only rows
+    // in hand are the FOLD's — which carry no `entryIndex`, so they cannot be
+    // matched to the active one. `mine[0]` is whichever the fold emitted first,
+    // and the fold is ordered by the standings cascade: on a two-entry member
+    // that can be entry #2 while `activeEntryIndex` is still 1. The sheet would
+    // then DISPLAY entry #2's picks and SUBMIT them as entry #1 — a save that
+    // copies one entry's sheet onto another, which is precisely the corruption
+    // this plan exists to prevent.
+    //
+    // A single-entry pool keeps the fallback exactly as it was, because there
+    // `mine[0]` is not a guess: it is the member's only entry.
+    if (maxEntriesPerUser > 1) return null;
     const mine = entries.filter(e => e.ownerUid === user.id);
     return mine[0] || null;
-  }, [ownEntry, draft, entries, user]);
+  }, [ownEntry, draft, entries, user, maxEntriesPerUser]);
 
   // Check if the current selected week is locked (earliest game kicked off).
   // Server-corrected clock — device time can drift and lie about the deadline.
