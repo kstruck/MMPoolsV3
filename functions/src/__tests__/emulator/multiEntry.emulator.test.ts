@@ -1628,6 +1628,25 @@ describe('getPoolDues — the only door into the sealed dues store', () => {
     expect((await member(BOB)).feeOwed).toBe(25);
   }, 60000);
 
+  it('reports which ENTRY DOCUMENTS carry a PAID mirror', async () => {
+    // The delete callable refuses on this third payment source, and the ledger
+    // cannot read raw entries for other members (own-entry-only pre-reveal), so
+    // without this the UI cannot honestly mirror that refusal.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+
+    const { paidMirrors } = await get(HOST);
+    expect(paidMirrors).toEqual([`e2:${ALICE}`]);
+    // ...and a legacy DIVERGENCE is reported too: the entry doc says PAID while
+    // the member/dues side does not. That is the case the UI could not see.
+    await poolRef().collection('entries').doc(ALICE).set({ paidStatus: 'PAID' }, { merge: true });
+    const after = await get(HOST);
+    expect(after.paidMirrors.sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    expect(Object.keys(after.dues[ALICE])).toEqual([`e2:${ALICE}`]);   // dues side unchanged
+  }, 60000);
+
   it('AUTHORIZATION: refuses a participant, a stranger, and a member reading their own pool', async () => {
     await seedPool({ max: 2, entryCount: 2 });
     await submit(ALICE, { picks: { [G1]: 'KC' } });

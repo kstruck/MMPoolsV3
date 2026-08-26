@@ -813,6 +813,19 @@ export const dbService = {
     },
 
     /**
+     * PLAN-MULTI-ENTRY-DUES P2-T4: a commissioner removes an entry that was
+     * never paid for and never scored. Commissioner-only, and the server
+     * re-checks BOTH refusals — the UI disables the control for the same two
+     * reasons, but a disabled button is a courtesy, never the gate.
+     */
+    deleteNFLEntry: async (poolId: string, targetUid: string, entryIndex: number): Promise<{ entryId: string; liabilityDelta: number }> => {
+        const fn = httpsCallable(functions, 'deleteNFLEntry');
+        const res = await fn(withCorrelationId({ poolId, targetUid, entryIndex }));
+        const d = res.data as { entryId?: string; liabilityDelta?: number };
+        return { entryId: d?.entryId ?? '', liabilityDelta: d?.liabilityDelta ?? 0 };
+    },
+
+    /**
      * PLAN-MULTI-ENTRY-DUES P2-T5: the per-entry payment map, commissioner only.
      *
      * A callable rather than a Firestore read because the map lives in
@@ -824,11 +837,12 @@ export const dbService = {
     getPoolDues: async (poolId: string): Promise<{
         dues: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>;
         liable: Record<string, string[]>;
+        paidMirrors: string[];
     }> => {
         const fn = httpsCallable(functions, 'getPoolDues');
         const res = await fn(withCorrelationId({ poolId }));
-        const d = res.data as { dues?: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>; liable?: Record<string, string[]> };
-        return { dues: d?.dues ?? {}, liable: d?.liable ?? {} };
+        const d = res.data as { dues?: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>; liable?: Record<string, string[]>; paidMirrors?: string[] };
+        return { dues: d?.dues ?? {}, liable: d?.liable ?? {}, paidMirrors: d?.paidMirrors ?? [] };
     },
 
     // The ONLY writer of pool.coManagers (PLAN-CO-COMMISSIONERS D2). ONE uid per
