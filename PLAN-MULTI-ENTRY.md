@@ -3,8 +3,10 @@
 > **STATUS: §6 SIGNED 2026-08-15. 🟢 SHIPPED AND LIVE 2026-08-25 —
 > `MULTI_ENTRY_WIZARD_ENABLED = true` (#591). T0, K9 (#445), T1 (#449),
 > T2 (#450), T3 (#587), T4 (#588), T5 (#589), T6a (#590), FLIP (#591).
-> Functions deployed from `main` @ `809384d4` and verified by name; the Coolify
-> rebuild is owed. STILL OPEN: the rest of T6 (`RecordPayoutsCard`), T7, T8, T9.**
+> Functions deployed from <!-- deploy-state:ignore --> `main` @ `809384d4` and
+> verified by name (HISTORICAL — superseded 2026-08-26 by #597's deploy at
+> `e6882d21`; HANDOFF's top box is the live claim). The Coolify rebuild that was
+> owed here has since run. STILL OPEN: the rest of T6 (`RecordPayoutsCard`), T7, T8, T9.**
 > This is a **MONEY + SCORING** change (`mmp-change-control` Rule 3): dues become
 > a multiple of the entry fee, and every scoring, standings, reveal and finalize
 > path re-keys from a uid to an entry. Plan → adversarial review log

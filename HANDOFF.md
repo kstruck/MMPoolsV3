@@ -1,16 +1,77 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-25 (latest) — **LAUNCH DAY IS DONE. MULTI-ENTRY IS LIVE, POOL CREATION IS OPEN, AND THE DEPLOY QUEUE IS EMPTY. EIGHT PRs MERGED (#587–#594 + #529). FUNCTIONS, RULES AND THE FRONTEND ALL DEPLOYED AND EACH VERIFIED INDEPENDENTLY.**
+> ## 🟢 2026-08-26 (latest) — **#597 AND #598 ARE BOTH LIVE. MEASURED THIS SESSION ON KEVIN'S MACHINE, NOT INHERITED FROM ANY REPORT. DEPLOY QUEUE EMPTY.**
+>
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `e6882d21`.**
+> ⚠️ Updated 2026-08-26 (the previous tagged claim, `809384d4`, was stale by one
+> functions deploy — it is now `<!-- deploy-state:ignore -->`).
+>
+> 🛑 **WHY `e6882d21` AND NOT `main` HEAD (`3e71fbf8`).** The tag names the commit
+> whose `functions/` content is deployed, and that is the last commit that TOUCHED
+> `functions/` — `e6882d21` (#597). `3e71fbf8` (#598) is frontend + tests only
+> (`git diff --stat e6882d21 3e71fbf8 -- functions/ shared/` is empty), so
+> `functions/` at HEAD is content-identical to what is running. Tagging HEAD would
+> have asserted a deploy that never happened; tagging `e6882d21` asserts the one
+> that did. **No functions deploy is owed.**
+>
+> **The evidence, measured 2026-08-26 — by NAME, per CLAUDE.md §3:**
+>
+> ```
+> npx firebase functions:list | Select-String "renameNFLEntry"
+> ```
+>
+> `renameNFLEntry` **PRESENT** (v2 callable, us-central1). It is the ONLY export
+> #597 added (`git diff e6882d21^ e6882d21 -- functions/src/index.ts` is a single
+> `+` line), so one name settles the whole merge.
+>
+> **RULES ARE *NOT* AT THIS COMMIT** and that is deliberate and unchanged:
+> `firestore.rules` has not changed since #579, whose rules deploy Kevin ran on
+> 2026-08-25. Do not read "functions are at `e6882d21`" as "everything is".
+>
+> ✅ **FRONTEND: BOTH MERGES ARE LIVE.** Kevin's Coolify rebuild at ~03:20Z on
+> 2026-08-26 carried #597 AND #598. Verified by a recursive chunk crawl —
+> **116 chunks fetched**, seeded from `index` and searching `index` itself:
+>
+> | String | Verdict | Chunk | From |
+> |---|---|---|---|
+> | `renameNFLEntry` | PRESENT | `index-DR2gWNnz.js`, `PoolRoute-TGFaQu44.js` | #597 |
+> | `Rename this entry` | PRESENT | `PoolRoute-TGFaQu44.js` | #597 |
+> | `LXI` | PRESENT | `index-DR2gWNnz.js` | #598 |
+> | `2027-02-14T16:30:00-07:00` | PRESENT | `index-DR2gWNnz.js` | #598 |
+> | `America/Denver` | PRESENT | `index-DR2gWNnz.js` | #598 |
+> | `Sep 10` | **ABSENT** *(negative control — #598 deleted it)* | — | pre-#598 |
+>
+> 🛑 **A NEEDLE THAT IS A TEMPLATE LITERAL CAN NEVER BE FOUND, AND THIS SESSION
+> PRODUCED THAT FALSE ABSENT BEFORE CATCHING IT.** The first crawl searched for
+> `Super Bowl LXI` and reported **ABSENT** on a build that was in fact correct.
+> The string does not exist in the source: `season.ts` defines
+> ``SUPER_BOWL_TITLE = `Super Bowl ${SUPER_BOWL_NUMERAL}` `` and the minifier does
+> not fold it, so the bundle holds `"Super Bowl "` and `"LXI"` as separate
+> operands. **Pick needles that are whole string literals in the source** — here
+> `LXI` and the ISO date — and read the source to confirm the literal exists
+> before trusting either verdict.
+>
+> 🛑 **AND CARRY A NEGATIVE CONTROL.** `Sep 10` is the string #598 DELETED. Its
+> absence, alongside the new strings' presence, distinguishes "the new build
+> shipped" from "my crawl finds nothing anywhere" — which is the failure mode the
+> template-literal miss had already demonstrated is easy to hit. A crawl that
+> reports only ABSENTs has not proven a stale deploy; it has proven nothing.
+>
+> ⚠️ **The 2026-08-25 crawl guidance below still stands and was followed**: crawl
+> RECURSIVELY, seed from `index`, and search `index` itself. A one-level scan
+> produced a false ABSENT on 2026-08-25.
+
+---
+
+> ## ✅ 2026-08-25 — LAUNCH DAY. **HISTORY, and its deploy facts are SUPERSEDED by the box above.** Eight PRs merged (#587–#594 + #529).
 >
 > Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `809384d4`.**
-> ⚠️ Updated 2026-08-25 (the previous tagged claim, `c37bbd37`, had been carried
-> since 2026-08-12 and was stale by four deploys — it is now
-> `<!-- deploy-state:ignore -->`). **RULES ARE *NOT* AT THIS COMMIT** and that is
-> deliberate: `firestore.rules` has not changed since #579, whose rules deploy is
-> still owed as step 2 of the 2026-08-25 audit box below. Do not read "functions
-> are at `809384d4`" as "everything is".
+> ⚠️ **READ EVERY "THIS DEPLOY" AND EVERY BUNDLE HASH BELOW AS 2026-08-25's.**
+> The functions claim of this box was <!-- deploy-state:ignore --> `main` @
+> `809384d4` and the frontend bundle was `index-C4LEWyql.js`; both moved on
+> 2026-08-26 (top box). What stays TRUE here is the evidence method and the
+> owed-list closures — which is why the box is kept rather than deleted.
 >
 > ✅ **THE AUDIT BOX'S STEP 1 IS DONE, AS A SIDE EFFECT OF THIS DEPLOY.** One
 > `npx firebase deploy --only functions` covered both. Verified by NAME rather
@@ -1618,11 +1679,12 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 
 *(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules were live from <!-- deploy-state:ignore --> `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
-> ## ✅ DEPLOY STATE 2026-08-12 — **HISTORY. functions + rules were at <!-- deploy-state:ignore --> `main` @ `c37bbd37`; SUPERSEDED — functions moved to `809384d4` on 2026-08-25 (top box) and the frontend to `d6bae3f4` on 2026-08-13**
+> ## ✅ DEPLOY STATE 2026-08-12 — **HISTORY. functions + rules were at <!-- deploy-state:ignore --> `main` @ `c37bbd37`; SUPERSEDED — functions moved to `809384d4` on 2026-08-25 and again to `e6882d21` on 2026-08-26 (top box), and the frontend to `d6bae3f4` on 2026-08-13**
 >
 > **Functions are deployed from <!-- deploy-state:ignore --> `main` @ `c37bbd37`,
-> and so are the rules.** ⚠️ SUPERSEDED 2026-08-25 — functions moved to
-> `809384d4` (top box), and the `deploy-state:current` tag moved with them.
+> and so are the rules.** ⚠️ SUPERSEDED — functions moved to
+> `809384d4` on 2026-08-25 and then to `e6882d21` on 2026-08-26, which is what
+> the top box and the `deploy-state:current` tag now name.
 > This line is history. The frontend WAS at this commit when this box was
 > written and has since moved to `d6bae3f4` (2026-08-13, box above). Deployed the morning of 2026-08-12, in
 > the order the change required: **functions → Coolify rebuild → rules.** That order is not cosmetic — see the

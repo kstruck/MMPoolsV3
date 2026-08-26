@@ -30,6 +30,7 @@ import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReus
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
+import { NFL_KICKOFF_MS } from '../../config/season';
 
 type PlaceRow = { rank: number; percentage: number };
 
@@ -293,10 +294,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   // --- Season lock logic ---
-  // Regular managers can only edit before Week 1 starts (Sep 10, 2026).
-  // SuperAdmins can ALWAYS edit.
-  const seasonStartMs = new Date('2026-09-10T00:00:00-06:00').getTime();
-  const isPreSeason = serverNow() < seasonStartMs;
+  // Regular managers can only edit before the season starts; SuperAdmins ALWAYS.
+  //
+  // ⚠️ This was keyed to its own hardcoded `2026-09-10T00:00:00-06:00`, one of
+  // five copies of the season start that disagreed with each other (see
+  // src/config/season.ts). It now reads the same instant as the countdown and
+  // both milestone strips.
+  //
+  // The move is Sep 10 00:00 MDT -> Sep 9 18:20 MDT: about thirty hours
+  // STRICTER, which is the safe direction for a gate. It is also client-side
+  // only — `updatePoolSettings` has no season-start cutoff of its own
+  // (measured: no `seasonStart` / `isPreSeason` in functions/src/poolOps.ts) —
+  // so this is an affordance, not the authorization boundary.
+  const isPreSeason = serverNow() < NFL_KICKOFF_MS;
   const canEditSettings = isSuperAdmin || isPreSeason;
 
   // ---- Local settings state (initialized from pool) ----

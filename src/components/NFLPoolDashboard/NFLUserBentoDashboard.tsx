@@ -36,6 +36,7 @@ import {
   PolarRadiusAxis
 } from 'recharts';
 import { Badge, Button, RankChip, YouPill } from '../ui';
+import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../../config/season';
 
 interface NFLUserBentoDashboardProps {
   pool: Pool;
@@ -1289,7 +1290,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               NFL Kickoff
             </span>
             <span className="text-gold-600 dark:text-gold-400 font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
-              <span className="h-2 w-2 rounded-full bg-gold-500 animate-live-pulse"></span> Sep 10
+              <span className="h-2 w-2 rounded-full bg-gold-500 animate-live-pulse"></span> {milestoneLabel(NFL_KICKOFF_MS)}
             </span>
           </div>
 
@@ -1314,10 +1315,10 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
           {/* Timeline Node 3 */}
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left group">
             <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em] block mb-0.5 transition-colors duration-150 group-hover:text-[color:var(--text)]">
-              Super Bowl LX
+              {SUPER_BOWL_TITLE}
             </span>
             <span className="text-[color:var(--text)] font-display font-bold text-sm uppercase tracking-[0.05em] flex items-center gap-1.5 num">
-              <span className="h-2 w-2 rounded-full bg-[color:var(--text)]"></span> Feb 8
+              <span className="h-2 w-2 rounded-full bg-[color:var(--text)]"></span> {milestoneLabel(SUPER_BOWL_MS)}
             </span>
           </div>
 

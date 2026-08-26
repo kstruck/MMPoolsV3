@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-13 — functions+rules at `c37bbd37`, frontend at `d6bae3f4`)
+## 2. Live state (deploy state verified 2026-08-26 — functions at `e6882d21`, rules unchanged since #579, frontend carries #597 + #598)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,20 +361,36 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `809384d4`.**
-⚠️ Updated 2026-08-25, the multi-entry deploy
-(was <!-- deploy-state:ignore --> `main` @ `c37bbd37`, which this file carried
-since 2026-08-12 — four deploys stale). 🛑 **RULES ARE NO LONGER AT THE SAME COMMIT.** `firestore.rules` has not
-changed since #579 and its deploy is still owed; "functions are at X" is not
-"everything is at X".
-`HANDOFF.md`'s top box is the fuller statement, including the evidence for each
-surface.
-⚠️ **THE PARAGRAPH BELOW IS THE 2026-08-13 RECORD AND ITS "OWES NOTHING" CLAIM
-IS NO LONGER TRUE.** It is kept because the chunk-graph evidence is still the
-best statement of how the frontend was verified — but as of 2026-08-25 the
-deploy queue is NOT empty: a Coolify rebuild, #579's rules deploy and the
-pool-password sweep are all owed (HANDOFF's top box). Read the queue there, not
-here. (codex, on the docs PR.)
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `e6882d21`.**
+⚠️ Updated 2026-08-26, the #597 `renameNFLEntry` deploy
+(was <!-- deploy-state:ignore --> `main` @ `809384d4`, this file's 2026-08-25
+claim — one deploy stale). Measured, not inherited:
+`npx firebase functions:list | Select-String "renameNFLEntry"` returns the
+callable, and `renameNFLEntry` is the only export #597 added.
+
+🛑 **`e6882d21` IS NOT `main` HEAD, AND THAT IS CORRECT.** HEAD is `3e71fbf8`
+(#598), which touched no `functions/` or `shared/` file — so `e6882d21` is the
+newest commit whose `functions/` content is live, and no functions deploy is
+owed. Naming HEAD here would claim a deploy that never ran.
+
+🛑 **RULES ARE NOT AT THE SAME COMMIT.** `firestore.rules` has not changed
+since #579, and Kevin has run that rules deploy — so nothing is owed there
+either. "Functions are at X" is not "everything is at X".
+*(Do not let `#579` fall to the start of a line when reflowing this: a
+line-initial `#` parses as an H1, and `tests/docs-state-invariants.test.ts`
+then reads the wrapped prose as a dated state heading and fails. It caught
+exactly that here.)*
+`HANDOFF.md`'s top box is the fuller statement, including the frontend
+chunk-crawl evidence and the two crawl traps that produced false ABSENTs.
+⚠️ **THE PARAGRAPH BELOW IS THE 2026-08-13 RECORD. ITS BUNDLE HASH AND ITS SHAs
+ARE HISTORY**; it is kept because the chunk-graph evidence is still the best
+statement of how the frontend was verified. (codex, on the docs PR.)
+
+✅ **THE QUEUE IS EMPTY AS OF 2026-08-26.** The three items this note used to
+list as owed are all closed: the Coolify rebuild ran (twice — 2026-08-25 and
+again ~03:20Z on 2026-08-26), #579's rules deploy was run by Kevin on
+2026-08-25, and the pool-password sweep closed the same day at 23 pools scanned
+/ 0 changed. Read the live queue in HANDOFF's top box, not here.
 
 > *(2026-08-13, HISTORY)* **Rules are deployed from that same commit. The
 > FRONTEND has moved on: it is rebuilt from `d6bae3f4` (#417, 2026-08-13),

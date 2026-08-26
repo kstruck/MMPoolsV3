@@ -1,6 +1,6 @@
 # MORNING — 2026-08-25, launch day: multi-entry is live
 
-**Six PRs merged (#587–#592). Functions deployed from `main` @ `809384d4` and
+**Six PRs merged (#587–#592). Functions deployed from <!-- deploy-state:ignore --> `main` @ `809384d4` and
 verified by name; the frontend rebuilt and verified by chunk content. The rules
 deploy and the pool-password sweep are still owed.**
 
@@ -63,7 +63,10 @@ and is invisible to others until a pick is saved.
 
 ## 3. Deploy state, and what is still owed
 
-✅ **Functions** — deployed from `main` @ `809384d4`, verified by name (§4).
+✅ **Functions** — deployed from <!-- deploy-state:ignore --> `main` @ `809384d4`, verified by name (§4).
+⚠️ **HISTORICAL as of 2026-08-26** — superseded by #597's deploy; the live
+claim is `e6882d21` in HANDOFF's top box. Tagged `ignore` so this record does
+not contradict it.
 
 ✅ **Frontend** — Coolify rebuilt 2026-08-25, bundle
 `index-BRP5Lf-B.js` → **`index-CtqdBjX0.js`**, and **verified by CONTENT rather
