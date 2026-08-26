@@ -70,7 +70,7 @@ deliberately, and Kevin has now changed the scope.
 
 | Superseded | It said | It now says | Where |
 |---|---|---|---|
-| **D2 (money)** | *"`paidStatus` remains one flag per member (paid in full or not) — partial payment is the payment-ledger plan's problem, not this one's; until then a member with 3 entries is UNPAID until all 3 are paid."* | Per-entry payment on the Member Record; `paidStatus` DERIVED from it. | §3 D1 |
+| **D2 (money)** | *"`paidStatus` remains one flag per member (paid in full or not) — partial payment is the payment-ledger plan's problem, not this one's; until then a member with 3 entries is UNPAID until all 3 are paid."* | Per-entry payment, in the closed `pools/{poolId}/private/dues__{uid}` store (D1 as AMENDED 2026-08-26 — the map may not sit on the participant-readable Member Record); `paidStatus` DERIVED from it and still STORED on the Member Record. | §3 D1 |
 | **D2 / K11** | Adding an entry to a PAID member flips them UNPAID and appends a `MARKED_UNPAID` ledger line, because payment was all-or-nothing. | **K11 IS RETIRED.** The paid entries stay paid; the new one is simply unpaid. | §3 D6 |
 | **K7 (deletion)** | *"deleting an entry is out of scope"*; `playableEntryCount` is a one-way counter, and so is `pool.entryCount`. | Both become reversible, under the D2/D3 refusals. | §3 D7, D8 |
 
@@ -148,19 +148,108 @@ one checkbox that is all-or-nothing. That is exactly what Kevin described.
 
 ## 3. Key decisions
 
-### D1 — Per-entry paid status lives on the MEMBER RECORD *(Kevin: A)*
+### D1 — Per-entry paid status lives in a CLOSED subcollection; `paidStatus` stays on the Member Record *(Kevin: A, AMENDED 2026-08-26)*
 
-The Member Record gains:
+🛑 **AMENDED. THE ORIGINAL D1 PUT `paidEntries` ON THE MEMBER RECORD, AND THAT
+LEAKED WHICH ENTRY HAS A PICK.** Found by codex round 4 on P2-T2, ruled by Kevin
+on 2026-08-26 (option B of the three offered on that PR). The original text is
+kept below the fold so the change is auditable rather than silent.
+
+**The defect, measured, both halves:**
+
+1. `firestore.rules:758-765` — a Member Record is readable by
+   `request.auth.uid in ... participantIds`. **Any participant can read any
+   other member's record.**
+2. `liableEntryIds` returns the ids of entries that **have committed a pick**.
+
+So a key named `e2:alice` in Alice's `paidEntries` told every participant in the
+pool that **Alice's entry 2 is live** — the exact bit `shared/memberRecord.ts`
+refuses to persist:
+
+> `entries` — *"the authorization-safe roster of this member's entries:
+> existence + index + display name, **NEVER picks and never per-entry weeks** (a
+> participant-readable record must not say which entry has a pick for an
+> unrevealed week)"*
+
+D1a had already refused a per-entry `liable` flag on exactly this reasoning.
+`paidEntries` was the same bit arriving by another route, and the original D1 did
+not notice because it was reasoning about where MONEY belongs, not about who can
+read the document money sits on.
+
+**The store:**
+
+```
+pools/{poolId}/private/dues__{uid}
+  { uid, poolId, paidEntries: { [entryId]: { paidAt?, method?, note? } }, updatedAt }
+```
+
+✅ **NO `firestore.rules` CHANGE IS REQUIRED, AND THAT IS THE POINT.** The
+existing wildcard already closes the whole subcollection to every principal
+including SUPER_ADMIN:
+
+```
+match /private/{docId} { allow read: if false; allow write: if false; }
+```
+
+and its own comment says it is deliberately a wildcard *"so a future private doc
+cannot be added under a laxer default"* — this is that future doc. There is no
+recursive `{document=**}` anywhere under `/pools/`, so nothing else can reach it.
+**This SATISFIES D11 rather than tripping it**: the callables hold Admin SDK
+handles and bypass rules, exactly as `verifyPoolAccess` does for the password
+record next door. The `dues__` prefix keeps a uid from ever colliding with
+`access`.
+
+⚠️ **The commissioner ledger cannot read this directly, and that is deliberate.**
+P2-T5 serves per-entry detail through a callable, the same posture
+`getPoolPicks` already takes for commissioner-only pick data. A per-entry dues
+row is commissioner information; no participant surface needs it.
+
+**`paidStatus` DOES NOT MOVE.** It stays a stored field on the Member Record, so
+every one of §8's ~two dozen readers is untouched by this amendment — which is
+the whole reason this option was chosen over moving the money truth wholesale.
+
+<details>
+<summary><strong>The original D1, superseded (click to expand)</strong></summary>
+
+> The Member Record gains:
+>
+> ```ts
+> /**
+>  * PLAN-MULTI-ENTRY-DUES D1. Which of this member's entries have been paid for,
+>  * keyed by entry id. ABSENT on every record written before this ticket:
+>  * readers treat `undefined` as "no per-entry detail recorded" and fall back to
+>  * `paidStatus`, which is still the summary flag and is still stored.
+>  */
+> paidEntries?: Record<string, { paidAt?: number; method?: string; note?: string }>;
+> ```
+>
+> **Why the Member Record and not the entry doc.** Money truth in one document
+> means one transaction and no two-phase state.
+
+</details>
+
+The dues document carries:
 
 ```ts
 /**
  * PLAN-MULTI-ENTRY-DUES D1. Which of this member's entries have been paid for,
- * keyed by entry id. ABSENT on every record written before this ticket:
- * readers treat `undefined` as "no per-entry detail recorded" and fall back to
- * `paidStatus`, which is still the summary flag and is still stored.
+ * keyed by entry id. Lives in the CLOSED `private/` subcollection, never on the
+ * participant-readable Member Record — its keys name entries that have
+ * committed a pick, which is commissioner-only information.
+ *
+ * ABSENT for every member who predates this ticket: readers treat a missing
+ * document as "no per-entry detail recorded" and fall back to `paidStatus`,
+ * which is still the summary flag and is still stored on the Member Record.
  */
 paidEntries?: Record<string, { paidAt?: number; method?: string; note?: string }>;
 ```
+
+⚠️ **TWO DOCUMENTS NOW, SO THE TRANSACTION IS THE INVARIANT.** Money truth used
+to be one document; it is now the Member Record (`paidStatus`, `feeOwed`) plus
+the dues document (`paidEntries`). **Every writer reads and writes BOTH in ONE
+transaction** — that is what replaces single-document atomicity, and it is not
+optional: a summary written without its map, or the reverse, is exactly the
+two-phase state the original D1 was avoiding.
 
 and `paidStatus` becomes **derived and still stored**:
 
@@ -172,8 +261,17 @@ paidStatus = liableEntryIds.length > 0 && liableEntryIds.every(id => id in paidE
 recomputed **in the same transaction as every write that can change either
 side** — a per-entry mark, an entry delete, an entry add, a fee cascade.
 
-**Why the Member Record and not the entry doc.** Money truth in one document
-means one transaction and no two-phase state. The entry doc's `paidStatus`
+**Why not the entry doc.** Per-entry payment could have lived on each entry
+document instead. It does not, because the dues store is keyed by MEMBER: one
+document per member holds every one of their rows, so a member-level question
+("is this person paid in full?") is answered by one read rather than a query,
+and one transaction covers the Member Record plus that single dues document.
+
+⚠️ **The original text here read "money truth in ONE document", and after the
+2026-08-26 amendment that is no longer true** — the truth is the Member Record
+(`paidStatus`, `feeOwed`) plus the dues document (`paidEntries`), which is why
+D1 above makes the single transaction the invariant that replaces it. Two
+documents, one transaction. The entry doc's `paidStatus`
 mirror stays (`setPaidStatus.ts:265`) because exports and other surfaces read
 it, but it is a MIRROR — the Member Record is the source, as it is today.
 
@@ -285,7 +383,7 @@ the map. It also has to acquire data it does not currently read.
 
 | # | Writer | After this plan |
 |---|---|---|
-| 1 | `functions/src/lib/memberRecord.ts:123` — `planMembershipWrite` CREATE, literal `'UNPAID'` | unchanged: a brand-new record has an empty `paidEntries`, and `derivePaidStatus` of that is `'UNPAID'`. Keep the literal, and assert the two agree. |
+| 1 | `functions/src/lib/memberRecord.ts:123` — `planMembershipWrite` CREATE, literal `'UNPAID'` | unchanged: a brand-new member has NO dues document, so the map is empty and `derivePaidStatus` of that is `'UNPAID'`. Keep the literal, and assert the two agree. **It writes no dues document either** — an absent one is the correct representation of "nothing paid" (R3), and creating an empty one on every join would be write amplification for no information. |
 | 2 | `functions/src/lib/memberRecord.ts:192` — the K11 reset | **REPLACED, NOT DELETED.** See the box below — this is the only writer of `paidStatus` on the existing-member ADD path, and deleting it without a replacement leaves a paid member reading PAID after adding an unpaid entry. |
 | 3 | `functions/src/setPaidStatus.ts:241` / `:253` — the authoritative PAID / UNPAID mark | **rewritten**: mutate `paidEntries`, then write `paidStatus: derivePaidStatus(next)`. |
 | 4 | `functions/src/setPaidStatus.ts:100` — the self-report seed, `paidStatus: 'UNPAID'` on create only | unchanged, and deliberately: this is a MEMBER-triggered path and must never write money. Same reasoning already in that file. |
@@ -478,12 +576,23 @@ Both transactions read *and* write `pools/{poolId}/members/{uid}`:
 
 - `setPaidStatus` reads it (`setPaidStatus.ts:217`) and writes it (`:240` PAID /
   `:252` UNPAID);
-- the delete reads it (to recompute `feeOwed`, the roster map and `paidEntries`)
-  and writes it.
+- the delete reads it (to recompute `feeOwed` and the roster map) and writes it.
 
 One document in both read sets ⇒ the loser aborts and retries, and on retry it
 sees the winner's committed state. **That is the whole mechanism, it needs no
 query semantics, and no additional lock is to be added.**
+
+✅ **THE 2026-08-26 D1 AMENDMENT DOES NOT WEAKEN THIS, AND IT WAS CHECKED RATHER
+THAN ASSUMED.** Moving `paidEntries` to `private/dues__{uid}` means the writers
+now touch TWO documents — but `members/{uid}` is still read and written by both,
+because `paidStatus` still lives there. The serialisation point is unchanged;
+the dues document is a second shared document on the same pair of transactions,
+which can only make the conflict MORE likely to be detected, never less.
+
+⚠️ **What the amendment DOES cost is single-document atomicity**, and that is
+paid back by requiring both documents in ONE transaction (D1). A crash between
+them is not possible; a writer that forgets one of them is, which is why the
+summary and the map are written by the same helper.
 
 🛑 **AND THE ARGUMENT RESTS ON THE *READ*, NOT THE WRITE.** `tx.get(mRef)` at
 `:217` is unconditional; the writes at `:240`/`:252` are the two arms of one
@@ -662,7 +771,16 @@ already have been priced at the old denominator. This paragraph is the tripwire.
   roster) still renders `—`, never an unticked box. An unticked box is a
   statement; `—` is the absence of one.
 
-### D11 — `firestore.rules` is NOT expected to change *(codex r1 C6)*
+### D11 — `firestore.rules` is NOT expected to change, and the D1 amendment KEPT it that way *(codex r1 C6; re-confirmed 2026-08-26)*
+
+✅ **The 2026-08-26 amendment to D1 moved `paidEntries` into `pools/{poolId}/private/`
+and needed NO rules change** — that subcollection is already
+`allow read: if false; allow write: if false` for every principal, by a wildcard
+written precisely so a new private document inherits the closed default. So the
+amendment satisfies this decision instead of triggering its STOP-and-ask. Verified
+by extending `functions/scripts/poolPrivateAccess.rules.test.mjs` rather than by
+reading the rule and believing it.
+
 
 Measured, not assumed:
 
@@ -719,7 +837,7 @@ just the id**, or two deletions of "entry 2" are indistinguishable in the trail.
 |---|---|---|
 | **R1** | A delete lands after a prize was priced at the old `entryCount`, so the published payout no longer matches the pot. | **D3.** Deletion is impossible once any week is scored, and prizes are published by the scorer. This is the load-bearing mitigation for the whole feature. |
 | **R2** | `paidStatus` derives to PAID for a member with no liable entries (`[].every` is `true`), turning every seeded commissioner green. | The `length > 0` guard in D1, and it is the ticket's first test. |
-| **R3** | A reader treats `paidEntries: undefined` (every legacy record) as "nothing is paid" and reports a PAID member as unpaid. | `undefined` means "no per-entry detail" and the reader falls back to the stored `paidStatus`. The derivation only runs where the map exists or is being written. Same unknown-is-not-false discipline as `hasPlayableEntry` and `pickedWeeks`. |
+| **R3** | A reader treats a MISSING dues document (every member who predates this ticket) as "nothing is paid" and reports a PAID member as unpaid. | Absent means "no per-entry detail", and the reader falls back to the stored `paidStatus` on the Member Record — which is exactly why `paidStatus` did not move in the D1 amendment. The derivation only runs where the map exists or is being written, and a writer MATERIALISES a stored `PAID` into the map before deriving from it (P2-T2). Same unknown-is-not-false discipline as `hasPlayableEntry` and `pickedWeeks`. |
 | **R4** | `entryCount` goes negative on a legacy pool whose stamp had drifted, and the pot goes negative with it. | D8's explicit clamp at 0, with a unit test on a drifted pool. |
 | **R5** | The delete removes the entry doc but a concurrent scoring pass has already read it, and republishes a standings row for a document that no longer exists. | The delete transaction reads the pool doc **and** `standings/current`; a scoring pass that commits first aborts it. And D3 means the pool has never been scored, so `standings/current` should not exist at all — the delete asserts that rather than assuming it. |
 | **R6** | Retiring K11 leaves a member who genuinely owes more money looking PAID. | It cannot: the new entry is absent from `paidEntries`, so the derived `paidStatus` is UNPAID from the moment the entry exists. The ticket asserts this directly. |
@@ -738,7 +856,17 @@ just the id**, or two deletions of "entry 2" are indistinguishable in the trail.
   paid or it is not.
 - **Rebuy payment per entry.** `rebuyOwed`/`rebuyPaid` stay per member. Kevin's
   ask was about the entry fee; splitting rebuys is a separate decision.
-- **Backfilling `paidEntries` onto existing records.** Fix-forward: the map
+✅ **THE 2026-08-26 RELOCATION NEEDS NO DATA CLEANUP, AND THAT WAS MEASURED,
+NOT ASSUMED.** P2-T1 (#601) shipped `MemberRecord.paidEntries` as a TYPE
+declaration plus a pure read, with **no writer anywhere** — the only writer was
+P2-T2, which had not merged when the amendment landed. Confirmed with
+`git grep -n paidEntries origin/main -- functions/src src shared`: every other
+hit is an unrelated local named `paidEntries`/`paidEntriesCount` in the bracket,
+stats and playoff code. **So not one production Member Record carries the field,
+and moving it strands nothing.** Had T2 merged first this would have been a
+migration instead.
+
+- **Backfilling the dues store for existing members.** Fix-forward: the map
   appears the first time a commissioner marks an entry, and until then
   `paidStatus` is the answer, exactly as today.
 
@@ -748,7 +876,7 @@ just the id**, or two deletions of "entry 2" are indistinguishable in the trail.
 
 | # | Question | Answer |
 |---|---|---|
-| D1 | Where does per-entry paid status live? | **A** — on the Member Record as `paidEntries`; `paidStatus` derived and still stored. |
+| D1 | Where does per-entry paid status live? | **A** — as `paidEntries`; `paidStatus` derived and still stored on the Member Record. ⚠️ **AMENDED 2026-08-26 (Kevin, option B on PR #602): the MAP moved OFF the Member Record** to the closed `pools/{poolId}/private/dues__{uid}`, because its keys name entries that have committed a pick and a Member Record is participant-readable. `paidStatus` did not move. See §3 D1. |
 | D2 | May a PAID entry be deleted? | **A** — No. Refuse; un-mark payment first. |
 | D3 | May an entry be deleted once a week is scored? | **A** — No. Refuse. |
 | D4 | Does deletion reduce the pot? | **A** — Yes. `entryCount` drops and payouts recompute. |
@@ -782,13 +910,13 @@ Each is its own PR with its own `codex exec review --base origin/main` round set
 
 | T | Ticket | Touches |
 |---|---|---|
-| **P2-T1** | `paidEntries` on the Member Record + the two derivation helpers (`liableEntryIds(m, uid, pickedEntryIds)` and `derivePaidStatus(m, liable)`) in `shared/memberRecord.ts`, **plus `ownerStateAfter` returning the transaction-local picked ids** that the first one needs (D1a). **PURE, no writers yet** — so the whole derivation including R2's empty-map case is unit-tested before anything can write it. | `shared/memberRecord.ts`, `lib/multiEntry.ts`, their tests |
-| **P2-T2** | `setPaidStatus` takes an optional `entryId`; recomputes `paidStatus` from `paidEntries` in the same transaction; ledger amount becomes the ENTRY's fee when an entryId is given. The entry-doc mirror lands on that entry only. | `functions/src/setPaidStatus.ts`, `schemas/participantOps.ts` |
-| **P2-T3** | Retire K11 (D6): remove `applyPaidReset` and `planMembershipWrite`'s `paidReset`, **and REPLACE — not drop — the summary write with `paidStatus: derivePaidStatus(...)` on every UPDATE that changes the entry set** (D1a row 2; dropping it leaves a paid member reading PAID after adding an unpaid entry). Rewrite emulator case 3 to assert the opposite on the per-entry marks AND that the stored summary goes UNPAID. | `functions/src/lib/{memberRecord,multiEntry}.ts`, `nflPools.ts` |
-| **P2-T4** | `deleteNFLEntry` callable: commissioner-only, D2/D3 refusals, `admin_audit` row, ledger line, removes the entry doc + its `entries` key + its `paidEntries` key, recomputes `feeOwed`/`playableEntryCount`/`pool.entryCount` from ONE `liabilityDelta` (D7/D8 — zero for a non-liable entry, with the clamp when negative). | new `functions/src/nflEntryDelete.ts`, `index.ts`, schemas |
-| **P2-T5** | Ledger UI (D10): fee + checkbox on every row, member subtotal, `owedIn`/`paidIn` re-derived per entry with rebuys kept per member. | `PaymentLedgerNFL.tsx`, `NFLManagerView.tsx` |
+| **P2-T1** | *(SHIPPED #601, and its `MemberRecord.paidEntries` field is RELOCATED by T2 under the amended D1.)* `paidEntries` + the two derivation helpers (`liableEntryIds(m, uid, pickedEntryIds)` and `derivePaidStatus(m, liable)`) in `shared/memberRecord.ts`, **plus `ownerStateAfter` returning the transaction-local picked ids** that the first one needs (D1a). **PURE, no writers yet** — so the whole derivation including R2's empty-map case is unit-tested before anything can write it. | `shared/memberRecord.ts`, `lib/multiEntry.ts`, their tests |
+| **P2-T2** | `setPaidStatus` takes an optional `entryId`; **relocates `paidEntries` to `pools/{poolId}/private/dues__{uid}` (amended D1)** and reads/writes it in the SAME transaction as the Member Record; recomputes `paidStatus`; ledger amount becomes the ENTRY's fee when an entryId is given. The entry-doc mirror lands on that entry only. | `functions/src/setPaidStatus.ts`, `schemas/participantOps.ts`, `lib/poolDues.ts`, `shared/memberRecord.ts` |
+| **P2-T3** | Retire K11 (D6) — reading and writing `private/dues__{uid}` in the SAME transaction as the Member Record (amended D1): remove `applyPaidReset` and `planMembershipWrite`'s `paidReset`, **and REPLACE — not drop — the summary write with `paidStatus: derivePaidStatus(...)` on every UPDATE that changes the entry set** (D1a row 2; dropping it leaves a paid member reading PAID after adding an unpaid entry). Rewrite emulator case 3 to assert the opposite on the per-entry marks AND that the stored summary goes UNPAID. | `functions/src/lib/{memberRecord,multiEntry}.ts`, `nflPools.ts` |
+| **P2-T4** | `deleteNFLEntry` callable: commissioner-only, D2/D3 refusals, `admin_audit` row, ledger line, removes the entry doc + its `entries` key + its `paidEntries` key from `private/dues__{uid}` **in the same transaction as the Member Record** (amended D1), recomputes `feeOwed`/`playableEntryCount`/`pool.entryCount` from ONE `liabilityDelta` (D7/D8 — zero for a non-liable entry, with the clamp when negative). | new `functions/src/nflEntryDelete.ts`, `index.ts`, schemas |
+| **P2-T5** | Ledger UI (D10): fee + checkbox on every row, member subtotal, `owedIn`/`paidIn` re-derived per entry with rebuys kept per member. ⚠️ **Needs a CALLABLE to serve `paidEntries`** — the amended D1 puts it in the closed `private/` subcollection, so no client can read it directly. Same posture as `getPoolPicks`. | `PaymentLedgerNFL.tsx`, `NFLManagerView.tsx`, a new commissioner-only callable |
 | **P2-T6** | The delete control: explain-then-confirm naming the entry, disabled with the reason when D2/D3 refuse it. | `PaymentLedgerNFL.tsx` / manager surface |
-| **P2-T7** | The sweep pass in §8, each reader classified by WHAT IT READS. | `PLAN-MULTI-ENTRY-DUES-SWEEPS.md` |
+| **P2-T7** | The sweep pass in §8, each reader classified by WHAT IT READS — **and it OWNS the `reconcilePaymentTruth` fix** (D1a writer #5), which no other ticket touches: it must read the owner's entries and write the dues document, or the next derivation un-pays what it just paid. | `PLAN-MULTI-ENTRY-DUES-SWEEPS.md`, `functions/src/migrations/reconcilePaymentTruth.ts` |
 
 **T1 before T2 is not arbitrary.** The derivation is where R2 lives, and a pure
 function with a test is the only place that bug is cheap.

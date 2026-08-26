@@ -64,6 +64,9 @@ const createdPools: string[] = [];
 const poolRef = () => db.collection('pools').doc(POOL);
 const pool = async () => (await poolRef().get()).data()!;
 const member = async (uid: string) => (await poolRef().collection('members').doc(uid).get()).data()!;
+// PLAN-MULTI-ENTRY-DUES D1 (amended): the per-entry map lives in the CLOSED
+// `private/` subcollection, NOT on the participant-readable Member Record.
+const dues = async (uid: string) => (await poolRef().collection('private').doc(`dues__${uid}`).get()).data()?.paidEntries;
 const entry = async (id: string) => (await poolRef().collection('entries').doc(id).get());
 const ownedEntries = async (uid: string) => (await poolRef().collection('entries').where('ownerUid', '==', uid).get()).docs;
 const ledger = async (uid: string) => (await poolRef().collection('payments').where('uid', '==', uid).get()).docs.map(d => d.data());
@@ -249,7 +252,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}`, paymentMethod: 'cash' }, auth: auth(HOST) } as never);
 
     const m = await member(ALICE);
-    expect(Object.keys(m.paidEntries ?? {})).toEqual([`e2:${ALICE}`]);   // presence IS the signal
+    expect(Object.keys(await dues(ALICE) ?? {})).toEqual([`e2:${ALICE}`]);   // presence IS the signal
     expect(m.paidStatus).toBe('UNPAID');                                 // one of two -> not paid in full
     expect((await entry(`e2:${ALICE}`)).data()).toMatchObject({ paidStatus: 'PAID', paymentMethod: 'cash' });
     expect((await entry(ALICE)).data()!.paidStatus).not.toBe('PAID');    // entry 1 untouched
@@ -258,7 +261,12 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     const paid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID');
     expect(paid).toHaveLength(1);
     expect(paid[0].amount).toBe(25);
-    expect(paid[0].entryId).toBe(`e2:${ALICE}`);
+    // 🛑 THE ENTRY ID MUST NOT BE HERE. `payments` is participant-readable,
+    // and only a LIABLE entry can be marked paid — so `entryId: e2:alice` would
+    // prove to the whole pool that Alice's entry 2 has a pick, which is the very
+    // leak the dues store was moved to close. An earlier version of this PR
+    // wrote it and would have shipped the leak inside its own fix.
+    expect('entryId' in paid[0]).toBe(false);
   }, 60000);
 
   it('7b. paying the SECOND entry too flips the member to PAID', async () => {
@@ -271,7 +279,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
 
     const m = await member(ALICE);
     expect(m.paidStatus).toBe('PAID');
-    expect(Object.keys(m.paidEntries).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    expect(Object.keys(await dues(ALICE)).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
     // TWO ledger rows, one per entry, $25 each -- not one $50 row.
     const paid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID');
     expect(paid).toHaveLength(2);
@@ -290,13 +298,14 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
     const m = await member(ALICE);
     // D1b: the key is GONE, not set to a falsy value.
-    expect(Object.prototype.hasOwnProperty.call(m.paidEntries, `e2:${ALICE}`)).toBe(false);
-    expect(Object.keys(m.paidEntries)).toEqual([ALICE]);
+    const d = await dues(ALICE);
+    expect(Object.prototype.hasOwnProperty.call(d, `e2:${ALICE}`)).toBe(false);
+    expect(Object.keys(d)).toEqual([ALICE]);
     expect(m.paidStatus).toBe('UNPAID');
     expect((await entry(ALICE)).data()!.paidStatus).toBe('PAID');        // the OTHER entry stays paid
     const unpaid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID');
     expect(unpaid).toHaveLength(1);
-    expect(unpaid[0].entryId).toBe(`e2:${ALICE}`);
+    expect('entryId' in unpaid[0]).toBe(false);      // participant-readable: no entry id
   }, 60000);
 
   /**
@@ -321,7 +330,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
 
     const unpaid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID');
     expect(unpaid).toHaveLength(1);                                      // the money is on the record
-    expect(unpaid[0].entryId).toBe(`e2:${ALICE}`);
+    expect('entryId' in unpaid[0]).toBe(false);      // participant-readable: no entry id
     expect(unpaid[0].amount).toBe(25);
   }, 60000);
 
@@ -358,22 +367,23 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
       { paidStatus: 'PAID', paidAt: 1_700_000_000_000, paymentMethod: 'venmo' }, { merge: true });
     const before = await member(ALICE);
     expect(before.paidStatus).toBe('PAID');
-    expect(before.paidEntries).toBeUndefined();                          // the legacy shape
+    expect(await dues(ALICE)).toBeUndefined();                           // the legacy shape: NO dues doc
 
     // Re-marking one entry of an already-paid member must be a no-op.
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
     const after = await member(ALICE);
     expect(after.paidStatus).toBe('PAID');                               // NOT downgraded
-    expect(Object.keys(after.paidEntries).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
-    expect(after.paidEntries[ALICE].paidAt).toBe(1_700_000_000_000);     // the stored detail carried
-    expect(after.paidEntries[ALICE].method).toBe('venmo');
+    const seeded = await dues(ALICE);
+    expect(Object.keys(seeded).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    expect(seeded[ALICE].paidAt).toBe(1_700_000_000_000);                // the stored detail carried
+    expect(seeded[ALICE].method).toBe('venmo');
     expect((await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID')).toHaveLength(0);  // no phantom payment
 
     // ...and un-marking one of them now behaves per-entry, from the real state.
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
     const un = await member(ALICE);
     expect(un.paidStatus).toBe('UNPAID');
-    expect(Object.keys(un.paidEntries)).toEqual([ALICE]);                // entry 1 keeps its payment
+    expect(Object.keys(await dues(ALICE))).toEqual([ALICE]);             // entry 1 keeps its payment
   }, 60000);
 
   it('7d. a member-level mark (no entryId) still pays EVERY entry — the old callers are unchanged', async () => {
@@ -383,7 +393,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
     const m = await member(ALICE);
     expect(m.paidStatus).toBe('PAID');
-    expect(Object.keys(m.paidEntries).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    expect(Object.keys(await dues(ALICE)).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
     for (const d of await ownedEntries(ALICE)) expect(d.data().paidStatus).toBe('PAID');
   }, 60000);
 
@@ -394,7 +404,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await wPaid({ data: { poolId: POOL, memberUid: HOST, isPaid: true }, auth: auth(HOST) } as never);
     const h = await member(HOST);
     expect(h.paidStatus).toBe('UNPAID');
-    expect(Object.keys(h.paidEntries ?? {})).toEqual([]);
+    expect(Object.keys(await dues(HOST) ?? {})).toEqual([]);
   }, 60000);
 
   it('7f. D7a: marking an entry the member does not own is ENTRY_NOT_FOUND, not a ghost key', async () => {
@@ -403,7 +413,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await expect(wPaid({
       data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${BOB}` }, auth: auth(HOST),
     } as never)).rejects.toThrow(/ENTRY_NOT_FOUND/);
-    expect(Object.keys((await member(ALICE)).paidEntries ?? {})).toEqual([]);
+    expect(Object.keys(await dues(ALICE) ?? {})).toEqual([]);
   }, 60000);
 
   /**
@@ -436,7 +446,7 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
 
     const m = await member(ALICE);
     expect(m.paidStatus).toBe('UNPAID');
-    expect(Object.keys(m.paidEntries)).toEqual([]);
+    expect(Object.keys(await dues(ALICE) ?? {})).toEqual([]);
     const unpaid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID');
     expect(unpaid).toHaveLength(1);
     expect(unpaid[0].amount).toBe(25);                                   // the one row that moved
@@ -449,17 +459,54 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     await seedPool({ max: 2, entryCount: 2 });
     await submit(ALICE, { picks: { [G1]: 'KC' } });
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
-    expect(Object.keys((await member(ALICE)).paidEntries)).toEqual([ALICE]);
+    expect(Object.keys(await dues(ALICE))).toEqual([ALICE]);
 
     await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });      // K11 fires
     const afterAdd = await member(ALICE);
     expect(afterAdd.paidStatus).toBe('UNPAID');
-    expect(afterAdd.paidEntries ?? {}).toEqual({});                      // the map went with it
+    expect(await dues(ALICE)).toBeUndefined();                           // the whole doc went with it
 
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
     const m = await member(ALICE);
     expect(m.paidStatus).toBe('UNPAID');                                 // entry 1 is genuinely unpaid now
     expect((await entry(ALICE)).data()!.paidStatus).toBe('UNPAID');      // ...and the doc agrees
+  }, 60000);
+
+  /**
+   * 🛑 THE LEDGER IS PARTICIPANT-READABLE, SO IT IS SWEPT AS A WHOLE.
+   *
+   * `pools/{id}/payments` is `allow read: if isPoolParticipant()`. Only a LIABLE
+   * entry can be marked paid, so ANY field on a ledger row naming a specific
+   * entry proves that entry has committed a pick — the leak the dues store was
+   * moved to close. An earlier version of this PR wrote `entryId` here.
+   *
+   * Swept over every row after a MIXED sequence rather than asserted on one row,
+   * because the next person to add a field will add it to one branch.
+   */
+  it('7m. NO paid/unpaid ledger row ever names an entry, after per-entry AND member-level marks', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+
+    const rows = (await ledger(ALICE)).filter(r => r.type === 'MARKED_PAID' || r.type === 'MARKED_UNPAID');
+    expect(rows.length).toBeGreaterThan(0);          // or this asserts nothing
+
+    // The bit that leaks is an EXTRA entry's id. Entry #1's id IS the bare uid
+    // (parent plan D1), and `uid` has always been on every ledger row as the
+    // MEMBER key — so that collision is unavoidable and carries no information
+    // a participant does not already have. `e2:` upward is the real signal.
+    for (const r of rows) {
+      for (const [k, v] of Object.entries(r)) {
+        expect(v === `e2:${ALICE}`, `ledger field "${k}" leaks an extra entry's id`).toBe(false);
+      }
+      expect('entryId' in r, 'no ledger row may carry an entryId field').toBe(false);
+    }
+    // MUST NOT catch: `uid` and `entryName` are the member's, and stay.
+    expect(rows.every(r => r.uid === ALICE)).toBe(true);
+    expect(rows.some(r => r.entryName === ALICE)).toBe(true);
   }, 60000);
 
   it('8. proxyPick on entry 2 leaves entry 1 untouched (and creates it with the default name)', async () => {

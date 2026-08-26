@@ -8,7 +8,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
 import { isProvableMember, membersCol } from "./lib/memberRecord";
-import { isCanonicalMemberRecord, derivePaidStatus, liableEntryIds, type MemberRecord } from "./shared/memberRecord";
+import { isCanonicalMemberRecord, derivePaidStatus, liableEntryIds, type MemberRecord, type PaidEntryMap } from "./shared/memberRecord";
+import { readPoolDues, writePoolDues } from "./lib/poolDues";
 import { entryHasPick } from "./lib/multiEntry";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
@@ -249,10 +250,14 @@ export const setPaidStatus = validated(
     // (commissioner-blind picks), so it cannot answer WHICH entries are liable.
     // See `liableEntryIds`.
     const member = snap.data() as unknown as MemberRecord;
+    // The per-entry map now lives in the CLOSED `private/` subcollection, not on
+    // this participant-readable record (amended D1). Read in the SAME
+    // transaction, which is what replaces single-document atomicity now that
+    // money truth spans two documents.
+    const storedMap = await readPoolDues(tx, poolRef, memberUid);
     const pickedEntryIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
     if (legacySnap?.exists && entryHasPick(legacySnap.data())) pickedEntryIds.push(legacyRef.id);
     const liable = liableEntryIds(member, memberUid, pickedEntryIds);
-    type PaidEntryMap = NonNullable<MemberRecord['paidEntries']>;
     // 🛑 A LEGACY `PAID` RECORD IS MATERIALIZED BEFORE ANYTHING IS DERIVED FROM
     // IT, AND SKIPPING THIS DOWNGRADES PAYING MEMBERS IN PRODUCTION (codex r1).
     //
@@ -271,10 +276,15 @@ export const setPaidStatus = validated(
     // the roster keep the date and method they already displayed.
     //
     // Deliberately NOT a backfill (plan section 5, fix-forward): only the record
-    // being written is materialized, and only inside this transaction.
-    const storedMap = (member.paidEntries && typeof member.paidEntries === 'object')
-      ? member.paidEntries : undefined;
-    const legacySeed: PaidEntryMap = {};
+    // being written is materialized, and only inside this transaction. After the
+    // D1 amendment the legacy shape is an ABSENT dues DOCUMENT rather than an
+    // absent field, which changes nothing about the rule.
+    // Null-prototype throughout: `map['__proto__'] = row` on an ordinary object
+    // sets the PROTOTYPE instead of creating a key (see `RESERVED_ID` in
+    // shared/memberRecord.ts). `liableEntryIds` already filters such ids out, so
+    // this is the second lock on the same door — the maps here are also built
+    // from stored Firestore data, which this code does not get to choose.
+    const legacySeed: PaidEntryMap = Object.create(null);
     if (!storedMap && member.paidStatus === 'PAID') {
       for (const id of liable) {
         legacySeed[id] = {
@@ -284,7 +294,8 @@ export const setPaidStatus = validated(
         };
       }
     }
-    const priorPaidEntries: PaidEntryMap = storedMap ? { ...storedMap } : legacySeed;
+    const priorPaidEntries: PaidEntryMap = storedMap
+      ? Object.assign(Object.create(null), storedMap) : legacySeed;
 
     // ENTRY_NOT_FOUND rather than a ghost key (D7a). Marking PAID is restricted
     // to rows the ledger actually charges; UN-marking additionally allows any id
@@ -311,7 +322,7 @@ export const setPaidStatus = validated(
     // no entryId was given (the member-level mark keeps working exactly as it
     // reads — "this member has paid" means all of their rows).
     const targetIds = entryId !== undefined ? [entryId] : liable;
-    const nextPaidEntries: PaidEntryMap = { ...priorPaidEntries };
+    const nextPaidEntries: PaidEntryMap = Object.assign(Object.create(null), priorPaidEntries);
     for (const id of targetIds) {
       if (isPaid) nextPaidEntries[id] = paidRow;
       else delete nextPaidEntries[id];
@@ -355,23 +366,25 @@ export const setPaidStatus = validated(
       }, { merge: true });
     }
 
-    // The per-entry map, written WHOLE.
+    // The per-entry map, written WHOLE, to the CLOSED dues document.
     //
     // ⚠️ THIS SUPERSEDES D1b's `new FieldPath('paidEntries', entryId)`
-    // INSTRUCTION, and the reason is the legacy seed above. That seed has to
-    // persist — a materialization that exists only in memory derives the right
-    // summary and then stores a map with one key in it, which is the bug this
-    // paragraph replaced (caught by test 7i before review). Persisting it is a
+    // INSTRUCTION, for two reasons that both point the same way. First, the
+    // legacy seed above has to PERSIST — a materialization that exists only in
+    // memory derives the right summary and then stores a map with one key in it,
+    // which is a bug test 7i caught before review did. Persisting it is a
     // whole-map write by definition, so a per-key path would be a SECOND write
-    // shape covering a subset of the cases: strictly worse than one.
+    // shape covering a subset of the cases. Second, `paidEntries` is now the
+    // whole point of its own document rather than one field among many, so
+    // replacing it wholesale is the natural write and the `:`-in-a-dotted-path
+    // ambiguity D1b was avoiding never arises at all — the ids are object keys
+    // here, never path segments.
     //
-    // `update()` with a plain object REPLACES the field rather than deep-merging
-    // it, which is what makes a removal expressible at all — `set(..., {merge:
-    // true})` unions nested maps and can never delete a key. And the field name
-    // `paidEntries` contains no dot, so the ambiguity D1b was avoiding (an entry
-    // id's `:` inside a dotted path) never arises: the ids are object keys here,
-    // not path segments. Safe inside this transaction, which read the document.
-    tx.update(mRef, 'paidEntries', nextPaidEntries);
+    // Safe because this transaction READ that document (`readPoolDues` above).
+    // Spread back to an ORDINARY object for the write: object spread copies own
+    // keys as data properties (never through a setter), and the Firestore
+    // serializer is not asked to reason about a null prototype.
+    writePoolDues(tx, poolRef, poolId, memberUid, { ...nextPaidEntries }, Date.now());
     // The mirror lands on the NAMED entry only when one was named — mirroring a
     // single entry's payment onto all of the member's entries is the
     // all-or-nothing behaviour this ticket removes. With no entryId the member
@@ -465,10 +478,25 @@ export const setPaidStatus = validated(
         uid: memberUid,
         // `entryName` stays the MEMBER's name — it is an existing reader
         // contract shared with the rebuy and payout writers, and repurposing it
-        // per entry would silently change what every historical row means. The
-        // entry is identified by the new `entryId` field instead.
+        // per entry would silently change what every historical row means. It
+        // is also the safe choice: naming the ENTRY here would leak the same bit
+        // the box below refuses to write.
         ...(memberName !== undefined ? { entryName: memberName } : {}),
-        ...(entryId !== undefined ? { entryId } : {}),
+        // 🛑 THE ENTRY ID IS DELIBERATELY *NOT* WRITTEN HERE, AND AN EARLIER
+        // VERSION OF THIS PR DID WRITE IT.
+        //
+        // `pools/{id}/payments` is `allow read: if isPoolParticipant()`
+        // (firestore.rules) — every member of the pool reads this trail. A row
+        // saying `entryId: e2:alice` proves Alice's entry 2 has committed a
+        // pick, because only a LIABLE entry can be marked paid. That is the
+        // exact leak the 2026-08-26 amendment moved `paidEntries` off the
+        // Member Record to close, arriving through the other participant-
+        // readable door, and it would have shipped inside the fix for itself.
+        //
+        // Nothing is lost that this trail is for. Its stated job is to settle
+        // "I paid you" disputes, and amount + date + note + actor do that. The
+        // commissioner's per-entry attribution lives in the sealed dues
+        // document, which P2-T5 reads through a callable.
         ...(typeof ledgerAmount === 'number' ? { amount: ledgerAmount } : {}),
         actorUid: uid,
         at: Date.now(),

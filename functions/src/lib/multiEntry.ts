@@ -21,6 +21,7 @@ import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { defaultEntryName, entryIdFor, effectiveMaxEntriesPerUser, ENTRY_NAME_MAX } from "../shared/multiEntry";
 import { deriveEntryCount } from "../shared/memberRecord";
+import { poolDuesRef } from "./poolDues";
 
 export interface OwnedEntry { id: string; data: Record<string, any> }
 
@@ -237,17 +238,22 @@ export function applyPaidReset(
   // PLAN-MULTI-ENTRY-DUES: the reset must clear the PER-ENTRY map too, or it is
   // only half a reset (codex r2 on P2-T2).
   //
-  // K11 sets the member UNPAID and mirrors that onto every entry doc. Once
-  // `paidEntries` exists it is the AUTHORITY the summary is derived from, so
-  // leaving it behind desynchronises the three stores: the commissioner then
-  // pays only the newly added entry, the derivation sees the stale key for
-  // entry 1 and reports the member PAID — while entry 1's own document still
-  // says UNPAID, and re-paying entry 1 raises no ledger event because its key
-  // was never removed. Clearing the field keeps "reset to unpaid" total.
+  // K11 sets the member UNPAID and mirrors that onto every entry doc. The dues
+  // map is the AUTHORITY the summary is derived from, so leaving it behind
+  // desynchronises the three stores: the commissioner then pays only the newly
+  // added entry, the derivation sees the stale key for entry 1 and reports the
+  // member PAID — while entry 1's own document still says UNPAID, and re-paying
+  // entry 1 raises no ledger event because its key was never removed. Deleting
+  // the document keeps "reset to unpaid" total.
+  //
+  // ⚠️ DELETE, not "write an empty map". An ABSENT dues document is the
+  // canonical representation of "no per-entry detail" (R3), and it is what a
+  // member who never had one looks like — so a reset lands them in the same
+  // state rather than a second one that every reader would have to know about.
   //
   // K11 is RETIRED by P2-T3, which deletes this function; until then it has to
-  // be correct about a field that did not exist when it was written.
-  tx.set(poolRef.collection('members').doc(uid), { paidEntries: FieldValue.delete() }, { merge: true });
+  // be correct about a store that did not exist when it was written.
+  tx.delete(poolDuesRef(poolRef, uid));
   const paidDetail = [
     reset.paidAt ? `marked paid ${new Date(reset.paidAt).toISOString().slice(0, 10)}` : 'marked paid',
     reset.paymentMethod ? `via ${reset.paymentMethod}` : undefined,
