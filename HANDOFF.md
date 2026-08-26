@@ -1,32 +1,75 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-08-26 (latest) — **#597 AND #598 ARE BOTH LIVE. MEASURED THIS SESSION ON KEVIN'S MACHINE, NOT INHERITED FROM ANY REPORT. DEPLOY QUEUE EMPTY.**
+> ## 🟢 2026-08-26 (latest) — **PER-ENTRY DUES PHASE 2 T1+T2 ARE MERGED AND DEPLOYED. #599–#602 IN. FUNCTIONS DEPLOY VERIFIED BY SOURCE TIMESTAMP, NOT BY `Deploy complete!`.**
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `e6882d21`.**
-> ⚠️ Updated 2026-08-26 (the previous tagged claim, `809384d4`, was stale by one
-> functions deploy — it is now `<!-- deploy-state:ignore -->`).
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `6d92dc61`.**
+> ⚠️ Updated 2026-08-26 evening — Kevin deployed after #602 merged. The previous
+> tagged claim, `e6882d21`, is now `<!-- deploy-state:ignore -->`.
 >
-> 🛑 **WHY `e6882d21` AND NOT `main` HEAD (`3e71fbf8`).** The tag names the commit
-> whose `functions/` content is deployed, and that is the last commit that TOUCHED
-> `functions/` — `e6882d21` (#597). `3e71fbf8` (#598) is frontend + tests only
-> (`git diff --stat e6882d21 3e71fbf8 -- functions/ shared/` is empty), so
-> `functions/` at HEAD is content-identical to what is running. Tagging HEAD would
-> have asserted a deploy that never happened; tagging `e6882d21` asserts the one
-> that did. **No functions deploy is owed.**
+> 🛑 **THIS DEPLOY ADDED NO NEW CALLABLE, SO THE USUAL VERIFY-BY-NAME DOES NOT
+> WORK — AND THAT IS A TRAP WORTH WRITING DOWN.** CLAUDE.md §3 says an absent
+> function is the tell. #601 and #602 changed `setPaidStatus`, `lib/multiEntry.ts`
+> and `shared/`, and added `lib/poolDues.ts` — a lib, not an export. `git diff
+> origin/main~2 origin/main -- functions/src/index.ts` shows **no export change at
+> all**, so `functions:list | Select-String` would return the same rows before and
+> after and prove nothing.
 >
-> **The evidence, measured 2026-08-26 — by NAME, per CLAUDE.md §3:**
+> ✅ **WHAT DOES PROVE IT: the source-upload timestamp.**
 >
 > ```
-> npx firebase functions:list | Select-String "renameNFLEntry"
+> npx firebase functions:list --json
 > ```
 >
-> `renameNFLEntry` **PRESENT** (v2 callable, us-central1). It is the ONLY export
-> #597 added (`git diff e6882d21^ e6882d21 -- functions/src/index.ts` is a single
-> `+` line), so one name settles the whole merge.
+> Every v2 function carries `source.storageSource.generation` — a MICROSECOND
+> timestamp of when its source zip was uploaded. Divide by 1000 for epoch ms.
+> Compare it against the merge time and the question is settled:
+>
+> | Function | Source uploaded | vs #602 merge (13:42:45Z) |
+> |---|---|---|
+> | `setPaidStatus` | 2026-08-26T13:52:01Z | **AFTER** |
+> | `submitNFLPicks` | 2026-08-26T13:51:45Z | **AFTER** |
+> | `proxyPick` | 2026-08-26T13:52:39Z | **AFTER** |
+> | `renameNFLEntry` | 2026-08-26T13:51:50Z | **AFTER** |
+>
+> **189 of 190 functions re-uploaded after the merge.** The one that did not is
+> `ext-firestore-send-email-processqueue` — a Firebase EXTENSION, updated by the
+> extension and not by `deploy --only functions`, so its December 2025 source is
+> correct and expected. Three more report no source field at all
+> (`createParticipantProfile`, `onAnnouncementCreated`, `onUserCreated`): they are
+> `gcfv1`, and the v1 API does not expose `storageSource`.
+>
+> 🛑 **WHAT THIS PROVES, AND WHAT IT DOES NOT — STATED BECAUSE THE GAP IS THE
+> WHOLE FAILURE MODE.** The timestamps prove a deploy RAN, after the merge, and
+> re-uploaded essentially the whole fleet. **They do NOT bind that zip to
+> `6d92dc61`.** A deploy run from a STALE CHECKOUT produces exactly the same
+> timestamps — and that is precisely the failure CLAUDE.md §3 exists for, the one
+> that has silently shipped nothing twice. So the tagged SHA above rests on the
+> timestamps **plus** Kevin having pulled before deploying, not on the timestamps
+> alone. (Found by cross-model review of this very box, which had claimed more
+> than the evidence carried.)
+>
+> ✅ **THE UPGRADE, WHEN CERTAINTY IS WANTED — and this repo already has the
+> standard for it.** Every function carries a CONTENT hash:
+>
+> ```
+> labels."firebase-functions-hash"   e.g. setPaidStatus = 5ae3837134853ad9…
+> ```
+>
+> `firebase deploy` compares that hash and skips what has not changed. So a
+> SECOND deploy from a checkout at the intended commit, reporting every function
+> `Skipped (No changes detected)`, is the certification — **the all-Skipped run is
+> the evidence, not the absence of an error.** That is the same bar the
+> 2026-07-28 box below records. It is a Kevin action (a no-op deploy), cheap, and
+> the only thing that closes the gap above.
+>
+> **Use the timestamp method whenever a deploy adds no new export** — a rename, a
+> bug fix or a refactor is exactly the shape that cannot be verified by name — but
+> record it for what it is: evidence a deploy happened, not proof of which commit
+> it carried.
 >
 > **RULES ARE *NOT* AT THIS COMMIT** and that is deliberate and unchanged:
 > `firestore.rules` has not changed since #579, whose rules deploy Kevin ran on
-> 2026-08-25. Do not read "functions are at `e6882d21`" as "everything is".
+> 2026-08-25. Do not read "functions are at `6d92dc61`" as "everything is".
 >
 > ✅ **FRONTEND: BOTH MERGES ARE LIVE.** Kevin's Coolify rebuild at ~03:20Z on
 > 2026-08-26 carried #597 AND #598. Verified by a recursive chunk crawl —
@@ -1683,7 +1726,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 >
 > **Functions are deployed from <!-- deploy-state:ignore --> `main` @ `c37bbd37`,
 > and so are the rules.** ⚠️ SUPERSEDED — functions moved to
-> `809384d4` on 2026-08-25 and then to `e6882d21` on 2026-08-26, which is what
+> `809384d4` on 2026-08-25, then `e6882d21` and then `6d92dc61` on 2026-08-26, which is what
 > the top box and the `deploy-state:current` tag now name.
 > This line is history. The frontend WAS at this commit when this box was
 > written and has since moved to `d6bae3f4` (2026-08-13, box above). Deployed the morning of 2026-08-12, in

@@ -52,21 +52,25 @@ export interface MembershipFacts {
 }
 
 /**
- * K11 — an entry added under a PAID mark. `feeOwed` rose, so the member is
- * no longer paid in full; the record flips to UNPAID in the same transaction
- * and the caller ledgers it (`MARKED_UNPAID` with the new `feeOwed`) and
- * mirrors it onto every entry the member owns.
+ * 🛑 K11 IS RETIRED (PLAN-MULTI-ENTRY-DUES D6). `PaidReset`, `applyPaidReset`
+ * and the `MARKED_UNPAID` event it wrote are GONE — not left dormant, because a
+ * dormant money path is a path somebody re-enables.
+ *
+ * What K11 did: an entry added under a PAID mark flipped the member to UNPAID,
+ * mirrored that onto every entry they own, and appended a `MARKED_UNPAID` ledger
+ * line. Under per-entry dues that is WRONG, not merely redundant — the member
+ * paid for entries 1 and 2, and adding entry 3 does not unpay 1 and 2.
+ *
+ * ⚠️ WHAT SURVIVES IS THE SUMMARY WRITE, AND DROPPING IT WOULD BE A MONEY LIE.
+ * `paidStatus` is a STORED field (plan §0a) — nothing derives it on read — so if
+ * the update path stops writing it, a fully-paid member who adds an unpaid entry
+ * keeps a stored `PAID`: money reported as collected that was never collected,
+ * which is the exact thing K11 existed to prevent. See `liabilityRose` below.
  */
-export interface PaidReset {
-  previousFeeOwed: number;
-  feeOwed: number;
-  paidAt?: number;
-  paymentMethod?: string;
-}
 
 export type MembershipPlan =
   | { participant: 'remove'; member: { op: 'delete' } }
-  | { participant: 'add'; member: { op: 'set'; data: Partial<MemberRecord>; merge: boolean; paidReset?: PaidReset;
+  | { participant: 'add'; member: { op: 'set'; data: Partial<MemberRecord>; merge: boolean;
       /** D8 — how much this write raised the member's liable-entry count (feeds `pool.entryCount`). */
       liabilityDelta: number } };
 
@@ -169,29 +173,41 @@ export function planMembershipWrite(
   // here — fee changes cascade through the entryFee-edit path instead, and a
   // legacy record whose stamp predates a fee change is deliberately left alone
   // when liability is unchanged (that is the cascade's job, not a submit's).
-  let paidReset: PaidReset | undefined;
+  const liabilityRose = liableEntries > priorLiableEntries;
   if (liableFee !== undefined && (
     existing.feeOwed === undefined
     || (existing.feeOwed === 0 && liableFee > 0)
-    || liableEntries > priorLiableEntries
+    || liabilityRose
   )) {
     data.feeOwed = liableFee;
     data.feeOwedSource = 'LIVE';
-    // K11: a PAID member whose dues just rose is no longer paid in full. The
-    // alternative — reporting the new fee as collected — is a money lie.
-    // Applied by `ensureMemberRecord` (it needs FieldValue.delete for the
-    // payment details) and ledgered + mirrored by the caller.
-    if (existing.paidStatus === 'PAID' && liableFee > (existing.feeOwed ?? 0)) {
-      paidReset = {
-        previousFeeOwed: existing.feeOwed ?? 0,
-        feeOwed: liableFee,
-        ...(typeof existing.paidAt === 'number' ? { paidAt: existing.paidAt } : {}),
-        ...(typeof (existing as { paymentMethod?: unknown }).paymentMethod === 'string'
-          ? { paymentMethod: (existing as { paymentMethod?: string }).paymentMethod } : {}),
-      };
-      data.paidStatus = 'UNPAID';
-    }
   }
+  // 🛑 THE SUMMARY, RECOMPUTED — the half of K11 that must survive its
+  // retirement (D6; the D1a writer table calls this row REPLACED, not DELETED).
+  //
+  // This is the ONLY assignment to `paidStatus` on the update path — the branch
+  // above preserves it by design — so removing it outright leaves a fully-paid
+  // member reading `PAID` after adding an unpaid entry.
+  //
+  // ⚠️ WHY THE LITERAL AND NOT `derivePaidStatus(...)`, WHICH THE PLAN NAMES.
+  // They are provably equal here, and the literal costs no transactional read on
+  // the hot submit path. When liability RISES there is a newly-liable entry id,
+  // and that id cannot already be in `paidEntries`:
+  //
+  //   - it becomes liable at this write (its first committed pick), and
+  //   - `setPaidStatus` refuses ENTRY_NOT_FOUND for any id outside the liable
+  //     set, so nothing can have paid it in advance, and
+  //   - the legacy materialisation seeds only the ids liable AT SEED TIME.
+  //
+  // So `liableEntryIds` after this write contains an id absent from the map, and
+  // `derivePaidStatus` of that is `'UNPAID'` by its `every`. The equivalence is
+  // pinned by a test rather than left as a comment — if `setPaidStatus` ever
+  // admits a non-liable id, that test fails and this literal must become the
+  // real call.
+  //
+  // Liability UNCHANGED writes nothing: a resubmit, a rename or a join touch
+  // must not disturb a paid member.
+  if (liabilityRose) data.paidStatus = 'UNPAID';
   // The latch only ever goes UP. Join/backfill touches pass `undefined`, and
   // writing `!!undefined` here would clear the flag on a member who has already
   // submitted — the join path at nflPools.ts:238 touches existing records on
@@ -210,7 +226,7 @@ export function planMembershipWrite(
       data.pickedWeeks = [...stored, facts.pickedWeek].sort((a, b) => a - b);
     }
   }
-  return { participant: 'add', member: { op: 'set', data, merge: true, liabilityDelta: liableEntries - priorLiableEntries, ...(paidReset ? { paidReset } : {}) } };
+  return { participant: 'add', member: { op: 'set', data, merge: true, liabilityDelta: liableEntries - priorLiableEntries } };
 }
 
 /**
@@ -243,18 +259,23 @@ export function ensureMemberRecord(
   facts: MembershipFacts,
   existing: MemberRecord | null,
   now: number,
-): { wrote: boolean; paidReset?: PaidReset; liabilityDelta: number } {
+): { wrote: boolean; liabilityDelta: number } {
   const plan = planMembershipWrite(poolId, uid, facts, existing, now);
   if (plan.participant !== 'add') return { wrote: false, liabilityDelta: 0 };
-  const reset = plan.member.paidReset;
+  // The payment-detail clear rides with the summary write, and only with it:
+  // stale method/date/note on a member who has just gone UNPAID misreads as a
+  // payment record. Same clear `setPaidStatus` applies on its UNPAID transition.
+  // ⚠️ `plan.member.merge` IS PART OF THE CONDITION, NOT DECORATION. The CREATE
+  // branch also writes a literal `paidStatus: 'UNPAID'`, and it returns
+  // `merge: false` — and Firestore THROWS on a `FieldValue.delete()` inside a
+  // `set()` without merge. Keying on the status alone would turn every first
+  // join into a runtime error.
+  const wentUnpaid = plan.member.merge && plan.member.data.paidStatus === 'UNPAID';
   tx.set(membersCol(db, poolId).doc(uid), {
     ...plan.member.data,
-    // K11 — same clear as setPaidStatus's UNPAID transition: stale
-    // method/date/note on an unpaid member misreads as a payment record. The
-    // details survive in the caller's ledger line.
-    ...(reset ? { paidAt: FieldValue.delete(), paymentMethod: FieldValue.delete(), paymentNote: FieldValue.delete() } : {}),
+    ...(wentUnpaid ? { paidAt: FieldValue.delete(), paymentMethod: FieldValue.delete(), paymentNote: FieldValue.delete() } : {}),
   }, { merge: plan.member.merge });
-  return { wrote: true, liabilityDelta: plan.member.liabilityDelta, ...(reset ? { paidReset: reset } : {}) };
+  return { wrote: true, liabilityDelta: plan.member.liabilityDelta };
 }
 
 /**

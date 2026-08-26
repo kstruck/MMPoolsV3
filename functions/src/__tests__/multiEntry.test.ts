@@ -210,15 +210,46 @@ describe('planMembershipWrite × multi-entry', () => {
     expect(plan.member.data).toMatchObject({ feeOwed: 50, feeOwedSource: 'LIVE', playableEntryCount: 2 });
     expect(plan.member.data.entries).toEqual({ u1: { entryIndex: 1 }, 'e2:u1': { entryIndex: 2 } });
     expect(plan.member.liabilityDelta).toBe(1);
-    expect(plan.member.paidReset).toBeUndefined();
   });
 
-  it('K11: a PAID member adding an entry flips to UNPAID with the reset detail', () => {
+  /**
+   * PLAN-MULTI-ENTRY-DUES D6 — K11 RETIRED. This test used to assert the reset
+   * PAYLOAD; it now asserts what replaced it, and the distinction is the ticket.
+   */
+  it('D6: a PAID member adding an entry still goes UNPAID — the SUMMARY survives K11', () => {
     const existing = rec({ role: 'PARTICIPANT', feeOwed: 25, paidStatus: 'PAID', paidAt: 123, hasPlayableEntry: true, playableEntryCount: 1 });
     const plan = planMembershipWrite('p1', 'u1', facts({ hasPlayableEntry: true, playableEntryCount: 2 }), existing, NOW);
     if (plan.participant !== 'add') throw new Error('add');
+    // The half that MUST survive: nothing derives `paidStatus` on read, so a
+    // dropped write leaves a fully-paid member reading PAID while owing $50.
     expect(plan.member.data.paidStatus).toBe('UNPAID');
-    expect(plan.member.paidReset).toEqual({ previousFeeOwed: 25, feeOwed: 50, paidAt: 123 });
+    expect(plan.member.data.feeOwed).toBe(50);
+    // The half that is GONE: no reset payload, so no ledger line and no mirror.
+    expect('paidReset' in plan.member).toBe(false);
+  });
+
+  /**
+   * 🛑 THE EQUIVALENCE THE LITERAL RESTS ON.
+   *
+   * `planMembershipWrite` writes the literal `'UNPAID'` rather than calling
+   * `derivePaidStatus`, because it is pure and reading the dues store would cost
+   * a transactional read on every pick submission. That is only sound while a
+   * newly-liable entry cannot already be in `paidEntries` — which `setPaidStatus`
+   * guarantees by refusing ENTRY_NOT_FOUND outside the liable set.
+   *
+   * Pinned here rather than left in a comment: if that guarantee ever breaks,
+   * this fails and the literal must become the real call.
+   */
+  it('the literal UNPAID equals derivePaidStatus for every shape this branch fires on', () => {
+    for (const priorCount of [0, 1, 2, 5]) {
+      const nextCount = priorCount + 1;
+      const paidIds = Array.from({ length: priorCount }, (_, i) => (i === 0 ? 'u1' : `e${i + 1}:u1`));
+      const liableIds = Array.from({ length: nextCount }, (_, i) => (i === 0 ? 'u1' : `e${i + 1}:u1`));
+      // Every PRIOR entry paid — the most favourable case for reading PAID.
+      const paidEntries = Object.fromEntries(paidIds.map(id => [id, { paidAt: NOW }]));
+      const member = { role: 'PARTICIPANT' as const, playableEntryCount: nextCount, paidEntries };
+      expect(derivePaidStatus(member, liableEntryIds(member, 'u1', liableIds))).toBe('UNPAID');
+    }
   });
 
   it('a resubmit on the same entry changes nothing about money (no reset, delta 0)', () => {
