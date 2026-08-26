@@ -162,18 +162,37 @@ export function freeDefaultEntryName(
 export function ownerStateAfter(
   owned: OwnedEntry[],
   written: { id: string; entryIndex: number; entryName?: string; hasPick: boolean },
-): { playableEntryCount: number; entries: Record<string, { entryIndex: number; name?: string }> } {
+): {
+  playableEntryCount: number;
+  entries: Record<string, { entryIndex: number; name?: string }>;
+  /**
+   * PLAN-MULTI-ENTRY-DUES D1a — WHICH entries hold a pick, not just how many.
+   *
+   * 🛑 TRANSACTION-LOCAL. This is the input `liableEntryIds` needs and CANNOT
+   * get from the Member Record, because `entries` deliberately carries no pick
+   * state (a participant-readable record must not say which entry has a pick for
+   * an unrevealed week). **It must never be written to the record** — persisting
+   * it is precisely the leak the omission exists to prevent. Compute it here,
+   * pass it to `liableEntryIds` inside the same transaction, discard it.
+   *
+   * It costs no extra read: `entryHasPick` was already being evaluated on every
+   * one of these documents to build `playableEntryCount`. Only the ids were
+   * being thrown away.
+   */
+  pickedEntryIds: string[];
+} {
   let playableEntryCount = written.hasPick ? 1 : 0;
+  const pickedEntryIds: string[] = written.hasPick ? [written.id] : [];
   const entries: Record<string, { entryIndex: number; name?: string }> = {
     [written.id]: { entryIndex: written.entryIndex, ...(written.entryName ? { name: written.entryName } : {}) },
   };
   for (const e of owned) {
     if (e.id === written.id) continue;
-    if (entryHasPick(e.data)) playableEntryCount++;
+    if (entryHasPick(e.data)) { playableEntryCount++; pickedEntryIds.push(e.id); }
     const idx = typeof e.data.entryIndex === 'number' ? e.data.entryIndex : 1;
     entries[e.id] = { entryIndex: idx, ...(typeof e.data.entryName === 'string' && e.data.entryName ? { name: e.data.entryName } : {}) };
   }
-  return { playableEntryCount, entries };
+  return { playableEntryCount, entries, pickedEntryIds };
 }
 
 /**
