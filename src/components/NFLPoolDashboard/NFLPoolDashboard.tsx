@@ -44,6 +44,7 @@ import { resolveStandingsAlias, type StandingsScope } from '../../utils/nflStand
 import { isPinnableMessageId } from '@shared/pinnedMessage';
 import { poolTypeLabel, poolOptionLabels } from '../../utils/poolTypeLabel';
 import { weekValueFor, seasonCompare } from '../../utils/nflResults';
+import { NFL_KICKOFF_MS } from '../../config/season';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -164,7 +165,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       const weekNum = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
       return Math.min(4, Math.max(1, weekNum));
     } else {
-      const seasonStart = new Date('2026-09-10T00:00:00').getTime(); // Estimated kickoff of Week 1
+      // Week 1's boundary — the same kickoff instant every other surface uses
+      // (src/config/season.ts). Was a fifth hardcoded copy, and a whole day out.
+      const seasonStart = NFL_KICKOFF_MS;
       if (now < seasonStart) return 1;
       const diffMs = now - seasonStart;
       const weekNum = Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000));
