@@ -98,6 +98,26 @@ export interface MemberRecord {
    * gains entry #1 the first time its owner submits under multi-entry.
    */
   entries?: Record<string, { entryIndex: number; name?: string }>;
+  /**
+   * PLAN-MULTI-ENTRY-DUES D1 — which of this member's entries have been PAID
+   * for, keyed by entry id (`entryIdFor`).
+   *
+   * 🛑 PRESENCE IS THE PAID SIGNAL. There is deliberately **no `paid: boolean`**
+   * (D1b): an id present in this map is paid, absent is not. Un-marking DELETES
+   * the key — never `{paid: false}` and never `{}`. With a boolean, `{paid:false}`
+   * and an absent key would be two spellings of one fact and every reader would
+   * have to handle both; an `{}` value with no boolean would read as PAID, which
+   * is the failure a boolean is meant to prevent and does not.
+   *
+   * ⚠️ ABSENT on every record written before this ticket. `undefined` means "no
+   * per-entry detail recorded" — NOT "nothing is paid". Readers fall back to
+   * `paidStatus`, which is still the stored summary. Same unknown-is-not-false
+   * discipline as `hasPlayableEntry` and `pickedWeeks` above.
+   *
+   * ⚠️ Entry ids contain `:` (`e2:uid`), so a nested delete needs
+   * `new FieldPath('paidEntries', entryId)` rather than a dotted string path.
+   */
+  paidEntries?: Record<string, { paidAt?: number; method?: string; note?: string }>;
 }
 
 /**
@@ -128,6 +148,150 @@ export function memberPlayedEntries(
   return typeof m.playableEntryCount === 'number'
     ? m.playableEntryCount
     : (m.hasPlayableEntry === true || (m.role === 'MANAGER' && (m.feeOwed ?? 0) > 0) ? 1 : 0);
+}
+
+/**
+ * PLAN-MULTI-ENTRY-DUES D1 — the entry ids this member is LIABLE for: the rows
+ * the ledger charges, and the exact set `derivePaidStatus` requires to be paid.
+ *
+ * 🛑 `pickedEntryIds` IS AN ARGUMENT, AND THAT IS AN AUTHORIZATION DECISION.
+ * Liability is "this entry has committed a pick", and the Member Record does not
+ * carry that per entry — `entries` is documented above as "NEVER picks and never
+ * per-entry weeks", because a participant-readable record must not say which
+ * entry has a pick for an unrevealed week (commissioner-blind picks).
+ * `playableEntryCount` is a COUNT, not a set, so with entries 1 and 2 and one
+ * pick between them the liable id is unknowable from the record alone.
+ *
+ * So the caller supplies the ids from its own transactional read of the entry
+ * documents — `ownerStateAfter` returns them for exactly this — and they are
+ * never written back to the record. Storing a per-entry `liable` flag would be
+ * the forbidden bit itself: early in a season, when only week 1 exists and is
+ * unrevealed, "entry X is liable" and "entry X picked week 1" are the same
+ * statement. If a ticket concludes it needs that, STOP and ask Kevin (D11).
+ *
+ * 🛑 `pickedEntryIds` IS THE AUTHORITY, AND IS NOT INTERSECTED WITH `entries`.
+ * It is read from the entry documents; `entries` is a mirror rebuilt on submit
+ * and is ABSENT on legacy records. Intersecting would drop liable ids whenever
+ * the mirror is stale — making a member owe LESS and derive PAID more easily,
+ * which is the money-lie direction. The docs win.
+ *
+ * The empty-set fallback is D1's synthetic id: a participant owes one fee from
+ * the moment they JOIN, before any entry document exists, and entry #1's id is
+ * the bare `uid` (parent plan D1) — so they get exactly one payable row rather
+ * than none. A seeded MANAGER who has never played has `memberLiableEntries` 0
+ * and is liable for NOTHING, which is what keeps `derivePaidStatus` from
+ * turning them green (N1/R2).
+ */
+export function liableEntryIds(
+  // NOTE the absence of `entries`. It is NOT in this Pick because this function
+  // does not read the mirror, per the paragraph above — the type is the cheapest
+  // place for that decision to be visible, and listing a field we ignore would
+  // invite the intersection back in.
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount'>,
+  uid: string,
+  pickedEntryIds: readonly string[],
+): string[] {
+  const picked = sanitizeEntryIds(pickedEntryIds).sort();
+  if (picked.length > 0) return picked;
+  return memberLiableEntries(m) > 0 ? [uid] : [];
+}
+
+/**
+ * Distinct, non-blank entry ids. Used by BOTH helpers below and above, and that
+ * duplication is the point (codex r3 #1, r4 #3).
+ *
+ * 🛑 `derivePaidStatus` SANITIZES ITS OWN ARGUMENT rather than trusting
+ * `liableEntryIds` to have done it, because it is exported and any writer may
+ * build a list by hand. Two concrete bypasses, both of which produced a false
+ * PAID before this existed:
+ *
+ * - **duplicates defeat the count guard.** `['u1','u1']` has length 2, so a
+ *   member owing two entries passes the `>= memberLiableEntries` check while ONE
+ *   real row is paid.
+ * - **a blank id can be paid off.** `liable: ['']` with a `paidEntries['']` key
+ *   satisfies the presence test against a row that cannot exist — a Firestore
+ *   document id is never empty, so one arriving here is caller garbage.
+ *
+ * Both shrink the set, which moves the answer toward UNPAID: the safe direction
+ * for money, and never a false PAID.
+ */
+function sanitizeEntryIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)].filter(id => typeof id === 'string' && id.length > 0);
+}
+
+/**
+ * Is `id` marked paid in this map? Presence of a WELL-FORMED row (D1b).
+ *
+ * ⚠️ `hasOwnProperty`, NOT `id in paid`. `in` walks the prototype chain, so an id
+ * colliding with an `Object.prototype` key would read as paid against a map that
+ * never mentioned it.
+ *
+ * ⚠️ AND THE VALUE MUST BE AN OBJECT (codex r5 #1). `{}` IS paid — D1b is
+ * explicit that there is no `paid: boolean` and metadata is optional — but a
+ * `null` value is not a row, it is malformed data, and Firestore will happily
+ * store one. The realistic way it arrives is a writer that "un-marks" by writing
+ * a falsy value instead of DELETING the key, which is the exact mistake D1b
+ * forbids; reading that as PAID would report money collected that was just
+ * disclaimed. Malformed money data fails closed.
+ */
+function isPaidRow(paid: Record<string, unknown>, id: string): boolean {
+  if (!Object.prototype.hasOwnProperty.call(paid, id)) return false;
+  const row = paid[id];
+  if (typeof row !== 'object' || row === null) return false;
+  // 🛑 A PLAIN OBJECT, not merely "an object" (codex r5 #1, r6, r7 #1).
+  // `typeof` says 'object' for `null`, arrays, AND every class instance the
+  // Firestore SDKs hand back — `Timestamp`, `GeoPoint`, `DocumentReference`.
+  // The realistic arrival is a writer doing `paidEntries[id] = serverTimestamp()`
+  // instead of `{ paidAt }`: schema-wrong, and it would read as a payment.
+  //
+  // Checking the prototype rejects that whole class at once, and — this is why
+  // it is done this way — WITHOUT importing anything. This module is
+  // deliberately framework-free so the client can bundle it; `instanceof
+  // Timestamp` would drag `firebase-admin` in and break that. A map field
+  // deserialises to a plain object in both SDKs, so a real row always passes.
+  const proto = Object.getPrototypeOf(row);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * PLAN-MULTI-ENTRY-DUES D1 — the STORED summary `paidStatus`, recomputed from
+ * the per-entry map. Pure; every writer calls this rather than deciding for
+ * itself, so the stored flag and the map cannot disagree (D1a).
+ *
+ * 🛑 THE EMPTY-SET TRAP, WHICH IS WHY THE GUARD IS FIRST. `[].every(...)` is
+ * `true`, so a naive `every` reports a member with NO liable entries as PAID —
+ * turning every seeded commissioner green. They are UNPAID today, with
+ * `feeOwed: 0`, and roster chips render that. `liableEntryIds` returns `[]` for
+ * exactly that member, so this guard is the whole of N1/R2.
+ *
+ * ⚠️ `hasOwnProperty`, NOT `id in paidEntries`. `in` walks the prototype chain,
+ * so an id colliding with an `Object.prototype` key would read as paid against a
+ * map that never mentioned it. Entry ids are `uid` / `eN:uid` and should never
+ * collide, which is the argument for the cheap check rather than against it.
+ */
+export function derivePaidStatus(
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount' | 'paidEntries'>,
+  liable: readonly string[],
+): 'PAID' | 'UNPAID' {
+  // Sanitized HERE, not trusted from the caller — see `sanitizeEntryIds`.
+  const ids = sanitizeEntryIds(liable);
+  if (ids.length === 0) return 'UNPAID';
+  // 🛑 FEWER ROWS THAN THE FEE COVERS CAN NEVER DERIVE PAID (codex r3 #2/#3).
+  // `feeOwed` is `entryFee x memberLiableEntries(m)`, so if the caller's entry
+  // evidence yields FEWER liable rows than the stored counter, paying every row
+  // shown would settle less money than the member owes and still report PAID.
+  // That is the money lie this whole plan exists to remove, arriving through the
+  // back door: a writer that reads a partial entry set (`reconcilePaymentTruth`
+  // reads ONE entry doc, D1a) or passes `[]` for a member who has played.
+  // Fail closed. A legitimate caller never trips this - the picked ids ARE
+  // `playableEntryCount` when both come from the same transactional read, and
+  // the synthetic-uid fallback is exactly 1 when `memberLiableEntries` is 1.
+  // Evidence LARGER than the counter is allowed: the entry docs outrank a stale
+  // or absent stored count, and more rows owed is the safe direction.
+  if (ids.length < memberLiableEntries(m)) return 'UNPAID';
+  const paid = m.paidEntries;
+  if (!paid) return 'UNPAID';
+  return ids.every(id => isPaidRow(paid, id)) ? 'PAID' : 'UNPAID';
 }
 
 /**

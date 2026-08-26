@@ -4,7 +4,9 @@ import {
   assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, ownerStateAfter, pickOwnedEntry,
 } from '../lib/multiEntry';
 import { defaultEntryName, entryIdFor } from '../shared/multiEntry';
-import { deriveEntryCount, memberLiableEntries, type MemberRecord } from '../shared/memberRecord';
+import {
+  derivePaidStatus, deriveEntryCount, liableEntryIds, memberLiableEntries, type MemberRecord,
+} from '../shared/memberRecord';
 
 /**
  * PLAN-MULTI-ENTRY T2 — the pure half. Every rule here is also exercised
@@ -104,6 +106,67 @@ describe('ownerStateAfter — post-write count + roster', () => {
     expect(entryHasPick({ picks: {} })).toBe(false);
     expect(entryHasPick({ picks: { 1: 'KC' } })).toBe(true);
     expect(entryHasPick(null)).toBe(false);
+  });
+
+  /**
+   * PLAN-MULTI-ENTRY-DUES D1a (codex r4 #1). The ids, not just the count — the
+   * input `liableEntryIds` cannot get from the Member Record.
+   */
+  it('returns WHICH entries hold a pick, agreeing with the count', () => {
+    const owned = [
+      { id: 'u1', data: { picks: { g1: 'KC' } } },
+      { id: 'e2:u1', data: { picks: {}, entryIndex: 2 } },        // empty sheet — not liable
+      { id: 'e4:u1', data: { picks: { g7: 'SF' }, entryIndex: 4 } },
+    ];
+    const s = ownerStateAfter(owned, { id: 'e3:u1', entryIndex: 3, hasPick: true });
+    expect([...s.pickedEntryIds].sort()).toEqual(['e3:u1', 'e4:u1', 'u1']);
+    // The two outputs are derived from ONE predicate pass and must never disagree.
+    expect(s.pickedEntryIds.length).toBe(s.playableEntryCount);
+  });
+
+  it('the written doc is judged by its POST-write shape, not the stored one', () => {
+    // Stored empty, written with a pick -> liable. The stale `owned` copy of the
+    // same id must not win, or a first submit would look unpaid-for.
+    const owned = [{ id: 'u1', data: { picks: {} } }];
+    expect(ownerStateAfter(owned, { id: 'u1', entryIndex: 1, hasPick: true }).pickedEntryIds).toEqual(['u1']);
+    // ...and the reverse: written WITHOUT a pick is not liable, even though a
+    // stored copy has one (an empty resubmit cannot un-commit, but the predicate
+    // must still read off `written`).
+    const owned2 = [{ id: 'u1', data: { picks: { g1: 'KC' } } }];
+    expect(ownerStateAfter(owned2, { id: 'u1', entryIndex: 1, hasPick: false }).pickedEntryIds).toEqual([]);
+  });
+
+  it('is EMPTY when nothing has a pick — the seeded-manager shape that feeds N1', () => {
+    const s = ownerStateAfter([], { id: 'u1', entryIndex: 1, hasPick: false });
+    expect(s.pickedEntryIds).toEqual([]);
+    expect(s.playableEntryCount).toBe(0);
+  });
+
+  /**
+   * 🛑 GUARD THE GUARD, and this one guards an AUTHORIZATION invariant.
+   *
+   * `pickedEntryIds` is transaction-local by contract: persisting it onto the
+   * Member Record is the commissioner-blind-picks leak the `entries` map exists
+   * to avoid. `entries` must therefore carry index/name and NOTHING pick-shaped.
+   *
+   * The sample it MUST catch is below — a leak is simulated by hand and the
+   * assertion fails on it. The sample it must NOT catch is the ordinary roster
+   * on the line above, which passes.
+   */
+  it('the roster map still leaks NO pick state, even though the ids are now computed', () => {
+    const owned = [{ id: 'e2:u1', data: { picks: { g1: 'KC' }, entryIndex: 2, entryName: 'Kev #2' } }];
+    const s = ownerStateAfter(owned, { id: 'u1', entryIndex: 1, hasPick: true });
+    const pickShaped = (o: Record<string, unknown>) =>
+      Object.keys(o).some(k => /pick|liable|week|hasPick/i.test(k));
+
+    // MUST NOT catch: the real roster entries.
+    for (const v of Object.values(s.entries)) expect(pickShaped(v)).toBe(false);
+    expect(Object.values(s.entries).every(v => pickShaped(v))).toBe(false);
+
+    // MUST catch: a hand-built leak of exactly the shape this forbids.
+    expect(pickShaped({ entryIndex: 2, name: 'Kev #2', hasPick: true })).toBe(true);
+    expect(pickShaped({ entryIndex: 2, liable: true })).toBe(true);
+    expect(pickShaped({ entryIndex: 2, pickedWeeks: [1] })).toBe(true);
   });
 });
 
@@ -217,5 +280,210 @@ describe('K5 — generated default names are unique too (codex r1 P2)', () => {
     expect(freeDefaultEntryName('Kev', 3, { owned, ref: { id: 'e3:u1' } })).toBe('Kev #3 (2)');
     expect(freeDefaultEntryName('Kev', 2, { owned, ref: { id: 'e2:u1' } })).toBe('Kev #2');
     expect(freeDefaultEntryName('Kev', 1, { owned, ref: { id: 'u1' } })).toBeUndefined();
+  });
+});
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T1 — the derivation, PURE and with no writers yet.
+ *
+ * This block exists before anything can write `paidEntries` on purpose: the
+ * derivation is where N1 lives, and a pure function with a test is the only
+ * place that bug is cheap (plan section 7, "T1 before T2 is not arbitrary").
+ */
+describe('DUES D1 — liableEntryIds', () => {
+  it('N1 (THE FIRST TEST, and the reason the length guard exists): a seeded manager with no liable entries is liable for NOTHING', () => {
+    // `[].every(...)` is `true`. Without the guard this member derives PAID and
+    // every seeded commissioner in production turns green.
+    expect(liableEntryIds(rec({ role: 'MANAGER', feeOwed: 0 }), 'u1', [])).toEqual([]);
+    expect(derivePaidStatus({ paidEntries: {} }, [])).toBe('UNPAID');
+    expect(derivePaidStatus({}, [])).toBe('UNPAID');
+    // ...and the whole point: they stay UNPAID even with a populated map.
+    expect(derivePaidStatus({ paidEntries: { 'u1': { paidAt: NOW } } }, [])).toBe('UNPAID');
+  });
+
+  it('a joined-and-never-picked PARTICIPANT gets exactly ONE payable row, at the synthetic uid', () => {
+    // They owe a fee from the moment they join, before any entry doc exists,
+    // and entry #1's id IS the bare uid (parent plan D1).
+    expect(liableEntryIds(rec({ role: 'PARTICIPANT' }), 'u1', [])).toEqual(['u1']);
+    expect(liableEntryIds(rec({ role: 'PARTICIPANT', playableEntryCount: 0 }), 'u1', [])).toEqual(['u1']);
+  });
+
+  it('a legacy MANAGER charged before the latch existed still gets a payable row', () => {
+    // memberLiableEntries counts them 1 off `feeOwed > 0`; liability without a
+    // payable row would be a debt nobody can settle.
+    expect(liableEntryIds(rec({ role: 'MANAGER', feeOwed: 25 }), 'u1', [])).toEqual(['u1']);
+  });
+
+  it('picked ids win, deduped and sorted, and the synthetic fallback does NOT apply', () => {
+    expect(liableEntryIds(rec({ role: 'PARTICIPANT' }), 'u1', ['e2:u1', 'u1'])).toEqual(['e2:u1', 'u1']);
+    expect(liableEntryIds(rec({ role: 'PARTICIPANT' }), 'u1', ['u1', 'u1'])).toEqual(['u1']);
+    // A manager who HAS played is liable for what they played, not for a uid row.
+    expect(liableEntryIds(rec({ role: 'MANAGER', playableEntryCount: 1 }), 'u1', ['e2:u1'])).toEqual(['e2:u1']);
+  });
+
+  it('the picked ids are the AUTHORITY and are NOT intersected with the `entries` mirror', () => {
+    // The mirror is ABSENT on legacy records and stale between submits.
+    // Intersecting would drop a liable id, making the member owe LESS and derive
+    // PAID more easily -- the money-lie direction. The entry docs win.
+    const legacy = rec({ role: 'PARTICIPANT', entries: undefined });
+    expect(liableEntryIds(legacy, 'u1', ['u1', 'e2:u1'])).toEqual(['e2:u1', 'u1']);
+    const stale = rec({ role: 'PARTICIPANT', entries: { 'u1': { entryIndex: 1 } } });
+    expect(liableEntryIds(stale, 'u1', ['u1', 'e2:u1'])).toEqual(['e2:u1', 'u1']);
+    // ...and the consequence that matters: paying only the mirrored one is NOT paid in full.
+    expect(derivePaidStatus({ paidEntries: { 'u1': {} } }, liableEntryIds(stale, 'u1', ['u1', 'e2:u1']))).toBe('UNPAID');
+  });
+});
+
+describe('DUES D1/D1b — derivePaidStatus, where PRESENCE is the paid signal', () => {
+  it('PAID only when EVERY liable id is present', () => {
+    expect(derivePaidStatus({ paidEntries: { 'u1': {}, 'e2:u1': {} } }, ['u1', 'e2:u1'])).toBe('PAID');
+    expect(derivePaidStatus({ paidEntries: { 'e2:u1': {} } }, ['u1', 'e2:u1'])).toBe('UNPAID');
+    expect(derivePaidStatus({ paidEntries: { 'u1': {} } }, ['u1', 'e2:u1'])).toBe('UNPAID');
+  });
+
+  it("Kevin's case: pay entry 2, not entry 1 -> the member is UNPAID", () => {
+    const m = rec({ role: 'PARTICIPANT', playableEntryCount: 2 });
+    const liable = liableEntryIds(m, 'u1', ['u1', 'e2:u1']);
+    expect(derivePaidStatus({ paidEntries: { 'e2:u1': { paidAt: NOW } } }, liable)).toBe('UNPAID');
+    expect(derivePaidStatus({ paidEntries: { 'e2:u1': { paidAt: NOW }, 'u1': { paidAt: NOW } } }, liable)).toBe('PAID');
+  });
+
+  it('an EMPTY value object still counts as paid — presence is the signal, not truthiness', () => {
+    // D1b: there is no `paid: boolean`, so `{}` means paid. Metadata is optional.
+    expect(derivePaidStatus({ paidEntries: { 'u1': {} } }, ['u1'])).toBe('PAID');
+    expect(derivePaidStatus({ paidEntries: { 'u1': { method: 'cash' } } }, ['u1'])).toBe('PAID');
+  });
+
+  it('an ABSENT map is "no per-entry detail", never "everything is paid"', () => {
+    expect(derivePaidStatus({}, ['u1'])).toBe('UNPAID');
+    expect(derivePaidStatus({ paidEntries: undefined }, ['u1'])).toBe('UNPAID');
+  });
+
+  it('a colon-bearing entry id round-trips (D1b — the FieldPath case)', () => {
+    expect(derivePaidStatus({ paidEntries: { 'e2:u1': { paidAt: NOW } } }, ['e2:u1'])).toBe('PAID');
+    // and un-marking is a DELETED key, not a falsy value -- which is what the
+    // callable must do, and what this reads back as.
+    const afterUnmark: Record<string, { paidAt?: number }> = { 'e2:u1': { paidAt: NOW } };
+    delete afterUnmark['e2:u1'];
+    expect(derivePaidStatus({ paidEntries: afterUnmark }, ['e2:u1'])).toBe('UNPAID');
+  });
+
+  /**
+   * PLAN-MULTI-ENTRY-DUES, codex r3 findings 2 and 3 on the T1 diff.
+   *
+   * These two findings share one root cause and one fix. `feeOwed` is
+   * `entryFee x memberLiableEntries(m)`, so a caller whose entry evidence yields
+   * FEWER liable rows than the stored counter would have the member pay every
+   * row shown, settle less money than they owe, and still read PAID.
+   */
+  describe('fail-closed: fewer liable rows than the fee covers can NEVER derive PAID', () => {
+    it('a participant recorded at 3 played entries, but only 2 ids supplied, stays UNPAID', () => {
+      const m = { role: 'PARTICIPANT', playableEntryCount: 3,
+        paidEntries: { 'u1': {}, 'e2:u1': {} } } as const;
+      const liable = liableEntryIds(m, 'u1', ['u1', 'e2:u1']);
+      expect(liable).toEqual(['e2:u1', 'u1']);          // the helper reports what it was told
+      expect(memberLiableEntries(m)).toBe(3);           // ...but the record says three fees
+      expect(derivePaidStatus(m, liable)).toBe('UNPAID');
+      // and paying the third settles it
+      expect(derivePaidStatus(
+        { ...m, paidEntries: { 'u1': {}, 'e2:u1': {}, 'e3:u1': {} } },
+        liableEntryIds(m, 'u1', ['u1', 'e2:u1', 'e3:u1']),
+      )).toBe('PAID');
+    });
+
+    it('a member who HAS played but is handed [] does not settle on one synthetic row', () => {
+      // The synthetic-uid fallback is right for a joined-and-never-picked member
+      // and WRONG for this one; the count guard is what tells them apart.
+      const m = { role: 'PARTICIPANT', playableEntryCount: 2, paidEntries: { 'u1': {} } } as const;
+      expect(liableEntryIds(m, 'u1', [])).toEqual(['u1']);
+      expect(derivePaidStatus(m, ['u1'])).toBe('UNPAID');
+    });
+
+    it('evidence LARGER than the stored counter is allowed — the entry docs outrank a stale count', () => {
+      // Legacy record: playableEntryCount absent, hasPlayableEntry true -> counts 1.
+      // The transaction found two picked entries. Owing MORE is the safe direction.
+      const m = { role: 'PARTICIPANT', hasPlayableEntry: true,
+        paidEntries: { 'u1': {}, 'e2:u1': {} } } as const;
+      expect(memberLiableEntries(m)).toBe(1);
+      expect(derivePaidStatus(m, liableEntryIds(m, 'u1', ['u1', 'e2:u1']))).toBe('PAID');
+      // ...and only ONE of the two paid is still UNPAID, which is the point.
+      expect(derivePaidStatus({ ...m, paidEntries: { 'u1': {} } }, ['e2:u1', 'u1'])).toBe('UNPAID');
+    });
+
+    it('derivePaidStatus SANITIZES ITS OWN ARGUMENT — it does not trust liableEntryIds (codex r4 #3)', () => {
+      // MUST catch: duplicates would otherwise pad the array to the owed length
+      // and let ONE paid row settle TWO owed entries.
+      const dup = { role: 'PARTICIPANT', playableEntryCount: 2, paidEntries: { 'u1': {} } } as const;
+      expect(['u1', 'u1'].length).toBe(2);                       // the pad is real
+      expect(memberLiableEntries(dup)).toBe(2);
+      expect(derivePaidStatus(dup, ['u1', 'u1'])).toBe('UNPAID');
+      // MUST catch: a hand-built blank id with a matching key.
+      expect(derivePaidStatus(
+        { role: 'PARTICIPANT', paidEntries: { '': {} } }, [''],
+      )).toBe('UNPAID');
+      // MUST NOT catch: two DISTINCT real ids, both paid, is genuinely PAID.
+      expect(derivePaidStatus(
+        { ...dup, paidEntries: { 'u1': {}, 'e2:u1': {} } }, ['u1', 'e2:u1'],
+      )).toBe('PAID');
+    });
+
+    it('a blank entry id cannot be paid off (codex r3 #1)', () => {
+      // MUST catch: `liable: ['']` with a matching `paidEntries['']` key would
+      // otherwise derive PAID against a row that cannot exist.
+      expect(liableEntryIds({ role: 'PARTICIPANT' }, 'u1', ['', 'u1'])).toEqual(['u1']);
+      expect(liableEntryIds({ role: 'PARTICIPANT' }, 'u1', [''])).toEqual(['u1']);   // falls back
+      expect(derivePaidStatus(
+        { role: 'PARTICIPANT', paidEntries: { '': {} } },
+        liableEntryIds({ role: 'PARTICIPANT' }, 'u1', ['']),
+      )).toBe('UNPAID');
+      // MUST NOT catch: a real id is untouched by the filter.
+      expect(liableEntryIds({ role: 'PARTICIPANT' }, 'u1', ['e2:u1'])).toEqual(['e2:u1']);
+    });
+  });
+
+  it('a MALFORMED row value is not a payment (codex r5 #1)', () => {
+    // The realistic arrival: a writer that "un-marks" by writing a falsy value
+    // instead of DELETING the key - the exact mistake D1b forbids. Firestore
+    // stores null happily, and reading it as PAID would report money collected
+    // that was just disclaimed.
+    const bad = { 'u1': null } as unknown as Record<string, { paidAt?: number }>;
+    expect(Object.prototype.hasOwnProperty.call(bad, 'u1')).toBe(true);   // present...
+    expect(derivePaidStatus({ role: 'PARTICIPANT', paidEntries: bad }, ['u1'])).toBe('UNPAID');
+    // `typeof null` AND `typeof []` are both 'object', so each needs excluding
+    // by hand. Firestore stores arrays natively, so this is as reachable as null.
+    expect(typeof [] === 'object').toBe(true);                            // the trap is real
+    const arr = { 'u1': [] } as unknown as Record<string, { paidAt?: number }>;
+    expect(derivePaidStatus({ role: 'PARTICIPANT', paidEntries: arr }, ['u1'])).toBe('UNPAID');
+    // ...and every Firestore CLASS INSTANCE too. The realistic arrival is a
+    // writer doing paidEntries[id] = serverTimestamp() instead of { paidAt }.
+    // Stand-ins, because importing firebase-admin here would break the
+    // framework-free property that lets the client bundle this module.
+    class Timestamp { constructor(public seconds = 1, public nanoseconds = 0) {} }
+    class GeoPoint { constructor(public latitude = 0, public longitude = 0) {} }
+    for (const v of [new Timestamp(), new GeoPoint(), new Date(NOW)]) {
+      expect(typeof v === 'object' && v !== null && !Array.isArray(v)).toBe(true);  // passes the OLD check
+      const inst = { 'u1': v } as unknown as Record<string, { paidAt?: number }>;
+      expect(derivePaidStatus({ role: 'PARTICIPANT', paidEntries: inst }, ['u1'])).toBe('UNPAID');
+    }
+    // MUST NOT catch: a null-prototype map is still a plain map.
+    const bare = Object.assign(Object.create(null), { paidAt: NOW });
+    expect(derivePaidStatus(
+      { role: 'PARTICIPANT', paidEntries: { 'u1': bare } }, ['u1'],
+    )).toBe('PAID');
+    // MUST NOT catch: `{}` IS paid. D1b has no `paid: boolean`; metadata is optional.
+    expect(derivePaidStatus({ role: 'PARTICIPANT', paidEntries: { 'u1': {} } }, ['u1'])).toBe('PAID');
+    expect(derivePaidStatus(
+      { role: 'PARTICIPANT', paidEntries: { 'u1': { paidAt: NOW, method: 'cash' } } }, ['u1'],
+    )).toBe('PAID');
+  });
+
+  it('GUARD THE GUARD: an inherited Object.prototype key is NOT presence', () => {
+    // MUST catch: `'constructor' in {}` is true, so an `in` check would report
+    // PAID against a map that never mentioned the id. hasOwnProperty does not.
+    expect('constructor' in {}).toBe(true);                       // the trap is real
+    expect(derivePaidStatus({ paidEntries: {} }, ['constructor'])).toBe('UNPAID');
+    expect(derivePaidStatus({ paidEntries: {} }, ['toString'])).toBe('UNPAID');
+    // MUST NOT catch: an OWN key of that name is still presence.
+    expect(derivePaidStatus({ paidEntries: { 'constructor': {} } }, ['constructor'])).toBe('PAID');
   });
 });
