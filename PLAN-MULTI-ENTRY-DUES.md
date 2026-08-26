@@ -1,7 +1,11 @@
 # PLAN — per-entry dues and entry deletion (NFL multi-entry, Phase 2)
 
-> **STATUS: §6 ANSWERED BY KEVIN 2026-08-25 (D1–D4 all "A"). NO CODE YET —
-> this doc is the gate.** `mmp-change-control` §1: plan → adversarial review log
+> **STATUS: §6 FULLY SIGNED. D1–D4 answered by Kevin 2026-08-25 (all "A");
+> N1, N2 and the two §6a exclusions ratified 2026-08-26. NO CODE YET — this doc
+> is the gate, and Kevin's ruling is to HOLD Phase 2 code until PR #597 (Phase 1,
+> `renameNFLEntry`) merges, per CLAUDE.md §2d's one-PR-at-a-time cadence.**
+>
+> `mmp-change-control` §1: plan → adversarial review log
 > (`PLAN-MULTI-ENTRY-DUES-REVIEW-LOG.md`) → sweeps
 > (`PLAN-MULTI-ENTRY-DUES-SWEEPS.md`) → code, in small PRs.
 >
@@ -581,15 +585,24 @@ just the id**, or two deletions of "entry 2" are indistinguishable in the trail.
 | D4 | Does deletion reduce the pot? | **A** — Yes. `entryCount` drops and payouts recompute. |
 
 **Nothing in §6 is open.** Two things surfaced while writing this plan that D1–D4
-do not cover; both are recorded as **recommendations taken**, not as new
-questions, and both are cheap to reverse if Kevin disagrees:
+do not cover. Both were put to Kevin in chat with a recommendation, and **both
+were RATIFIED on 2026-08-26** ("go with rec") — so they are decisions now, not
+standing recommendations, and neither is to be re-derived by an implementer:
 
-- **N1 — the empty-map derivation (R2).** A member with no liable entries stays
-  `UNPAID`. Taken because it is today's behaviour and the alternative turns every
-  seeded commissioner green.
-- **N2 — `paidEntries` is cleared by a delete, so a re-added entry starts
-  unpaid.** Taken because the alternative lets a paid mark be manufactured by
-  deleting and re-adding.
+| # | Question | Ruling |
+|---|---|---|
+| **N1** | What does the derived `paidStatus` say for a member with **no liable entries** — a seeded commissioner who has never played? | **UNPAID (Kevin, 2026-08-26).** `[].every(...)` is `true`, so a naive derivation would turn every seeded commissioner green. The `length > 0` guard in D1 is the implementation, R2 is the risk row, and it is the ticket's first test. |
+| **N2** | Does a deleted entry's paid mark survive, so a re-added entry at the same id comes back paid? | **NO — the `paidEntries` key is cleared with the entry (Kevin, 2026-08-26).** The alternative lets a commissioner manufacture a paid entry by deleting and re-adding one. A re-created entry starts unpaid. |
+
+### 6a. Two things Kevin ruled OUT on 2026-08-26 — do not re-propose
+
+Recorded here because both are the kind of "obvious improvement" a later session
+re-invents, and each would have widened a money or authorization surface:
+
+| Ruled out | Detail |
+|---|---|
+| **A commissioner rename of a member's entry** | Kevin: **no.** It adds a new authorization capability — and so a plan gate of its own under `mmp-change-control` §1 — to buy a rename the member can already perform themselves via `renameNFLEntry`. Not in scope for this plan or for Phase 1. |
+| **A rename UI on SINGLE-ENTRY pools** | Kevin: **leave it.** `EntrySwitcher` renders nothing when `maxEntriesPerUser` is 1 or absent, so an ordinary pool has no rename control. The `renameNFLEntry` callable itself works on any NFL pool — the restriction is the switcher's visibility rule, deliberately unchanged. Entry #1's row shows the player's own name, which is what the default is for. |
 
 ---
 
