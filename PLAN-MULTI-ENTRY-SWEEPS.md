@@ -144,7 +144,7 @@ grep -rn "collection('entries').doc(\|collection(\"entries\").doc(" functions/sr
 | Hit | Verdict |
 |---|---|
 | `nflPools.ts:1808` | ✅ **`doc(r.id)`** — the T3 fix. Was `doc(r.ownerUid)`, the line that overwrote entry #1's rank with entry #2's |
-| `lib/multiEntry.ts:214` | ✅ `applyPaidReset` iterates `ownedIds` — a doc per OWNED ENTRY, not a uid |
+| ~~`lib/multiEntry.ts:214`~~ | ⚰️ **`applyPaidReset` NO LONGER EXISTS.** It iterated `ownedIds` — a doc per OWNED ENTRY, not a uid — and was correct on that axis. K11 was RETIRED by PLAN-MULTI-ENTRY-DUES D6 (P2-T3) and the function deleted, so the hit is gone rather than reclassified. Row kept struck through: a sweep that silently loses a line reads as a sweep that never covered it |
 | `poolExceptions.ts:249`, `setPaidStatus.ts:134,225`, `userProfile.ts:47` | ✅ all the same shape: a deliberate probe for a LEGACY `entries/{uid}` document that carries no `ownerUid` and so cannot be found by the owned-entries query. Each sits beside that query, never instead of it |
 | `simHarness.ts:207,646` | ✅ the harness fabricates entry #1 per simulated player; its header no longer claims this is a scorer invariant |
 

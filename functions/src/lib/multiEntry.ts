@@ -21,7 +21,6 @@ import type { DocumentReference, Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { defaultEntryName, entryIdFor, effectiveMaxEntriesPerUser, ENTRY_NAME_MAX } from "../shared/multiEntry";
 import { deriveEntryCount } from "../shared/memberRecord";
-import { poolDuesRef } from "./poolDues";
 
 export interface OwnedEntry { id: string; data: Record<string, any> }
 
@@ -215,58 +214,18 @@ export function entryCountWrite(
   return { entryCount: deriveEntryCount(members) + delta };
 }
 
-/**
- * K11 — after `ensureMemberRecord` reported a paid reset: mirror UNPAID onto
- * every entry the member owns (same field conventions as setPaidStatus's
- * UNPAID transition) and append the ledger line that says why.
- */
-export function applyPaidReset(
-  tx: Transaction,
-  poolRef: DocumentReference,
-  uid: string,
-  memberName: string | undefined,
-  ownedIds: string[],
-  reset: { previousFeeOwed: number; feeOwed: number; paidAt?: number; paymentMethod?: string },
-  reason: string,
-  now: number,
-): void {
-  for (const id of ownedIds) {
-    tx.set(poolRef.collection('entries').doc(id), {
-      paidStatus: 'UNPAID', paymentMethod: FieldValue.delete(), paidAt: null, paymentNote: null, updatedAt: now,
-    }, { merge: true });
-  }
-  // PLAN-MULTI-ENTRY-DUES: the reset must clear the PER-ENTRY map too, or it is
-  // only half a reset (codex r2 on P2-T2).
-  //
-  // K11 sets the member UNPAID and mirrors that onto every entry doc. The dues
-  // map is the AUTHORITY the summary is derived from, so leaving it behind
-  // desynchronises the three stores: the commissioner then pays only the newly
-  // added entry, the derivation sees the stale key for entry 1 and reports the
-  // member PAID — while entry 1's own document still says UNPAID, and re-paying
-  // entry 1 raises no ledger event because its key was never removed. Deleting
-  // the document keeps "reset to unpaid" total.
-  //
-  // ⚠️ DELETE, not "write an empty map". An ABSENT dues document is the
-  // canonical representation of "no per-entry detail" (R3), and it is what a
-  // member who never had one looks like — so a reset lands them in the same
-  // state rather than a second one that every reader would have to know about.
-  //
-  // K11 is RETIRED by P2-T3, which deletes this function; until then it has to
-  // be correct about a store that did not exist when it was written.
-  tx.delete(poolDuesRef(poolRef, uid));
-  const paidDetail = [
-    reset.paidAt ? `marked paid ${new Date(reset.paidAt).toISOString().slice(0, 10)}` : 'marked paid',
-    reset.paymentMethod ? `via ${reset.paymentMethod}` : undefined,
-    `at $${reset.previousFeeOwed}`,
-  ].filter(Boolean).join(' ');
-  tx.set(poolRef.collection('payments').doc(), {
-    type: 'MARKED_UNPAID',
-    uid,
-    ...(memberName !== undefined ? { entryName: memberName } : {}),
-    amount: reset.feeOwed,
-    actorUid: 'system',
-    at: now,
-    createdAt: FieldValue.serverTimestamp(),
-    note: `${reason} — dues rose from $${reset.previousFeeOwed} to $${reset.feeOwed}; previously ${paidDetail}. Mark paid again once the difference is collected.`,
-  });
-}
+// 🛑 `applyPaidReset` IS GONE (PLAN-MULTI-ENTRY-DUES D6 — K11 retired).
+//
+// It mirrored UNPAID onto every entry a member owned and appended a
+// `MARKED_UNPAID` ledger line whenever an added entry raised their dues. Under
+// per-entry dues that is wrong: the member paid for entries 1 and 2, and adding
+// entry 3 does not unpay 1 and 2. Deleted rather than left dormant — a dormant
+// money path is a path somebody re-enables.
+//
+// The half that survives is the SUMMARY write, and it lives in
+// `planMembershipWrite` (`lib/memberRecord.ts`), not here. The `MARKED_UNPAID`
+// rows K11 already wrote to production ledgers STAY: they were true when
+// written, and nothing backfills or deletes ledger history.
+//
+// (Line comments, not a JSDoc block: a `/** */` attached to nothing is a
+// dangling doc comment that tooling binds to whatever follows it.)
