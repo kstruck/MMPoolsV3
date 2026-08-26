@@ -140,3 +140,24 @@ export const renameNFLEntrySchema = z.strictObject({
 });
 
 export type RenameNFLEntryInput = z.infer<typeof renameNFLEntrySchema>;
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T4 — a COMMISSIONER deletes a member's entry.
+ *
+ * ⚠️ `targetUid` IS REQUIRED, AND THAT IS THE DIFFERENCE FROM THE RENAME. A
+ * rename is owner-only and reads its subject from `request.auth.uid`; a delete
+ * is commissioner-only and acts on SOMEBODY ELSE, so the subject has to travel
+ * on the payload. The handler authorizes the CALLER as commissioner and never
+ * infers the subject from auth.
+ *
+ * No `requestId`, for the same reason the rename has none: there is nothing to
+ * latch. A retried delete finds the document already gone and refuses with
+ * ENTRY_NOT_FOUND, which is the correct answer to "delete it again".
+ */
+export const deleteNFLEntrySchema = z.strictObject({
+    poolId,
+    targetUid: z.string().trim().min(1).max(200),
+    entryIndex: z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP),
+});
+
+export type DeleteNFLEntryInput = z.infer<typeof deleteNFLEntrySchema>;
