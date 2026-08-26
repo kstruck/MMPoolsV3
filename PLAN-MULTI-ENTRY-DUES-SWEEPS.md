@@ -51,17 +51,30 @@ for F in paidStatus feeOwed playableEntryCount entryCount; do
 done
 ```
 
-Both claims this document makes about itself are machine-checkable, and were
-checked at the T7 commit: **every path the commands print appears verbatim in
-§4, §5 or §6** (0 missing across all four fields), and **every subsection's
-`(N files)` equals the number of distinct paths in it** — the counts were set
-from that measurement, not typed.
+### The invariant this document holds itself to
 
-**Every path those commands print is written out in full in §4, §5 or §6** — no
-wildcards, no `{a,b}` brace shorthand, no `...` elision. The verdict lists are
-therefore checkable by string match rather than by reading, which the first
-draft was not: that is how the two omissions recorded in §4a and §4d survived
-it.
+**Every path those four commands print appears verbatim somewhere in §4, §5 or
+§6** — no wildcards, no `{a,b}` brace shorthand, no `...` elision, and no path
+written without its `functions/src/`, `src/` or `shared/` prefix. So the list is
+checkable by string match rather than by reading. Verified at the T7 commit:
+**0 missing across all four fields.**
+
+⚠️ **It is ONE VERDICT PER FILE, not one per field.** Many of these files read
+two or three of the four, and repeating them would create four places to drift.
+Each file is written up once, under the field it most centrally reads. So a
+subsection's count is a count of **verdicts written there**, and the per-field
+totals in the table below are grep totals — the two do not add up to each other,
+by design.
+
+An earlier draft claimed the stronger invariant "every subsection's count equals
+that field's readers", which is false for exactly this reason (codex r3). The
+claim is weakened here rather than the structure changed, because the structure
+is right and the claim was wrong.
+
+Three things this document got wrong before review, all recorded in place rather
+than quietly fixed, because a sweep that hides its own misses is the artifact it
+is meant to replace: two omitted readers (§4a, §4d), a member-vs-entry
+misclassification (§4c), and a read-only callable filed under WRITERS (§4c).
 
 Counts at the T7 commit — 121 file/field pairs across **106 distinct files**:
 
@@ -98,9 +111,9 @@ express it.
 
 ---
 
-## 4. `paidStatus` — 45 files
+## 4. `paidStatus` — 45 files in the grep list
 
-### 4a. WRITERS (8 files) — the paths that must keep the derivation true
+### 4a. WRITERS (7 verdicts) — the paths that must keep the derivation true
 
 | File | What it reads / writes | Verdict |
 |---|---|---|
@@ -109,10 +122,9 @@ express it.
 | `functions/src/lib/memberRecord.ts` | `liabilityRose` → writes `paidStatus: 'UNPAID'`; K11's reset DELETED | ✅ **CHANGED by P2-T2 (D6).** |
 | `functions/src/migrations/reconcilePaymentTruth.ts` | reads the owner's whole entry set + the dues doc, writes `nextDues` + a **derived** summary | ✅ **CHANGED by this ticket (T7).** D1a's "the writer that will be missed" — it runs from Operations, sits in no hot path, and a summary-only write here would be un-paid by the next writer. |
 | `functions/src/lib/poolDues.ts` | the sealed store's read/write helpers | ✅ **NEW in P2-T3.** |
-| `functions/src/nflPoolDues.ts:65,78,136` | the `getPoolDues` callable. `:136` reads the **ENTRY document's** `paidStatus` into `paidMirrors`; `:65,78` are doc comments on the count-not-set rule and on that mirror | ✅ **NEW in P2-T5a, extended by T6.** 🛑 **Omitted from the first draft of this sweep** (codex P1) — a Phase 2 artifact missing from Phase 2's own enumeration, which is why §2 now insists the list be machine-checkable. |
 | `functions/src/shared/memberRecord.ts` · `shared/memberRecord.ts` | `derivePaidStatus`, `liableEntryIds`, `isPaidRow` — the derivation itself | ✅ **CHANGED by P2-T1.** Two copies, kept identical by the existing sync check. |
 
-### 4b. NO-CHANGE — reads the member summary, and "paid in full" still means that (8 files)
+### 4b. NO-CHANGE — reads the member summary, and "paid in full" still means that (8 verdicts)
 
 | File:line | What it reads |
 |---|---|
@@ -125,7 +137,7 @@ express it.
 | `src/components/PaymentsPanel.tsx:73,101` | `(myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID'` — member summary, entry doc only as a legacy fallback. **This is the file the §1 rule is named after.** |
 | `src/components/admin/OperationsPanel.tsx:346` | a `blastRadius` **string** describing `reconcilePaymentTruth`. Prose, not a read. |
 
-### 4c. NO-CHANGE — reads an ENTRY document or another collection, not the member summary (3 files)
+### 4c. NO-CHANGE — reads an ENTRY document or another collection, not the member summary (4 verdicts)
 
 Named explicitly because the field name collides, and telling the entry mirror
 from the member summary is the distinction this whole sweep turns on. A future
@@ -134,63 +146,68 @@ sweep will grep these up; it should not have to re-derive which is which.
 | File:line | What it reads |
 |---|---|
 | `functions/src/lib/commissionerAggregate.ts:19` | `w?.paidOut === true \|\| w?.paidStatus === 'PAID'` on a **payout/winnings** record with a `.amount` — not a Member Record. |
+| `functions/src/nflPoolDues.ts:136` | `if (data.paidStatus === 'PAID') paidMirrors.push(e.id)` over `pools/{id}/entries` — the **ENTRY document** mirror, gathered for the ledger. `:65,78` are doc comments, not reads. 🛑 The first draft of this sweep OMITTED this file entirely (codex r2), and the repair then filed it under **WRITERS** (codex r3) — `getPoolDues` is read-only and writes none of the four fields. Two wrong verdicts on one Phase 2 artifact; both recorded rather than quietly corrected. |
 | `functions/src/nflScoringEngine.ts:855` | `if (e.paidStatus !== undefined) row.paidStatus = e.paidStatus` — copies an **entry document's** value into a standings row. (`:809` is the `StandingsRow` interface field, not the copy; the first draft cited the two together, which codex flagged as imprecise.) |
 | `src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx:546,595,972` | **ENTRY documents, not the member record**: `:546,595` read `e.paidStatus` per standings row, `:972` reads `myEntry.paidStatus`. The first draft filed this under the member summary and was **wrong** (codex P2). Corrected here rather than quietly moved — the member/entry distinction is the one thing this sweep exists to keep straight, so a miss in it is worth recording. |
 
-### 4d. NO-CHANGE — non-NFL pool types, types and simulators (22 files)
+### 4d. NO-CHANGE — non-NFL pool types, types and simulators (22 verdicts)
 
 In scope, checked, unaffected: per-entry dues are NFL-only, and `getPoolDues` /
 `deleteNFLEntry` both refuse a non-NFL pool type. Written out one per line
 because §2 promises the list is checkable by string match.
 
-| File | What it reads |
-|---|---|
-| `functions/src/bracketEntries.ts` (7 lines) | BRACKET entry payment state. |
-| `functions/src/bracketOps.ts:39` | writes `paidStatus` on a BRACKET entry. |
-| `functions/src/bracketScoring.ts:410-411` | counts PAID **bracket entries** for the bracket pot. |
-| `functions/src/migrations/backfillMemberRecords.ts` | copies an existing value, never overwrites. |
-| `functions/src/nflPoolTypes.ts` | type declaration. |
-| `functions/src/schemas/poolEngagement.ts` | schema declaration. |
-| `functions/src/types.ts` | type declaration. |
-| `src/types/index.ts` | type declaration. |
-| `src/types/nflPoolTypes.ts` | type declaration. |
-| `src/services/dbService.ts:771,777` | passes a caller-supplied value straight to the callable. |
-| `src/components/BracketPoolDashboard/BracketPoolDashboard.tsx` (13 lines) | BRACKET entry payment UI, incl. the `lockUnpaid` gate at `:582,636`. |
-| `src/components/BracketPoolDashboard/PaymentLedger.tsx:44,68,73,99,192,439,477,507,518,520,525` | the **BRACKET** payment ledger — `entry.paidStatus` on bracket ENTRY documents throughout, incl. the pot at `:68` and the toggle at `:518`. 🛑 **Omitted from the first draft** (codex P1). It is the closest structural analogue to `PaymentLedgerNFL`, which makes it the single most embarrassing file to have missed and the most important to have a verdict on: it is untouched because bracket pools have one entry-fee liability per entry document already, and no member-level per-entry map. |
-| `src/components/BracketPoolDashboard/ChalkComparison.tsx:106` | builds a synthetic PAID chalk entry. |
-| `src/components/BracketPoolDashboard/ExportControls.tsx:55,62` | exports `e.paidStatus` to CSV. |
-| `src/components/BracketPoolDashboard/StandingsTable.tsx:199` | a PAID badge on a bracket entry. |
-| `src/components/ParticipantDashboard.tsx:395` | sums PAID **brackets**. |
-| `src/components/ManagerDashboard.tsx:105,110,137,142` | squares `.squares[]` and the playoff `entries` map. |
-| `src/components/SuperAdmin.tsx:208,2825-2832` | bracket entry paid toggle. |
-| `src/components/TournamentSimulator/TournamentSimulator.tsx` | simulator fixtures. |
-| `src/utils/testing/simulators/bracketE2ESimulator.ts` · `src/utils/testing/simulators/bracketSimulator.ts` · `src/utils/testing/simulators/nflSeasonSimulator.ts` | admin Test Suite simulators. They seed the field; they do not read production payment truth. |
+Each row names **the expression and the collection**, not the file's purpose —
+codex r3 flagged the first draft of this table for doing the latter, which is
+the exact failure mode §1 is written against.
 
-### 4e. CHANGED by earlier P2 tickets (2 files)
+| File | The expression, and what it is read off |
+|---|---|
+| `functions/src/bracketEntries.ts:96,225` | writes `paidStatus: "UNPAID"` onto a new **bracket entry doc**; `:225` gates on `entryData.paidStatus !== 'PAID'` for `lockUnpaid`. |
+| `functions/src/bracketOps.ts:39` | writes `paidStatus: isPaid ? 'PAID' : 'UNPAID'` onto a **bracket entry doc**. |
+| `functions/src/bracketScoring.ts:410-411` | `entriesSnap.docs...filter(e => e.paidStatus === 'PAID')` over `pools/{id}/entries` — **bracket entry docs**, for the bracket pot. |
+| `functions/src/migrations/backfillMemberRecords.ts:3,20` | copies an existing `paidStatus` onto a Member Record and **never overwrites** one. Type + comment only; no predicate. |
+| `functions/src/nflPoolTypes.ts:233,265,290` | `paidStatus: 'PAID' \| 'UNPAID'` — three **type declarations**, no read. |
+| `functions/src/schemas/poolEngagement.ts:89` | `paidStatus: z.enum(["PAID","UNPAID"])` — the `setPaidStatus` **request schema**, no read. |
+| `functions/src/types.ts:375` | `paidStatus: 'PAID' \| 'UNPAID'` — **type declaration**. |
+| `src/types/index.ts:825` | `paidStatus: 'PAID' \| 'UNPAID'` — **type declaration**. |
+| `src/types/nflPoolTypes.ts:318,337,356` | `paidStatus: 'PAID' \| 'UNPAID'` — **type declarations**. |
+| `src/services/dbService.ts:771,777` | `paidStatus` is a **parameter** forwarded verbatim to the callable; the function reads nothing. |
+| `src/components/BracketPoolDashboard/BracketPoolDashboard.tsx:251,433,582,636,909-910,1149-1150,1977,1981,2006,2012` | all on **bracket entry docs**: `activeEntry?.paidStatus !== 'PAID'` for `lockUnpaid` (`:582,636`), `entries.filter(e => e.paidStatus === 'PAID').length * entryFee` for the collected/outstanding tiles (`:1977,1981`), badges and the toggle. |
+| `src/components/BracketPoolDashboard/PaymentLedger.tsx:44,68,73,99,192,439,477,507,518,520,525` | the **BRACKET** payment ledger — `entry.paidStatus` on bracket ENTRY documents throughout, incl. the pot at `:68` and the toggle at `:518`. 🛑 **Omitted from the first draft** (codex P1). It is the closest structural analogue to `PaymentLedgerNFL`, which makes it the single most embarrassing file to have missed and the most important to have a verdict on: it is untouched because bracket pools have one entry-fee liability per entry document already, and no member-level per-entry map. |
+| `src/components/BracketPoolDashboard/ChalkComparison.tsx:106` | writes a literal `paidStatus: 'PAID'` into a synthetic in-memory chalk **bracket entry**. Never persisted, never read back. |
+| `src/components/BracketPoolDashboard/ExportControls.tsx:55,62` | `PaidStatus: e.paidStatus \|\| 'UNPAID'` — a CSV column off each **bracket entry doc**. |
+| `src/components/BracketPoolDashboard/StandingsTable.tsx:199` | `entry.paidStatus === 'PAID'` on a **bracket entry doc**, for a badge. |
+| `src/components/ParticipantDashboard.tsx:395` | `myBrackets.some(e => e.paidStatus === 'PAID')` then `entriesPaid += fee` — over the viewer's **bracket entries**, not any Member Record. |
+| `src/components/ManagerDashboard.tsx:105,110,137,142` | `sq.squares?.filter(s => s.owner && s.paidStatus === 'PAID')` (the **squares array**) and `Object.values(anyP.entries).filter(e => e.paidStatus === 'PAID')` (the **playoff `entries` map on the pool doc**). Neither is a Member Record. |
+| `src/components/SuperAdmin.tsx:208,2825-2832` | `entry.paidStatus === 'PAID'` on rows of `viewingPoolEntries` — **entry docs**; `:208` sets the new value locally after the toggle callable returns. |
+| `src/components/TournamentSimulator/TournamentSimulator.tsx:229,286` | writes a literal `paidStatus: 'PAID'` onto simulated **bracket entries**. No read. |
+| `src/utils/testing/simulators/bracketE2ESimulator.ts:191` · `src/utils/testing/simulators/bracketSimulator.ts:196` · `src/utils/testing/simulators/nflSeasonSimulator.ts:312` | each **writes** a literal `paidStatus: 'PAID'` when seeding a simulated entry. None reads the field, and none reads a Member Record. |
+
+### 4e. CHANGED by earlier P2 tickets (2 verdicts)
 
 | File | What it reads |
 |---|---|
 | `src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx` (17 lines) | per-entry rows off `dues` / `liable` / `paidMirrors` from `getPoolDues`. ✅ **P2-T5b + T6.** |
 | `src/components/NFLPoolDashboard/NFLManagerView.tsx` (6 lines) | fetches and pool-stamps the dues payload. ✅ **P2-T5b + T6.** |
 
-### 4f. 🔴 CARRIES A FINDING (2 files)
+### 4f. 🔴 CARRIES A FINDING (2 verdicts)
 
 `src/utils/poolRoster.ts:387,432` and `shared/memberRecord.ts:487` — see **§7**.
 
-### 4g. Not production code (1 file)
+### 4g. Not production code (1 verdict)
 
 `src/pages/DevDashboardPreview.tsx` (12 lines) — mock fixtures for the dev
 preview page. No read of live data.
 
 ---
 
-## 5. `feeOwed` — 24 files
+## 5. `feeOwed` — 24 files in the grep list
 
 The change: it can now DECREASE. Every reader below was checked for a
 monotonicity assumption; **none holds one**, because none of them caches the
 value — they all read it fresh per render or per run.
 
-### 5a. WRITERS (7 files)
+### 5a. WRITERS (7 verdicts)
 
 | File | What it writes | Verdict |
 |---|---|---|
@@ -200,7 +217,7 @@ value — they all read it fresh per render or per run.
 | `functions/src/migrations/backfillProfileData.ts:177-187` | stamps `feeOwed` only where absent (`:181 if (rec.feeOwed !== undefined) continue`), marked `BACKFILL_ESTIMATE` | ✅ **NO-CHANGE.** Never rewrites a live stamp, so it cannot fight the T4 decrement. |
 | `functions/src/expertProfiles.ts:106` | writes `feeOwed: 0` for a synthetic expert profile | ✅ **NO-CHANGE.** |
 
-### 5b. NO-CHANGE — reads the stamp as the member's current total (12 files)
+### 5b. NO-CHANGE — reads the stamp as the member's current total (12 verdicts)
 
 | File:line | What it reads |
 |---|---|
@@ -215,25 +232,25 @@ value — they all read it fresh per render or per run.
 | `src/components/admin/OperationsPanel.tsx:363-364` | `blastRadius` prose. |
 | `src/components/PaymentsPanel.tsx:84,90,100,107` | `myRow.feeOwed ?? rates.entryFee` — the member's own outstanding total. |
 
-### 5c. CHANGED by earlier P2 tickets (1 file)
+### 5c. CHANGED by earlier P2 tickets (1 verdict)
 
 `src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx` (27 lines) — splits the
 authoritative `feeOwed` across the liable rows so the rows sum to it exactly.
 ✅ **P2-T5b.**
 
-### 5d. 🔴 CARRIES A FINDING (2 files)
+### 5d. 🔴 CARRIES A FINDING (2 verdicts)
 
 `src/utils/poolRoster.ts:386-387,424,432` and `shared/memberRecord.ts:485-487` —
 see **§7**.
 
 ---
 
-## 6. `playableEntryCount` (13 files) and `entryCount` (39 files)
+## 6. `playableEntryCount` (13 files) and `entryCount` (39 files) in the grep list
 
 Both can now DECREASE. The sweep looked for exactly one thing — a reader that
 assumes otherwise.
 
-### 6a. The monotonicity hunt, and its result (1 file)
+### 6a. The monotonicity hunt, and its result (1 verdict)
 
 ```bash
 grep -rn 'Math.max(.*entryCount\|Math.max(.*feeOwed' functions/src src shared
@@ -248,7 +265,7 @@ and then decrements its own local copy. That is a decrement, not an assumption
 that the value only rises. The `?? 0` / `|| 0` hits are all absent-field
 defaults.
 
-### 6b. The load-bearing one — the prize snapshot (7 files)
+### 6b. The load-bearing one — the prize snapshot (7 verdicts)
 
 | File:line | What it reads | Verdict |
 |---|---|---|
@@ -257,15 +274,21 @@ defaults.
 | `functions/src/nflScoringEngine.ts:924` | comment: the pot/places/entryCount are **frozen** at snapshot time | ✅ **NO-CHANGE**, and it is the reason the above holds. |
 | `src/components/NFLPoolDashboard/WeeklyWinnersList.tsx:79` | renders `prize.entryCount` from the **frozen snapshot**, not the live pool | ✅ **NO-CHANGE.** |
 
-### 6c. Billing — checked because it is money (1 file)
+### 6c. Billing — checked because it is money (3 verdicts)
 
-`functions/src/billing.ts:386` — `count = after.entryCount || 0`, the paid-tier
-ceiling check. ✅ **NO-CHANGE.** A decrement moves a pool **further below** a
-ceiling, never above one, so the failure direction is "a pool stays allowed",
-which is the direction that costs nobody anything. `bracketEntries.ts:46,53,80`
-and `propBets.ts:75` read it for the same ceiling with the same direction.
+| File:line | What it reads |
+|---|---|
+| `functions/src/billing.ts:386` | `count = after.entryCount \|\| 0` — the paid-tier ceiling check. |
+| `functions/src/bracketEntries.ts:46,53,80` | `poolData.entryCount \|\| 0` against `maxTotal` and `assertPaidParticipantCeiling`. |
+| `functions/src/propBets.ts:75` | `poolData.entryCount \|\| 0` against the same ceiling. |
 
-### 6d. WRITERS (4 files)
+✅ **NO-CHANGE, all three.** A decrement moves a pool **further below** a ceiling,
+never above one, so the failure direction is "a pool stays allowed" — the
+direction that costs nobody anything. (The first draft named the latter two only
+in prose without their `functions/src/` prefix, which defeated the machine check
+and let the header say `(1 file)` while three were named — codex r3.)
+
+### 6d. WRITERS (4 verdicts)
 
 | File | Verdict |
 |---|---|
@@ -273,7 +296,7 @@ and `propBets.ts:75` read it for the same ceiling with the same direction.
 | `functions/src/nflEntryDelete.ts` (7) | the D4 decrement. ✅ **P2-T4.** |
 | `functions/src/bracketEntries.ts:106,389,527` · `functions/src/propBets.ts:99` | `FieldValue.increment(±1)` on **their own** pool types. ✅ **NO-CHANGE** — a pool has one type, so these never share a counter with the NFL path. |
 
-### 6e. NO-CHANGE — display and capacity (7 files)
+### 6e. NO-CHANGE — display and capacity (7 verdicts)
 
 `src/components/BrowsePools.tsx:299,316` · `src/components/Dashboards/GlobalStandingsCard.tsx:33` ·
 `src/components/ManagerDashboard.tsx:109,141,673,698` · `src/components/PayoutsPanel.tsx:10-13,329,350,514,517`
@@ -288,7 +311,7 @@ knowing it is prose that has aged).
 All render a filled/capacity figure fresh. A decrement simply renders the
 smaller number.
 
-### 6f. NO-CHANGE — types, sims, scenarios (12 files)
+### 6f. NO-CHANGE — types, sims, scenarios (12 verdicts)
 
 `functions/src/types.ts` · `src/types/index.ts` · `src/types/nflPoolTypes.ts` ·
 `functions/src/nflPoolTypes.ts` · `functions/src/shared/simGen.ts` · `shared/simGen.ts` ·
@@ -298,7 +321,7 @@ smaller number.
 `src/utils/testing/simulators/bracketSimulator.ts` ·
 `src/utils/testing/simulators/propsSimulator.ts`.
 
-### 6g. `playableEntryCount` — remaining readers (6 files)
+### 6g. `playableEntryCount` — remaining readers (6 verdicts)
 
 | File:line | What it reads | Verdict |
 |---|---|---|
