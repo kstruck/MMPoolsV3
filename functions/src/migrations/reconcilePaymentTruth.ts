@@ -41,7 +41,7 @@ import { validated } from "../lib/validated";
 import { reconcilePaymentTruthSchema } from "../schemas/migrations";
 import { readPoolDues, writePoolDues, DUES_PREFIX, DUES_PREFIX_END, type PaidEntryMap } from "../lib/poolDues";
 import { entryHasPick } from "../lib/multiEntry";
-import { derivePaidStatus, liableEntryIds, type MemberRecord } from "../shared/memberRecord";
+import { derivePaidStatus, isPaidRow, liableEntryIds, type MemberRecord } from "../shared/memberRecord";
 
 /** The pool types whose authoritative payment store is the Member Record. */
 const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -175,7 +175,15 @@ export const reconcilePaymentTruth = validated(
         if (!duesUid) continue;
         const map = d.get('paidEntries');                 // ONE field, named. Never spread.
         if (map && typeof map === 'object' && !Array.isArray(map)) {
-          paidEntryIdsByUid.set(duesUid, new Set(Object.keys(map)));
+          // 🛑 `isPaidRow`, NOT `Object.keys` (codex r7). A malformed row —
+          // `{ [entryId]: null }`, a Timestamp, an array — is treated as UNPAID
+          // by `derivePaidStatus`, so keying off mere PRESENCE would make this
+          // gate and the derivation disagree about the same document. The gate
+          // would then report `alreadyConsistent` for an entry that is PAID
+          // while its member is UNPAID: the divergence this migration exists to
+          // repair, silently skipped. Same predicate, so they cannot drift.
+          paidEntryIdsByUid.set(duesUid,
+            new Set(Object.keys(map).filter((id) => isPaidRow(map, id))));
         }
       }
       const membersById = new Map(membersSnap.docs.map((m) => [m.id, m.data() as any]));
@@ -271,6 +279,21 @@ export const reconcilePaymentTruth = validated(
               const fm: any = freshM.data();
               const fe: any = freshE.data();
               if (!freshM.exists || fe?.paidStatus !== 'PAID' || fm?.paidStatus === 'PAID') return false;
+              // 🛑 AND THE DUES ROW, RE-READ IN THIS TRANSACTION (codex r7, P1).
+              //
+              // The page-level gate above cannot see a commissioner who marks
+              // THIS entry paid between the page read and this transaction.
+              // Under per-entry dues that write leaves the member `UNPAID` —
+              // correctly, because another entry is still unpaid — so every
+              // check above still passes, and this would rewrite the row and
+              // append a SECOND `MARKED_PAID` for one payment. A duplicated
+              // money event in the participant-readable ledger is worse than
+              // the divergence being repaired.
+              //
+              // Before T7 this race was unreachable: the concurrent write set
+              // the member to `PAID`, and `fm?.paidStatus === 'PAID'` caught it.
+              // Deriving the summary is what re-opened it.
+              if (storedDues && isPaidRow(storedDues, entryDoc.id)) return false;
 
               // The entry that triggered this is marked paid; everything the
               // member already had is kept. The legacy shape (no dues document)

@@ -985,6 +985,73 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
     expect(ledger2.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(1);
   });
 
+  it('🛑 a MALFORMED dues row does NOT suppress the repair', async () => {
+    // `derivePaidStatus` fails malformed money data CLOSED — a `null` value is
+    // not a paid row, it is the mistake D1b forbids (un-marking by writing a
+    // falsy value instead of DELETING the key). The idempotence gate must use
+    // the SAME predicate, or it reports `alreadyConsistent` for an entry that
+    // is PAID while its member is UNPAID — the exact divergence this
+    // migration exists to repair, silently skipped (codex r7).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { dm1: null },                 // present as a KEY, not a valid row
+    });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.membersPromoted).toBe(1);     // repaired, NOT skipped
+    const dues = (await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+    expect(dues.dm1).toEqual({});          // the malformed row is replaced by a real one
+  });
+
+  it('an existing dues row for the entry blocks a duplicate ledger event', async () => {
+    // 🛑 WHAT THIS DOES AND DOES NOT COVER — read before trusting it.
+    //
+    // COVERS: the settled case. A dues row already records this entry as paid,
+    // the member is UNPAID because their OTHER entry is not, and the migration
+    // must neither re-promote nor mint a MARKED_PAID event.
+    //
+    // TWO guards catch this, and the mutation results are exact:
+    //   remove the page gate alone            — GREEN (the tx re-check catches it)
+    //   remove the tx re-check alone          — GREEN (the page gate catches it)
+    //   remove BOTH                           — RED, 'expected 1 to be +0'
+    // So this test pins the BEHAVIOUR, not either guard. The page gate has its
+    // own single-mutation test above (IS IDEMPOTENT), which goes red when only
+    // that gate is removed.
+    //
+    // DOES NOT COVER: the concurrent-commissioner RACE codex r7 raised — a
+    // `setPaidStatus` landing BETWEEN the page read and the transaction. That
+    // is the only case where the tx re-check is load-bearing ALONE, and this
+    // harness cannot stage it without a seam built to pause the migration
+    // mid-run. The guard is kept as defence in depth and the gap is recorded
+    // rather than papered over: an earlier version of this comment claimed the
+    // page-gate mutation failed this test, and the mutation run said otherwise.
+    // This repo has shipped inert guards before (#596, the T6 entry mirror).
+    //
+    // Before T7 the race was unreachable anyway: the concurrent write set the
+    // member PAID and `fm?.paidStatus === 'PAID'` caught it. Deriving the
+    // summary is what re-opened it.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { dm1: { paidAt: 5, method: 'venmo' } },
+    });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.membersPromoted).toBe(0);
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(0);
+    // ...and the commissioner's own row is untouched.
+    const dues = (await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+    expect(dues.dm1.method).toBe('venmo');
+  });
+
   it('DRY RUN still writes nothing at all, dues document included', async () => {
     await seedPool({ entries: [
       { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
