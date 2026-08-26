@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { now as serverNow, syncServerClock } from '../utils/serverClock';
 import { formatDeadline } from '../utils/formatTime';
+import { NFL_KICKOFF_MS } from '../config/season';
 
 // Explicit UTC offset makes this instant unambiguous regardless of viewer timezone
-const NFL_KICKOFF = new Date('2026-09-09T18:20:00-06:00').getTime();
+// The instant now lives in src/config/season.ts. This file had the ONLY correct
+// copy of it; the alias keeps the rest of the component untouched.
+const NFL_KICKOFF = NFL_KICKOFF_MS;
 
 const TimeBox = ({ value, label }: { value: number; label: string }) => (
     <div className="flex flex-col items-center justify-center bg-navy-900/80 backdrop-blur-sm border border-[rgba(230,206,150,0.2)] rounded-lg py-3 w-20 md:w-24 shadow-panel">

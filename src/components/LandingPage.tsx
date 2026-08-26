@@ -7,6 +7,7 @@ import { Footer } from './Footer';
 import { Countdown } from './Countdown';
 import { canAccessPoolCreation, POOL_CREATION_ENABLED } from '../utils/auth';
 import { cn } from './ui/cn';
+import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../config/season';
 
 interface LandingPageProps {
   user?: User | null;
@@ -153,7 +154,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <div className="absolute -bottom-6 md:-bottom-10 left-1/2 transform -translate-x-1/2 bg-navy-900/90 backdrop-blur-md border border-[rgba(230,206,150,0.16)] rounded-full py-3 px-8 shadow-panel z-30 flex gap-8 whitespace-nowrap overflow-x-auto max-w-[90vw]">
               <div className="flex flex-col items-center">
                 <span className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#9FB0CC]">NFL Kickoff</span>
-                <span className="font-display font-bold text-gold-400 num">Sep 10</span>
+                <span className="font-display font-bold text-gold-400 num">{milestoneLabel(NFL_KICKOFF_MS)}</span>
               </div>
               <div className="w-px h-8 bg-[rgba(230,206,150,0.16)]"></div>
               <div className="flex flex-col items-center">
@@ -162,8 +163,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               </div>
               <div className="w-px h-8 bg-[rgba(230,206,150,0.16)]"></div>
               <div className="flex flex-col items-center">
-                <span className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#9FB0CC]">Super Bowl LX</span>
-                <span className="font-display font-bold text-white num">Feb 8</span>
+                <span className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#9FB0CC]">{SUPER_BOWL_TITLE}</span>
+                <span className="font-display font-bold text-white num">{milestoneLabel(SUPER_BOWL_MS)}</span>
               </div>
             </div>
           </div>
