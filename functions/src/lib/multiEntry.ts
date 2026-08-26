@@ -234,6 +234,20 @@ export function applyPaidReset(
       paidStatus: 'UNPAID', paymentMethod: FieldValue.delete(), paidAt: null, paymentNote: null, updatedAt: now,
     }, { merge: true });
   }
+  // PLAN-MULTI-ENTRY-DUES: the reset must clear the PER-ENTRY map too, or it is
+  // only half a reset (codex r2 on P2-T2).
+  //
+  // K11 sets the member UNPAID and mirrors that onto every entry doc. Once
+  // `paidEntries` exists it is the AUTHORITY the summary is derived from, so
+  // leaving it behind desynchronises the three stores: the commissioner then
+  // pays only the newly added entry, the derivation sees the stale key for
+  // entry 1 and reports the member PAID — while entry 1's own document still
+  // says UNPAID, and re-paying entry 1 raises no ledger event because its key
+  // was never removed. Clearing the field keeps "reset to unpaid" total.
+  //
+  // K11 is RETIRED by P2-T3, which deletes this function; until then it has to
+  // be correct about a field that did not exist when it was written.
+  tx.set(poolRef.collection('members').doc(uid), { paidEntries: FieldValue.delete() }, { merge: true });
   const paidDetail = [
     reset.paidAt ? `marked paid ${new Date(reset.paidAt).toISOString().slice(0, 10)}` : 'marked paid',
     reset.paymentMethod ? `via ${reset.paymentMethod}` : undefined,

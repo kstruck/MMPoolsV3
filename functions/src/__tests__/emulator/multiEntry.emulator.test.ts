@@ -237,6 +237,231 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     expect(paid[0].amount).toBe(50);
   }, 60000);
 
+  /**
+   * PLAN-MULTI-ENTRY-DUES P2-T2 — per-entry dues, end to end.
+   * Kevin, 2026-08-25: "It is possible someone enters multiple entries but only
+   * pays for a portion of them."
+   */
+  it('7a. pay entry 2 but NOT entry 1 → the member stays UNPAID, and only entry 2 mirrors', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}`, paymentMethod: 'cash' }, auth: auth(HOST) } as never);
+
+    const m = await member(ALICE);
+    expect(Object.keys(m.paidEntries ?? {})).toEqual([`e2:${ALICE}`]);   // presence IS the signal
+    expect(m.paidStatus).toBe('UNPAID');                                 // one of two -> not paid in full
+    expect((await entry(`e2:${ALICE}`)).data()).toMatchObject({ paidStatus: 'PAID', paymentMethod: 'cash' });
+    expect((await entry(ALICE)).data()!.paidStatus).not.toBe('PAID');    // entry 1 untouched
+
+    // The ledger records the ENTRY's fee, not the member's $50 total, and says which entry.
+    const paid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID');
+    expect(paid).toHaveLength(1);
+    expect(paid[0].amount).toBe(25);
+    expect(paid[0].entryId).toBe(`e2:${ALICE}`);
+  }, 60000);
+
+  it('7b. paying the SECOND entry too flips the member to PAID', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidStatus).toBe('UNPAID');
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: ALICE }, auth: auth(HOST) } as never);
+
+    const m = await member(ALICE);
+    expect(m.paidStatus).toBe('PAID');
+    expect(Object.keys(m.paidEntries).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    // TWO ledger rows, one per entry, $25 each -- not one $50 row.
+    const paid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID');
+    expect(paid).toHaveLength(2);
+    expect(paid.map(r => r.amount)).toEqual([25, 25]);
+  }, 60000);
+
+  it('7c. un-marking ONE entry DELETES its key and drops the member back to UNPAID', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    for (const id of [ALICE, `e2:${ALICE}`]) {
+      await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: id }, auth: auth(HOST) } as never);
+    }
+    expect((await member(ALICE)).paidStatus).toBe('PAID');
+
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    const m = await member(ALICE);
+    // D1b: the key is GONE, not set to a falsy value.
+    expect(Object.prototype.hasOwnProperty.call(m.paidEntries, `e2:${ALICE}`)).toBe(false);
+    expect(Object.keys(m.paidEntries)).toEqual([ALICE]);
+    expect(m.paidStatus).toBe('UNPAID');
+    expect((await entry(ALICE)).data()!.paidStatus).toBe('PAID');        // the OTHER entry stays paid
+    const unpaid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID');
+    expect(unpaid).toHaveLength(1);
+    expect(unpaid[0].entryId).toBe(`e2:${ALICE}`);
+  }, 60000);
+
+  /**
+   * 🛑 THE CASE THAT SEPARATES A PER-ENTRY LEDGER FROM A MEMBER-LEVEL ONE, and
+   * it was MISSING until a mutation test found the hole.
+   *
+   * 7a-7c all pass with the OLD member-level transition test, because in every
+   * one of them the member's own PAID/UNPAID flag also moves. Here it does not:
+   * the member is UNPAID before AND after, so `priorStatus === 'PAID'` is false
+   * and the member-level test reports "no transition" — $25 comes off the books
+   * with NO ledger row at all.
+   */
+  it('7g. un-marking the ONLY paid entry of an UNPAID member still ledgers it', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidStatus).toBe('UNPAID');            // never became PAID
+
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidStatus).toBe('UNPAID');            // ...and still is
+
+    const unpaid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID');
+    expect(unpaid).toHaveLength(1);                                      // the money is on the record
+    expect(unpaid[0].entryId).toBe(`e2:${ALICE}`);
+    expect(unpaid[0].amount).toBe(25);
+  }, 60000);
+
+  it('7h. re-marking an already-paid ENTRY adds no second ledger row', async () => {
+    // The mirror of 7g: with the member-level test this member is UNPAID
+    // throughout, so every repeat mark would log again and read as money
+    // arriving twice.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    for (let i = 0; i < 3; i++) {
+      await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}`, paymentNote: `note ${i}` }, auth: auth(HOST) } as never);
+    }
+    expect((await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID')).toHaveLength(1);
+  }, 60000);
+
+  /**
+   * 🛑 THE LIVE-DATA CASE (codex r1 on T2). Every Member Record written before
+   * this ticket has NO `paidEntries` — including members who are already PAID.
+   * Deriving from an empty map would turn the first per-entry edit into an
+   * UNPAID mark plus a spurious ledger row: money already collected, reported
+   * as owed. Pools are live and members are already PAID, so this is reachable
+   * on real data, not a migration hypothetical.
+   */
+  it('7i. a LEGACY PAID member (no paidEntries) is materialized, not downgraded', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    // The legacy shape, written directly: PAID with NO `paidEntries`. It is
+    // stamped AFTER the submits on purpose — K11 is still live until P2-T3, so
+    // seeding `alicePaid` up front would be undone by the second submit and the
+    // test would silently stop testing what it says it tests.
+    await poolRef().collection('members').doc(ALICE).set(
+      { paidStatus: 'PAID', paidAt: 1_700_000_000_000, paymentMethod: 'venmo' }, { merge: true });
+    const before = await member(ALICE);
+    expect(before.paidStatus).toBe('PAID');
+    expect(before.paidEntries).toBeUndefined();                          // the legacy shape
+
+    // Re-marking one entry of an already-paid member must be a no-op.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    const after = await member(ALICE);
+    expect(after.paidStatus).toBe('PAID');                               // NOT downgraded
+    expect(Object.keys(after.paidEntries).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    expect(after.paidEntries[ALICE].paidAt).toBe(1_700_000_000_000);     // the stored detail carried
+    expect(after.paidEntries[ALICE].method).toBe('venmo');
+    expect((await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID')).toHaveLength(0);  // no phantom payment
+
+    // ...and un-marking one of them now behaves per-entry, from the real state.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    const un = await member(ALICE);
+    expect(un.paidStatus).toBe('UNPAID');
+    expect(Object.keys(un.paidEntries)).toEqual([ALICE]);                // entry 1 keeps its payment
+  }, 60000);
+
+  it('7d. a member-level mark (no entryId) still pays EVERY entry — the old callers are unchanged', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+    const m = await member(ALICE);
+    expect(m.paidStatus).toBe('PAID');
+    expect(Object.keys(m.paidEntries).sort()).toEqual([`e2:${ALICE}`, ALICE].sort());
+    for (const d of await ownedEntries(ALICE)) expect(d.data().paidStatus).toBe('PAID');
+  }, 60000);
+
+  it('7e. N1: a seeded commissioner with NO liable entries stays UNPAID, and a mark cannot green them', async () => {
+    // `[].every(...)` is true, so a naive derivation turns every host green.
+    await seedPool({ max: 2, entryCount: 2 });
+    expect((await member(HOST)).paidStatus).toBe('UNPAID');
+    await wPaid({ data: { poolId: POOL, memberUid: HOST, isPaid: true }, auth: auth(HOST) } as never);
+    const h = await member(HOST);
+    expect(h.paidStatus).toBe('UNPAID');
+    expect(Object.keys(h.paidEntries ?? {})).toEqual([]);
+  }, 60000);
+
+  it('7f. D7a: marking an entry the member does not own is ENTRY_NOT_FOUND, not a ghost key', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await expect(wPaid({
+      data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${BOB}` }, auth: auth(HOST),
+    } as never)).rejects.toThrow(/ENTRY_NOT_FOUND/);
+    expect(Object.keys((await member(ALICE)).paidEntries ?? {})).toEqual([]);
+  }, 60000);
+
+  /**
+   * codex r2 on T2. A member-level mark over a PARTIAL map settles only what is
+   * still outstanding, so pricing it at the member's whole `feeOwed` records
+   * money that was never handed over.
+   */
+  it('7j. a member-level mark over a partial map ledgers only the ROWS IT MOVED', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+
+    // $25 already collected. The member-level mark collects the REMAINING $25.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidStatus).toBe('PAID');
+    const paid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID');
+    expect(paid).toHaveLength(2);
+    expect(paid.map(r => r.amount).sort()).toEqual([25, 25]);            // NOT 25 + 50
+  }, 60000);
+
+  it('7k. a bulk un-mark from a partial state still ledgers the reversal', async () => {
+    // The member is UNPAID before AND after, so a member-level transition test
+    // records nothing and $25 leaves the books silently.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false }, auth: auth(HOST) } as never);
+
+    const m = await member(ALICE);
+    expect(m.paidStatus).toBe('UNPAID');
+    expect(Object.keys(m.paidEntries)).toEqual([]);
+    const unpaid = (await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID');
+    expect(unpaid).toHaveLength(1);
+    expect(unpaid[0].amount).toBe(25);                                   // the one row that moved
+  }, 60000);
+
+  it('7l. K11 clears the per-entry map too — a half reset desynchronises three stores', async () => {
+    // A paid member adds an entry: K11 sets them UNPAID and mirrors that onto
+    // every entry doc. If `paidEntries` survived, paying only the NEW entry
+    // would derive PAID while entry 1's document still said UNPAID.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+    expect(Object.keys((await member(ALICE)).paidEntries)).toEqual([ALICE]);
+
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });      // K11 fires
+    const afterAdd = await member(ALICE);
+    expect(afterAdd.paidStatus).toBe('UNPAID');
+    expect(afterAdd.paidEntries ?? {}).toEqual({});                      // the map went with it
+
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    const m = await member(ALICE);
+    expect(m.paidStatus).toBe('UNPAID');                                 // entry 1 is genuinely unpaid now
+    expect((await entry(ALICE)).data()!.paidStatus).toBe('UNPAID');      // ...and the doc agrees
+  }, 60000);
+
   it('8. proxyPick on entry 2 leaves entry 1 untouched (and creates it with the default name)', async () => {
     await seedPool({ type: 'NFL_SURVIVOR', max: 2, entryCount: 2 });
     await submit(ALICE, { picks: { 1: 'KC' } });
