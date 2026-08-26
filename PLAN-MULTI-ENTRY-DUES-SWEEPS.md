@@ -59,17 +59,21 @@ written without its `functions/src/`, `src/` or `shared/` prefix. So the list is
 checkable by string match rather than by reading. Verified at the T7 commit:
 **0 missing across all four fields.**
 
-⚠️ **It is ONE VERDICT PER FILE, not one per field.** Many of these files read
-two or three of the four, and repeating them would create four places to drift.
-Each file is written up once, under the field it most centrally reads. So a
-subsection's count is a count of **verdicts written there**, and the per-field
-totals in the table below are grep totals — the two do not add up to each other,
-by design.
+⚠️ **The unit of verdict is a (FILE, FIELD) PAIR, not a file — and where one
+verdict covers a file's readings of several fields, the other fields' sections
+CROSS-REFERENCE it (§5e, §6h) rather than staying silent.** 106 distinct
+files produce 121 pairs, because many read two or three of the four fields, and
+those readings can deserve different verdicts — `functions/src/nflPools.ts`
+carries three, one each in §4b, §5b and §6g, and that is correct rather than
+duplication. A subsection's `(N verdicts)` is therefore a count of the pairs
+written up there, and the per-field totals in the table below are grep totals of
+FILES. The two are different units and do not add up to each other.
 
-An earlier draft claimed the stronger invariant "every subsection's count equals
-that field's readers", which is false for exactly this reason (codex r3). The
-claim is weakened here rather than the structure changed, because the structure
-is right and the claim was wrong.
+Two earlier drafts got this wrong in opposite directions: one claimed each
+subsection's count equalled that field's reader count (false — a file's verdict
+may sit under another field, codex r3), the next claimed one verdict per file
+(false — `nflPools.ts` alone disproves it, codex r4). This is the version that
+survives being checked.
 
 Three things this document got wrong before review, all recorded in place rather
 than quietly fixed, because a sweep that hides its own misses is the artifact it
@@ -124,11 +128,10 @@ express it.
 | `functions/src/lib/poolDues.ts` | the sealed store's read/write helpers | ✅ **NEW in P2-T3.** |
 | `functions/src/shared/memberRecord.ts` · `shared/memberRecord.ts` | `derivePaidStatus`, `liableEntryIds`, `isPaidRow` — the derivation itself | ✅ **CHANGED by P2-T1.** Two copies, kept identical by the existing sync check. |
 
-### 4b. NO-CHANGE — reads the member summary, and "paid in full" still means that (8 verdicts)
+### 4b. NO-CHANGE — reads the member summary, and "paid in full" still means that (7 verdicts)
 
 | File:line | What it reads |
 |---|---|
-| `functions/src/statsTrigger.ts:132` | `data.paidStatus === 'PAID' \|\| data.paid === true` on **BRACKET entry docs** — not the NFL member summary. |
 | `functions/src/lib/reminderTargets.ts:160` | selects reminder targets on `paidStatus !== 'PAID'`. A partially-paid member is still owed money, so reminding them is correct. |
 | `functions/src/nflPools.ts:678,707,815,1038` | **seeds** `'UNPAID'` on create/join. Seeding the safe value is still right; the derivation takes over on the first payment. |
 | `functions/src/poolExceptions.ts:382,402,407,497` | seeds `'UNPAID'` on an exception entry, and `:497` says in as many words it has no payment context. |
@@ -137,7 +140,7 @@ express it.
 | `src/components/PaymentsPanel.tsx:73,101` | `(myMember?.paidStatus ?? myEntry?.paidStatus) === 'PAID'` — member summary, entry doc only as a legacy fallback. **This is the file the §1 rule is named after.** |
 | `src/components/admin/OperationsPanel.tsx:346` | a `blastRadius` **string** describing `reconcilePaymentTruth`. Prose, not a read. |
 
-### 4c. NO-CHANGE — reads an ENTRY document or another collection, not the member summary (4 verdicts)
+### 4c. NO-CHANGE — reads an ENTRY document or another collection, not the member summary (5 verdicts)
 
 Named explicitly because the field name collides, and telling the entry mirror
 from the member summary is the distinction this whole sweep turns on. A future
@@ -146,6 +149,7 @@ sweep will grep these up; it should not have to re-derive which is which.
 | File:line | What it reads |
 |---|---|
 | `functions/src/lib/commissionerAggregate.ts:19` | `w?.paidOut === true \|\| w?.paidStatus === 'PAID'` on a **payout/winnings** record with a `.amount` — not a Member Record. |
+| `functions/src/statsTrigger.ts:132,155` | `:132` `data.paidStatus === 'PAID' \|\| data.paid === true` over `pools/{id}/entries` — **BRACKET entry docs**; `:155` the same predicate over the **`pool.entries` map** for NFL_PLAYOFFS. The NFL-season branch does not go through either; it calls `memberRecordsPot`. Filed under the member summary in an earlier draft, which its own row text contradicted (codex r4). |
 | `functions/src/nflPoolDues.ts:136` | `if (data.paidStatus === 'PAID') paidMirrors.push(e.id)` over `pools/{id}/entries` — the **ENTRY document** mirror, gathered for the ledger. `:65,78` are doc comments, not reads. 🛑 The first draft of this sweep OMITTED this file entirely (codex r2), and the repair then filed it under **WRITERS** (codex r3) — `getPoolDues` is read-only and writes none of the four fields. Two wrong verdicts on one Phase 2 artifact; both recorded rather than quietly corrected. |
 | `functions/src/nflScoringEngine.ts:855` | `if (e.paidStatus !== undefined) row.paidStatus = e.paidStatus` — copies an **entry document's** value into a standings row. (`:809` is the `StandingsRow` interface field, not the copy; the first draft cited the two together, which codex flagged as imprecise.) |
 | `src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx:546,595,972` | **ENTRY documents, not the member record**: `:546,595` read `e.paidStatus` per standings row, `:972` reads `myEntry.paidStatus`. The first draft filed this under the member summary and was **wrong** (codex P2). Corrected here rather than quietly moved — the member/entry distinction is the one thing this sweep exists to keep straight, so a miss in it is worth recording. |
@@ -165,14 +169,14 @@ the exact failure mode §1 is written against.
 | `functions/src/bracketEntries.ts:96,225` | writes `paidStatus: "UNPAID"` onto a new **bracket entry doc**; `:225` gates on `entryData.paidStatus !== 'PAID'` for `lockUnpaid`. |
 | `functions/src/bracketOps.ts:39` | writes `paidStatus: isPaid ? 'PAID' : 'UNPAID'` onto a **bracket entry doc**. |
 | `functions/src/bracketScoring.ts:410-411` | `entriesSnap.docs...filter(e => e.paidStatus === 'PAID')` over `pools/{id}/entries` — **bracket entry docs**, for the bracket pot. |
-| `functions/src/migrations/backfillMemberRecords.ts:3,20` | copies an existing `paidStatus` onto a Member Record and **never overwrites** one. Type + comment only; no predicate. |
+| `functions/src/migrations/backfillMemberRecords.ts:88,274` | `:88` `add(e.ownerUid \|\| d.id, { userName: e.userName, paidStatus: e.paidStatus })` — harvests from the **`entries` subcollection**; `:274` writes `paidStatus: src.paidStatus === 'PAID' ? 'PAID' : 'UNPAID'` onto the Member Record, and never overwrites an existing one. (`:3,20` are a comment and the `PoolMemberSource` type — cited alone in an earlier draft, which named no read at all, codex r4.) |
 | `functions/src/nflPoolTypes.ts:233,265,290` | `paidStatus: 'PAID' \| 'UNPAID'` — three **type declarations**, no read. |
 | `functions/src/schemas/poolEngagement.ts:89` | `paidStatus: z.enum(["PAID","UNPAID"])` — the `setPaidStatus` **request schema**, no read. |
 | `functions/src/types.ts:375` | `paidStatus: 'PAID' \| 'UNPAID'` — **type declaration**. |
 | `src/types/index.ts:825` | `paidStatus: 'PAID' \| 'UNPAID'` — **type declaration**. |
 | `src/types/nflPoolTypes.ts:318,337,356` | `paidStatus: 'PAID' \| 'UNPAID'` — **type declarations**. |
 | `src/services/dbService.ts:771,777` | `paidStatus` is a **parameter** forwarded verbatim to the callable; the function reads nothing. |
-| `src/components/BracketPoolDashboard/BracketPoolDashboard.tsx:251,433,582,636,909-910,1149-1150,1977,1981,2006,2012` | all on **bracket entry docs**: `activeEntry?.paidStatus !== 'PAID'` for `lockUnpaid` (`:582,636`), `entries.filter(e => e.paidStatus === 'PAID').length * entryFee` for the collected/outstanding tiles (`:1977,1981`), badges and the toggle. |
+| `src/components/BracketPoolDashboard/BracketPoolDashboard.tsx:433,582,636,909-910,1149-1150,1977,1981,2006,2012` | on **bracket entry docs**: `activeEntry?.paidStatus !== 'PAID'` for `lockUnpaid` (`:582,636`), `entries.filter(e => e.paidStatus === 'PAID').length * entryFee` for the collected/outstanding tiles (`:1977,1981`), badges and the toggle. **`:251` is NOT one of these** — it is `setViewingEntry({ ..., paidStatus: 'PAID' })`, an **in-memory synthetic "Master Bracket" print object** that is never persisted and never read back. Lumping it in with the entry-doc reads made the collection claim false (codex r4). |
 | `src/components/BracketPoolDashboard/PaymentLedger.tsx:44,68,73,99,192,439,477,507,518,520,525` | the **BRACKET** payment ledger — `entry.paidStatus` on bracket ENTRY documents throughout, incl. the pot at `:68` and the toggle at `:518`. 🛑 **Omitted from the first draft** (codex P1). It is the closest structural analogue to `PaymentLedgerNFL`, which makes it the single most embarrassing file to have missed and the most important to have a verdict on: it is untouched because bracket pools have one entry-fee liability per entry document already, and no member-level per-entry map. |
 | `src/components/BracketPoolDashboard/ChalkComparison.tsx:106` | writes a literal `paidStatus: 'PAID'` into a synthetic in-memory chalk **bracket entry**. Never persisted, never read back. |
 | `src/components/BracketPoolDashboard/ExportControls.tsx:55,62` | `PaidStatus: e.paidStatus \|\| 'UNPAID'` — a CSV column off each **bracket entry doc**. |
@@ -188,7 +192,7 @@ the exact failure mode §1 is written against.
 | File | What it reads |
 |---|---|
 | `src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx` (17 lines) | per-entry rows off `dues` / `liable` / `paidMirrors` from `getPoolDues`. ✅ **P2-T5b + T6.** |
-| `src/components/NFLPoolDashboard/NFLManagerView.tsx` (6 lines) | fetches and pool-stamps the dues payload. ✅ **P2-T5b + T6.** |
+| `src/components/NFLPoolDashboard/NFLManagerView.tsx:285,301,309,311-313` | reads **only callable output**, never a document: `duesPayload?.poolId === pool.id ? duesPayload.dues : undefined` and the same guard for `.liable` and `.paidMirrors` (`:311-313`), off `getPoolDues`. `:285,309` are comments recording that an absent payload makes the ledger fall back to the member-level `paidStatus`. ✅ **P2-T5b + T6.** |
 
 ### 4f. 🔴 CARRIES A FINDING (2 verdicts)
 
@@ -196,8 +200,9 @@ the exact failure mode §1 is written against.
 
 ### 4g. Not production code (1 verdict)
 
-`src/pages/DevDashboardPreview.tsx` (12 lines) — mock fixtures for the dev
-preview page. No read of live data.
+| File:line | The expression |
+|---|---|
+| `src/pages/DevDashboardPreview.tsx:130-133` (and 8 more) | object **literals** of the form `{ id: 'demo', ownerUid: 'demo', userName: 'Kevin Struck', totalScore: 34, paidStatus: 'PAID', ... }` — hard-coded standings-row fixtures in the file's own source. Nothing is read from Firestore, and no Member Record or entry document is involved. |
 
 ---
 
@@ -242,6 +247,20 @@ authoritative `feeOwed` across the liable rows so the rows sum to it exactly.
 
 `src/utils/poolRoster.ts:386-387,424,432` and `shared/memberRecord.ts:485-487` —
 see **§7**.
+
+---
+
+### 5e. Cross-referenced — their `feeOwed` verdict is in §4 (3 verdicts)
+
+These three read `feeOwed` too, but their whole Phase 2 story is one story and
+splitting it across sections would create two places to drift. Listed here so
+the field's 24 files are all accounted for rather than silently absent.
+
+| File | Where its verdict is |
+|---|---|
+| `functions/src/setPaidStatus.ts` | §4a — it writes `feeOwed`'s per-entry split alongside the derived summary. |
+| `functions/src/lib/poolDues.ts` | §4a — the sealed store helpers. |
+| `src/components/NFLPoolDashboard/NFLManagerView.tsx` | §4e — reads callable output only, no document. |
 
 ---
 
@@ -298,28 +317,40 @@ and let the header say `(1 file)` while three were named — codex r3.)
 
 ### 6e. NO-CHANGE — display and capacity (7 verdicts)
 
-`src/components/BrowsePools.tsx:299,316` · `src/components/Dashboards/GlobalStandingsCard.tsx:33` ·
-`src/components/ManagerDashboard.tsx:109,141,673,698` · `src/components/PayoutsPanel.tsx:10-13,329,350,514,517`
-(falls back to `pool.entryCount` when no explicit count is passed) ·
-`src/components/billing/BillingGate.tsx:273` · `src/components/admin/MembersTab.tsx:1221`
-(a comment about a past bug) · `src/utils/poolSport.ts:75-106` (`:88` records that
-NFL season pools have no maintained `entryCount` — **this comment is now stale for
-NFL pools that have been through T2**; harmless, since `:97,103` already read
-`?? 0` and the `entries` map stays authoritative on that path, but it is worth
-knowing it is prose that has aged).
+| File:line | The expression, and what it is read off |
+|---|---|
+| `src/components/BrowsePools.tsx:299,316` | `filled = bp.entryCount \|\| 0` / `filled = pp.entryCount \|\| 0` — the **pool document**, for a filled/capacity badge. |
+| `src/components/Dashboards/GlobalStandingsCard.tsx:33` | `pool.entryCount \|\| (pool.participantIds?.length \|\| 0)` — the **pool document**, with a roster-length fallback. |
+| `src/components/ManagerDashboard.tsx:109,141,673,698` | `anyP.entryCount \|\| (anyP.entries ? Object.keys(anyP.entries).length : 0)` — the **pool document**, falling back to the **`entries` map on that same document**; `:673,698` are `pool.entryCount \|\| 0` for a filled figure. |
+| `src/components/PayoutsPanel.tsx:10-13,329,350,514,517` | `entryCount ?? (typeof anyPool.entryCount === 'number' ? anyPool.entryCount : undefined)` — a **prop first**, the **pool document** only as fallback. |
+| `src/components/billing/BillingGate.tsx:273` | `count = pool.entryCount \|\| 0` — the **pool document**, for the tier gate. |
+| `src/components/admin/MembersTab.tsx:1221` | a **comment** about a past pool-list bug. No read. |
+| `src/utils/poolSport.ts:75,97,103,106` | `pool.entryCount ?? 0` — the **pool document** (`:97,103`); `:106` notes the **`entries` map is authoritative** on the playoff path. ⚠️ `:88` says NFL season pools have no maintained `entryCount` — **prose that has aged**: it is maintained now for any NFL pool touched by T2. Harmless, because the reads already default with `?? 0`, but worth knowing. |
 
-All render a filled/capacity figure fresh. A decrement simply renders the
-smaller number.
+All read fresh per render; none caches across a delete. A decrement simply
+renders the smaller number.
 
 ### 6f. NO-CHANGE — types, sims, scenarios (12 verdicts)
 
-`functions/src/types.ts` · `src/types/index.ts` · `src/types/nflPoolTypes.ts` ·
-`functions/src/nflPoolTypes.ts` · `functions/src/shared/simGen.ts` · `shared/simGen.ts` ·
-`src/components/TournamentSimulator/TournamentSimulator.tsx` ·
-`src/utils/testing/scenarios/assertionRunner.ts` · `src/utils/testing/scenarios/index.ts` ·
-`src/utils/testing/simulators/bracketE2ESimulator.ts` ·
-`src/utils/testing/simulators/bracketSimulator.ts` ·
-`src/utils/testing/simulators/propsSimulator.ts`.
+A bare path list is an enumeration, not a review (codex r4). Each row names the
+expression, so a future sweep can tell a declaration from a read.
+
+| File:line | The expression |
+|---|---|
+| `functions/src/types.ts:211,556,679` | `entryCount?: number` — **type declarations**. No read. |
+| `src/types/index.ts:162,205,474,795` | `entryCount?: number` — **type declarations**. No read. |
+| `src/types/nflPoolTypes.ts:83,181,254,385` | `entryCount?: number`; `:385` a comment on the **frozen** prize snapshot. No read. |
+| `functions/src/nflPoolTypes.ts:79,131,183,326` | the same declarations and the same frozen-snapshot comment, server side. No read. |
+| `functions/src/shared/simGen.ts:9,88` · `shared/simGen.ts:9,88` | `entryCount: number` on the **sim spec object** (`:9`), then `for (let i = 0; i < spec.entryCount; i++)` — a loop bound over a caller-supplied spec, never a pool document. |
+| `src/components/TournamentSimulator/TournamentSimulator.tsx:121,745,1186,1191,1216` | `useState(0)` **local component state** passed down as a prop and rendered. Never read off a pool. |
+| `src/utils/testing/scenarios/assertionRunner.ts:83,381,433` | `pool?._propCards?.length \|\| pool?.entryCount` and `pool?._bracketEntries?.length \|\| pool?.entryCount` — a **test-scenario assertion** that prefers the actual document count and uses the field only as a fallback. |
+| `src/utils/testing/scenarios/index.ts:167,232` | `entryCount` on a **scenario spec type**. No read. |
+| `src/utils/testing/simulators/bracketE2ESimulator.ts:73,82,141` | `entryCount = 50` as a **default parameter**, and `entryCount: 0` **written** when seeding a simulated pool. |
+| `src/utils/testing/simulators/bracketSimulator.ts:109` | writes `entryCount: 0` when seeding a simulated pool. |
+| `src/utils/testing/simulators/propsSimulator.ts:80` | writes `entryCount: 0` when seeding a simulated pool. |
+
+None reads a live pool's `entryCount` to make a decision, so a decrement reaches
+none of them.
 
 ### 6g. `playableEntryCount` — remaining readers (6 verdicts)
 
@@ -330,6 +361,25 @@ smaller number.
 | `functions/src/userProfile.ts:29` | comment recording `entryFee x playableEntryCount` (D2) | ✅ **NO-CHANGE.** |
 | `src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx:423,430` | `played` for the delete-confirmation arithmetic | ✅ **P2-T6.** |
 | `src/components/PaymentsPanel.tsx:85,114-115` | `entryFee x max(joinLiability, playableEntryCount)` for the viewer's own outstanding | ✅ **NO-CHANGE.** Reads fresh; a decrement lowers what it shows, correctly. |
+
+---
+
+### 6h. Cross-referenced — their verdict is in §4 or §5 (6 verdicts)
+
+Same rule as §5e: these read `playableEntryCount` and/or `entryCount` as part of
+the same derivation their §4/§5 verdict already covers. Listed so both fields'
+grep lists are fully accounted for.
+
+| File | Reads | Where its verdict is |
+|---|---|---|
+| `functions/src/shared/memberRecord.ts` · `shared/memberRecord.ts` | both | §4a / §5a — `memberLiableEntries`, `deriveEntryCount`, the derivation itself. |
+| `functions/src/lib/memberRecord.ts` | both | §4a / §5a — the liability-rise rule that consumes both counts. |
+| `functions/src/nflEntryRename.ts` | both | §4b / §5b — one comment listing all four as fields it must **not** write. |
+| `functions/src/nflPoolDues.ts` | `playableEntryCount` | §4c — `:65`, a comment on the count-not-set rule. |
+
+**With §5e and §6h, all 121 (file, field) pairs are accounted for:** 108 carry a
+verdict in their own field's section, 12 are cross-referenced above, and one file
+(`functions/src/nflPools.ts`) carries verdicts in all three sections already.
 
 ---
 
