@@ -271,6 +271,43 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   const [isScoring, setIsScoring] = useState(false);
   const [isSavingPayment, setIsSavingPayment] = useState<string | null>(null);
+  /**
+   * PLAN-MULTI-ENTRY-DUES P2-T5: uid -> entryId -> payment row.
+   *
+   * Fetched through the `getPoolDues` CALLABLE, not read from Firestore: the map
+   * lives in `pools/{id}/private/`, sealed to every client by `firestore.rules`,
+   * because its keys name entries that have committed a pick (the D1 amendment).
+   *
+   * ⚠️ `undefined` until it loads, and `undefined` is NOT `{}`. An empty object
+   * would tell the ledger "this pool has no per-entry payments", turning every
+   * row's checkbox off mid-load; `undefined` makes each row fall back to the
+   * member-level `paidStatus` (R3) — which is what a pre-Phase-2 pool shows
+   * anyway, so the pre-load render is the old, correct one.
+   */
+  /**
+   * PLAN-MULTI-ENTRY-DUES P2-T5: the per-entry payment map and the liable-entry
+   * set, from the `getPoolDues` CALLABLE — the map lives in
+   * `pools/{id}/private/`, sealed to every client by `firestore.rules`, because
+   * its keys name entries that have committed a pick (the D1 amendment).
+   *
+   * 🛑 STORED WITH THE POOL ID IT CAME FROM, and read back through a match.
+   * Entry ids are DETERMINISTIC (`uid`, `e2:uid`) and a member can be in many
+   * pools, so a response landing after the view moved on would otherwise paint
+   * one pool's payments onto another's rows — and hand the commissioner a
+   * checkbox acting on it. Comparing at READ time makes the stale case
+   * unrepresentable, rather than something an effect has to remember to clear.
+   */
+  const [duesPayload, setDuesPayload] = useState<{
+    poolId: string;
+    dues: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>;
+    liable: Record<string, string[]>;
+  } | undefined>(undefined);
+  // ⚠️ `undefined` whenever the payload is for another pool, or not loaded.
+  // NOT `{}` — an empty object would tell the ledger "nobody paid"; `undefined`
+  // makes it fall back to the member-level `paidStatus` (R3), which is the
+  // pre-Phase-2 rendering and is never wrong, only less detailed.
+  const duesByUid = duesPayload?.poolId === pool.id ? duesPayload.dues : undefined;
+  const liableByUid = duesPayload?.poolId === pool.id ? duesPayload.liable : undefined;
   const [savingCoCommissioner, setSavingCoCommissioner] = useState<string | null>(null);
   const [remindingUid, setRemindingUid] = useState<string | null>(null);
   const [bulkReminding, setBulkReminding] = useState<'PICKS' | 'PAYMENT' | null>(null);
@@ -644,12 +681,15 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // now pure downside — an error on the authoritative path would silently write
   // the display-legacy entry doc instead and recreate exactly the split-brain
   // D13 existed to close. An error must surface as an error.
-  const handleTogglePayment = async (uid: string, currentStatus: string) => {
-    setIsSavingPayment(uid);
+  const handleTogglePayment = async (uid: string, entryId: string, currentStatus: string) => {
+    // Keyed by ENTRY (D10): the spinner belongs to the row that was clicked, and
+    // a uid would freeze every row of a multi-entry member on one click.
+    setIsSavingPayment(entryId);
     setFeedback(null);
     const nextPaid = currentStatus !== 'PAID';
     try {
-      await dbService.setPaidStatus(pool.id, uid, nextPaid);
+      await dbService.setPaidStatus(pool.id, uid, nextPaid, undefined, entryId);
+      await refreshDues();   // no subscription behind the map — pull it again
     } catch (err: any) {
       logger.error(`Failed to set paid status for ${uid}:`, err);
       // getUserMessage, not err.message: setPaidStatus now throws a
@@ -666,11 +706,12 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // modal's saveDetailedPayment, now reached from the Payment Ledger's fee cell.
   // Details ride only with PAID (the schema refuses them otherwise), so this
   // also marks the member paid. Same authoritative callable, no fallback.
-  const handleSavePaidDetails = async (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }): Promise<boolean> => {
-    setIsSavingPayment(uid);
+  const handleSavePaidDetails = async (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }, entryId?: string): Promise<boolean> => {
+    setIsSavingPayment(entryId ?? uid);
     setFeedback(null);
     try {
-      await dbService.setPaidStatus(pool.id, uid, true, details);
+      await dbService.setPaidStatus(pool.id, uid, true, details, entryId);
+      await refreshDues();
       return true; // the ledger closes its editor only on success (codex r7)
     } catch (err: any) {
       logger.error(`Failed to save payment details for ${uid}:`, err);
@@ -684,6 +725,54 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // Rebuy settlement (PLAN-PAYMENT-TRUTH P3): a member's rebuy dues are owed
   // and settled INDEPENDENTLY of base dues — the same button state machine as
   // the paid toggle, against the settleRebuys mode of the same callable.
+  /**
+   * Load the per-entry payment map. Called on mount and after every write that
+   * can change it, because the map is NOT a Firestore subscription — it comes
+   * from a callable, so nothing pushes updates.
+   *
+   * A failure is deliberately swallowed to `undefined` rather than `{}`: the
+   * ledger then falls back to member-level `paidStatus` (R3), which is the
+   * pre-Phase-2 rendering and is never WRONG, only less detailed. Turning every
+   * checkbox off because a read failed would be a statement that nobody paid.
+   */
+  /**
+   * Monotonic request id. The pool stamp rejects ANOTHER pool's response; this
+   * rejects an OLDER one for the SAME pool (codex).
+   *
+   * 🛑 THE CASE: the mount fetch is still in flight when a payment write fires
+   * its own refresh. The mount response can land LAST and replace the freshly
+   * paid map with the pre-write one — the row flips back to unpaid, and the
+   * commissioner's next click REVERSES a payment they just made. Money state
+   * that lies in the "not paid" direction invites exactly the wrong correction.
+   */
+  const duesSeqRef = useRef(0);
+
+  const refreshDues = useCallback(async () => {
+    const forPool = pool.id;
+    const seq = duesSeqRef.current + 1;
+    duesSeqRef.current = seq;
+    try {
+      const { dues, liable } = await dbService.getPoolDues(forPool);
+      // Dropped if a newer request has since started. The payload also carries
+      // the pool it was fetched for, and the derived values above discard it if
+      // the view has moved on.
+      if (seq === duesSeqRef.current) setDuesPayload({ poolId: forPool, dues, liable });
+    } catch (err) {
+      logger.error('Failed to load per-entry dues; falling back to member-level paid status:', err);
+      // ⚠️ CLEAR, do not keep. A write may already have succeeded — it is only
+      // the READ that failed — so the loaded map is now PRE-write. Showing it
+      // says the entry is unpaid when it was just paid, which is the same
+      // reversing click as above. `undefined` falls back to the member-level
+      // status, which the write did update. Guarded so a late failure cannot
+      // wipe a newer success.
+      if (seq === duesSeqRef.current) {
+        setDuesPayload(prev => (prev?.poolId === forPool ? undefined : prev));
+      }
+    }
+  }, [pool.id]);
+
+  useEffect(() => { void refreshDues(); }, [refreshDues]);
+
   const handleSettleRebuys = async (uid: string, settle: boolean) => {
     setIsSavingPayment(uid);
     setFeedback(null);
@@ -1701,7 +1790,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               every published weekly prize with its "paid" checkbox. Lives on
               the Members & Payments sub-tab — where a commissioner looks for
               money (Kevin, 2026-08-16). */}
-          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} />
+          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} duesByUid={duesByUid} liableByUid={liableByUid} />
           <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
             <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">
