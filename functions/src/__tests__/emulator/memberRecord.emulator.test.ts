@@ -23,23 +23,34 @@ async function seedUser(uid: string, name: string, role = 'PARTICIPANT') {
   await db.collection('users').doc(uid).set({ role, name, email: `${uid}@example.com` });
 }
 
+/**
+ * 🛑 ENUMERATED, NOT LISTED. This used to carry a HARDCODED array of
+ * subcollection names, and it silently stopped wiping the moment a new one
+ * existed — deleting a pool does NOT delete its subcollections, so anything not
+ * named survived into the next test.
+ *
+ * It cost a real debugging session: `private/dues__{uid}` (PLAN-MULTI-ENTRY-DUES
+ * D1) leaked from one test into the next, so a member seeded UNPAID was
+ * materialized from the PREVIOUS test's paid rows, the PAID mark became a no-op,
+ * and "MARKED_PAID + MARKED_UNPAID" came back with only the un-mark. The
+ * assertion that caught it was a ledger COUNT, which pointed nowhere near the
+ * cause.
+ *
+ * `listCollections()` cannot go stale. Nothing to remember to update.
+ */
+async function wipeDocWithSubcollections(ref: FirebaseFirestore.DocumentReference) {
+  for (const sub of await ref.listCollections()) {
+    const s = await sub.get();
+    await Promise.all(s.docs.map((d) => d.ref.delete()));
+  }
+  await ref.delete();
+}
+
 async function wipe() {
   const pools = await db.collection('pools').get();
-  for (const p of pools.docs) {
-    for (const sub of ['members', 'entries', 'participants', 'payments', 'rosterSummary']) {
-      const s = await p.ref.collection(sub).get();
-      await Promise.all(s.docs.map((d) => d.ref.delete()));
-    }
-    await p.ref.delete();
-  }
+  for (const p of pools.docs) await wipeDocWithSubcollections(p.ref);
   const users = await db.collection('users').get();
-  for (const u of users.docs) {
-    for (const sub of ['managedPools', 'participations', 'activity']) {
-      const s = await u.ref.collection(sub).get();
-      await Promise.all(s.docs.map((d) => d.ref.delete()));
-    }
-    await u.ref.delete();
-  }
+  for (const u of users.docs) await wipeDocWithSubcollections(u.ref);
 }
 
 beforeEach(wipe);
