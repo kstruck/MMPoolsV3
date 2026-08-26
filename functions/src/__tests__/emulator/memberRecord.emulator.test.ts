@@ -855,7 +855,7 @@ describe('coManagers — a departed member is dropped from the array (PLAN-CO-CO
  * that writes the summary and not the map is un-paid by the next writer.
  */
 /** The shape `reconcilePaymentTruth` returns — named so these tests need no `any`. */
-type ReconcileResult = { ok: boolean; membersPromoted: number };
+type ReconcileResult = { ok: boolean; membersPromoted: number; ambiguousSkipped: number; alreadyConsistent: number };
 
 describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
   const poolId = 'p2-dues-pool';
@@ -950,6 +950,39 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
     const dues = await duesOf();
     expect(Object.keys(dues).sort()).toEqual(['dm1', 'e2:dm1']);
     expect(dues['e2:dm1'].method).toBe('cash');    // the pre-existing row survives
+  });
+
+  it('🛑 IS IDEMPOTENT on a partial repair — run 2 must not call it AMBIGUOUS', async () => {
+    // The defect this pins (codex r6) was introduced BY this ticket. Before T7
+    // the migration wrote a literal 'PAID', so run 2 saw `entry PAID + member
+    // PAID` and counted `alreadyConsistent`. T7 makes it write the DERIVED
+    // summary — correctly UNPAID for a member with one of two liable entries
+    // paid — so run 2 sees the SAME shape it started with, and now also finds
+    // the MARKED_PAID ledger row run 1 appended. The ambiguity gate keys on
+    // exactly that ledger history, so every partial payment the migration
+    // repaired would be re-reported for manual resolution, forever.
+    //
+    // The dues map is the evidence that tells the two apart, and its check must
+    // run BEFORE the ledger-history check — run 1 wrote both.
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    const r1 = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r1.membersPromoted).toBe(1);
+    // Run 1 left the member UNPAID (only one of two entries paid) and appended
+    // a ledger row — the exact preconditions the gate would misread.
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(1);
+
+    const r2 = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r2.ambiguousSkipped).toBe(0);      // <-- 1 before the fix
+    expect(r2.membersPromoted).toBe(0);       // nothing left to promote
+    expect(r2.alreadyConsistent).toBeGreaterThanOrEqual(1);
+    // ...and run 2 appended nothing.
+    const ledger2 = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger2.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(1);
   });
 
   it('DRY RUN still writes nothing at all, dues document included', async () => {

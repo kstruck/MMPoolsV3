@@ -39,7 +39,7 @@ import { recomputeCommissionerAggregate, ownerOf } from "../lib/commissionerAggr
 import { isSimPool, isExplicitlyMarkedTestPool } from "../shared/testPool";
 import { validated } from "../lib/validated";
 import { reconcilePaymentTruthSchema } from "../schemas/migrations";
-import { readPoolDues, writePoolDues, type PaidEntryMap } from "../lib/poolDues";
+import { readPoolDues, writePoolDues, DUES_PREFIX, DUES_PREFIX_END, type PaidEntryMap } from "../lib/poolDues";
 import { entryHasPick } from "../lib/multiEntry";
 import { derivePaidStatus, liableEntryIds, type MemberRecord } from "../shared/memberRecord";
 
@@ -139,11 +139,45 @@ export const reconcilePaymentTruth = validated(
 
     try {
       const entryFee: number | undefined = pool.settings?.entryFee;
-      const [entriesSnap, membersSnap, paymentsSnap] = await Promise.all([
+      const [entriesSnap, membersSnap, paymentsSnap, duesSnap] = await Promise.all([
         doc.ref.collection('entries').get(),
         doc.ref.collection('members').get(),
         doc.ref.collection('payments').get(),
+        // 🛑 THE PER-ENTRY MAP, READ FOR IDEMPOTENCE (codex r6, P2).
+        //
+        // Before P2-T7 this migration wrote a literal `PAID`, so a second run
+        // saw `entry PAID + member PAID` and counted `alreadyConsistent`. T7
+        // made it write the DERIVED summary, which for a member with one of two
+        // liable entries paid is correctly `UNPAID` — so run 2 sees the same
+        // `entry PAID + member UNPAID` shape it started with, AND now finds the
+        // ledger row run 1 appended, and files the pair as AMBIGUOUS_SKIPPED.
+        //
+        // That is a false ambiguity this migration manufactured itself, and it
+        // would land on the operator's desk for EVERY partial payment it
+        // repaired. The map is the evidence that distinguishes the two cases:
+        // an entry already recorded there was reconciled by a previous run.
+        //
+        // The id-range bound is the same lexical-successor trick `getPoolDues`
+        // uses, and for the same reason — `private/` also holds the pool's
+        // PBKDF2 password record, and `dues__` + U+F8FF is NOT a safe upper
+        // bound (an id above that codepoint sorts past it and is skipped).
+        doc.ref.collection('private')
+          .orderBy(admin.firestore.FieldPath.documentId())
+          .startAt(DUES_PREFIX)
+          .endBefore(DUES_PREFIX_END)
+          .get(),
       ]);
+      /** uid → the entry ids already recorded as paid in that member's dues map. */
+      const paidEntryIdsByUid = new Map<string, Set<string>>();
+      for (const d of duesSnap.docs) {
+        if (!d.id.startsWith(DUES_PREFIX)) continue;      // never `private/access`
+        const duesUid = d.id.slice(DUES_PREFIX.length);
+        if (!duesUid) continue;
+        const map = d.get('paidEntries');                 // ONE field, named. Never spread.
+        if (map && typeof map === 'object' && !Array.isArray(map)) {
+          paidEntryIdsByUid.set(duesUid, new Set(Object.keys(map)));
+        }
+      }
       const membersById = new Map(membersSnap.docs.map((m) => [m.id, m.data() as any]));
       // Members with ANY MARKED_* ledger history were touched by the
       // authoritative setPaidStatus path at some point (it has always appended a
@@ -176,6 +210,20 @@ export const reconcilePaymentTruth = validated(
         }
 
         if (entryPaid && !memberPaid) {
+          // ⚠️ THIS TEST MUST COME BEFORE THE LEDGER-HISTORY TEST, because a
+          // previous run of this migration wrote BOTH the dues row and a
+          // MARKED_PAID ledger row. Checked second, the ledger row would win
+          // and every partial payment this repaired would be re-reported as
+          // ambiguous forever (codex r6).
+          //
+          // The per-entry map already records THIS entry as paid, so the pair
+          // is reconciled: the member is UNPAID only because their OTHER liable
+          // entries have not been paid, which is the correct derived answer and
+          // not a disagreement to fix.
+          if (paidEntryIdsByUid.get(uid)?.has(entryDoc.id)) {
+            report.alreadyConsistent++;
+            continue;
+          }
           if (uidsWithLedgerHistory.has(uid)) {
             // A pre-P1 un-mark through the roster toggle leaves exactly this
             // shape (member UNPAID via setPaidStatus, entry never updated) —
