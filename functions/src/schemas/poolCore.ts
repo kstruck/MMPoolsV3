@@ -110,3 +110,26 @@ export const submitNFLPicksSchema = z.strictObject({
 
 export type UpdatePoolSettingsInput = z.infer<typeof updatePoolSettingsSchema>;
 export type SubmitNFLPicksInput = z.infer<typeof submitNFLPicksSchema>;
+
+/**
+ * PLAN-MULTI-ENTRY follow-up — `renameNFLEntry`.
+ *
+ * A member can NAME an entry at creation but, until this callable, could not
+ * RENAME one that already exists: `entryName` only ever travelled on
+ * `submitNFLPicks`, whose Survivor/Margin branches throw on a missing team, so
+ * there was no way to change a name without also re-picking.
+ *
+ * `entryIndex` is REQUIRED here (no default): a rename addresses one specific
+ * existing entry, and defaulting a missing index to 1 would silently rename the
+ * wrong entry. `entryName` is required and non-empty — clearing a name back to
+ * "use my player name" is deliberately NOT offered (`assertEntryNameFree`
+ * refuses a blank with ENTRY_NAME_EMPTY either way).
+ */
+export const renameNFLEntrySchema = z.strictObject({
+    poolId,
+    entryIndex: z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP),
+    entryName: z.string().trim().min(1).max(ENTRY_NAME_MAX),
+    requestId: nullish(z.string().max(200)),
+});
+
+export type RenameNFLEntryInput = z.infer<typeof renameNFLEntrySchema>;

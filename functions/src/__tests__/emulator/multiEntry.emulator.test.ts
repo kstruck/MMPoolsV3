@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { createNFLPool, executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal, scoreNFLWeekInternal } from '../../nflPools';
+import { renameNFLEntryInternal } from '../../nflEntryRename';
 import { proxyPick } from '../../poolExceptions';
 import { setPaidStatus } from '../../setPaidStatus';
 import { updatePoolSettings } from '../../poolOps';
@@ -640,4 +641,257 @@ describe('PLAN-MULTI-ENTRY — FLIP: wizard payload → two entries → standing
     // link key on (§0b.2) — and what the client fold uses for membership.
     expect(mine.every(r => r.ownerUid === ALICE)).toBe(true);
   }, 120000);
+});
+
+
+/**
+ * `renameNFLEntry` — PLAN-MULTI-ENTRY K5 follow-up (Kevin, 2026-08-26).
+ *
+ * 🛑 WHAT THESE TESTS ARE REALLY FOR: proving a rename is a rename.
+ *
+ * The reason this is a separate callable rather than a field on
+ * `submitNFLPicks` is that the submit transaction also moves money —
+ * `feeOwed`, `playableEntryCount`, `pool.entryCount`, the K11 paid-reset — and
+ * a display-name edit must move none of it. That is not something code reading
+ * can settle, because the coupling is inside `ensureMemberRecord` and
+ * `entryCountWrite`, several call frames down. So the money fields are
+ * SNAPSHOTTED before the rename and deep-compared after, and the entry document
+ * is compared field-for-field with `entryName` removed from both sides.
+ *
+ * The other half is staleness. A member's row is rendered from ONE of two
+ * places depending on whether it has been scored — the Member Record's roster
+ * map (unscored) or `standings/current` (scored) — and a rename that updated
+ * only one of them would look correct to whoever tested it and wrong to
+ * everybody in the other state. Both are asserted, on the same pool.
+ */
+describe('renameNFLEntry — a rename that renames and nothing else', () => {
+  // ⚠️ THIS BLOCK SEEDS ITS OWN SLATE. The T2 block's `beforeEach` seeds G1/G2
+  // and its `afterAll` deletes them, and both are scoped to that describe — so
+  // a test out here that relied on them got "No NFL games found for HOF
+  // Weekend" from `submitNFLPicksInternal`, not a rename failure. Same two
+  // documents, seeded locally, refreshed per test (the Survivor case below
+  // back-dates their kickoff to force a hard lock).
+  beforeEach(async () => {
+    for (const uid of [HOST, ALICE, BOB]) await db.collection('users').doc(uid).set({ name: uid });
+    await db.collection('nfl_games').doc(G1).set({
+      id: G1, espnGameId: G1, season: SEASON, seasonType: 1, week: 1,
+      startTime: Date.now() + 4 * HOUR, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true },
+    });
+    await db.collection('nfl_games').doc(G2).set({
+      id: G2, espnGameId: G2, season: SEASON, seasonType: 1, week: 1,
+      startTime: Date.now() + 5 * HOUR, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('DAL'), awayTeam: T('NYG'), scores: { home: 0, away: 0 }, spread: { value: -1, locked: true },
+    });
+  }, 30000);
+
+  afterAll(async () => {
+    try {
+      for (const id of createdPools) await db.recursiveDelete(db.collection('pools').doc(id));
+      for (const id of [G1, G2, F1, F2]) await db.collection('nfl_games').doc(id).delete();
+    } catch (e) {
+      console.warn('[renameNFLEntry.emulator] teardown incomplete:', e);
+    }
+  }, 60000);
+
+  const rename = (uid: string, entryIndex: number, entryName: string) =>
+    renameNFLEntryInternal(db, { actorUid: uid, subjectUid: uid, subjectName: uid },
+      { poolId: POOL, entryIndex, entryName });
+
+  /** Everything a rename MUST NOT move, in one comparable object. */
+  const moneyState = async (uid: string) => {
+    const m = await member(uid);
+    const p = await pool();
+    return {
+      feeOwed: m.feeOwed, playableEntryCount: m.playableEntryCount, paidStatus: m.paidStatus,
+      paidAt: m.paidAt ?? null, paymentMethod: m.paymentMethod ?? null,
+      hasPlayableEntry: m.hasPlayableEntry, pickedWeeks: m.pickedWeeks ?? null,
+      rebuyOwed: m.rebuyOwed ?? null, entryCount: p.entryCount,
+      ledgerLines: (await ledger(uid)).length,
+    };
+  };
+
+  /** An entry document with its display name removed — everything else must be identical. */
+  const entryStateSansName = async (id: string) => {
+    const d = (await entry(id)).data()! as Record<string, unknown>;
+    delete d.entryName;
+    return d;
+  };
+
+  it('renames entry 2: the doc, the roster map and the standings row all move; entry 1 does not', async () => {
+    await seedOpenSlate();
+    await seedPool({ max: 3, entryCount: 2, season: T3_SEASON });
+    await submit(ALICE, { picks: { [F1]: 'KC' } });
+    await submit(ALICE, { picks: { [F1]: 'BUF' }, entryIndex: 2, entryName: 'Alice B' });
+    // SCORED, so the standings projection exists — the surface that does NOT
+    // self-heal from the roster map.
+    await concludeSlate({ f1: [30, 10], f2: [24, 20] });
+    await score();
+
+    const beforeMoney = await moneyState(ALICE);
+    const beforeE1 = await entryStateSansName(ALICE);
+    const beforeE2 = await entryStateSansName(`e2:${ALICE}`);
+    const e1NameBefore = (await entry(ALICE)).data()!.entryName;
+
+    const out = await rename(ALICE, 2, '  Alice Deux  ');
+    // Trimmed by `assertEntryNameFree`, and the id is the server's, never the client's.
+    expect(out).toEqual({ success: true, entryId: `e2:${ALICE}`, entryName: 'Alice Deux' });
+
+    // 1. the entry doc — the source of truth.
+    expect((await entry(`e2:${ALICE}`)).data()!.entryName).toBe('Alice Deux');
+    // 2. the Member Record roster map — the ONLY copy other members can read.
+    const m = await member(ALICE);
+    expect(m.entries[`e2:${ALICE}`]).toEqual({ entryIndex: 2, name: 'Alice Deux' });
+    expect(m.entries[ALICE]).toEqual({ entryIndex: 1 });
+    // 3. the published standings row — what a SCORED row renders from.
+    const rows = (await poolRef().collection('standings').doc('current').get()).data()!.rows as Array<Record<string, unknown>>;
+    expect(rows.find(r => r.id === `e2:${ALICE}`)!.entryName).toBe('Alice Deux');
+    // ...and the row's score is untouched: this patches a name, not a result.
+    expect(rows.find(r => r.id === `e2:${ALICE}`)!.totalScore).toBe(0);
+    expect(rows.find(r => r.id === ALICE)!.totalScore).toBe(1);
+    expect(rows.find(r => r.id === ALICE)!.entryName).toBeUndefined();
+
+    // 🛑 ENTRY 1 IS BYTE-IDENTICAL, name included.
+    expect(await entryStateSansName(ALICE)).toEqual(beforeE1);
+    expect((await entry(ALICE)).data()!.entryName).toBe(e1NameBefore);
+    // 🛑 ENTRY 2 IS BYTE-IDENTICAL APART FROM THE NAME — picks, usedTeams,
+    // submittedAt, lastRequestId, totalScore, the revision watermark, all of it.
+    expect(await entryStateSansName(`e2:${ALICE}`)).toEqual(beforeE2);
+    // 🛑 AND NO MONEY MOVED.
+    expect(await moneyState(ALICE)).toEqual(beforeMoney);
+  }, 120000);
+
+  it('names entry #1, which has none by default, without disturbing the extra', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2, entryName: 'Alice B' });
+    const before = await moneyState(ALICE);
+
+    await rename(ALICE, 1, 'Alice Prime');
+
+    expect((await entry(ALICE)).data()!.entryName).toBe('Alice Prime');
+    expect((await entry(`e2:${ALICE}`)).data()!.entryName).toBe('Alice B');
+    expect((await member(ALICE)).entries).toEqual({
+      [ALICE]: { entryIndex: 1, name: 'Alice Prime' },
+      [`e2:${ALICE}`]: { entryIndex: 2, name: 'Alice B' },
+    });
+    expect(await moneyState(ALICE)).toEqual(before);
+  }, 60000);
+
+  it('refuses a name another of the owner\'s entries already holds (case-insensitively)', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2, entryName: 'Alice B' });
+
+    await rename(ALICE, 1, 'Alice A');
+    await expect(rename(ALICE, 2, 'alice a')).rejects.toThrow(/ENTRY_NAME_TAKEN/);
+    // The refusal wrote NOTHING — not a partial rename of the doc with a stale
+    // roster map, which is the shape a non-transactional version would leave.
+    expect((await entry(`e2:${ALICE}`)).data()!.entryName).toBe('Alice B');
+    expect((await member(ALICE)).entries[`e2:${ALICE}`].name).toBe('Alice B');
+
+    // ...but renaming an entry to the name it ALREADY has is fine: the helper
+    // excludes the target from its own clash check.
+    await expect(rename(ALICE, 2, 'Alice B')).resolves.toMatchObject({ success: true });
+  }, 60000);
+
+  it('🛑 a rename NEVER CREATES an entry — a missing one is not-found', async () => {
+    await seedPool({ max: 3, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    const before = await moneyState(ALICE);
+
+    await expect(rename(ALICE, 2, 'Ghost')).rejects.toThrow(/ENTRY_NOT_FOUND/);
+    // The document `resolveOwnedEntry` handed back a ref for does not exist,
+    // and the owner's liability did not move. A created-on-rename entry would
+    // be a contestant with no picks that still counted toward the pot.
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(false);
+    expect(await moneyState(ALICE)).toEqual(before);
+    expect((await member(ALICE)).entries).toEqual({ [ALICE]: { entryIndex: 1 } });
+  }, 60000);
+
+  it('refuses a caller who is not in the pool, and one who does not own the entry', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+
+    // A stranger: not on `participantIds` at all.
+    await expect(renameNFLEntryInternal(db, { actorUid: 'me-stranger', subjectUid: 'me-stranger' },
+      { poolId: POOL, entryIndex: 1, entryName: 'Mine now' })).rejects.toThrow(/NOT_POOL_MEMBER/);
+
+    // 🛑 A FELLOW MEMBER. Bob is a legitimate participant, so membership alone
+    // does not protect Alice's entry — the entry id is derived from the
+    // CALLER's uid, so Bob's "entry 1" is his own document, which does not
+    // exist. He cannot address hers at all, and there is no payload uid he
+    // could put a different answer in.
+    await expect(rename(BOB, 1, 'Alice pwned')).rejects.toThrow(/ENTRY_NOT_FOUND/);
+    expect((await entry(ALICE)).data()!.entryName).toBeUndefined();
+  }, 60000);
+
+  it('🛑 rebuilds the WHOLE roster map on a legacy Member Record, never one key', async () => {
+    // The trap: writing `entries.<id>.name` onto a record with no map at all
+    // leaves a map holding exactly ONE id — and `ownedEntryIds`
+    // (src/utils/memberStandings.ts:107) renders one row per key, so every
+    // other entry this member owns would lose its standings row. A rename that
+    // DELETED a row from the board would be far worse than a stale name.
+    await seedPool({ max: 3, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2, entryName: 'Alice B' });
+    // Back-date the record to its pre-T2 shape: entries exist, the map does not.
+    await poolRef().collection('members').doc(ALICE).update({
+      entries: admin.firestore.FieldValue.delete(),
+    });
+    expect((await member(ALICE)).entries).toBeUndefined();
+
+    await rename(ALICE, 2, 'Alice Deux');
+
+    expect((await member(ALICE)).entries).toEqual({
+      [ALICE]: { entryIndex: 1 },
+      [`e2:${ALICE}`]: { entryIndex: 2, name: 'Alice Deux' },
+    });
+  }, 60000);
+
+  it('renames a SURVIVOR entry after the week has locked — the case submit cannot serve', async () => {
+    // 🛑 THIS IS THE WHOLE REASON THE CALLABLE EXISTS. `submitNFLPicksInternal`
+    // throws `Missing Survivor team selection` on a payload with no team, and
+    // `WEEK_LOCKED` on one that has a team once the deadline passes — so on
+    // Survivor and Margin there has never been a way to change a name after a
+    // week locked. If this ever regresses to "resubmit with a name", this test
+    // is what fails.
+    await seedPool({ type: 'NFL_SURVIVOR', max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { 1: 'KC' } });
+    await submit(ALICE, { picks: { 1: 'BUF' }, entryIndex: 2, entryName: 'Alice B' });
+    // Kick the slate off: the week is now hard-locked for a Survivor pool.
+    for (const id of [G1, G2]) {
+      await db.collection('nfl_games').doc(id).update({ startTime: Date.now() - HOUR });
+    }
+    await expect(submit(ALICE, { picks: { 1: 'BUF' }, entryIndex: 2, entryName: 'Alice Deux' }))
+      .rejects.toThrow(/WEEK_LOCKED/);
+    const before = await moneyState(ALICE);
+
+    await rename(ALICE, 2, 'Alice Deux');
+
+    const e2 = (await entry(`e2:${ALICE}`)).data()!;
+    expect(e2.entryName).toBe('Alice Deux');
+    // The Survivor state a rename must not touch.
+    expect(e2.picks).toEqual({ 1: 'BUF' });
+    expect(e2.usedTeams).toEqual(['BUF']);
+    expect(e2.status).toBe('ALIVE');
+    expect(e2.strikesUsed).toBe(0);
+    expect(await moneyState(ALICE)).toEqual(before);
+  }, 60000);
+
+  it('leaves a PAID member paid — a rename is not a dues change (K11 does not fire)', async () => {
+    await seedPool({ max: 2, entryCount: 2, alicePaid: true });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    expect((await member(ALICE)).paidStatus).toBe('PAID');
+
+    await rename(ALICE, 1, 'Alice Prime');
+
+    const m = await member(ALICE);
+    expect(m.paidStatus).toBe('PAID');
+    expect(m.paidAt).toBe(1_700_000_000_000);
+    expect(m.feeOwed).toBe(25);
+    // ...and no MARKED_UNPAID line was appended. K11 fires on a dues RISE; a
+    // rename raises nothing, so the ledger must be silent.
+    expect(await ledger(ALICE)).toHaveLength(0);
+  }, 60000);
 });

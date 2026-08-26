@@ -227,6 +227,148 @@ describe('<EntrySwitcher>', () => {
 });
 
 /**
+ * RENAME (PLAN-MULTI-ENTRY K5 follow-up) — the pencil on the ACTIVE chip.
+ *
+ * The failure this guards is not cosmetic. Until `renameNFLEntry` existed the
+ * only way a name reached the server was on a pick submission, and on Survivor
+ * and Margin that path REFUSES a payload with no team for the week — so a
+ * member who mistyped a name was stuck with it the moment the week locked. The
+ * tests below pin the three things that make the pencil worth having: it is
+ * offered only where a rename can actually happen, it does not clash an entry
+ * with itself, and a server refusal is shown NEXT TO THE FIELD rather than
+ * swallowed while the row still reads as saved.
+ */
+describe('EntrySwitcher — renaming an entry that exists', () => {
+  const withRename = (extra: Record<string, unknown> = {}) => {
+    const onRename = vi.fn().mockResolvedValue(undefined);
+    render(<EntrySwitcher
+      {...baseProps}
+      ownEntries={[e('kevin', 1), e('e2:kevin', 2, 'Kevin B')]}
+      activeEntryId="e2:kevin"
+      activeEntryIndex={2}
+      onRename={onRename}
+      {...extra}
+    />);
+    return onRename;
+  };
+
+  it('offers the pencil on the ACTIVE chip only', () => {
+    withRename();
+    expect(screen.getByTestId('rename-entry-2')).toBeTruthy();
+    // Entry #1 is not the active chip — renaming it means selecting it first,
+    // which is also the only way the sheet below could be about it.
+    expect(screen.queryByTestId('rename-entry-1')).toBeNull();
+    cleanup();
+  });
+
+  it('offers no pencil at all when no rename handler is wired', () => {
+    // The strip must keep working (switch, add) on any surface that has not
+    // wired the callable — a missing handler is not a broken pencil.
+    render(<EntrySwitcher
+      {...baseProps}
+      ownEntries={[e('kevin', 1), e('e2:kevin', 2, 'Kevin B')]}
+      activeEntryId="e2:kevin"
+      activeEntryIndex={2}
+    />);
+    expect(screen.queryByTestId('rename-entry-2')).toBeNull();
+    expect(screen.getByText('Kevin B')).toBeTruthy();
+    cleanup();
+  });
+
+  it('opens seeded with the CURRENT name and sends the index, never an id', () => {
+    const onRename = withRename();
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    const input = screen.getByLabelText('Rename this entry') as HTMLInputElement;
+    expect(input.value).toBe('Kevin B');
+    fireEvent.change(input, { target: { value: 'Kevin Deux' } });
+    fireEvent.click(screen.getByLabelText('Save entry name'));
+    // 🛑 THE INDEX, NOT THE DOCUMENT ID. The server derives the entry id from
+    // the caller's uid, so a client-supplied id would be forgeable.
+    expect(onRename).toHaveBeenCalledWith(2, 'Kevin Deux');
+    cleanup();
+  });
+
+  it('trims before sending, and refuses a blank without a round trip', () => {
+    const onRename = withRename();
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    const input = screen.getByLabelText('Rename this entry');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.click(screen.getByLabelText('Save entry name'));
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByText(/can't be blank/i)).toBeTruthy();
+    // Clearing a name is NOT what this does — the server refuses an empty one
+    // with ENTRY_NAME_EMPTY either way, so saying so here is the same answer.
+    fireEvent.change(input, { target: { value: '  Kevin Deux  ' } });
+    fireEvent.click(screen.getByLabelText('Save entry name'));
+    expect(onRename).toHaveBeenCalledWith(2, 'Kevin Deux');
+    cleanup();
+  });
+
+  it('🛑 does NOT clash the entry being renamed with ITSELF', () => {
+    // `assertEntryNameFree` excludes `target.ref.id`; the advisory check has to
+    // exclude the same entry or re-opening the pencil and saving unchanged
+    // would warn about a duplicate that does not exist.
+    const onRename = withRename();
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    fireEvent.change(screen.getByLabelText('Rename this entry'), { target: { value: 'Kevin B' } });
+    expect(screen.queryByText('You already have an entry with that name.')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Save entry name'));
+    expect(onRename).toHaveBeenCalledWith(2, 'Kevin B');
+    cleanup();
+  });
+
+  it('warns about a name ANOTHER of the member\'s entries already holds', () => {
+    withRename({ ownEntries: [e('kevin', 1, 'Kevin A'), e('e2:kevin', 2, 'Kevin B')] });
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    fireEvent.change(screen.getByLabelText('Rename this entry'), { target: { value: 'kevin a' } });
+    expect(screen.getByText('You already have an entry with that name.')).toBeTruthy();
+    cleanup();
+  });
+
+  it('shows the SERVER\'s refusal beside the field and keeps the form open', async () => {
+    // The advisory check is not the rule. When the two disagree the member has
+    // to see the server's answer, and the field has to stay editable — a toast
+    // that vanishes over a closed form reads as "saved".
+    const onRename = vi.fn().mockRejectedValue(
+      Object.assign(new Error('ENTRY_NAME_TAKEN: you already have an entry named "Kevin B".'),
+        { code: 'functions/already-exists' }));
+    render(<EntrySwitcher
+      {...baseProps}
+      ownEntries={[e('kevin', 1), e('e2:kevin', 2, 'Kevin B')]}
+      activeEntryId="e2:kevin"
+      activeEntryIndex={2}
+      onRename={onRename}
+    />);
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    fireEvent.change(screen.getByLabelText('Rename this entry'), { target: { value: 'Something' } });
+    fireEvent.click(screen.getByLabelText('Save entry name'));
+    expect(await screen.findByText(/already have an entry with that name/i)).toBeTruthy();
+    expect(screen.getByLabelText('Rename this entry')).toBeTruthy();
+    cleanup();
+  });
+
+  it('truncates to the server\'s limit, same as the draft field', () => {
+    withRename();
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    const input = screen.getByLabelText('Rename this entry') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'x'.repeat(60) } });
+    expect(input.value).toHaveLength(30);   // ENTRY_NAME_MAX
+    cleanup();
+  });
+
+  it('closes the rename form when the member switches entries or starts a draft', () => {
+    // Otherwise the form would sit under a chip strip that is now about a
+    // different entry, still pointed at the old index.
+    withRename();
+    fireEvent.click(screen.getByTestId('rename-entry-2'));
+    expect(screen.getByTestId('rename-entry-form')).toBeTruthy();
+    fireEvent.click(screen.getByText('Entry 1'));   // entry #1's chip (unnamed → the index label)
+    expect(screen.queryByTestId('rename-entry-form')).toBeNull();
+    cleanup();
+  });
+});
+
+/**
  * PLAN-MULTI-ENTRY T6a — what a ROW is called.
  *
  * The failure this prevents is not a crash: it is two identical "Kevin Struck"
