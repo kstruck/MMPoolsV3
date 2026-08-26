@@ -124,12 +124,19 @@ export type SubmitNFLPicksInput = z.infer<typeof submitNFLPicksSchema>;
  * wrong entry. `entryName` is required and non-empty — clearing a name back to
  * "use my player name" is deliberately NOT offered (`assertEntryNameFree`
  * refuses a blank with ENTRY_NAME_EMPTY either way).
+ *
+ * ⚠️ NO `requestId`, unlike `submitNFLPicks`. There it keys the resubmit
+ * idempotency latch (`lastRequestId` on the entry doc); here there is nothing
+ * to latch — the write is `entryName = X`, so a retried call lands the same
+ * value — and accepting the key on a strict schema without honouring it would
+ * advertise an idempotency guarantee the handler does not implement. The
+ * `_correlationId` the client attaches is stripped by `validated()` before this
+ * schema ever sees it, so tracing is unaffected.
  */
 export const renameNFLEntrySchema = z.strictObject({
     poolId,
     entryIndex: z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP),
     entryName: z.string().trim().min(1).max(ENTRY_NAME_MAX),
-    requestId: nullish(z.string().max(200)),
 });
 
 export type RenameNFLEntryInput = z.infer<typeof renameNFLEntrySchema>;

@@ -64,6 +64,17 @@ export async function renameNFLEntryInternal(
   let renamedId = '';
   let renamedName = '';
 
+  // ⚠️ NO SCORING LEASE, DELIBERATELY (`assertNoScoringInProgress`, which
+  // `submitNFLPicksInternal` takes). A submit needs it because it changes what
+  // the scorer is mid-way through reading; a rename changes no input to
+  // scoring. The two orderings both end correctly on their own:
+  //   - scorer commits first  → this transaction's reads (the entry doc and
+  //     `standings/current`) are stale, Firestore aborts and retries us, and we
+  //     patch the freshly published rows.
+  //   - rename commits first  → the scorer republishes `rows` from the entry
+  //     documents, which now carry the new name, so the projection self-heals.
+  // Nothing here writes the pool document, so the scoring FENCE
+  // (`checkFence`, which reads only the pool doc) is never disturbed.
   await db.runTransaction(async (transaction) => {
     // ---- READS (Firestore requires all reads before any write) ----
     const poolSnap = await transaction.get(poolRef);
@@ -191,7 +202,6 @@ export const renameNFLEntry = validated(
         // there must never be one — the entry id is derived from this value.
         subjectUid: request.auth!.uid,
         subjectName: token?.name,
-        requestId: input.requestId ?? undefined,
       },
       { poolId: input.poolId, entryIndex: input.entryIndex, entryName: input.entryName },
     );
