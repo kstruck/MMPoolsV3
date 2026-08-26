@@ -1212,6 +1212,16 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                             : prev)}
                           onCancelDraft={() => setEntryDraft(null)}
                           isWeekLocked={isWeekLocked}
+                          /*
+                            Rename an entry that EXISTS. Rejections propagate on
+                            purpose — EntrySwitcher renders the server's own
+                            refusal (ENTRY_NAME_TAKEN) beside the input rather
+                            than a toast that leaves the field looking saved.
+                            No local state to update: the entries subscription
+                            delivers the new name a beat later, same as a submit.
+                          */
+                          onRename={(entryIndex, entryName) =>
+                            dbService.renameNFLEntry(pool.id, entryIndex, entryName)}
                         />
 
                         {pool.type === 'NFL_PICKEM' && (

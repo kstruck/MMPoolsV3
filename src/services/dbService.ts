@@ -1852,6 +1852,29 @@ export const dbService = {
         }
     },
 
+    /**
+     * Rename an entry that ALREADY EXISTS (PLAN-MULTI-ENTRY K5 follow-up).
+     *
+     * Deliberately not `submitNFLPicks` with a name and no picks: that path is
+     * a pick submission — it carries the lock gates, fee liability and the
+     * paid-reset — and on Survivor/Margin it refuses a payload with no team, so
+     * a rename through it is impossible once a week has locked. The server
+     * derives the entry id from the caller's uid + `entryIndex`; the client
+     * never sends an id.
+     */
+    renameNFLEntry: async (poolId: string, entryIndex: number, entryName: string): Promise<void> => {
+        try {
+            const renameNFLEntryFn = httpsCallable(functions, 'renameNFLEntry');
+            await renameNFLEntryFn(withCorrelationId({ poolId, entryIndex, entryName }));
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'renameNFLEntry', poolId, entryIndex }
+            });
+            throw error;
+        }
+    },
+
     executeSurvivorRebuy: async (poolId: string, week: number, entryIndex?: number): Promise<void> => {
         try {
             const executeSurvivorRebuyFn = httpsCallable(functions, 'executeSurvivorRebuy');

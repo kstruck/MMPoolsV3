@@ -56,6 +56,13 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     ENTRY_NAME_EMPTY: "An entry name can't be blank. Type a name for this entry and save again.",
     MAX_ENTRIES_REACHED: "You already hold every entry this pool allows you. Ask the commissioner to raise the limit if you want another.",
     ENTRY_INDEX_EXCEEDS_MAX: "This pool doesn't allow that many entries per player. Ask the commissioner to raise the limit.",
+    // `renameNFLEntry`. A rename NEVER creates an entry, so a request for one
+    // that does not exist is refused rather than quietly satisfied — which a
+    // client whose entry list is a few seconds stale can produce. Without this
+    // prefix it renders as the generic not-found copy, which reads as "the pool
+    // is gone" about a pool the member is looking at.
+    ENTRY_NOT_FOUND: "That entry doesn't exist yet — an entry is created by its first saved pick. Refresh the page and try again.",
+    NOT_AN_NFL_POOL: 'Entries can only be renamed in NFL pools.',
 };
 
 const AUTH_MESSAGES: Record<string, string> = {
