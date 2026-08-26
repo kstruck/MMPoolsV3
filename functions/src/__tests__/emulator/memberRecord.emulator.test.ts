@@ -855,7 +855,7 @@ describe('coManagers — a departed member is dropped from the array (PLAN-CO-CO
  * that writes the summary and not the map is un-paid by the next writer.
  */
 /** The shape `reconcilePaymentTruth` returns — named so these tests need no `any`. */
-type ReconcileResult = { ok: boolean; membersPromoted: number; ambiguousSkipped: number; alreadyConsistent: number };
+type ReconcileResult = { ok: boolean; membersPromoted: number; ambiguousSkipped: number; alreadyConsistent: number; entriesPaidNotLiable: number };
 
 describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
   const poolId = 'p2-dues-pool';
@@ -1050,6 +1050,50 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
     const dues = (await db.collection('pools').doc(poolId)
       .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
     expect(dues.dm1.method).toBe('venmo');
+  });
+
+  it('🛑 a STALE fully-paid summary is repaired, not filed as consistent', async () => {
+    // The idempotence gate keys on 'this entry is already in the dues map'.
+    // That is only a reason to skip while the map still DERIVES to UNPAID. If
+    // every liable entry has a valid row, the stored UNPAID is stale and the
+    // member must be promoted — skipping it leaves them unpaid forever and
+    // prints `alreadyConsistent`, which is a false statement about money
+    // (codex r8).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 }, 'e2:dm1': { paidAt: 2 } },   // BOTH liable entries paid
+    });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.membersPromoted).toBe(1);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get())
+      .data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('PAID');
+  });
+
+  it('🛑 refuses to record money against an entry that never PICKED', async () => {
+    // Liability is 'this entry has committed a pick'. `setPaidStatus` refuses a
+    // non-liable id with ENTRY_NOT_FOUND, so a dues row and a MARKED_PAID event
+    // here would put a payment on the participant-readable ledger that the
+    // authoritative path would have rejected — and it could never make the
+    // member paid, because derivePaidStatus only consults liable ids (codex r8).
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' } },                    // liable, unpaid
+      { id: 'e2:dm1', picks: {}, paidStatus: 'PAID' },       // PAID but NEVER PICKED
+    ] });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.entriesPaidNotLiable).toBe(1);
+    expect(r.membersPromoted).toBe(0);
+    // No dues row, and no money event.
+    const duesDoc = await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get();
+    expect(duesDoc.exists).toBe(false);
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(0);
   });
 
   it('DRY RUN still writes nothing at all, dues document included', async () => {

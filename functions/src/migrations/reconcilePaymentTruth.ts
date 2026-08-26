@@ -103,6 +103,14 @@ export const reconcilePaymentTruth = validated(
      *  never auto-promoted (codex r4). Only members with ZERO ledger history —
      *  whose only-ever write path was the Bento entry write — are promoted. */
     ambiguousSkipped: 0,
+    /** entry PAID + member UNPAID, but the entry NEVER COMMITTED A PICK — so it
+     *  is not in `liableEntryIds` and `setPaidStatus` refuses the same id with
+     *  ENTRY_NOT_FOUND. Recording a dues row and a MARKED_PAID event for it
+     *  would put a payment on the participant-readable ledger that the
+     *  authoritative path would have rejected, and it could never make the
+     *  member paid, because the derivation only consults liable ids. Reported
+     *  for the operator, never written (codex r8). */
+    entriesPaidNotLiable: 0,
     /** Sim-harness pools + hand-flagged isTestPool pools. Unconditional. */
     testPoolsSkipped: 0,
     /** Pools whose type keeps payment on the entry itself — nothing to reconcile. */
@@ -110,11 +118,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
@@ -199,6 +207,30 @@ export const reconcilePaymentTruth = validated(
           .map((p) => p.uid)
           .filter(Boolean),
       );
+      // The owners' PICKED entry ids, built once per pool from the same
+      // documents `getPoolDues` uses. Needed by the idempotence gate below: "is
+      // this entry already in the dues map" is only a reason to skip if the
+      // member's STORED summary already equals what the map DERIVES. Without
+      // this the gate reports `alreadyConsistent` for a member whose every
+      // liable entry is paid while their record still says UNPAID — a real
+      // stale summary, skipped, and a dishonest report line (codex r8).
+      const pickedByOwner = new Map<string, string[]>();
+      for (const e of entriesSnap.docs) {
+        const ed = e.data() as Record<string, unknown>;
+        if (!entryHasPick(ed)) continue;
+        const owner = typeof ed.ownerUid === 'string' ? ed.ownerUid : e.id;
+        pickedByOwner.set(owner, [...(pickedByOwner.get(owner) ?? []), e.id]);
+      }
+      /** The dues map exactly as `derivePaidStatus` would see it, per uid. */
+      const duesMapByUid = new Map<string, PaidEntryMap>();
+      for (const d of duesSnap.docs) {
+        if (!d.id.startsWith(DUES_PREFIX)) continue;
+        const duesUid = d.id.slice(DUES_PREFIX.length);
+        const map = d.get('paidEntries');
+        if (duesUid && map && typeof map === 'object' && !Array.isArray(map)) {
+          duesMapByUid.set(duesUid, map as PaidEntryMap);
+        }
+      }
       let changedThisPool = 0;
 
       for (const entryDoc of entriesSnap.docs) {
@@ -228,9 +260,25 @@ export const reconcilePaymentTruth = validated(
           // is reconciled: the member is UNPAID only because their OTHER liable
           // entries have not been paid, which is the correct derived answer and
           // not a disagreement to fix.
+          //
+          // ⚠️ AND ONLY WHEN THE SUMMARY IS NOT STALE (codex r8). Presence in
+          // the map is not on its own a reason to skip: if EVERY liable entry
+          // now has a valid row, the derived status is `PAID` and the stored
+          // `UNPAID` is stale — a real divergence, which must fall through to
+          // the promotion below rather than be counted as consistent.
           if (paidEntryIdsByUid.get(uid)?.has(entryDoc.id)) {
-            report.alreadyConsistent++;
-            continue;
+            const liableNow = liableEntryIds(
+              member as MemberRecord, uid, pickedByOwner.get(uid) ?? []);
+            const derivedNow = derivePaidStatus(
+              { ...(member as MemberRecord), paidEntries: duesMapByUid.get(uid) ?? {} },
+              liableNow,
+            );
+            if (derivedNow !== 'PAID') {
+              // Partially paid, and the record agrees. Nothing to reconcile.
+              report.alreadyConsistent++;
+              continue;
+            }
+            // else: fall through — the map says paid in full, the record does not.
           }
           if (uidsWithLedgerHistory.has(uid)) {
             // A pre-P1 un-mark through the roster toggle leaves exactly this
@@ -293,7 +341,39 @@ export const reconcilePaymentTruth = validated(
               // Before T7 this race was unreachable: the concurrent write set
               // the member to `PAID`, and `fm?.paidStatus === 'PAID'` caught it.
               // Deriving the summary is what re-opened it.
-              if (storedDues && isPaidRow(storedDues, entryDoc.id)) return false;
+              // The owner's picked entries — the same input `ownerStateAfter`
+              // hands the submit path, rebuilt here from the documents this
+              // transaction just read. The legacy `entries/{uid}` doc can carry
+              // no `ownerUid` and so miss the query; it IS this entry when the
+              // ids match, so it is folded in.
+              const pickedIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
+              if (entryDoc.id === uid && !pickedIds.includes(uid) && entryHasPick(fe)) pickedIds.push(uid);
+              const liable = liableEntryIds(fm as MemberRecord, uid, pickedIds);
+
+              // 🛑 NEVER RECORD MONEY AGAINST A NON-LIABLE ENTRY (codex r8, P2).
+              //
+              // Liability is "this entry has committed a pick". A legacy entry
+              // marked PAID that never picked is NOT in `liable`, and
+              // `setPaidStatus` refuses that exact id with `ENTRY_NOT_FOUND`.
+              // Writing a dues row and a MARKED_PAID event for it would put a
+              // payment on the ledger that the authoritative path would have
+              // rejected — and it cannot help, because `derivePaidStatus` only
+              // ever consults the liable ids, so the row could never make the
+              // member paid. Reported, not written.
+              if (!liable.includes(entryDoc.id)) return 'NOT_LIABLE';
+
+              // The race guard, staleness-aware for the same reason the page
+              // gate is (codex r7 for the guard, r8 for the staleness limb): a
+              // dues row written between the page read and here means the
+              // payment is already recorded, so re-recording it would append a
+              // SECOND MARKED_PAID for one payment. But if that row completed
+              // the member's liability, the summary is stale and the write
+              // below is exactly what should happen — so only bail when the
+              // derivation still says UNPAID.
+              if (storedDues && isPaidRow(storedDues, entryDoc.id)
+                  && derivePaidStatus({ ...(fm as MemberRecord), paidEntries: storedDues }, liable) !== 'PAID') {
+                return false;
+              }
 
               // The entry that triggered this is marked paid; everything the
               // member already had is kept. The legacy shape (no dues document)
@@ -305,14 +385,6 @@ export const reconcilePaymentTruth = validated(
                 ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod ? { method: fe.paymentMethod } : {}),
                 ...(typeof fe.paymentNote === 'string' && fe.paymentNote ? { note: fe.paymentNote.slice(0, 500) } : {}),
               };
-              // The owner's picked entries — the same input `ownerStateAfter`
-              // hands the submit path, rebuilt here from the documents this
-              // transaction just read. The legacy `entries/{uid}` doc can carry
-              // no `ownerUid` and so miss the query; it IS this entry when the
-              // ids match, so it is folded in.
-              const pickedIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
-              if (entryDoc.id === uid && !pickedIds.includes(uid) && entryHasPick(fe)) pickedIds.push(uid);
-              const liable = liableEntryIds(fm as MemberRecord, uid, pickedIds);
               const derived = derivePaidStatus({ ...(fm as MemberRecord), paidEntries: nextDues }, liable);
               // Same field conventions as setPaidStatus's authoritative PAID write.
               const stampedPaidAt = typeof fe.paidAt === 'number' ? fe.paidAt : Date.now();
@@ -360,7 +432,15 @@ export const reconcilePaymentTruth = validated(
               writePoolDues(tx, doc.ref, poolId, uid, nextDues, Date.now());
               return true;
             });
-            if (acted) { report.membersPromoted++; changedThisPool++; }
+            if (acted === 'NOT_LIABLE') {
+              // A PAID entry that never committed a pick. `setPaidStatus`
+              // refuses this id, and a dues row for it could never make the
+              // member paid, so there is nothing to reconcile — but it IS a
+              // divergence an operator should see, so it is reported rather
+              // than folded into `alreadyConsistent` (codex r8).
+              report.entriesPaidNotLiable++;
+              notedFix(poolId, uid, 'NOT_LIABLE_SKIPPED');
+            } else if (acted) { report.membersPromoted++; changedThisPool++; }
             else report.alreadyConsistent++; // raced with a live setPaidStatus
           } else {
             report.membersPromoted++;
