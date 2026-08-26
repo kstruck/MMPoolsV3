@@ -4,6 +4,7 @@ import ftest from 'firebase-functions-test';
 import { createNFLPool, executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal, scoreNFLWeekInternal } from '../../nflPools';
 import { renameNFLEntryInternal } from '../../nflEntryRename';
 import { deleteNFLEntryInternal } from '../../nflEntryDelete';
+import { getPoolDuesInternal } from '../../nflPoolDues';
 import { proxyPick } from '../../poolExceptions';
 import { setPaidStatus } from '../../setPaidStatus';
 import { updatePoolSettings } from '../../poolOps';
@@ -1560,5 +1561,145 @@ describe('deleteNFLEntry — the first path that lowers a one-way counter', () =
     // Derived from the Member Records (host 0 + alice 1-after + bob 1) rather
     // than incremented from a field that is not there.
     expect((await pool()).entryCount).toBe(2);
+  }, 60000);
+});
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T5 — `getPoolDues`.
+ *
+ * The dues store is sealed to every client by `firestore.rules`, so this
+ * callable is the ONLY way the commissioner ledger can see per-entry payments.
+ * Which makes it the only thing standing between that data and everyone else.
+ */
+describe('getPoolDues — the only door into the sealed dues store', () => {
+  beforeEach(async () => {
+    for (const uid of [HOST, ALICE, BOB]) await db.collection('users').doc(uid).set({ name: uid });
+    await db.collection('nfl_games').doc(G1).set({
+      id: G1, espnGameId: G1, season: SEASON, seasonType: 1, week: 1,
+      startTime: Date.now() + 4 * HOUR, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true },
+    });
+  });
+
+  const get = (actor: string, verifiedSuperAdmin = false) =>
+    getPoolDuesInternal(db, { actorUid: actor, verifiedSuperAdmin }, { poolId: POOL });
+
+  it('returns every member per-entry map, keyed by uid', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await submit(BOB, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}`, paymentMethod: 'cash' }, auth: auth(HOST) } as never);
+    await wPaid({ data: { poolId: POOL, memberUid: BOB, isPaid: true }, auth: auth(HOST) } as never);
+
+    const { dues } = await get(HOST);
+    expect(Object.keys(dues).sort()).toEqual([ALICE, BOB].sort());
+    expect(Object.keys(dues[ALICE])).toEqual([`e2:${ALICE}`]);
+    expect(dues[ALICE][`e2:${ALICE}`].method).toBe('cash');
+    expect(Object.keys(dues[BOB])).toEqual([BOB]);
+    // A member with no dues record is ABSENT, not an empty map — the caller
+    // must not be able to confuse "nothing recorded" with "nothing paid".
+    expect(HOST in dues).toBe(false);
+  }, 60000);
+
+  it('AUTHORIZATION: refuses a participant, a stranger, and a member reading their own pool', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+
+    await expect(get(ALICE)).rejects.toThrow(/Only the commissioner/);
+    await expect(get(BOB)).rejects.toThrow(/Only the commissioner/);
+    await expect(get('me-stranger')).rejects.toThrow(/Only the commissioner/);
+  }, 60000);
+
+  it('🛑 NEVER returns the pool PASSWORD record that lives in the same subcollection', async () => {
+    // `private/` holds `access` — a PBKDF2 hash — alongside the dues documents.
+    // This callable reads that collection with admin credentials, so one loose
+    // spread here would hand credential material to the client.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+    await poolRef().collection('private').doc('access').set({
+      passwordHash: 'deadbeef:cafebabe', updatedAt: 1,
+    });
+
+    const { dues } = await get(HOST);
+    expect(Object.keys(dues)).toEqual([ALICE]);              // the password doc is not a member
+    expect('access' in dues).toBe(false);
+    const blob = JSON.stringify(dues);
+    expect(blob).not.toContain('deadbeef');                  // ...and its contents are nowhere
+    expect(blob).not.toContain('passwordHash');
+  }, 60000);
+
+  it('🛑 returns ONLY paidEntries — a new field on the dues document does not ride along', async () => {
+    // Precaution 2 in the callable: the document is never spread. If someone
+    // later stores something sensitive beside the map, it must not become part
+    // of this response by default.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+    await poolRef().collection('private').doc(`dues__${ALICE}`).set({
+      internalNote: 'SHOULD-NOT-LEAK', auditTrail: ['SHOULD-NOT-LEAK-EITHER'],
+    }, { merge: true });
+
+    const { dues } = await get(HOST);
+    expect(Object.keys(dues[ALICE])).toEqual([ALICE]);       // still just the map
+    expect(JSON.stringify(dues)).not.toContain('SHOULD-NOT-LEAK');
+  }, 60000);
+
+  it('a doc whose id lacks the dues__ prefix is skipped entirely', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+    // A future private doc that happens to carry a paidEntries-shaped field.
+    await poolRef().collection('private').doc('somethingElse').set({
+      paidEntries: { 'forged:id': { paidAt: 1 } },
+    });
+
+    const { dues } = await get(HOST);
+    expect(Object.keys(dues)).toEqual([ALICE]);
+    expect(JSON.stringify(dues)).not.toContain('forged:id');
+  }, 60000);
+
+  it('a SUPER_ADMIN claim alone is NOT enough — only a VERIFIED one gets in', async () => {
+    // A demoted-but-unrefreshed token keeps its old role claim until it expires,
+    // and this callable returns every member's map. The wrapper proves the claim
+    // against users/{uid}.role before setting `verifiedSuperAdmin`; the internal
+    // never sees a raw claim.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
+
+    await expect(get('me-stale-admin', false)).rejects.toThrow(/Only the commissioner/);
+    await expect(get('me-real-admin', true)).resolves.toMatchObject({ dues: expect.any(Object) });
+  }, 60000);
+
+  it('refuses a non-NFL pool', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await poolRef().set({ type: 'SQUARES' }, { merge: true });
+    await expect(get(HOST)).rejects.toThrow(/NOT_AN_NFL_POOL/);
+  }, 60000);
+
+  it('finds a dues doc whose uid sorts ABOVE the old \uf8ff sentinel', async () => {
+    // The conventional Firebase prefix bound is `prefix + \uf8ff`, and it is
+    // WRONG: U+F8FF tops a private-use block, not Unicode. A uid starting above
+    // it sorts past that bound and is silently skipped -- and the failure is in
+    // the quiet direction, so the member's payments just never appear and the
+    // commissioner re-collects dues already paid.
+    await seedPool({ max: 2, entryCount: 2 });
+    const HIGH_UID = '\u{1F600}payer';                 // an emoji, far above U+F8FF
+    await poolRef().collection('private').doc(`dues__${HIGH_UID}`).set({
+      uid: HIGH_UID, poolId: POOL, paidEntries: { [HIGH_UID]: { paidAt: 1 } }, updatedAt: 1,
+    });
+
+    const { dues } = await get(HOST);
+    expect(HIGH_UID in dues).toBe(true);
+    expect(Object.keys(dues[HIGH_UID])).toEqual([HIGH_UID]);
+  }, 60000);
+
+  it('refuses a pool that does not exist, rather than returning an empty map', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await expect(getPoolDuesInternal(db, { actorUid: HOST }, { poolId: 'no-such-pool' }))
+      .rejects.toThrow(/Pool not found/);
   }, 60000);
 });

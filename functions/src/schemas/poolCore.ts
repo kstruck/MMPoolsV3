@@ -161,3 +161,13 @@ export const deleteNFLEntrySchema = z.strictObject({
 });
 
 export type DeleteNFLEntryInput = z.infer<typeof deleteNFLEntrySchema>;
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T5 — the commissioner reads the per-entry payment
+ * map. Pool-scoped and nothing else: the response covers EVERY member, because
+ * the ledger renders the whole roster, and narrowing it per uid would mean one
+ * round trip per member for a screen that always wants all of them.
+ */
+export const getPoolDuesSchema = z.strictObject({ poolId });
+
+export type GetPoolDuesInput = z.infer<typeof getPoolDuesSchema>;

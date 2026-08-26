@@ -63,6 +63,7 @@ export { overrideLockedSpread, nflFrozenSpreadTrigger } from "./nflSpreadOverrid
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
 export { renameNFLEntry } from "./nflEntryRename";
 export { deleteNFLEntry } from "./nflEntryDelete";
+export { getPoolDues } from "./nflPoolDues";
 export { getPoolPicks } from "./nflPickReveal";
 // Operator loop (PLAN-NFL-PRESEASON-PILOT A3a): hourly pre-kickoff tripwire that
 // pages ops when a week's spreads aren't all locked. Kill-switch + dry-run gated.
