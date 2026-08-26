@@ -477,6 +477,30 @@ describe('DUES D1/D1b — derivePaidStatus, where PRESENCE is the paid signal', 
     )).toBe('PAID');
   });
 
+  it('a RESERVED `__proto__` id is dropped, not assigned through (codex r5 on T2)', () => {
+    // MUST catch: `map['__proto__'] = row` on an ordinary object sets the
+    // PROTOTYPE instead of creating a key, so the row lands nowhere while a
+    // caller that already decided a transition happened ledgers a payment.
+    const victim: Record<string, unknown> = {};
+    victim['__proto__'] = { paidAt: NOW };
+    expect(Object.prototype.hasOwnProperty.call(victim, '__proto__')).toBe(false);  // the trap is real
+
+    // Dropped from the liable set entirely, which fails toward UNPAID.
+    expect(liableEntryIds({ role: 'PARTICIPANT' }, 'u1', ['__proto__', 'u1'])).toEqual(['u1']);
+    expect(derivePaidStatus(
+      { role: 'PARTICIPANT', paidEntries: { 'u1': {} } }, ['__proto__', 'u1'],
+    )).toBe('PAID');   // only the real row is owed, and it is paid
+    // ...and a member whose ONLY id is reserved is liable for nothing derivable.
+    expect(derivePaidStatus({ role: 'PARTICIPANT' }, ['__proto__'])).toBe('UNPAID');
+    // Every reserved shape, not just this one.
+    for (const id of ['__proto__', '__name__', '__id__']) {
+      expect(liableEntryIds({ role: 'MANAGER', playableEntryCount: 1 }, 'u1', [id])).toEqual(['u1']);
+    }
+    // MUST NOT catch: a real id with underscores is untouched.
+    expect(liableEntryIds({ role: 'PARTICIPANT' }, 'u1', ['e2:my_uid_'])).toEqual(['e2:my_uid_']);
+    expect(liableEntryIds({ role: 'PARTICIPANT' }, 'u1', ['__notclosed'])).toEqual(['__notclosed']);
+  });
+
   it('GUARD THE GUARD: an inherited Object.prototype key is NOT presence', () => {
     // MUST catch: `'constructor' in {}` is true, so an `in` check would report
     // PAID against a map that never mentioned the id. hasOwnProperty does not.

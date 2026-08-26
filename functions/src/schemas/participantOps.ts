@@ -42,6 +42,12 @@ export const setPaidStatusSchema = z
         // finally gives `rebuyPaid` a writer. true settles ALL currently-owed
         // rebuy dues (rebuyPaid := rebuyOwed); false reverses to 0.
         settleRebuys: z.boolean().optional(),
+        // PLAN-MULTI-ENTRY-DUES P2-T2 — WHICH entry this mark settles. Absent =
+        // the whole member, i.e. today's behaviour, which every existing caller
+        // still gets. Rides with EITHER authoritative mark: D2 has the
+        // commissioner un-mark a paid entry before deleting it, so `isPaid:
+        // false` with an entryId is a required flow, not an edge case.
+        entryId: z.string().trim().min(1).max(200).optional(),
         paymentMethod: z.string().trim().min(1).max(40).optional(),
         paidAt: z.number().finite().nullable().optional(),
         paymentNote: z.string().max(500).nullable().optional(),
@@ -59,6 +65,15 @@ export const setPaidStatusSchema = z
     .refine((o) => o.isPaid === true
         || (o.paymentMethod === undefined && o.paidAt === undefined && o.paymentNote === undefined), {
         message: "payment details are only valid with the authoritative isPaid: true mark",
+    })
+    // `entryId` is a TARGET, not a payment detail, so it rides with isPaid true
+    // OR false — but never with a member self-report or a rebuy settlement.
+    // A `claim` names no entry (the honor-system flag is per member), and
+    // settleRebuys settles a member-level sum (D7b: rebuys are NOT per entry).
+    // Letting it through either would write a per-entry money key from a path
+    // that has no per-entry meaning.
+    .refine((o) => o.entryId === undefined || o.isPaid !== undefined, {
+        message: "entryId is only valid with the authoritative isPaid mark",
     });
 
 export type CreateClaimCodeInput = z.infer<typeof createClaimCodeSchema>;

@@ -98,27 +98,33 @@ export interface MemberRecord {
    * gains entry #1 the first time its owner submits under multi-entry.
    */
   entries?: Record<string, { entryIndex: number; name?: string }>;
-  /**
-   * PLAN-MULTI-ENTRY-DUES D1 — which of this member's entries have been PAID
-   * for, keyed by entry id (`entryIdFor`).
-   *
-   * 🛑 PRESENCE IS THE PAID SIGNAL. There is deliberately **no `paid: boolean`**
-   * (D1b): an id present in this map is paid, absent is not. Un-marking DELETES
-   * the key — never `{paid: false}` and never `{}`. With a boolean, `{paid:false}`
-   * and an absent key would be two spellings of one fact and every reader would
-   * have to handle both; an `{}` value with no boolean would read as PAID, which
-   * is the failure a boolean is meant to prevent and does not.
-   *
-   * ⚠️ ABSENT on every record written before this ticket. `undefined` means "no
-   * per-entry detail recorded" — NOT "nothing is paid". Readers fall back to
-   * `paidStatus`, which is still the stored summary. Same unknown-is-not-false
-   * discipline as `hasPlayableEntry` and `pickedWeeks` above.
-   *
-   * ⚠️ Entry ids contain `:` (`e2:uid`), so a nested delete needs
-   * `new FieldPath('paidEntries', entryId)` rather than a dotted string path.
-   */
-  paidEntries?: Record<string, { paidAt?: number; method?: string; note?: string }>;
 }
+
+/**
+ * PLAN-MULTI-ENTRY-DUES D1 (AMENDED 2026-08-26) — which of a member's entries
+ * have been PAID for, keyed by entry id.
+ *
+ * 🛑 THIS IS NOT A FIELD ON `MemberRecord`, AND THE ORIGINAL SIGNED PLAN SAID IT
+ * SHOULD BE. The keys name entries that have committed a pick, and a Member
+ * Record is readable by every participant in the pool — so the map told the
+ * whole pool which of another player's entries was live, the exact bit the
+ * `entries` field above refuses to persist. It lives in the closed
+ * `pools/{poolId}/private/dues__{uid}` document instead; see
+ * `functions/src/lib/poolDues.ts`. The summary `paidStatus` DID NOT MOVE.
+ *
+ * 🛑 PRESENCE IS THE PAID SIGNAL. There is deliberately **no `paid: boolean`**
+ * (D1b): an id present is paid, absent is not. Un-marking DELETES the key —
+ * never `{paid: false}` and never `{}`. With a boolean, `{paid:false}` and an
+ * absent key would be two spellings of one fact and every reader would have to
+ * handle both; an `{}` value with no boolean would read as PAID, which is the
+ * failure a boolean is meant to prevent and does not.
+ *
+ * ⚠️ ABSENT for every member who predates this ticket. That means "no per-entry
+ * detail recorded", NOT "nothing is paid" — readers fall back to the stored
+ * `paidStatus`, which is why it stays on the Member Record. Same
+ * unknown-is-not-false discipline as `hasPlayableEntry` and `pickedWeeks`.
+ */
+export type PaidEntryMap = Record<string, { paidAt?: number; method?: string; note?: string }>;
 
 /**
  * How many entries this member is LIABLE for — the multiplier on the entry
@@ -193,7 +199,11 @@ export function liableEntryIds(
 ): string[] {
   const picked = sanitizeEntryIds(pickedEntryIds).sort();
   if (picked.length > 0) return picked;
-  return memberLiableEntries(m) > 0 ? [uid] : [];
+  // The synthetic fallback goes through the SAME filter (codex, final round on
+  // T2). It is built from `uid`, which this function does not get to choose, so
+  // a reserved uid would otherwise walk straight past the sanitizer that every
+  // supplied id is held to.
+  return memberLiableEntries(m) > 0 ? sanitizeEntryIds([uid]) : [];
 }
 
 /**
@@ -216,8 +226,26 @@ export function liableEntryIds(
  * for money, and never a false PAID.
  */
 function sanitizeEntryIds(ids: readonly string[]): string[] {
-  return [...new Set(ids)].filter(id => typeof id === 'string' && id.length > 0);
+  return [...new Set(ids)].filter(id => typeof id === 'string' && id.length > 0 && !RESERVED_ID.test(id));
 }
+
+/**
+ * Firestore's reserved id shape, `__anything__`.
+ *
+ * ⚠️ `__proto__` IS THE ONE THAT MATTERS, and it is a money bug rather than a
+ * tidiness rule. `map[id] = row` with `id === '__proto__'` invokes the inherited
+ * setter and sets the object's PROTOTYPE instead of creating an own key — so the
+ * row is written nowhere, `hasOwnProperty` then reports the entry unpaid, and a
+ * caller that already decided a transition happened appends a MARKED_PAID
+ * ledger event for it. Money recorded as collected against a member who still
+ * reads as owing it.
+ *
+ * Dropping such an id shrinks the liable set, which fails toward UNPAID — and
+ * Firestore rejects `__.*__` as a document id anyway, so no legitimate entry can
+ * ever carry one. Both halves point the same way, which is why this is a filter
+ * and not an error.
+ */
+const RESERVED_ID = /^__.*__$/;
 
 /**
  * Is `id` marked paid in this map? Presence of a WELL-FORMED row (D1b).
@@ -234,7 +262,7 @@ function sanitizeEntryIds(ids: readonly string[]): string[] {
  * forbids; reading that as PAID would report money collected that was just
  * disclaimed. Malformed money data fails closed.
  */
-function isPaidRow(paid: Record<string, unknown>, id: string): boolean {
+function isPaidRow(paid: PaidEntryMap, id: string): boolean {
   if (!Object.prototype.hasOwnProperty.call(paid, id)) return false;
   const row = paid[id];
   if (typeof row !== 'object' || row === null) return false;
@@ -270,7 +298,8 @@ function isPaidRow(paid: Record<string, unknown>, id: string): boolean {
  * collide, which is the argument for the cheap check rather than against it.
  */
 export function derivePaidStatus(
-  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount' | 'paidEntries'>,
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount'>
+     & { paidEntries?: PaidEntryMap },
   liable: readonly string[],
 ): 'PAID' | 'UNPAID' {
   // Sanitized HERE, not trusted from the caller — see `sanitizeEntryIds`.

@@ -233,11 +233,75 @@ is PASSED to the member write; it is COMPUTED at `:690` for pick'em, off
 
 ---
 
+## Round 7 — the D1 AMENDMENT (Kevin's option-B ruling), before any code
+
+Scoped to the 2026-08-26 amendment text and the sections moved with it.
+
+| # | Question | Verdict |
+|---|---|---|
+| **1** | Does `firestore.rules` ALREADY close `pools/{poolId}/private/{docId}` to every principal, so "no rules change required" is true? | **CLEAN** — `firestore.rules:529` is `allow read: if false; allow write: if false`, no SUPER_ADMIN exception, and no recursive `{document=**}` exists anywhere under `/pools/`. |
+| **2** | Can `dues__{uid}` collide with `private/access`? | **CLEAN** — even a uid of `access` yields `dues__access`. |
+| **3** | Is D7a's serialisation guarantee intact now that writers touch two documents? | **CLEAN** — `paidStatus` stays on the Member Record, so `members/{uid}` is still read AND written by both transactions. The dues doc is a second shared document, which can only make a conflict easier to detect. |
+| **4** | Any section still asserting the old location? | **FINDING, 3 sites — ACCEPTED** — §0c's supersession table, D1's surviving "money truth in ONE document" sentence, and D1a's writer row 1. All three rewritten. |
+| **5** | Is the split-truth invariant fully assigned? | **FINDING — ACCEPTED** — `reconcilePaymentTruth` had no owning ticket (now T7's, explicitly), and T3/T4 did not name the dues document in their transaction. Both fixed. |
+
+✅ **And a fact worth recording rather than assuming**: the relocation needs NO
+data migration. `git grep -n paidEntries origin/main -- functions/src src shared`
+shows T1 (#601) shipped the field as a type declaration plus a pure read with
+**no writer anywhere** — the only writer was this PR, unmerged. Not one
+production Member Record carries it. Had T2 merged first, this would have been a
+migration instead of an edit.
+
+---
+
+## Round 8 — the RELOCATION code
+
+| # | Finding | Verdict |
+|---|---|---|
+| **1** | `map[id] = row` with `id === '__proto__'` invokes the inherited setter and sets the object's PROTOTYPE instead of creating a key. `hasOwnProperty` then reports the entry unpaid — while the caller, having already decided a transition happened, appends a `MARKED_PAID` row. Money recorded as collected against a member who still reads as owing it. | **ACCEPTED** | Closed twice over: `sanitizeEntryIds` drops every `__*__` id (Firestore rejects that shape as a document id anyway, so no legitimate entry can carry one), and the maps are built with `Object.create(null)` because they are also populated from stored data this code does not choose. |
+
+---
+
+## Round 9 — did the fix ship the leak it was fixing?
+
+🛑 **IT ALMOST DID, AND THIS IS THE FINDING OF THE WHOLE TICKET.**
+
+| # | Finding | Verdict |
+|---|---|---|
+| **1** | **The relocation moved `paidEntries` off the participant-readable Member Record — and the same commit wrote `entryId` onto the participant-readable payment LEDGER.** `pools/{id}/payments` is `allow read: if isPoolParticipant()` (`firestore.rules:543`), and only a LIABLE entry can be marked paid, so a row reading `entryId: e2:alice` proves to the whole pool that Alice's entry 2 has committed a pick. **The exact bit the amendment exists to hide, through the other door, inside its own fix.** | **ACCEPTED** — the field is no longer written. Nothing is lost that the trail is for: its stated job is settling "I paid you" disputes, and amount + date + note + actor do that. Per-entry attribution lives in the sealed dues document, which T5 reads through a callable. |
+| **2** | `liableEntryIds`' synthetic `[uid]` fallback bypassed the reserved-id sanitizer that every supplied id is held to. | **ACCEPTED** — the fallback now goes through `sanitizeEntryIds` too. |
+
+⚠️ **PRE-EXISTING AND NOT FIXED HERE, BUT NOW KNOWN**: `executeSurvivorRebuy`
+already writes `entryId` onto `REBUY_DUE` ledger rows
+(`multiEntry.emulator.test.ts:514` pins it). That is the same leak class from a
+different callable and a different plan. **Flagged for Kevin, not silently
+changed** — a rebuy is per-entry by design and its ledger contract predates this
+work.
+
+---
+
+## Round 10 — confirming, and one stale comment
+
+All four questions CLEAN on the substance: the leak is closed on every
+participant-readable surface this diff writes (`members/{uid}` carries summary
+only; `payments/{id}` carries no entry id; `private/dues__{uid}` is sealed to
+every client including SUPER_ADMIN); removing ledger `entryId` breaks no reader
+(`PaymentsPanel` never read it); the sanitizer covers every path that can
+introduce a key; and the amended D1 agrees with the shipped code.
+
+**One documentation-only finding**: a comment still said the entry was
+"identified by the new `entryId` field", contradicting the code three lines
+below it. Rewritten.
+
+---
+
 ## Stopping
 
-**Stopped at round 6.** CLAUDE.md §2c's two conditions (§2b DORMANT): a round
+**Stopped at round 10.** CLAUDE.md §2c's two conditions (§2b DORMANT): a round
 that came back clean on every question it was asked, **and** my own read of the
-document agreeing. **No findings are left open.** Six rounds against a cap of 10.
+document agreeing. **No findings are left open.** Ten rounds against a cap of
+10 — at the ceiling, not past it. Rounds 1–6 hardened the plan; 7–10 covered
+Kevin's D1 amendment and the code that implements it.
 
 ⚠️ **Rounds 1–3 should be weighted by the provenance caveat at the top of this
 file; rounds 4–6 are the normal reviewer.**

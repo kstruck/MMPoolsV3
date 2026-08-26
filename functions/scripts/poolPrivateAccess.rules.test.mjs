@@ -90,6 +90,73 @@ for (const [label, db] of [['guest', guest], ['other', other], ['member', member
 await assertFails(getDoc(doc(owner, 'pools', POOL_ID, 'private', 'something-else')));
 await assertFails(setDoc(doc(owner, 'pools', POOL_ID, 'private', 'something-else'), { x: 1 }));
 
+// --- PER-ENTRY DUES (PLAN-MULTI-ENTRY-DUES D1, AMENDED 2026-08-26) ---------
+//
+// 🛑 THIS IS THE WHOLE REASON THE MAP MOVED, SO IT IS ASSERTED RATHER THAN
+// INHERITED FROM THE WILDCARD'S REPUTATION.
+//
+// `paidEntries` is keyed by entry id, and those ids are entries that have
+// COMMITTED A PICK. It used to sit on `pools/{id}/members/{uid}`, which every
+// participant can read — so it told the whole pool which of another player's
+// entries was live, the exact bit the Member Record's `entries` field refuses
+// to persist (commissioner-blind picks). Kevin ruled the move on 2026-08-26
+// after cross-model review found it on PR #602.
+//
+// The claim being tested is that the move needed NO rules change because this
+// subcollection was already sealed. A claim like that is worth exactly one
+// test, and this is it: the MEMBER whose dues these are cannot read them, and
+// neither can a co-participant, the owner, or a SUPER_ADMIN.
+const DUES_DOC = `dues__${MEMBER_UID}`;
+await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'pools', POOL_ID, 'private', DUES_DOC), {
+        uid: MEMBER_UID,
+        poolId: POOL_ID,
+        paidEntries: { [`e2:${MEMBER_UID}`]: { paidAt: 1, method: 'cash' } },
+        updatedAt: 1,
+    });
+});
+const duesDoc = (db) => doc(db, 'pools', POOL_ID, 'private', DUES_DOC);
+for (const [label, db] of [['guest', guest], ['other', other], ['member (its own subject!)', member], ['owner', owner], ['superadmin', admin]]) {
+    await assertFails(getDoc(duesDoc(db)));
+    await assertFails(setDoc(duesDoc(db), { paidEntries: {} }));
+    await assertFails(updateDoc(duesDoc(db), { paidEntries: {} }));
+    await assertFails(deleteDoc(duesDoc(db)));
+    console.log(`  ok: ${label} cannot read or write pools/{id}/private/${DUES_DOC}`);
+}
+
+// GUARD THE GUARD: the denials above must be able to FAIL, or they prove
+// nothing. The document the map moved OFF is genuinely readable by a
+// CO-PARTICIPANT — that readability IS the leak — so a separate pool is set up
+// with two participants to demonstrate it, and to show the summary survives.
+const DUES_POOL = 'pool-dues-readable';
+const PEER_UID = 'peer-pa';
+await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'pools', DUES_POOL), {
+        type: 'NFL_PICKEM', ownerId: OWNER_UID, managerUid: OWNER_UID, isPublic: true,
+        status: 'OPEN', name: 'Dues Pool', participantIds: [MEMBER_UID, PEER_UID],
+    });
+    await setDoc(doc(db, 'pools', DUES_POOL, 'members', MEMBER_UID), {
+        uid: MEMBER_UID, poolId: DUES_POOL, userName: 'Member', paidStatus: 'PAID', joinedAt: 1,
+    });
+    await setDoc(doc(db, 'pools', DUES_POOL, 'private', DUES_DOC), {
+        uid: MEMBER_UID, poolId: DUES_POOL,
+        paidEntries: { [`e2:${MEMBER_UID}`]: { paidAt: 1 } }, updatedAt: 1,
+    });
+});
+const peer = env.authenticatedContext(PEER_UID).firestore();
+// The leak, in its own hand: a PEER really can read another member's record...
+const memberSnap = await assertSucceeds(getDoc(doc(peer, 'pools', DUES_POOL, 'members', MEMBER_UID)));
+assert.strictEqual(memberSnap.data().paidStatus, 'PAID', 'the SUMMARY stays readable — every roster surface reads it');
+assert.ok(!('paidEntries' in memberSnap.data()), 'the per-entry MAP must never be on this document');
+// ...and cannot reach the map that used to sit on it.
+await assertFails(getDoc(doc(peer, 'pools', DUES_POOL, 'private', DUES_DOC)));
+console.log('  ok: a co-participant reads the summary, and CANNOT reach the per-entry map');
+
+// The dues id cannot collide with the password record, for ANY uid.
+assert.notStrictEqual('dues__access', 'access');
+assert.ok(DUES_DOC.startsWith('dues__'), 'the prefix is what keeps the two apart');
+
 // --- The throttle store is server-only --------------------------------------
 await assertFails(getDoc(doc(other, 'pool_access_attempts', 'somekey')));
 await assertFails(setDoc(doc(other, 'pool_access_attempts', 'somekey'), { failures: 0 }));
