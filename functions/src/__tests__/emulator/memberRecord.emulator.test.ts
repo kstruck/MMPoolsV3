@@ -845,3 +845,124 @@ describe('coManagers — a departed member is dropped from the array (PLAN-CO-CO
     expect(pool.coManagers).toEqual([]);
   });
 });
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T7 — `reconcilePaymentTruth` under per-entry dues.
+ *
+ * 🛑 D1a CALLED THIS "THE WRITER THAT WILL BE MISSED": it runs from the
+ * Operations panel, sits in no hot path, and nothing exercises it in normal
+ * testing. `paidStatus` is now DERIVED from the per-entry map, so a promotion
+ * that writes the summary and not the map is un-paid by the next writer.
+ */
+/** The shape `reconcilePaymentTruth` returns — named so these tests need no `any`. */
+type ReconcileResult = { ok: boolean; membersPromoted: number };
+
+describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
+  const poolId = 'p2-dues-pool';
+  const BOSS = { uid: 'p2d_boss', token: { role: 'SUPER_ADMIN' } };
+
+  async function seedPool(opts: { entries: Array<{ id: string; picks: Record<string, unknown>; paidStatus?: string }>; dues?: Record<string, unknown> }) {
+    // validated({role}) enforces claim AND users-doc agreement (assertCallerRole).
+    await seedUser('p2d_boss', 'Boss', 'SUPER_ADMIN');
+    const pool = db.collection('pools').doc(poolId);
+    await pool.set({
+      id: poolId, type: 'NFL_PICKEM', name: 'Dues Reconcile', ownerId: 'p2d_boss',
+      participantIds: ['p2d_boss', 'dm1'], status: 'OPEN', settings: { entryFee: 25 },
+    });
+    await pool.collection('members').doc('dm1').set({
+      uid: 'dm1', poolId, userName: 'Dues Member', role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(), feeOwed: 50,
+      playableEntryCount: 2, hasPlayableEntry: true,
+    });
+    for (const e of opts.entries) {
+      await pool.collection('entries').doc(e.id).set({
+        id: e.id, poolId, ownerUid: 'dm1', userName: 'Dues Member',
+        picks: e.picks, ...(e.paidStatus ? { paidStatus: e.paidStatus } : {}),
+      });
+    }
+    if (opts.dues) {
+      await pool.collection('private').doc('dues__dm1').set({ uid: 'dm1', poolId, paidEntries: opts.dues, updatedAt: 1 });
+    }
+  }
+
+  const duesOf = async () =>
+    (await db.collection('pools').doc(poolId).collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+
+  it('records the ENTRY payment in the dues map, not just the member summary', async () => {
+    // Without the map write, the next `setPaidStatus` or delete recomputes the
+    // summary from a map that never heard about this payment — and un-pays it.
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.ok).toBe(true);
+    expect(Object.keys(await duesOf())).toEqual(['dm1']);
+  });
+
+  it('🛑 does NOT promote the member when their OTHER liable entry is unpaid', async () => {
+    // The commissioner marked ONE entry paid pre-P1, and that is all this
+    // knows. Writing a literal PAID would claim two fees were collected on the
+    // evidence of one — the money lie per-entry dues exists to remove.
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('UNPAID');          // one of two — not paid in full
+    expect(Object.keys(await duesOf())).toEqual(['dm1']);   // ...but the payment IS recorded
+  });
+
+  it('DOES promote when every liable entry is accounted for', async () => {
+    // Entry 2 was already settled per-entry; the pre-P1 entry write covers
+    // entry 1. Together that is the whole liability, so the summary is PAID and
+    // the behaviour matches what this migration did before the ticket.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'e2:dm1': { paidAt: 1 } },
+    });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('PAID');
+    expect(Object.keys(await duesOf()).sort()).toEqual(['dm1', 'e2:dm1']);
+  });
+
+  it('a PARTIAL existing dues map is preserved, never replaced', async () => {
+    // The map is the authority; this migration adds one key to it and must not
+    // discard what a commissioner already recorded per entry.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+        { id: 'e3:dm1', picks: {} },
+      ],
+      dues: { 'e2:dm1': { paidAt: 1, method: 'cash' } },
+    });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const dues = await duesOf();
+    expect(Object.keys(dues).sort()).toEqual(['dm1', 'e2:dm1']);
+    expect(dues['e2:dm1'].method).toBe('cash');    // the pre-existing row survives
+  });
+
+  it('DRY RUN still writes nothing at all, dues document included', async () => {
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    const r = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.ok).toBe(true);
+    expect(r.membersPromoted).toBe(1);             // it still REPORTS the fix
+    expect(await duesOf()).toBeUndefined();        // ...and performs none of it
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('UNPAID');
+  });
+});

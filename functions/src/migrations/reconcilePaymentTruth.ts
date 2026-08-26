@@ -39,6 +39,9 @@ import { recomputeCommissionerAggregate, ownerOf } from "../lib/commissionerAggr
 import { isSimPool, isExplicitlyMarkedTestPool } from "../shared/testPool";
 import { validated } from "../lib/validated";
 import { reconcilePaymentTruthSchema } from "../schemas/migrations";
+import { readPoolDues, writePoolDues, type PaidEntryMap } from "../lib/poolDues";
+import { entryHasPick } from "../lib/multiEntry";
+import { derivePaidStatus, liableEntryIds, type MemberRecord } from "../shared/memberRecord";
 
 /** The pool types whose authoritative payment store is the Member Record. */
 const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -194,14 +197,62 @@ export const reconcilePaymentTruth = validated(
             const mRef = doc.ref.collection('members').doc(uid);
             const ledgerRef = doc.ref.collection('payments').doc();
             const acted = await db.runTransaction(async (tx) => {
-              const [freshM, freshE] = await Promise.all([tx.get(mRef), tx.get(entryDoc.ref)]);
+              // 🛑 THE OWNER'S WHOLE ENTRY SET IS READ, NOT JUST THE ONE THAT
+              // TRIGGERED THIS (PLAN-MULTI-ENTRY-DUES D1a writer #5, P2-T7).
+              //
+              // This is the writer the plan named as "the one that will be
+              // missed": it runs from the Operations panel, sits in no hot path,
+              // and nothing exercises it in normal testing. Under per-entry dues
+              // it cannot promote a member on the evidence of ONE entry —
+              // `paidStatus` is now DERIVED from the per-entry map, so writing
+              // the summary without the map means the next writer recomputes it
+              // from a map that never heard about this payment and UN-PAYS what
+              // this just paid.
+              //
+              // A single entry document also cannot answer "which entries is
+              // this member liable for", which is what the derivation needs. So
+              // the owner's entries come along, in the same transaction, before
+              // any write.
+              const ownedQuery = doc.ref.collection('entries').where('ownerUid', '==', uid);
+              const [freshM, freshE, ownedSnap, storedDues] = await Promise.all([
+                tx.get(mRef),
+                tx.get(entryDoc.ref),
+                tx.get(ownedQuery),
+                readPoolDues(tx, doc.ref, uid),
+              ]);
               const fm: any = freshM.data();
               const fe: any = freshE.data();
               if (!freshM.exists || fe?.paidStatus !== 'PAID' || fm?.paidStatus === 'PAID') return false;
+
+              // The entry that triggered this is marked paid; everything the
+              // member already had is kept. The legacy shape (no dues document)
+              // starts from empty — this member has no per-entry history, which
+              // is exactly the pre-P1 world this migration exists to repair.
+              const nextDues: PaidEntryMap = { ...(storedDues ?? {}) };
+              nextDues[entryDoc.id] = {
+                ...(typeof fe.paidAt === 'number' ? { paidAt: fe.paidAt } : {}),
+                ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod ? { method: fe.paymentMethod } : {}),
+                ...(typeof fe.paymentNote === 'string' && fe.paymentNote ? { note: fe.paymentNote.slice(0, 500) } : {}),
+              };
+              // The owner's picked entries — the same input `ownerStateAfter`
+              // hands the submit path, rebuilt here from the documents this
+              // transaction just read. The legacy `entries/{uid}` doc can carry
+              // no `ownerUid` and so miss the query; it IS this entry when the
+              // ids match, so it is folded in.
+              const pickedIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
+              if (entryDoc.id === uid && !pickedIds.includes(uid) && entryHasPick(fe)) pickedIds.push(uid);
+              const liable = liableEntryIds(fm as MemberRecord, uid, pickedIds);
+              const derived = derivePaidStatus({ ...(fm as MemberRecord), paidEntries: nextDues }, liable);
               // Same field conventions as setPaidStatus's authoritative PAID write.
               const stampedPaidAt = typeof fe.paidAt === 'number' ? fe.paidAt : Date.now();
+              // ⚠️ THE DERIVED SUMMARY, NOT A LITERAL `'PAID'`. Promoting a
+              // member whose OTHER liable entries were never paid would be the
+              // money lie per-entry dues exists to remove — the commissioner
+              // marked ONE entry paid pre-P1, and that is all this knows. When
+              // the member does turn out to be paid in full, `derived` is
+              // `'PAID'` and the behaviour is unchanged from before this ticket.
               tx.set(mRef, {
-                paidStatus: 'PAID',
+                paidStatus: derived,
                 paidAt: stampedPaidAt,
                 paidBy: actorUid,
                 ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod
@@ -235,6 +286,7 @@ export const reconcilePaymentTruth = validated(
                 createdAt: FieldValue.serverTimestamp(),
                 note: noteParts.join(' — '),
               });
+              writePoolDues(tx, doc.ref, poolId, uid, nextDues, Date.now());
               return true;
             });
             if (acted) { report.membersPromoted++; changedThisPool++; }
