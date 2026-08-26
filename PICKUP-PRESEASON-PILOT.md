@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-26 — functions at `e6882d21`, rules unchanged since #579, frontend carries #597 + #598)
+## 2. Live state (deploy state verified 2026-08-26 — functions at `6d92dc61`, rules unchanged since #579, frontend carries #597 + #598)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,17 +361,27 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `e6882d21`.**
-⚠️ Updated 2026-08-26, the #597 `renameNFLEntry` deploy
-(was <!-- deploy-state:ignore --> `main` @ `809384d4`, this file's 2026-08-25
-claim — one deploy stale). Measured, not inherited:
-`npx firebase functions:list | Select-String "renameNFLEntry"` returns the
-callable, and `renameNFLEntry` is the only export #597 added.
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `6d92dc61`.**
+⚠️ Updated 2026-08-26 evening — Kevin deployed after #602 (per-entry dues T2)
+merged (was <!-- deploy-state:ignore --> `main` @ `e6882d21`, this file's
+earlier same-day claim).
 
-🛑 **`e6882d21` IS NOT `main` HEAD, AND THAT IS CORRECT.** HEAD is `3e71fbf8`
-(#598), which touched no `functions/` or `shared/` file — so `e6882d21` is the
-newest commit whose `functions/` content is live, and no functions deploy is
-owed. Naming HEAD here would claim a deploy that never ran.
+🛑 **THIS DEPLOY ADDED NO NEW CALLABLE, SO VERIFY-BY-NAME PROVES NOTHING HERE.**
+#601/#602 changed `setPaidStatus`, `lib/multiEntry.ts` and `shared/`, and added
+`lib/poolDues.ts` — a lib, not an export. `functions/src/index.ts` gained no
+line, so `functions:list | Select-String` returns the same rows before and after.
+
+✅ **What settled it instead:** `npx firebase functions:list --json` exposes
+`source.storageSource.generation`, a microsecond timestamp of each function's
+source upload. `setPaidStatus` uploaded 13:52:01Z against a 13:42:45Z merge, and
+**189 of 190 functions re-uploaded after it**. HANDOFF's top box carries the
+table and explains the four expected exceptions.
+
+⚠️ **That proves a deploy RAN, not WHICH COMMIT it carried** — a stale checkout
+produces identical timestamps. The tag rests on those timestamps plus Kevin
+having pulled first. To close the gap, a second no-op deploy reporting every
+function `Skipped (No changes detected)` is the certification; the `hash` label
+firebase compares is what makes that work.
 
 🛑 **RULES ARE NOT AT THE SAME COMMIT.** `firestore.rules` has not changed
 since #579, and Kevin has run that rules deploy — so nothing is owed there
