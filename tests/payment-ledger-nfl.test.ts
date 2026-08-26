@@ -15,7 +15,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   it('is mounted on the NFL manager view (Record Payouts card folded in — T7), and owns the fee toggle', () => {
     const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     expect(mgr).toContain("import { PaymentLedgerNFL } from './PaymentLedgerNFL'");
-    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} duesByUid={duesByUid} liableByUid={liableByUid} />');
+    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} duesByUid={duesByUid} liableByUid={liableByUid}');
     // T7: the card is gone; free-form BONUS/ADJUSTMENT live in the ledger's "Other awards" block.
     expect(mgr).not.toContain('RecordPayoutsCard');
     expect(ledger).toContain("kind: otherDraft.kind, settled: otherDraft.settled");
@@ -298,7 +298,7 @@ describe('PaymentLedgerNFL — per-entry dues (DUES T5b)', () => {
     // it. Cleared on pool change, and every response is stamped with the pool it
     // was asked for.
     expect(mgr).toContain('const forPool = pool.id;');
-    expect(mgr).toContain('setDuesPayload({ poolId: forPool, dues, liable });');
+    expect(mgr).toContain('setDuesPayload({ poolId: forPool, dues, liable, paidMirrors });');
     // Read back through a MATCH, so the stale case is unrepresentable rather
     // than something an effect has to remember to clear.
     expect(mgr).toContain("const duesByUid = duesPayload?.poolId === pool.id ? duesPayload.dues : undefined;");
@@ -307,7 +307,7 @@ describe('PaymentLedgerNFL — per-entry dues (DUES T5b)', () => {
     // mount fetch can finish after a write's refresh and revert a just-paid
     // row, which invites the commissioner to REVERSE a payment they just made.
     expect(mgr).toContain('const duesSeqRef = useRef(0);');
-    expect(mgr).toContain('if (seq === duesSeqRef.current) setDuesPayload({ poolId: forPool, dues, liable });');
+    expect(mgr).toContain('if (seq === duesSeqRef.current) setDuesPayload({ poolId: forPool, dues, liable, paidMirrors });');
     // A failed READ after a successful WRITE must clear, not keep: the loaded
     // map is pre-write, so showing it says "unpaid" about money just taken.
     expect(mgr).toContain('setDuesPayload(prev => (prev?.poolId === forPool ? undefined : prev));');
@@ -353,7 +353,7 @@ describe('PaymentLedgerNFL — per-entry dues (DUES T5b)', () => {
     const fn = code('functions/src/nflPoolDues.ts');
     expect(fn).toContain('liable: Record<string, string[]>;');
     expect(fn).toContain('liableEntryIds(rec, m.id, pickedByOwner.get(m.id) ?? [])');
-    expect(fn).toContain('return { dues, liable };');
+    expect(fn).toContain('return { dues, liable, paidMirrors };');
     expect(ledger).toContain('const memberLiable = liableByUid?.[r.uid];');
   });
 
@@ -382,5 +382,146 @@ describe('PaymentLedgerNFL — per-entry dues (DUES T5b)', () => {
     // An unticked box is a statement that the fee is unpaid; "—" is the absence
     // of one. The prize-recipient-outside-the-roster row is the case.
     expect(ledger).toContain('r.paidStatus === null ? <span className="text-faint text-[10px]">unknown</span>');
+  });
+});
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T6 (D2/D3/D12) — the delete control. Comment-stripped
+ * wiring guards, same shape as the blocks above.
+ */
+describe('PaymentLedgerNFL — the delete control (DUES T6)', () => {
+  const ledger = code('src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx');
+  const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+  const db = code('src/services/dbService.ts');
+
+  it('is DISABLED WITH THE REASON, never hidden', () => {
+    // A hidden control is indistinguishable from a missing feature, and leaves
+    // the commissioner guessing why an entry they can see cannot go.
+    expect(ledger).toContain('disabled={!!r.deleteRefusal || deletingEntryId === r.entryId}');
+    expect(ledger).toContain('title={r.deleteRefusal ??');
+  });
+
+  it('mirrors BOTH server refusals, in the server own words', () => {
+    expect(ledger).toContain('This pool has already scored a week');
+    expect(ledger).toContain('This entry is marked paid. Un-mark its payment first');
+    // D3 is read from the SAME three fields the callable reads, so the mirror
+    // cannot drift from the gate.
+    expect(ledger).toContain("Object.values(p.publishedWeeks ?? {}).some(v => v === true)");
+    expect(ledger).toContain("|| Object.values(p.scoredWeeks ?? {}).some(v => v === true)");
+    expect(ledger).toContain("|| Number(p.scoredThroughWeek ?? 0) > 0");
+    // The callable ALSO refuses when `standings/current` exists — a case a
+    // provisional pass reaches with none of the three markers above. This
+    // component cannot read that document, so it uses the pool-doc field
+    // written in the SAME fenced write.
+    expect(ledger).toContain('|| p.lastScoredAt !== undefined;');
+  });
+
+  it('🛑 the UI refusal is a COURTESY — the callable is the gate', () => {
+    // A stale tab must not be able to delete a paid or scored entry, so the
+    // server re-checks. The client never sends a "force" of any kind.
+    const fn = code('functions/src/nflEntryDelete.ts');
+    expect(fn).toContain('ENTRY_IS_PAID');
+    expect(fn).toContain('ENTRY_IS_SCORED');
+    expect(db).toContain("httpsCallable(functions, 'deleteNFLEntry')");
+    // Scoped to THIS wrapper: `dbService` contains unrelated matches for
+    // "force" elsewhere, and a whole-file assertion would either pass by
+    // accident or fail for a reason that has nothing to do with deletes.
+    const from = db.indexOf('deleteNFLEntry: async');
+    const wrapper = db.slice(from, db.indexOf('},', from));
+    expect(wrapper.length).toBeGreaterThan(80);
+    expect(wrapper).toContain('withCorrelationId({ poolId, targetUid, entryIndex })');
+    // No override of any kind travels from the client — the payload is exactly
+    // the three fields the schema accepts.
+    expect(wrapper).not.toMatch(/force|override|skip/i);
+  });
+
+  it('explain-then-confirm: names the entry and states what MOVES', () => {
+    expect(mgr).toContain('<ConfirmActionModal');
+    expect(mgr).toContain('title="Delete this entry?"');
+    expect(mgr).toContain('Their dues drop by one entry fee and the pot');
+    expect(mgr).toContain('do not come back');
+    expect(mgr).toContain('destructive');
+    // The delete only runs from the modal's confirm — never straight off the row.
+    expect(mgr).toContain('onDeleteEntry={(uid, entryIndex, entryId, label, movesMoney) => setPendingDelete({ poolId: pool.id, uid, entryIndex, entryId, label, movesMoney })}');
+    expect(mgr).toContain('onConfirm={() => { void handleDeleteEntry(); }}');
+  });
+
+  it('🛑 the CONFIRMATION tells the truth for a non-liable entry too', () => {
+    // An entry with no committed pick was never charged, so deleting it moves
+    // neither dues nor the pot. Promising a drop at the irreversible step would
+    // contradict the outcome message the commissioner reads a second later.
+    // Three states, because there are three truths — and "chargeable" is NOT
+    // the predicate: a participant's entry #1 carries the JOIN liability, so it
+    // shows a fee, but deleting it leaves that liability intact and the server
+    // returns liabilityDelta 0.
+    expect(mgr).toContain('pendingDelete.movesMoney === true');
+    expect(mgr).toContain('pendingDelete.movesMoney === false');
+    expect(mgr).toContain('NOTHING changes about their dues or the pot');
+    expect(mgr).toContain('No money moves — this entry carries no dues.');
+    expect(ledger).toContain('onDeleteEntry(r.uid, r.entryIndex, r.entryId, r.name, r.deleteMovesMoney)');
+    // The row's ACTUAL id, never one reconstructed from the index: an entry can
+    // sit at an auto-generated id (multiEntry.ts §0a), and a reconstructed id
+    // would never match — the row would stay enabled mid-delete.
+    expect(mgr).toContain('setDeletingEntryId(entryId);');
+    expect(mgr).not.toContain('setDeletingEntryId(entryIdFor(');
+  });
+
+  it('🛑 the money prediction reproduces the SERVER arithmetic, not "is there a fee"', () => {
+    // liability = max(joinLiability, playedEntries); an entry only lowers
+    // `played` if it actually holds a pick.
+    expect(ledger).toContain("const joinLiability = mrec?.role === 'MANAGER' ? 0 : 1;");
+    expect(ledger).toContain('const thisHoldsAPick = played > 0 && !!memberLiable?.includes(entryId);');
+    expect(ledger).toContain('Math.max(joinLiability, played - (thisHoldsAPick ? 1 : 0)) < Math.max(joinLiability, played)');
+    // Unknown until the liable set loads — and then it claims NEITHER outcome.
+    expect(ledger).toContain('memberLiable === undefined ? null');
+    expect(mgr).toContain('recalculated by the server and reported when it finishes');
+  });
+
+  it('the entry document own paid mirror also disables the control', () => {
+    // The callable refuses on ANY of three payment sources; they can diverge on
+    // a legacy record, and mirroring only two leaves a button that errors.
+    expect(ledger).toContain("const mirrorPaid = paidMirrorIds ? paidMirrorIds.includes(entryId) : e?.paidStatus === 'PAID';");
+    // The ledger cannot read raw entries for OTHER members (own-entry-only
+    // pre-reveal), so the authoritative source is the callable, not the local
+    // projection — which is why the earlier local-only check was ineffective
+    // for exactly the rows that matter.
+    const fnDues = code('functions/src/nflPoolDues.ts');
+    expect(fnDues).toContain("if (data.paidStatus === 'PAID') paidMirrors.push(e.id);");
+    expect(fnDues).toContain('return { dues, liable, paidMirrors };');
+    expect(ledger).toContain("(entryPaid === 'PAID' || mirrorPaid) ?");
+    // 🛑 AND THE FIELD MUST ACTUALLY BE CARRIED. An earlier version read
+    // `paidStatus` off an object built as { id, entryIndex, entryName } — so the
+    // check was INERT: present in the source, always false at runtime, and a
+    // source-text assertion happily passed. Pin the plumbing, not the phrase.
+    expect(ledger).toContain('entryName?: string; paidStatus?: unknown }>();');
+    expect(ledger).toContain('entryName: e.entryName ?? byId.get(e.id)?.entryName, paidStatus: e.paidStatus }');
+  });
+
+  it('🛑 a pending delete is BOUND to the pool that opened it', () => {
+    // This dashboard is reused for another pool on navigation, and uids and
+    // entry indexes are shared across pools by construction — so a confirmation
+    // queued in pool A could HARD DELETE the matching entry in pool B, with no
+    // tombstone to recover from (D12).
+    expect(mgr).toContain('const { poolId, uid, entryIndex, entryId, label } = pendingDelete;');
+    expect(mgr).toContain('if (poolId !== pool.id) {');
+    expect(mgr).toContain('dbService.deleteNFLEntry(poolId, uid, entryIndex)');
+    // MUST catch the regression: the callable must never be handed the CURRENT
+    // pool id when the confirmation was opened against another.
+    expect(mgr).not.toContain('dbService.deleteNFLEntry(pool.id, uid, entryIndex)');
+  });
+
+  it('the played-entries fallback keeps the LEGACY MANAGER limb', () => {
+    // memberPlayedEntries counts a MANAGER whose record predates the latch but
+    // carries feeOwed > 0 as one played entry. Omitting it tells such a manager
+    // that deleting their only picked entry changes nothing, while the server
+    // lowers both their dues and the pot.
+    expect(ledger).toContain("|| (mrec?.role === 'MANAGER' && Number(r.feeOwed ?? 0) > 0) ? 1 : 0);");
+  });
+
+  it('the result says WHICH kind of delete happened', () => {
+    // A delete that costs nothing and one that lowers the pot are different
+    // events; the commissioner should not have to infer which.
+    expect(mgr).toContain('It had no committed pick, so no dues or pot figures changed.');
+    expect(mgr).toContain('Their dues and the pot each dropped by one entry.');
   });
 });

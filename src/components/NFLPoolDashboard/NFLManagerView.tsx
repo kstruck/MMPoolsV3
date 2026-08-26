@@ -28,6 +28,7 @@ import { hybridSplitProblem } from '@shared/hybridSplit';
 import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
+import { ConfirmActionModal } from '../admin/ConfirmActionModal';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
 import { NFL_KICKOFF_MS } from '../../config/season';
@@ -301,6 +302,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
     poolId: string;
     dues: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>;
     liable: Record<string, string[]>;
+    paidMirrors: string[];
   } | undefined>(undefined);
   // ⚠️ `undefined` whenever the payload is for another pool, or not loaded.
   // NOT `{}` — an empty object would tell the ledger "nobody paid"; `undefined`
@@ -308,6 +310,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // pre-Phase-2 rendering and is never wrong, only less detailed.
   const duesByUid = duesPayload?.poolId === pool.id ? duesPayload.dues : undefined;
   const liableByUid = duesPayload?.poolId === pool.id ? duesPayload.liable : undefined;
+  const paidMirrorIds = duesPayload?.poolId === pool.id ? duesPayload.paidMirrors : undefined;
   const [savingCoCommissioner, setSavingCoCommissioner] = useState<string | null>(null);
   const [remindingUid, setRemindingUid] = useState<string | null>(null);
   const [bulkReminding, setBulkReminding] = useState<'PICKS' | 'PAYMENT' | null>(null);
@@ -747,16 +750,24 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
    */
   const duesSeqRef = useRef(0);
 
+  /**
+   * PLAN-MULTI-ENTRY-DUES P2-T6 — the pending delete, held for the
+   * explain-then-confirm modal. D12 makes the delete HARD (no tombstone), so
+   * the confirmation is the last point at which this is reversible.
+   */
+  const [pendingDelete, setPendingDelete] = useState<{ poolId: string; uid: string; entryIndex: number; entryId: string; label: string; movesMoney: boolean | null } | null>(null);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+
   const refreshDues = useCallback(async () => {
     const forPool = pool.id;
     const seq = duesSeqRef.current + 1;
     duesSeqRef.current = seq;
     try {
-      const { dues, liable } = await dbService.getPoolDues(forPool);
+      const { dues, liable, paidMirrors } = await dbService.getPoolDues(forPool);
       // Dropped if a newer request has since started. The payload also carries
       // the pool it was fetched for, and the derived values above discard it if
       // the view has moved on.
-      if (seq === duesSeqRef.current) setDuesPayload({ poolId: forPool, dues, liable });
+      if (seq === duesSeqRef.current) setDuesPayload({ poolId: forPool, dues, liable, paidMirrors });
     } catch (err) {
       logger.error('Failed to load per-entry dues; falling back to member-level paid status:', err);
       // ⚠️ CLEAR, do not keep. A write may already have succeeded — it is only
@@ -772,6 +783,47 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   }, [pool.id]);
 
   useEffect(() => { void refreshDues(); }, [refreshDues]);
+
+  const handleDeleteEntry = async () => {
+    if (!pendingDelete) return;
+    const { poolId, uid, entryIndex, entryId, label } = pendingDelete;
+    setPendingDelete(null);
+    // 🛑 THE CONFIRMATION IS BOUND TO THE POOL THAT OPENED IT (codex, P1).
+    //
+    // This dashboard is reused for another pool on navigation, and the pending
+    // state would otherwise survive that while `handleDeleteEntry` used the
+    // CURRENT `pool.id`. Uids and entry indexes are shared across pools by
+    // construction, so confirming a delete queued in pool A could HARD DELETE
+    // the matching entry in pool B — the one destructive action in this file,
+    // aimed at the wrong pool, with no tombstone to recover from (D12).
+    if (poolId !== pool.id) {
+      logger.warn(`Discarded a pending entry delete queued for pool ${poolId} while viewing ${pool.id}.`);
+      return;
+    }
+    // The row's OWN id, not `entryIdFor(uid, entryIndex)`: an entry may sit at
+    // an auto-generated id, and a reconstructed one would never match the row —
+    // so it would never disable, and a second delete is one click away.
+    setDeletingEntryId(entryId);
+    setFeedback(null);
+    try {
+      const { liabilityDelta } = await dbService.deleteNFLEntry(poolId, uid, entryIndex);
+      await refreshDues();
+      setFeedback({
+        type: 'success',
+        // Says what MOVED, not just that it worked: a delete that costs nothing
+        // (a non-liable entry) and one that lowers the pot are different events
+        // and the commissioner should not have to infer which happened.
+        message: liabilityDelta === 0
+          ? `Deleted ${label}. It had no committed pick, so no dues or pot figures changed.`
+          : `Deleted ${label}. Their dues and the pot each dropped by one entry.`,
+      });
+    } catch (err: unknown) {
+      logger.error(`Failed to delete entry ${entryIndex} for ${uid}:`, err);
+      setFeedback({ type: 'error', message: getUserMessage(err, 'Failed to delete that entry.') });
+    } finally {
+      setDeletingEntryId(null);
+    }
+  };
 
   const handleSettleRebuys = async (uid: string, settle: boolean) => {
     setIsSavingPayment(uid);
@@ -1790,7 +1842,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               every published weekly prize with its "paid" checkbox. Lives on
               the Members & Payments sub-tab — where a commissioner looks for
               money (Kevin, 2026-08-16). */}
-          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} duesByUid={duesByUid} liableByUid={liableByUid} />
+          <PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} duesByUid={duesByUid} liableByUid={liableByUid} paidMirrorIds={paidMirrorIds}
+            onDeleteEntry={(uid, entryIndex, entryId, label, movesMoney) => setPendingDelete({ poolId: pool.id, uid, entryIndex, entryId, label, movesMoney })}
+            deletingEntryId={deletingEntryId} />
           <div className="bg-card border border-line shadow-card rounded-xl overflow-hidden">
             <div className="p-5 border-b border-line bg-surface space-y-3">
               <div className="flex justify-between items-center">
@@ -2150,6 +2204,42 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         )}
       </div>
       )}
+
+      {/* P2-T6 — explain-then-confirm, the repo's standard guardrail for a
+          destructive commissioner action.
+          🛑 D12 MAKES THIS THE LAST REVERSIBLE MOMENT. The delete is HARD — no
+          tombstone — so the modal names the entry, states the two things that
+          MOVE (dues and the pot), and states plainly what does not come back.
+          A typed token is deliberately NOT required: the server refuses a paid
+          or scored entry outright, so the blast radius is one unpaid, unscored,
+          unpublished row — real, but not the class that warrants typing a name. */}
+      <ConfirmActionModal
+        open={pendingDelete !== null}
+        title="Delete this entry?"
+        description={pendingDelete
+          // ⚠️ TWO DIFFERENT TRUTHS, and the confirmation must not tell the
+          // wrong one at the irreversible step. An entry with no committed pick
+          // was never liable, so deleting it moves NEITHER dues nor the pot —
+          // the callable returns `liabilityDelta: 0` and the result message
+          // says so. Promising a drop here would contradict the outcome the
+          // commissioner is about to read.
+          ? (pendingDelete.movesMoney === true
+              ? `${pendingDelete.label} will be removed from this pool. Their dues drop by one entry fee and the pot's entry count drops by one. The entry's picks are deleted and do not come back — re-creating it starts a new, unpaid entry.`
+              : pendingDelete.movesMoney === false
+                ? `${pendingDelete.label} will be removed from this pool. NOTHING changes about their dues or the pot — this entry is not one they are charged for. It does not come back.`
+                // ⚠️ The liable set has not loaded, so claim NEITHER outcome
+                // rather than guess at the irreversible step. The result message
+                // states what actually moved.
+                : `${pendingDelete.label} will be removed from this pool. The entry's picks are deleted and do not come back. Any dues and pot change is recalculated by the server and reported when it finishes.`)
+          : ''}
+        blastRadius={pendingDelete?.movesMoney === false
+          ? 'One entry, this pool. No money moves — this entry carries no dues.'
+          : 'One entry, this pool. Refunds nothing: an entry that was paid for cannot be deleted at all.'}
+        confirmLabel="Delete entry"
+        destructive
+        onConfirm={() => { void handleDeleteEntry(); }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 };
