@@ -56,14 +56,6 @@ wrong prescription (C4, E1).
 
 ---
 
-## Round 2
-
-⛔ **NOT YET RUN.** Owed before P2-T1 opens, per CLAUDE.md §2c: the text written
-to close these findings has never been reviewed, and "the code most likely to be
-wrong is the code written last, to close somebody else's finding."
-
----
-
 ## Round 2 — 3 findings, 1 absorbed, 2 rejected; D1b / D11 / D12 clean
 
 Scoped to the text written to close round 1 (§2c: "the code most likely to be
@@ -94,22 +86,74 @@ Scoped to D7a and D7b as rewritten by round 2.
 
 ---
 
+## Round 4 — THE NORMAL REVIEWER, ON KEVIN'S MACHINE. 3 findings, 3 P1, **ALL THREE ACCEPTED**
+
+🛑 **THIS IS THE ROUND THIS FILE ASKED FOR, AND IT WAS RIGHT TO ASK.** The caveat
+above says *"re-run a round on Kevin's machine with the normal reviewer before
+P2-T1 opens if that is available."* It was available (2026-08-26, `codex-cli
+0.144.5`, CLI default model, no provider override). It found **three P1 defects
+that three rounds of the substitute reviewer did not**, and one of them would
+have sunk P2-T1 on its first line.
+
+**Zero fabricated evidence this round.** Every citation was checked against the
+file before absorbing; all three verified. Compare the substitute reviewer's four
+fabricated findings across rounds 1–3. The calibration difference is the whole
+point of the caveat, and it is now measured rather than suspected.
+
+| # | Sev | Finding | Verdict | Evidence / action |
+|---|---|---|---|---|
+| **1** | P1 | `derivePaidStatus` is given only a `MemberRecord`, but liability is defined as *"the ids in `entries` whose entry has committed a pick"* — and `entries` carries no pick state. The helper cannot compute its own input. | **ACCEPTED — the finding of the round; P2-T1 was unimplementable as written** | Verified: `shared/memberRecord.ts` types `entries` as `Record<string, { entryIndex: number; name?: string }>`, and its doc comment says *"NEVER picks and never per-entry weeks"* — an AUTHORIZATION constraint (commissioner-blind picks), not an oversight. `playableEntryCount` is a count, not a set, so with entries 1 and 2 and one pick between them the liable id is unknowable from the record. **D1a rewritten**: two helpers, `liableEntryIds(m, uid, pickedEntryIds)` and `derivePaidStatus(m, liable)`, with the ids passed in from the caller's transactional read. |
+| **2** | P1 | Retiring K11 leaves **no writer** to recompute the stored summary when an existing member adds a liable entry, so a fully-paid member can keep a stored `PAID`. | **ACCEPTED** | Verified: `data.paidStatus = 'UNPAID'` (`lib/memberRecord.ts:192`) sits inside the `paidReset` branch and is the ONLY assignment to `paidStatus` on `planMembershipWrite`'s UPDATE path — whose own comment says it "merge[s] identity/units only; preserve[s] paidStatus". Applied at `nflPools.ts:907`. **D1a row 2 changed from `DELETED` to `REPLACED`**; D6's "becomes UNPAID *by itself*" corrected (nothing derives on read — §0a fixes `paidStatus` as STORED); T3's scope and §9's gate both extended. |
+| **3** | P1 | D7 decrements the pot *"only when the entry it removed was liable"*; D8 says `Math.max(0, current - 1)` with no such condition; §9's gate asserts all three counters "DROP" unconditionally. | **ACCEPTED** | Verified reachable: `picks: {}` is schema-legal on pick'em and persists an entry doc (`nflPools.ts:681`) with `committedPickForWeek` false (`:883-895`) — PLAN-EMPTY-SUBMISSION-FEE's whole subject. **D8 rewritten around ONE `liabilityDelta`** driving all three counters, zero for a non-liable entry; §9 gains the non-liable delete as its own case. |
+
+### What I verified that the finding did NOT claim, and it strengthened #3
+
+`entryCountWrite` emits `FieldValue.increment(delta)` when `entryCount` is
+present (`lib/multiEntry.ts:191-192`) and **applies no clamp at all**. So D8's
+own opening sentence — *"It needs no change to accept `-1`"* — is true of the
+SIGNATURE and false of the BEHAVIOUR the rest of D8 requires: routing a negative
+delta through that branch is exactly the unclamped path D8 then forbids. D8 now
+says so explicitly rather than leaving two sentences for whoever writes T4 to
+reconcile.
+
+### And a free one from `ownerStateAfter` — finding #1 costs no extra read
+
+`ownerStateAfter` ALREADY tests `entryHasPick(e.data)` per owned entry
+(`lib/multiEntry.ts:172`) and discards which ids matched, returning only the
+count and a pick-free map. So the ids finding #1 needs are computed today and
+thrown away. T1 has it return them as a third, **transaction-local** field —
+never written to the Member Record, which is what keeps the authorization
+contract intact. No writer gains a read.
+
+### The alternative fix, REJECTED on authorization
+
+"Store a per-entry `liable` flag on the record" is the obvious repair for #1, and
+it is the **forbidden bit**: liability IS "this entry has committed a pick", so
+early in a season, when only week 1 exists and is unrevealed,
+`entries[id].liable` and "entry `id` picked week 1" are the same statement. It
+would put the commissioner-blind-picks payload onto a participant-readable
+document. Recorded in D1a as a STOP-and-ask-Kevin signal, same posture as D11.
+
+---
+
+## Housekeeping — a stale block removed, and it had already misled someone
+
+This file carried **`## Round 2` — "⛔ NOT YET RUN"** immediately above an actual
+Round 2 and an actual Round 3. Two contradictory claims in one document, and the
+overnight brief acted on the wrong one (*"review round 2 on the PLAN DOCUMENT
+itself … the log marks round 2 as owed"*). Rounds 2 and 3 had in fact run — in
+the cloud container, on the substitute reviewer.
+
+The block is deleted. The reviewer-provenance caveat at the top of this file is
+**not** deleted: that part was true, it is the reason those rounds are weak
+evidence, and it is exactly what round 4 has now acted on.
+
+---
+
 ## Stopping
 
-**Stopped at round 3**, on CLAUDE.md §2c's two-condition rule (§2b is DORMANT):
-a round that came back clean on every question it was asked, **and** my own read
-of the document agreeing. **No findings are left open.**
-
-⚠️ **One honest caveat.** The round-3 clarification is itself new text and, read
-strictly, earns its own round. It is a one-sentence restatement of an argument
-round 3 had just validated from three directions, so a fourth round was not
-spent on it. Recorded here rather than left implicit.
-
-⚠️ **And the reviewer caveat at the top of this file still stands.** Across three
-rounds this reviewer produced **four findings whose evidence was fabricated**
-(`amountPaid`, `planMembershipWrite`'s derivation, `NON_PARTICIPANT`,
-`setMemberPaidStatus`) and **six that the plan already answered**. Its two best
-findings — round 1's Survivor-rebuy interaction and round 2's query-read-set
-objection — were both real and both changed the design. **Take the P1 labels with
-salt and the specific objections seriously**, and re-run a round on Kevin's
-machine with the normal reviewer before P2-T1 opens if that is available.
+**PENDING ROUND 5.** Round 4's three findings are absorbed above. The text
+written to close them has not been reviewed by anything yet, and CLAUDE.md §2c is
+explicit that new text written to close a finding earns its own round — *"the
+code most likely to be wrong is the code written last, to close somebody else's
+finding."* This section is replaced when round 5 runs.
