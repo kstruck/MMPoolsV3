@@ -12,7 +12,7 @@ import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } 
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
-import { applyPaidReset, assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
+import { assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
 import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
@@ -902,13 +902,11 @@ export async function submitNFLPicksInternal(
     // empty / wrong-week submission (schema-valid, PLAN-EMPTY-SUBMISSION-FEE)
     // must not pin a target before any real entrant has one (codex r3 on #452).
     if (frozenTargetWrite && committedPickForWeek) transaction.update(poolRef, frozenTargetWrite);
-    // K11: a PAID member whose dues just rose is UNPAID again — mirrored onto
-    // every entry they own, with a ledger line saying why.
-    if (stamp.paidReset) {
-      applyPaidReset(transaction, poolRef, uid, existingMember?.userName,
-        [...new Set([...target.owned.map(e => e.id), entryRef.id])],
-        stamp.paidReset, `Entry #${entryIndex} added`, now);
-    }
+    // 🛑 K11's apply step is GONE (PLAN-MULTI-ENTRY-DUES D6). Adding an entry no
+    // longer mirrors UNPAID onto the member's OTHER entries and no longer writes
+    // a `MARKED_UNPAID` line: they paid for those entries, and this one is
+    // simply unpaid. `ensureMemberRecord` still moves the member's stored
+    // SUMMARY to UNPAID in this same transaction — that half had to survive.
   }));
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd

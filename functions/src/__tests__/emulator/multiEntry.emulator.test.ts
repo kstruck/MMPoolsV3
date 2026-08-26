@@ -160,23 +160,46 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     expect((await entry(`e2:${ALICE}`)).exists).toBe(false);
   }, 60000);
 
-  it('3. K11: a PAID member who adds an entry flips UNPAID, both entries mirror it, ledger says why', async () => {
-    await seedPool({ max: 2, entryCount: 2, alicePaid: true });
+  /**
+   * 🛑 CASE 3 NOW ASSERTS THE OPPOSITE OF WHAT IT USED TO (PLAN-MULTI-ENTRY-DUES
+   * D6 — K11 RETIRED). It previously demanded that adding an entry mirror UNPAID
+   * onto EVERY entry and write a `MARKED_UNPAID` ledger line. Under per-entry
+   * dues that is wrong, not merely redundant: Alice paid for entry 1, and adding
+   * entry 2 does not unpay entry 1.
+   *
+   * What must STILL happen is the member's stored SUMMARY moving to UNPAID —
+   * `paidStatus` is a stored field and nothing derives it on read, so dropping
+   * that write would report $50 collected when $25 was.
+   */
+  it('3. D6: adding an entry leaves entry 1 PAID and writes NO ledger line — but the member summary still goes UNPAID', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
     await submit(ALICE, { picks: { [G1]: 'KC' } });
-    expect((await member(ALICE)).paidStatus).toBe('PAID');   // a resubmit-shaped first entry changes nothing
-    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    // Pay entry 1 for real, through the callable, so the dues store is populated
+    // the way production would have it.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, paymentMethod: 'venmo' }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidStatus).toBe('PAID');
+    expect(Object.keys(await dues(ALICE))).toEqual([ALICE]);
+
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });   // the add
 
     const m = await member(ALICE);
-    expect(m.paidStatus).toBe('UNPAID');
+    expect(m.paidStatus).toBe('UNPAID');        // the surviving half of K11
     expect(m.feeOwed).toBe(50);
-    expect(m.paidAt).toBeUndefined();
+    expect(m.paidAt).toBeUndefined();           // detail clears with the summary
     expect(m.paymentMethod).toBeUndefined();
-    for (const d of await ownedEntries(ALICE)) expect(d.data().paidStatus).toBe('UNPAID');
-    const lines = await ledger(ALICE);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ type: 'MARKED_UNPAID', amount: 50, actorUid: 'system' });
-    expect(lines[0].note).toMatch(/dues rose from \$25 to \$50/);
-    expect(lines[0].note).toMatch(/via venmo/);
+
+    // 🛑 THE RETIREMENT, IN THREE ASSERTIONS.
+    // 1. entry 1's payment SURVIVES in the per-entry store.
+    expect(Object.keys(await dues(ALICE))).toEqual([ALICE]);
+    // 2. entry 1's own document is NOT mirrored back to UNPAID.
+    expect((await entry(ALICE)).data()!.paidStatus).toBe('PAID');
+    expect((await entry(`e2:${ALICE}`)).data()!.paidStatus).not.toBe('PAID');
+    // 3. NO `MARKED_UNPAID` line — no money moved, so the ledger says nothing.
+    expect((await ledger(ALICE)).filter(l => l.type === 'MARKED_UNPAID')).toHaveLength(0);
+    // ...and paying the new entry settles the member without re-paying entry 1.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidStatus).toBe('PAID');
+    expect((await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID')).toHaveLength(2);
   }, 60000);
 
   it('4. a legacy pool with no entryCount derives it from the Member Records on the first write', async () => {
@@ -452,24 +475,24 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     expect(unpaid[0].amount).toBe(25);                                   // the one row that moved
   }, 60000);
 
-  it('7l. K11 clears the per-entry map too — a half reset desynchronises three stores', async () => {
-    // A paid member adds an entry: K11 sets them UNPAID and mirrors that onto
-    // every entry doc. If `paidEntries` survived, paying only the NEW entry
-    // would derive PAID while entry 1's document still said UNPAID.
+  /**
+   * 🛑 REPLACED BY D6. This asserted that K11 CLEARED the per-entry map on an
+   * add. K11 is retired, and clearing is now exactly the wrong behaviour: the
+   * member paid for entry 1, and adding entry 2 must not throw that away. Case 3
+   * above now pins the opposite. Kept as a named marker so the change is visible
+   * in the diff rather than a silent deletion.
+   */
+  it('7l. D6: an add PRESERVES the per-entry map (K11 no longer clears it)', async () => {
     await seedPool({ max: 2, entryCount: 2 });
     await submit(ALICE, { picks: { [G1]: 'KC' } });
     await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true }, auth: auth(HOST) } as never);
     expect(Object.keys(await dues(ALICE))).toEqual([ALICE]);
 
-    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });      // K11 fires
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
     const afterAdd = await member(ALICE);
-    expect(afterAdd.paidStatus).toBe('UNPAID');
-    expect(await dues(ALICE)).toBeUndefined();                           // the whole doc went with it
-
-    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
-    const m = await member(ALICE);
-    expect(m.paidStatus).toBe('UNPAID');                                 // entry 1 is genuinely unpaid now
-    expect((await entry(ALICE)).data()!.paidStatus).toBe('UNPAID');      // ...and the doc agrees
+    expect(afterAdd.paidStatus).toBe('UNPAID');                 // summary moves
+    expect(Object.keys(await dues(ALICE))).toEqual([ALICE]);    // payment does NOT
+    expect((await entry(ALICE)).data()!.paidStatus).toBe('PAID');
   }, 60000);
 
   /**

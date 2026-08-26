@@ -17,7 +17,7 @@ import {
 } from "./schemas/poolExceptions";
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
-import { applyPaidReset, assertEntryAdmitted, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
+import { assertEntryAdmitted, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import {
     assertNoScoringInProgress,
@@ -524,11 +524,8 @@ export const proxyPick = validated(
             }, existingMember, now);
             const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
             if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
-            if (stamp.paidReset) {
-                applyPaidReset(transaction, poolRef, targetUid, existingMember.userName,
-                    [...new Set([...target.owned.map(e => e.id), entryRef.id])],
-                    stamp.paidReset, `Entry #${entryIndex} added by proxy`, now);
-            }
+            // K11's apply step is GONE (D6) — see the note in `nflPools.ts`.
+            // The member's stored summary still moves via `ensureMemberRecord`.
         }
     }));
 
