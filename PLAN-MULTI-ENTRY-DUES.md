@@ -205,20 +205,88 @@ either side" and left the writers to the implementer. Naming them is the whole
 job, because a writer that forgets makes the stored summary disagree with the map
 and nothing detects it.
 
-**ONE canonical helper, in `shared/memberRecord.ts`, pure and unit-tested:**
+**TWO canonical helpers, in `shared/memberRecord.ts`, pure and unit-tested:**
 
 ```ts
+/**
+ * The entry ids this member is LIABLE for (D1's definition).
+ *
+ * `pickedEntryIds` is supplied BY THE CALLER from its transactional read of the
+ * owner's entry documents. It cannot come off the Member Record — see the box
+ * below. Pass the ids that have committed a pick; the synthetic-`uid` fallback
+ * for a joined-and-never-picked participant is applied here, not by the caller.
+ */
+export function liableEntryIds(
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount' | 'entries'>,
+  uid: string,
+  pickedEntryIds: readonly string[],
+): string[]
+
 export function derivePaidStatus(
-  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount' | 'entries' | 'paidEntries'>,
+  m: Pick<MemberRecord, 'paidEntries'>,
+  liable: readonly string[],
 ): 'PAID' | 'UNPAID'
 ```
+
+🛑 **WHY THE LIABLE IDS ARE AN ARGUMENT AND NOT DERIVED INSIDE *(codex r4 #1 —
+this is the finding that would have sunk P2-T1 as originally written)*.**
+
+The first draft gave `derivePaidStatus` the whole Member Record and no id list,
+which cannot work. D1 defines liability as *"the ids in `entries` whose entry has
+committed a pick"*, and **the Member Record does not carry pick state per
+entry — deliberately, as an AUTHORIZATION constraint, not an oversight:**
+
+> `entries?: Record<string, { entryIndex: number; name?: string }>` —
+> *"the authorization-safe roster of this member's entries: existence + index +
+> display name, NEVER picks and never per-entry weeks (a participant-readable
+> record must not say which entry has a pick for an unrevealed week — that
+> completeness is the commissioner's, via `getPoolPicks.counts`)"*
+> — `shared/memberRecord.ts`
+
+`playableEntryCount` gives a COUNT, not a set. So with entries 1 and 2 present
+and one pick between them, a record-only helper cannot tell which id is liable —
+and a member who paid for the picked entry would read as unpaid, or the reverse.
+That is a money error, silently, in the direction of both signs.
+
+⛔ **THE ALTERNATIVE IS REJECTED, AND IT IS REJECTED ON AUTHORIZATION, NOT
+TASTE.** "Store a per-entry `liable` flag on the record" is exactly the forbidden
+bit: liability *is* "this entry has committed a pick", so at the start of a
+season — when only week 1 exists and is unrevealed — `entries[id].liable` and
+"entry `id` picked week 1" are the same statement. It would put the
+commissioner-blind-picks contract's payload onto a participant-readable document.
+**If a ticket concludes it needs this, STOP and ask Kevin** — same posture as D11.
+
+✅ **ON THE SUBMIT AND DELETE PATHS THE ARGUMENT IS FREE — no new read.**
+`ownerStateAfter` already evaluates the predicate per owned entry
+(`entryHasPick(e.data)`, `lib/multiEntry.ts:172`) but **accumulates only a count**,
+returning that plus a pick-free `entries` map (`:165-176`). The ticket has it
+also accumulate the matching ids and return them as a THIRD, transaction-local
+field — computed inside a transaction that is already reading those documents,
+passed to `liableEntryIds`, and **never written to the Member Record**, which is
+what keeps the authorization contract intact.
+
+⚠️ **ONE WRITER DOES GAIN A READ, AND IT IS WRITER #5 AGAIN *(codex r5 on A)*.**
+An earlier draft of this box claimed "no new read, in ANY writer". That is false.
+`reconcilePaymentTruth`'s transaction reads exactly two documents — the member
+record and the ONE paid entry that triggered it
+(`tx.get(mRef)`, `tx.get(entryDoc.ref)`, `migrations/reconcilePaymentTruth.ts:197`)
+— and never enumerates the owner's other entries. It therefore **cannot obtain a
+sound `pickedEntryIds` set without adding a read**, and a derivation run on a
+partial set would un-pay entries it has no knowledge of.
+
+So the migration must either add the owner-entries read to its transaction, or
+write the `paidEntries` key and leave the summary to a writer that has the full
+set — a choice T-sweep makes with evidence, not by assumption. **This is the
+second independent reason #5 is the writer that will be missed**, and it is worth
+more than the first: the original note said only that it must remember to write
+the map. It also has to acquire data it does not currently read.
 
 **Every writer of `paidStatus`, today — the complete list, measured:**
 
 | # | Writer | After this plan |
 |---|---|---|
 | 1 | `functions/src/lib/memberRecord.ts:123` — `planMembershipWrite` CREATE, literal `'UNPAID'` | unchanged: a brand-new record has an empty `paidEntries`, and `derivePaidStatus` of that is `'UNPAID'`. Keep the literal, and assert the two agree. |
-| 2 | `functions/src/lib/memberRecord.ts:192` — the K11 reset | **DELETED** (D6). |
+| 2 | `functions/src/lib/memberRecord.ts:192` — the K11 reset | **REPLACED, NOT DELETED.** See the box below — this is the only writer of `paidStatus` on the existing-member ADD path, and deleting it without a replacement leaves a paid member reading PAID after adding an unpaid entry. |
 | 3 | `functions/src/setPaidStatus.ts:241` / `:253` — the authoritative PAID / UNPAID mark | **rewritten**: mutate `paidEntries`, then write `paidStatus: derivePaidStatus(next)`. |
 | 4 | `functions/src/setPaidStatus.ts:100` — the self-report seed, `paidStatus: 'UNPAID'` on create only | unchanged, and deliberately: this is a MEMBER-triggered path and must never write money. Same reasoning already in that file. |
 | 5 | `functions/src/migrations/reconcilePaymentTruth.ts` | **sweep target** — it promotes a claim-only record to PAID from a paid entry. Under per-entry payment it must write the `paidEntries` key too, or the next derivation un-pays what it just paid. |
@@ -228,6 +296,35 @@ export function derivePaidStatus(
 Operations panel (`admin/OperationsPanel.tsx:346` — *"Writes members.paidStatus +
 payments ledger rows…"*), and it is not in any hot path, so nothing exercises it
 in normal testing. The sweep ticket owns it explicitly.
+
+🛑 **ROW 2 IS A REPLACEMENT, AND READING IT AS A DELETION SHIPS A MONEY BUG
+*(codex r4 #2)*.** This table said `DELETED` and D6 said the derived status
+"becomes UNPAID *by itself*". Both are wrong in the same way, and the second
+sentence is what makes the first look safe.
+
+**Measured.** `data.paidStatus = 'UNPAID'` at `lib/memberRecord.ts:192` sits
+inside the K11 `paidReset` branch, and it is **the only assignment to
+`paidStatus` on `planMembershipWrite`'s UPDATE path** — the update branch's own
+comment says it "merge[s] identity/units only; preserve[s] paidStatus". So the
+existing-member add path has exactly one writer of the summary, and D6 removes
+it.
+
+**Nothing derives on read.** §0a fixes `paidStatus` as a STORED field precisely
+because readers cannot recompute it. So "the derived `paidStatus` becomes UNPAID
+by itself" is only true of a value somebody WRITES. Delete row 2 with no
+replacement and a fully-paid member who adds an unpaid liable entry keeps a
+stored `PAID` — reporting money as collected that was never collected, which is
+the exact failure K11 existed to prevent. Retiring K11 must not resurrect it.
+
+**So P2-T3 replaces the branch rather than removing it**: on every
+`planMembershipWrite` UPDATE that changes the entry set, write
+`paidStatus: derivePaidStatus(next, liableEntryIds(next, uid, pickedIds))`
+unconditionally, in the same transaction — the atomicity §8 already requires.
+`pickedIds` is the new transaction-local field from `ownerStateAfter` (D1a), so
+this costs no extra read. What D6 correctly removes is the **ledger line, the
+per-entry UNPAID mirror and the `MARKED_UNPAID` event** (`applyPaidReset`) — the
+noisy half. The summary recomputation is the half that must survive, and the
+distinction is the whole content of that ticket.
 
 ### D1b — Presence IS the paid signal; un-marking DELETES the key *(codex r1 E1)*
 
@@ -304,15 +401,32 @@ Today, adding an entry to a PAID member flips them UNPAID and appends a
 
 Under per-entry payment that behaviour is **wrong, not merely redundant**: the
 member paid for entries 1 and 2, and adding entry 3 does not unpay entries 1
-and 2. The derived `paidStatus` becomes UNPAID *by itself* (entry 3 is not in
-`paidEntries`), which is the correct summary — and it happens with no reset, no
-ledger line, and no loss of the per-entry marks.
+and 2. The summary `paidStatus` still becomes UNPAID — entry 3 is not in
+`paidEntries` — but with no reset, no ledger line, and no loss of the per-entry
+marks.
 
-**Remove `applyPaidReset` and the `paidReset` limb of `planMembershipWrite`
-rather than leaving them dormant.** A dormant money path is a path somebody
-re-enables. Its emulator test (case 3 in `multiEntry.emulator.test.ts`) is
-rewritten to assert the OPPOSITE: adding an entry to a fully-paid member leaves
-the existing entries paid.
+⚠️ **"BY ITSELF" WAS WRONG, AND THE ORIGINAL WORDING HERE SAID IT *(codex r4
+#2)*.** Nothing derives `paidStatus` on read: §0a fixes it as a STORED field
+because readers cannot recompute it. It becomes UNPAID only because a writer
+writes it. **`lib/memberRecord.ts:192` is that writer, and it is the ONLY one on
+the existing-member add path** — so removing it wholesale would leave a fully-paid
+member reading `PAID` after adding an unpaid entry, which is the money lie K11
+existed to prevent. D1a row 2 carries the measurement and the replacement.
+
+**So: remove `applyPaidReset` and the `paidReset` limb of `planMembershipWrite`
+rather than leaving them dormant** — a dormant money path is a path somebody
+re-enables — **but REPLACE the summary write, do not drop it.** What goes is the
+ledger line, the per-entry UNPAID mirror and the `MARKED_UNPAID` event. What
+stays, unconditionally on any UPDATE that changes the entry set, is
+`paidStatus: derivePaidStatus(next, liableEntryIds(next, uid, pickedIds))` in the
+same transaction.
+
+Its emulator test (case 3 in `multiEntry.emulator.test.ts`) is rewritten to
+assert the OPPOSITE of today on the per-entry marks **and both halves of the new
+behaviour**: adding an entry to a fully-paid member leaves the existing entries'
+`paidEntries` keys intact, writes no `MARKED_UNPAID` ledger line, **and moves the
+member's stored `paidStatus` to `UNPAID`**. Asserting only the first two is what
+would let the bug through.
 
 ⚠️ **The `MARKED_UNPAID` lines K11 already wrote to production ledgers stay.**
 They were true when written. Nothing back-fills or deletes ledger history.
@@ -445,18 +559,73 @@ delete changes how a *different* feature behaves.
 
 `entryCountWrite` already takes a signed delta and already handles the
 absent-field case by deriving from the Member Records. It needs **no change** to
-accept `-1`; the ticket adds the caller and a unit test proving a negative delta
-on a pool with NO `entryCount` derives-then-subtracts rather than writing `-1`.
+accept a negative delta; the ticket adds the caller and a unit test proving a
+negative delta on a pool with NO `entryCount` derives-then-subtracts rather than
+writing a negative number.
 
-🛑 **A FLOOR AT ZERO IS REQUIRED AND IS NOT FREE.** `FieldValue.increment(-1)`
-on a pool whose `entryCount` is wrong (a legacy pool where the derived value was
-stamped once and has since drifted) can go negative, and `potBreakdown` on a
-negative denominator produces a negative pot. The delete transaction therefore
-reads the pool doc, computes the next value, and clamps at 0 — an explicit
-`entryCount: Math.max(0, current - 1)` rather than a blind increment. **This
-costs the increment's concurrency safety**, which is acceptable only because the
-entry doc is in the same transaction's read set and is what actually serialises
-two deletes.
+🛑 **THE DELTA IS THE MEMBER'S LIABILITY CHANGE — NOT A FLAT `-1` *(codex r4
+#3)*.** D7 said the delete decrements *"only when the entry it removed was
+liable"*; this section said `Math.max(0, current - 1)` with no such condition,
+and §9's gate asserted all three counters "DROP" unconditionally. Three
+statements, two of them wrong, and the gate would have **encoded** the wrong one.
+
+**An entry document that carries no liability is reachable, measured.** `picks: {}`
+is schema-legal on a pick'em pool and persists an entry doc (`nflPools.ts:663-681`),
+while `committedPickForWeek` is false for it (`:690`, and passed to the member
+write at `:890`) — this is PLAN-EMPTY-SUBMISSION-FEE's whole subject, and the
+comment there records that passing `true` unconditionally once charged a seeded
+MANAGER for a pick nobody made.
+
+⛔ **BUT `picks: {}` IS NOT A SYNONYM FOR "NOT LIABLE", AND AN EARLIER DRAFT OF
+THIS PARAGRAPH SAID IT WAS *(codex r5 on C)*.** It claimed such an entry "was
+never in `feeOwed`". For a **seeded MANAGER** that is true — `joinLiability` is 0.
+For an **ordinary joined participant** it is false: `joinLiability` is 1, entry
+#1's id IS `uid`, and D1's synthetic-`uid` rule makes that very entry the one
+liable row. Their `feeOwed` is one fee precisely because they joined.
+
+**The delta is the definition; the empty-picks entry is an instance.** Work it
+through `memberLiableEntries = max(joinLiability, playableEntryCount)` and every
+case falls out of the one rule:
+
+| Member | Delete | before → after | `liabilityDelta` |
+|---|---|---|---|
+| seeded MANAGER, one empty-picks entry | that entry | `max(0,0)=0` → `max(0,0)=0` | **0** |
+| participant, only an empty-picks entry | that entry | `max(1,0)=1` → `max(1,0)=1` | **0** — they still owe one fee for having JOINED, which is correct and is not what the deleted entry was for |
+| participant, entry 1 picked + entry 2 empty | entry 2 | `max(1,1)=1` → `max(1,1)=1` | **0** |
+| participant, entries 1 and 2 both picked | entry 2 | `max(1,2)=2` → `max(1,1)=1` | **−1** |
+
+The outcome my wrong reasoning predicted (nothing moves) happens to be right in
+all the empty-picks rows — which is exactly why the error was easy to miss and
+worth writing down. **Never state the gate case as "delete a `picks: {}` entry";
+state it as "delete an entry whose removal leaves `memberLiableEntries`
+unchanged".** The first phrasing invites an implementer to special-case empty
+picks; the second is the rule that is actually true.
+
+**ONE delta, computed once, applied to all three.** The delete transaction
+computes the member's liability before and after from the surviving entry
+documents — `liabilityDelta = memberLiableEntries(after) - memberLiableEntries(before)`,
+the same quantity `planMembershipWrite` already returns on the submit path — and
+that single signed number drives `feeOwed`, `playableEntryCount` and the
+`entryCountWrite` call. **Deleting a non-liable entry yields `0` and writes no
+counter at all**, which is also why `entryCountWrite`'s existing `delta === 0 ⇒
+{}` short-circuit is the right shape and needs no change. Three counters derived
+from one delta cannot disagree; three independent decrements can.
+
+🛑 **A FLOOR AT ZERO IS STILL REQUIRED AND IS STILL NOT FREE.** `entryCountWrite`
+emits `FieldValue.increment(delta)` when the field is present
+(`lib/multiEntry.ts:192`) and **applies no clamp** — so on a pool whose
+`entryCount` has drifted (a legacy pool where the derived value was stamped once)
+it can go negative, and `potBreakdown` on a negative denominator produces a
+negative pot. When the delta is negative the delete transaction therefore reads
+the pool doc, computes the next value, and clamps: an explicit
+`entryCount: Math.max(0, current + delta)` rather than a blind increment.
+
+**This costs the increment's concurrency safety**, which is acceptable only
+because the entry doc is in the same transaction's read set and is what actually
+serialises two deletes. Note this is a real amendment to the paragraph above it:
+the opening sentence's "needs no change" is true of the SIGNATURE, and the ticket
+must not read it as licence to route a negative delta through
+`entryCountWrite`'s increment branch.
 
 ### D9 — seasonHistory is NOT a concern, and here is why
 
@@ -613,10 +782,10 @@ Each is its own PR with its own `codex exec review --base origin/main` round set
 
 | T | Ticket | Touches |
 |---|---|---|
-| **P2-T1** | `paidEntries` on the Member Record + the derivation helper (`derivePaidStatus`, `liableEntryIds`) in `shared/memberRecord.ts`. **PURE, no writers yet** — so the whole derivation including R2's empty-map case is unit-tested before anything can write it. | `shared/memberRecord.ts`, its test |
+| **P2-T1** | `paidEntries` on the Member Record + the two derivation helpers (`liableEntryIds(m, uid, pickedEntryIds)` and `derivePaidStatus(m, liable)`) in `shared/memberRecord.ts`, **plus `ownerStateAfter` returning the transaction-local picked ids** that the first one needs (D1a). **PURE, no writers yet** — so the whole derivation including R2's empty-map case is unit-tested before anything can write it. | `shared/memberRecord.ts`, `lib/multiEntry.ts`, their tests |
 | **P2-T2** | `setPaidStatus` takes an optional `entryId`; recomputes `paidStatus` from `paidEntries` in the same transaction; ledger amount becomes the ENTRY's fee when an entryId is given. The entry-doc mirror lands on that entry only. | `functions/src/setPaidStatus.ts`, `schemas/participantOps.ts` |
-| **P2-T3** | Retire K11 (D6): remove `applyPaidReset` and `planMembershipWrite`'s `paidReset`; rewrite emulator case 3 to assert the opposite. | `functions/src/lib/{memberRecord,multiEntry}.ts`, `nflPools.ts` |
-| **P2-T4** | `deleteNFLEntry` callable: commissioner-only, D2/D3 refusals, `admin_audit` row, ledger line, removes the entry doc + its `entries` key + its `paidEntries` key, recomputes `feeOwed`/`playableEntryCount`/`pool.entryCount` (D7/D8, with the clamp). | new `functions/src/nflEntryDelete.ts`, `index.ts`, schemas |
+| **P2-T3** | Retire K11 (D6): remove `applyPaidReset` and `planMembershipWrite`'s `paidReset`, **and REPLACE — not drop — the summary write with `paidStatus: derivePaidStatus(...)` on every UPDATE that changes the entry set** (D1a row 2; dropping it leaves a paid member reading PAID after adding an unpaid entry). Rewrite emulator case 3 to assert the opposite on the per-entry marks AND that the stored summary goes UNPAID. | `functions/src/lib/{memberRecord,multiEntry}.ts`, `nflPools.ts` |
+| **P2-T4** | `deleteNFLEntry` callable: commissioner-only, D2/D3 refusals, `admin_audit` row, ledger line, removes the entry doc + its `entries` key + its `paidEntries` key, recomputes `feeOwed`/`playableEntryCount`/`pool.entryCount` from ONE `liabilityDelta` (D7/D8 — zero for a non-liable entry, with the clamp when negative). | new `functions/src/nflEntryDelete.ts`, `index.ts`, schemas |
 | **P2-T5** | Ledger UI (D10): fee + checkbox on every row, member subtotal, `owedIn`/`paidIn` re-derived per entry with rebuys kept per member. | `PaymentLedgerNFL.tsx`, `NFLManagerView.tsx` |
 | **P2-T6** | The delete control: explain-then-confirm naming the entry, disabled with the reason when D2/D3 refuse it. | `PaymentLedgerNFL.tsx` / manager surface |
 | **P2-T7** | The sweep pass in §8, each reader classified by WHAT IT READS. | `PLAN-MULTI-ENTRY-DUES-SWEEPS.md` |
@@ -698,12 +867,22 @@ Unchanged from the standing set, listed so no ticket has to remember them:
   - pay entry 2 but not entry 1 → member `paidStatus` stays UNPAID, ledger shows
     one paid row;
   - pay both → PAID;
-  - delete an unpaid unscored entry → `feeOwed`, `playableEntryCount` and
-    `pool.entryCount` all DROP;
+  - delete an unpaid unscored **liable** entry → `feeOwed`, `playableEntryCount`
+    and `pool.entryCount` all DROP;
+  - **delete an unpaid unscored entry whose removal leaves `memberLiableEntries`
+    UNCHANGED → all three counters are UNCHANGED.** Cover BOTH shapes, because
+    they differ in why: a seeded MANAGER's `picks: {}` entry (`joinLiability` 0,
+    so it never carried liability) **and** an ordinary participant's second
+    `picks: {}` entry (they still owe one fee for having JOINED, so `feeOwed`
+    must NOT drop either). *(codex r4 #3 — the earlier unconditional "all DROP"
+    would have encoded the wrong behaviour; codex r5 — and the first repair
+    equated `picks: {}` with non-liable, which is false for a participant.)*
   - deleting a PAID entry is refused (D2);
   - deleting an entry in a pool with a scored week is refused (D3);
-  - adding an entry to a fully-paid member does NOT unpay the existing entries
-    (D6 / K11 retired);
+  - adding an entry to a fully-paid member does NOT unpay the existing entries,
+    writes NO `MARKED_UNPAID` ledger line, **and DOES move the member's stored
+    `paidStatus` to UNPAID** (D6 / K11 retired) *(codex r4 #2 — asserting only
+    the first two passes on the bug)*;
   - a seeded commissioner with no liable entries stays UNPAID (R2).
 - Lint delta **ZERO**, measured by stashing rather than trusting a number.
 - `codex exec review --base origin/main` — **never `--base main`** — up to 10
