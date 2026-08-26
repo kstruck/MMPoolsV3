@@ -53,6 +53,12 @@ done
 
 ### The invariant this document holds itself to
 
+⚠️ **Resolve a file against the SUBSECTION, not the top-level section**, when
+checking this document by script: §6 covers two fields, so "appears in §6" does
+not mean "has a verdict for the field you are checking". This is written down
+because a checker without it reported a clean result on five unaccounted pairs
+(see §6h).
+
 **Every path those four commands print appears verbatim somewhere in §4, §5 or
 §6** — no wildcards, no `{a,b}` brace shorthand, no `...` elision, and no path
 written without its `functions/src/`, `src/` or `shared/` prefix. So the list is
@@ -125,7 +131,7 @@ express it.
 | `functions/src/nflEntryDelete.ts` | reads the member record, re-derives after removing the entry, writes via `tx.update` | ✅ **CHANGED by P2-T4.** |
 | `functions/src/lib/memberRecord.ts` | `liabilityRose` → writes `paidStatus: 'UNPAID'`; K11's reset DELETED | ✅ **CHANGED by P2-T2 (D6).** |
 | `functions/src/migrations/reconcilePaymentTruth.ts` | reads the owner's whole entry set + the dues doc, writes `nextDues` + a **derived** summary | ✅ **CHANGED by this ticket (T7).** D1a's "the writer that will be missed" — it runs from Operations, sits in no hot path, and a summary-only write here would be un-paid by the next writer. |
-| `functions/src/lib/poolDues.ts` | the sealed store's read/write helpers | ✅ **NEW in P2-T3.** |
+| `functions/src/lib/poolDues.ts:46,64,82` | `poolRef.collection('private').doc(`dues__${uid}`)` (`:46`); `readPoolDues` returns `snap.data()?.paidEntries` (`:64`); `writePoolDues` takes a complete `paidEntries: PaidEntryMap` and `tx.set`s it **without merge**, so a removal is expressible (`:82`). | ✅ **NEW in P2-T3.** |
 | `functions/src/shared/memberRecord.ts` · `shared/memberRecord.ts` | `derivePaidStatus`, `liableEntryIds`, `isPaidRow` — the derivation itself | ✅ **CHANGED by P2-T1.** Two copies, kept identical by the existing sync check. |
 
 ### 4b. NO-CHANGE — reads the member summary, and "paid in full" still means that (7 verdicts)
@@ -259,7 +265,7 @@ the field's 24 files are all accounted for rather than silently absent.
 | File | Where its verdict is |
 |---|---|
 | `functions/src/setPaidStatus.ts` | §4a — it writes `feeOwed`'s per-entry split alongside the derived summary. |
-| `functions/src/lib/poolDues.ts` | §4a — the sealed store helpers. |
+| `functions/src/lib/poolDues.ts` | §4a — `snap.data()?.paidEntries` off `private/dues__{uid}`; its `feeOwed` mention is the header comment at `:28` noting both fields must move in one transaction. |
 | `src/components/NFLPoolDashboard/NFLManagerView.tsx` | §4e — reads callable output only, no document. |
 
 ---
@@ -307,12 +313,15 @@ direction that costs nobody anything. (The first draft named the latter two only
 in prose without their `functions/src/` prefix, which defeated the machine check
 and let the header say `(1 file)` while three were named — codex r3.)
 
-### 6d. WRITERS (4 verdicts)
+### 6d. WRITERS (7 verdicts)
 
 | File | Verdict |
 |---|---|
 | `functions/src/lib/multiEntry.ts` (12 lines) | `entryCountWrite` / `entryCountAfterDelete`, clamped at 0, derived from Member Records when the field is absent. ✅ **P2-T2/T4.** |
 | `functions/src/nflEntryDelete.ts` (7) | the D4 decrement. ✅ **P2-T4.** |
+| `functions/src/nflPools.ts:171,293-309,348,541-555,897-899,1209-1224` | writes `entryCount: 0` at pool creation (`:171`) and `entryCountWrite(poolData, membersForCount, stamp.liabilityDelta)` on join/pick (`:309,348,899`); reads `typeof poolData.entryCount === 'number'` to decide whether the D8 derivation read is needed (`:296,555`); `:1213` `Number.isInteger(freshPool?.entryCount) ? ... : entryDocCount` feeds `computeWeeklyPrizeSnapshot`. ✅ **P2-T2**, and `:1209-1224` is the WEEKLY twin of the season snapshot in §6b — same D3 protection. |
+| `functions/src/poolExceptions.ts:323-324,525` | the same pair: the D8 derivation read guarded by `typeof poolInTx.entryCount === 'number'`, then `entryCountWrite(poolInTx, membersForCount, stamp...)`. ✅ **P2-T2.** |
+| `functions/src/poolOps.ts:107,627-642` | `:635` `if (typeof current?.entryCount !== 'number')` then `entryCountWrite(current, members, 0)` — a **backfill to zero delta**, initialising the field on a legacy pool without moving it; `:107` lists `entryCount` among fields a client may not write. ✅ **NO-CHANGE.** A zero delta cannot fight the T4 decrement. |
 | `functions/src/bracketEntries.ts:106,389,527` · `functions/src/propBets.ts:99` | `FieldValue.increment(±1)` on **their own** pool types. ✅ **NO-CHANGE** — a pool has one type, so these never share a counter with the NFL path. |
 
 ### 6e. NO-CHANGE — display and capacity (7 verdicts)
@@ -352,19 +361,21 @@ expression, so a future sweep can tell a declaration from a read.
 None reads a live pool's `entryCount` to make a decision, so a decrement reaches
 none of them.
 
-### 6g. `playableEntryCount` — remaining readers (6 verdicts)
+### 6g. `playableEntryCount` — remaining readers (8 verdicts)
 
 | File:line | What it reads | Verdict |
 |---|---|---|
-| `functions/src/nflPools.ts:566,881` · `functions/src/poolExceptions.ts:516` | writes `ownerState.playableEntryCount` from the derived owner state | ✅ **P2-T2.** |
+| `functions/src/lib/multiEntry.ts:166,184,191,195,217,222,227,231` | `let playableEntryCount = written.hasPick ? 1 : 0` then `if (entryHasPick(e.data)) playableEntryCount++` over the owner's entry documents — `ownerStateAfter` (`:184-195`) and `ownerStateWithout` (`:222-231`). ✅ **P2-T2/T4.** `:207` records why it is now a RECOUNT and no longer a one-way latch. |
+| `functions/src/nflEntryDelete.ts:8,32,210` | writes a `playableEntryCount` **recounted from the surviving documents** (`:32`), and `:210` pins the `merge: false` write that deliberately omits it on the other limb. ✅ **P2-T4** — this is the path that made the field reversible. |
+| `functions/src/nflPools.ts:881` · `functions/src/poolExceptions.ts:516` | `playableEntryCount: ownerState.playableEntryCount` — written onto the Member Record from the derived owner state. (`:566` is a **comment** saying the count is derived, not a write; citing it in a row claiming "writes" was inaccurate — codex r5.) | ✅ **P2-T2.** |
 | `functions/src/poolOps.ts:679` | reads it to multiply a fee-rate change | ✅ **NO-CHANGE** (see §5a). |
 | `functions/src/userProfile.ts:29` | comment recording `entryFee x playableEntryCount` (D2) | ✅ **NO-CHANGE.** |
-| `src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx:423,430` | `played` for the delete-confirmation arithmetic | ✅ **P2-T6.** |
+| `src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx:423,430` | `typeof mrec?.playableEntryCount === 'number' ? mrec.playableEntryCount : (...)` — off the **Member Record** in `membersByUid`, with a documented fallback limb for a legacy MANAGER carrying `feeOwed > 0`. Feeds the delete-confirmation arithmetic. | ✅ **P2-T6.** |
 | `src/components/PaymentsPanel.tsx:85,114-115` | `entryFee x max(joinLiability, playableEntryCount)` for the viewer's own outstanding | ✅ **NO-CHANGE.** Reads fresh; a decrement lowers what it shows, correctly. |
 
 ---
 
-### 6h. Cross-referenced — their verdict is in §4 or §5 (6 verdicts)
+### 6h. Cross-referenced — their verdict is in §4 or §5 (5 verdicts)
 
 Same rule as §5e: these read `playableEntryCount` and/or `entryCount` as part of
 the same derivation their §4/§5 verdict already covers. Listed so both fields'
@@ -377,9 +388,18 @@ grep lists are fully accounted for.
 | `functions/src/nflEntryRename.ts` | both | §4b / §5b — one comment listing all four as fields it must **not** write. |
 | `functions/src/nflPoolDues.ts` | `playableEntryCount` | §4c — `:65`, a comment on the count-not-set rule. |
 
-**With §5e and §6h, all 121 (file, field) pairs are accounted for:** 108 carry a
-verdict in their own field's section, 12 are cross-referenced above, and one file
-(`functions/src/nflPools.ts`) carries verdicts in all three sections already.
+**With §5e and §6h, all 121 (file, field) pairs are accounted for** — each has a
+verdict under its own field, or is cross-referenced in §5e / §6h to the verdict
+that covers it. Verified mechanically, resolving `playableEntryCount` against
+§6g/§6h and `entryCount` against the rest of §6.
+
+⚠️ **That last clause is the whole lesson.** The first version of the check
+resolved a file against the top-level section only, and §6 covers **two** fields
+— so any file appearing anywhere in §6 was passed for both. It reported "0
+unaccounted" while five pairs had no verdict (`nflPools.ts`, `poolExceptions.ts`,
+`poolOps.ts` for `entryCount`; `lib/multiEntry.ts`, `nflEntryDelete.ts` for
+`playableEntryCount`). A verification tool that shares the artifact's blind spot
+confirms the blind spot. Found by codex r5, not by the checker.
 
 ---
 
