@@ -283,7 +283,13 @@ export type AuditEventType =
     | 'POOL_CLOSED'
     // PLAN-CO-COMMISSIONERS D2: {op, uid, before, after, revision} — the pool's own
     // audit trail, not admin_audit (that is the SUPER_ADMIN actor log).
-    | 'CO_COMMISSIONER_CHANGED';
+    | 'CO_COMMISSIONER_CHANGED'
+    // PLAN-MULTI-ENTRY-DUES D12: the delete is HARD, so this row and the ledger
+    // line are the ONLY durable record that the entry ever existed. Payload
+    // carries the entry NAME and INDEX, not just the id — ids are deterministic
+    // and reusable (`e2:uid`), so two deletions of "entry 2" would otherwise be
+    // indistinguishable in the trail.
+    | 'ENTRY_DELETED';
 
 export interface AuditLogEvent {
     id: string;

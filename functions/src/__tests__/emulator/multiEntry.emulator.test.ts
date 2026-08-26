@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { createNFLPool, executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal, scoreNFLWeekInternal } from '../../nflPools';
 import { renameNFLEntryInternal } from '../../nflEntryRename';
+import { deleteNFLEntryInternal } from '../../nflEntryDelete';
 import { proxyPick } from '../../poolExceptions';
 import { setPaidStatus } from '../../setPaidStatus';
 import { updatePoolSettings } from '../../poolOps';
@@ -1188,5 +1189,376 @@ describe('renameNFLEntry — a rename that renames and nothing else', () => {
     // ...and no MARKED_UNPAID line was appended. K11 fires on a dues RISE; a
     // rename raises nothing, so the ledger must be silent.
     expect(await ledger(ALICE)).toHaveLength(0);
+  }, 60000);
+});
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T4 — `deleteNFLEntry`.
+ *
+ * 🛑 THE FIRST PATH IN THIS REPO THAT LOWERS A ONE-WAY COUNTER. What makes that
+ * safe is D2 and D3, so the refusals are tested before the arithmetic.
+ */
+describe('deleteNFLEntry — the first path that lowers a one-way counter', () => {
+  beforeEach(async () => {
+    for (const uid of [HOST, ALICE, BOB]) await db.collection('users').doc(uid).set({ name: uid });
+    await db.collection('nfl_games').doc(G1).set({
+      id: G1, espnGameId: G1, season: SEASON, seasonType: 1, week: 1,
+      startTime: Date.now() + 4 * HOUR, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true },
+    });
+  });
+
+  const del = (actor: string, target: string, entryIndex: number) =>
+    deleteNFLEntryInternal(db, { actorUid: actor }, { poolId: POOL, targetUid: target, entryIndex });
+
+  it('deletes an unpaid, unscored entry and takes ALL THREE counters down together', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    expect((await member(ALICE)).feeOwed).toBe(50);
+    expect((await pool()).entryCount).toBe(3);          // host 0 + alice 2 + bob 1
+
+    const res = await del(HOST, ALICE, 2);
+    expect(res).toMatchObject({ success: true, entryId: `e2:${ALICE}`, entryIndex: 2, liabilityDelta: -1 });
+
+    // D12: HARD delete, no tombstone.
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(false);
+    const m = await member(ALICE);
+    expect(m.feeOwed).toBe(25);                          // one fee, not two
+    expect(m.playableEntryCount).toBe(1);                // RECOUNTED, not decremented
+    expect(Object.keys(m.entries)).toEqual([ALICE]);     // roster map rebuilt without it
+    expect((await pool()).entryCount).toBe(2);           // the pot denominator follows
+  }, 60000);
+
+  it('D2: refuses a PAID entry, and changes NOTHING when it refuses', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_PAID/);
+    // A refusal is a no-op on every store it would have touched.
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(true);
+    expect((await member(ALICE)).feeOwed).toBe(50);
+    expect((await pool()).entryCount).toBe(3);
+    expect(Object.keys(await dues(ALICE))).toEqual([`e2:${ALICE}`]);
+
+    // ...and the documented escape hatch actually works: un-mark, then delete.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    await expect(del(HOST, ALICE, 2)).resolves.toMatchObject({ success: true });
+  }, 60000);
+
+  it('D2 IS what makes the dues-key removal unreachable — pin the coupling, not the line', async () => {
+    // A mutation that KEEPS the key after a delete survives the suite, because
+    // D2 refuses before the removal can matter. That is fine, but only while D2
+    // checks the map — so assert the coupling directly: a key present in the
+    // dues store refuses the delete, full stop.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect(Object.prototype.hasOwnProperty.call(await dues(ALICE), `e2:${ALICE}`)).toBe(true);
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_PAID/);
+    // ...and with the key gone, the same delete succeeds — so the refusal is
+    // keyed on the MAP and not on something incidental.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect(Object.prototype.hasOwnProperty.call(await dues(ALICE), `e2:${ALICE}`)).toBe(false);
+    await expect(del(HOST, ALICE, 2)).resolves.toMatchObject({ success: true });
+  }, 60000);
+
+  it('D2: a LEGACY paid member (no dues doc) is refused too — absent detail is not "unpaid"', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    // The pre-ticket shape: PAID on the member, no per-entry map at all.
+    await poolRef().collection('members').doc(ALICE).set({ paidStatus: 'PAID' }, { merge: true });
+    expect(await dues(ALICE)).toBeUndefined();
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_PAID/);
+  }, 60000);
+
+  it('D3: refuses once ANY week is scored — the test is on the POOL, not the entry', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    // Entry 2 itself has scored nothing; the POOL has scored a week.
+    await poolRef().set({ scoredWeeks: { 1: true } }, { merge: true });
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_SCORED/);
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(true);
+  }, 60000);
+
+  it('D3: the legacy scoredThroughWeek high-water mark refuses too', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await poolRef().set({ scoredThroughWeek: 2 }, { merge: true });
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_SCORED/);
+  }, 60000);
+
+  it('D3: a published standings projection refuses even with no scored-week marker', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await poolRef().collection('standings').doc('current').set({ rows: [], lastScoredWeek: 1 });
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_SCORED/);
+  }, 60000);
+
+  it('D3: the DURABLE publishedWeeks marker refuses, even with no scoredWeeks (a provisional pass)', async () => {
+    // A provisional scoring pass writes publishedWeeks.{week} and deliberately
+    // WITHHOLDS scoredWeeks/scoredThroughWeek (nflPools.ts:1876). So a mid-week
+    // pool can have shown members a result while carrying neither marker
+    // `legacyPublishedWeeks` reads.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await poolRef().set({ publishedWeeks: { 1: true } }, { merge: true });
+    const p = await pool();
+    expect(p.scoredWeeks).toBeUndefined();          // the weaker markers are absent...
+    expect(p.scoredThroughWeek).toBeUndefined();
+    expect((await poolRef().collection('standings').doc('current').get()).exists).toBe(false);
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_SCORED/);   // ...and it still refuses
+  }, 60000);
+
+  it('refuses an ORPHAN entry with no Member Record, rather than stranding the pot denominator', async () => {
+    // Reachable on a pool predating ADR-0003's roster model. Treating the absent
+    // record as {} makes liabilityDelta 0, so the entry would be destroyed while
+    // pool.entryCount kept counting it — permanently, with nothing left to
+    // explain why. Refusing is recoverable; deleting is not.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    const before = (await pool()).entryCount;
+    await poolRef().collection('members').doc(ALICE).delete();
+
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_MEMBER_NOT_FOUND/);
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(true);      // nothing destroyed
+    expect((await pool()).entryCount).toBe(before);              // denominator untouched
+  }, 60000);
+
+  it('refuses a STALE Member Record whose count disagrees with the entry documents', async () => {
+    // `backfillMemberRecords` writes with merge:false and NO playableEntryCount
+    // and NO entries, so a backfilled member owning two picked entries reads as
+    // liable for ONE. The delta would then be 1 - 1 = 0 and the entry would be
+    // destroyed while pool.entryCount kept counting it. An earlier version of
+    // this callable recommended running that very backfill as the fix.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    const before = (await pool()).entryCount;
+    // Exactly what the backfill produces.
+    await poolRef().collection('members').doc(ALICE).set({
+      uid: ALICE, poolId: POOL, userName: ALICE, role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(),
+    }, { merge: false });
+
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/MEMBER_RECORD_STALE/);
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(true);
+    expect((await pool()).entryCount).toBe(before);
+
+    // The recovery the message actually recommends: one submit restamps the
+    // record, and the delete then costs correctly.
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    expect((await member(ALICE)).playableEntryCount).toBe(2);   // no longer stale
+    const res = await del(HOST, ALICE, 2);
+    expect(res.liabilityDelta).toBe(-1);                        // costed, not silently zero
+    expect((await member(ALICE)).playableEntryCount).toBe(1);
+
+    // ⚠️ `pool.entryCount` is NOT asserted against `before` here, and the reason
+    // is worth stating: WIPING the record desynced it. The stale record
+    // under-reported, so the healing submit added +1 to a counter that already
+    // counted both entries. That drift is caused by the corruption this test
+    // fabricates, not by the delete — which is precisely why the delete refuses
+    // to do arithmetic on a record in that state.
+  }, 60000);
+
+  it('an ordinary LEGACY record (no playableEntryCount, one picked entry) still passes', async () => {
+    // The stale-record guard must not refuse the common pre-T2 shape: the latch
+    // set, the counter absent, one entry. memberPlayedEntries reads 1 and the
+    // documents say 1, so they agree.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await poolRef().collection('members').doc(ALICE).update({
+      playableEntryCount: admin.firestore.FieldValue.delete(),
+    });
+    expect((await member(ALICE)).playableEntryCount).toBeUndefined();
+    expect((await member(ALICE)).hasPlayableEntry).toBe(true);
+
+    await expect(del(HOST, ALICE, 1)).resolves.toMatchObject({ success: true, liabilityDelta: 0 });
+  }, 60000);
+
+  it('pickedWeeks is cleared when nothing survives, and left alone when something does', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    expect((await member(ALICE)).pickedWeeks).toEqual([1]);
+
+    // Partial: ACCEPTED staleness. pick'em picks are keyed by gameId, not week,
+    // so the union cannot be recomputed without every game doc. Bounded to
+    // display, and D3 means nothing is scored.
+    await del(HOST, ALICE, 2);
+    expect((await member(ALICE)).pickedWeeks).toEqual([1]);
+
+    // Total: nothing survives, so the union is a claim about picks that no
+    // longer exist anywhere.
+    await del(HOST, ALICE, 1);
+    expect((await member(ALICE)).pickedWeeks).toBeUndefined();
+  }, 60000);
+
+  it('AUTHORIZATION: a member cannot delete their own entry, nor another member', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await expect(del(ALICE, ALICE, 2)).rejects.toThrow(/Only the commissioner/);
+    await expect(del(BOB, ALICE, 2)).rejects.toThrow(/Only the commissioner/);
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(true);
+  }, 60000);
+
+  it('a NON-LIABLE entry deletes but moves NO counter (D8 — the delta is the rule)', async () => {
+    // `picks: {}` is schema-legal on pick'em and persists an entry with no
+    // committed pick. It was never in playableEntryCount, feeOwed or entryCount.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: {}, entryIndex: 2 });
+    const before = await member(ALICE);
+    const poolBefore = await pool();
+    expect(before.playableEntryCount).toBe(1);
+
+    const res = await del(HOST, ALICE, 2);
+    expect(res.liabilityDelta).toBe(0);
+    const m = await member(ALICE);
+    expect(m.feeOwed).toBe(before.feeOwed);
+    expect(m.playableEntryCount).toBe(1);
+    expect((await pool()).entryCount).toBe(poolBefore.entryCount);
+  }, 60000);
+
+  it('D7a: an ABSENT feeOwed stays absent — a delete must not turn "unknown" into a claim', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await poolRef().collection('members').doc(ALICE).update({ feeOwed: admin.firestore.FieldValue.delete() });
+    expect((await member(ALICE)).feeOwed).toBeUndefined();
+
+    await del(HOST, ALICE, 2);
+    // Still absent. `memberDues` falls back to the pool fee for exactly this
+    // case; writing a number here would be a claim on the one path that lowers
+    // money owed.
+    expect((await member(ALICE)).feeOwed).toBeUndefined();
+    expect((await member(ALICE)).playableEntryCount).toBe(1);   // the recount still lands
+  }, 60000);
+
+  it('D7b: rebuyOwed and rebuyPaid are byte-identical across a delete', async () => {
+    // Unreachable in practice (a rebuy needs an ELIMINATED entry, which needs a
+    // scored week, which D3 forbids) — pinned anyway, because only one line in
+    // nflPools.ts and D3 make it so, and neither is visible from here.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await poolRef().collection('members').doc(ALICE).set({ rebuyOwed: 10, rebuyPaid: 5 }, { merge: true });
+
+    await del(HOST, ALICE, 2);
+    const m = await member(ALICE);
+    expect(m.rebuyOwed).toBe(10);
+    expect(m.rebuyPaid).toBe(5);
+  }, 60000);
+
+  it('N2: the dues key goes with the entry, so a RE-CREATED entry starts unpaid', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    await del(HOST, ALICE, 2);
+    expect(Object.keys(await dues(ALICE) ?? {})).toEqual([]);
+
+    // Re-create at the SAME deterministic id and it is unpaid, so a commissioner
+    // cannot manufacture a paid entry by deleting and re-adding one.
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(true);
+    expect(Object.keys(await dues(ALICE) ?? {})).toEqual([]);
+    expect((await member(ALICE)).paidStatus).toBe('UNPAID');
+    expect((await member(ALICE)).feeOwed).toBe(50);        // and it is charged again
+  }, 60000);
+
+  it('the ledger records the deletion with the entry NAME and INDEX (ids are reusable)', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2, entryName: 'Lucky Two' });
+    await del(HOST, ALICE, 2);
+
+    const rows = (await ledger(ALICE)).filter(l => l.type === 'ENTRY_DELETED');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].note).toMatch(/Entry #2 "Lucky Two" deleted/);
+    expect(rows[0].amount).toBe(25);
+    expect(rows[0].actorUid).toBe(HOST);
+    // Participant-readable collection: it must not name the entry ID.
+    expect(rows[0].entryId).toBeUndefined();
+
+    // ...and D12's OTHER durable record, which is NOT participant-readable and
+    // therefore MAY name the id. The delete keeps no corpse, so these two rows
+    // are the only evidence the entry ever existed.
+    const audit = (await poolRef().collection('audit').get()).docs
+      .map(d => d.data()).filter(a => a.type === 'ENTRY_DELETED');
+    expect(audit).toHaveLength(1);
+    expect(audit[0].payload).toMatchObject({
+      targetUid: ALICE, entryId: `e2:${ALICE}`, entryIndex: 2, entryName: 'Lucky Two', liabilityDelta: -1,
+    });
+    expect(audit[0].actor.uid).toBe(HOST);
+  }, 60000);
+
+  it('deleting a member LAST entry clears the hasPlayableEntry latch — no ghost competitor', async () => {
+    // The latch was documented one-way ("a member cannot un-submit"). A delete is
+    // the case that did not exist when it was written. Left true, the member
+    // keeps a standings row for an entry that is gone — `buildMemberStandings`
+    // includes them on the latch and reads an EMPTY roster map as legacy entry #1.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    expect((await member(ALICE)).hasPlayableEntry).toBe(true);
+
+    await del(HOST, ALICE, 1);
+    const m = await member(ALICE);
+    expect(m.hasPlayableEntry).toBe(false);
+    expect(m.playableEntryCount).toBe(0);
+    expect(m.entries).toEqual({});
+    // A participant who joined still owes their join fee — liability is not the
+    // same question as being on the leaderboard.
+    expect(m.feeOwed).toBe(25);
+  }, 60000);
+
+  it('a REFUSED delete writes no audit row and no ledger line', async () => {
+    // The trail must record deletions, not attempts — an audit row for a delete
+    // that never happened is worse than none, because D12 makes these rows the
+    // only evidence the entry existed at all.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await poolRef().set({ scoredWeeks: { 1: true } }, { merge: true });
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_IS_SCORED/);
+
+    const audit = (await poolRef().collection('audit').get()).docs
+      .map(d => d.data()).filter(a => a.type === 'ENTRY_DELETED');
+    expect(audit).toHaveLength(0);
+    expect((await ledger(ALICE)).filter(l => l.type === 'ENTRY_DELETED')).toHaveLength(0);
+  }, 60000);
+
+  it('refuses an entry the member does not have, and never CREATES one', async () => {
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_NOT_FOUND/);
+    expect((await entry(`e2:${ALICE}`)).exists).toBe(false);
+    // A retried delete is ENTRY_NOT_FOUND, which is the right answer.
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await del(HOST, ALICE, 2);
+    await expect(del(HOST, ALICE, 2)).rejects.toThrow(/ENTRY_NOT_FOUND/);
+  }, 60000);
+
+  it('a legacy pool with NO entryCount derives it, then subtracts', async () => {
+    await seedPool({ max: 2, entryCount: null });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    expect((await pool()).entryCount).toBe(3);
+    await poolRef().update({ entryCount: admin.firestore.FieldValue.delete() });   // back to legacy
+    await del(HOST, ALICE, 2);
+    // Derived from the Member Records (host 0 + alice 1-after + bob 1) rather
+    // than incremented from a field that is not there.
+    expect((await pool()).entryCount).toBe(2);
   }, 60000);
 });

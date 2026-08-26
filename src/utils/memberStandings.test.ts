@@ -38,6 +38,34 @@ describe('buildMemberStandings', () => {
         expect(rows.map(r => r.ownerUid)).toEqual(['kevin', 'ron']);
     });
 
+    /**
+     * PLAN-MULTI-ENTRY-DUES P2-T4 (codex r1 on the delete callable).
+     *
+     * 🛑 THE GHOST COMPETITOR. `deleteNFLEntry` removes a member's last entry, so
+     * their roster map goes empty and `playableEntryCount` goes to 0. If the
+     * `hasPlayableEntry` LATCH were left `true` — which is what "one-way" used to
+     * mean — this function would still include them (line 234), and
+     * `ownedEntryIds` treats an EMPTY map as a legacy record with one entry keyed
+     * by the uid (line 111). Net effect: a row for an entry that no longer
+     * exists, visible to every member, until scoring starts.
+     */
+    it('a member whose LAST entry was deleted gets no ghost row', () => {
+        // MUST NOT catch: the post-delete shape the callable writes.
+        const deleted = { uid: 'ron', userName: 'Ron Johnson', hasPlayableEntry: false, entries: {}, playableEntryCount: 0 };
+        expect(buildMemberStandings({
+            pool: POOL, members: [deleted], standingsRows: [], ownEntries: [],
+        })).toHaveLength(0);
+
+        // MUST catch: the same record with the latch left ON — the bug. One row
+        // appears, keyed by the uid, for an entry that was deleted.
+        const stale = { ...deleted, hasPlayableEntry: true };
+        const ghost = buildMemberStandings({
+            pool: POOL, members: [stale], standingsRows: [], ownEntries: [],
+        });
+        expect(ghost).toHaveLength(1);
+        expect(ghost[0].id).toBe('ron');
+    });
+
     it('marks a member with no scored row `unscored` instead of inventing standings', () => {
         const rows = buildMemberStandings({
             pool: POOL,
