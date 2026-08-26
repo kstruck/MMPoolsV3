@@ -75,6 +75,19 @@ interface Props {
    * yesterday, so it is never wrong — only less detailed.
    */
   liableByUid?: Record<string, string[]>;
+  /**
+   * Entry ids whose ENTRY DOCUMENT says PAID — the delete callable's third
+   * payment refusal. The ledger cannot read raw entries for other members
+   * (own-entry-only pre-reveal), so this arrives from the same callable.
+   */
+  paidMirrorIds?: string[];
+  /**
+   * PLAN-MULTI-ENTRY-DUES P2-T6. Delete one entry. Absent = no control at all,
+   * which is how every non-commissioner surface renders.
+   */
+  onDeleteEntry?: (uid: string, entryIndex: number, entryId: string, entryLabel: string, movesMoney: boolean | null) => void;
+  /** entryId currently being deleted — the row's control shows a spinner. */
+  deletingEntryId?: string | null;
   /** Survivor rebuy dues settle independently of base dues (P3). */
   onSettleRebuys?: (uid: string, settle: boolean) => void;
   /**
@@ -97,7 +110,7 @@ const fromYmd = (ymd: string): number => { const [y, m, d] = ymd.split('-').map(
 /** Owner uid of an entry doc: entry #1's id IS the uid; extras carry `ownerUid`. */
 const entryOwner = (e: any): string => e?.ownerUid || e?.id;
 
-export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTogglePaid, onSettleRebuys, onSavePaidDetails, savingFeeUid = null, duesByUid, liableByUid }) => {
+export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTogglePaid, onSettleRebuys, onSavePaidDetails, savingFeeUid = null, duesByUid, liableByUid, paidMirrorIds, onDeleteEntry, deletingEntryId = null }) => {
   // Inline fee-details editor: which uid is open + its draft.
   // Keyed by ENTRY id, not uid (D10): two rows of the same member would both
   // open the editor if this were a uid.
@@ -246,6 +259,35 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     // (or a participant/entry-only row) with no `feeOwed` stamp owes the pool's
     // entry fee, not $0 (codex r5 on T5).
     const rates = duesRates(pool);
+    // 🛑 D3, MIRRORED FROM THE SERVER — and it is a MIRROR, never the gate.
+    // `deleteNFLEntry` re-checks all three sources itself; this exists so the
+    // commissioner is told WHY the control is dead instead of clicking into an
+    // error. The three must stay in step, so they are read from the same fields
+    // the callable reads (`publishedWeeks`, `scoredWeeks`, `scoredThroughWeek`).
+    const p = pool as unknown as {
+      publishedWeeks?: Record<string, unknown>; scoredWeeks?: Record<string, unknown>;
+      scoredThroughWeek?: unknown; lastScoredAt?: unknown;
+    };
+    const poolHasScored =
+      Object.values(p.publishedWeeks ?? {}).some(v => v === true)
+      || Object.values(p.scoredWeeks ?? {}).some(v => v === true)
+      || Number(p.scoredThroughWeek ?? 0) > 0
+      // 🛑 `lastScoredAt` STANDS IN FOR `standings/current`, WHICH THIS
+      // COMPONENT CANNOT SEE (codex). The callable's third refusal is that the
+      // published projection exists at all, and a pool can carry it with none of
+      // the three markers above — a provisional pass writes standings while
+      // deliberately withholding `scoredWeeks`.
+      //
+      // The proxy is exact rather than approximate: `lastScoredAt` is set in the
+      // SAME `fencedWrite` that writes `standings/current`
+      // (`nflPools.ts:1872-1875`), and the only other writer pairs them too
+      // (`migrations/backfillProfileData.ts:196-204`). So its presence implies
+      // the projection exists.
+      //
+      // Subscribing to `standings/current` from the ledger just to grey out a
+      // button would be a new read on every commissioner render for a fact the
+      // pool document already carries.
+      || p.lastScoredAt !== undefined;
     const entriesByUid = new Map<string, any[]>();
     for (const e of entries ?? []) {
       const uid = entryOwner(e);
@@ -259,6 +301,12 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       hasMember: boolean; feeOwed: number | null; paidStatus: 'PAID' | 'UNPAID' | null;
       /** D10: the MEMBER's total, carried on their LAST row so the subtotal can render under the group. */
       memberTotal: number | null; lastOfMember: boolean; memberName: string;
+      /** The callable addresses an entry by INDEX, not id — ids are deterministic but the API is index-based. */
+      entryIndex: number;
+      /** D2/D3: why this entry cannot be deleted, or null when it can. */
+      deleteRefusal: string | null;
+      /** Will deleting this entry lower dues and the pot? `null` = not yet known. */
+      deleteMovesMoney: boolean | null;
       rebuyOwed: number; rebuyPaid: number;
       /** Payment metadata (method / date / note) — shown under the fee box, editable via onSavePaidDetails. */
       paidMeta?: string; paymentMethod?: string; paidAt?: number | null; paymentNote?: string | null;
@@ -271,9 +319,14 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       // Entry roster = the Member Record's `entries` map (existence + index +
       // name, reveal-safe — PLAN-MULTI-ENTRY) ∪ the entry docs we were given,
       // which can be the per-OWNER standings fold and hide entry #2+ (codex r4).
-      const byId = new Map<string, { id: string; entryIndex?: number; entryName?: string }>();
+      // `paidStatus` is carried through because the delete gate needs the ENTRY
+      // DOCUMENT's own payment mirror — the callable refuses on it, and it can
+      // diverge from the member record on a legacy row. An earlier version of
+      // this gate read it off an object that never had it, so the check was
+      // INERT: it looked like a guard and was not. (codex)
+      const byId = new Map<string, { id: string; entryIndex?: number; entryName?: string; paidStatus?: unknown }>();
       for (const [id, v] of Object.entries((membersByUid.get(r.uid)?.entries ?? {}) as Record<string, { entryIndex?: number; name?: string }>)) byId.set(id, { id, entryIndex: v?.entryIndex, entryName: v?.name });
-      for (const e of entriesByUid.get(r.uid) ?? []) byId.set(e.id, { id: e.id, entryIndex: e.entryIndex ?? byId.get(e.id)?.entryIndex, entryName: e.entryName ?? byId.get(e.id)?.entryName });
+      for (const e of entriesByUid.get(r.uid) ?? []) byId.set(e.id, { id: e.id, entryIndex: e.entryIndex ?? byId.get(e.id)?.entryIndex, entryName: e.entryName ?? byId.get(e.id)?.entryName, paidStatus: e.paidStatus });
       const own = [...byId.values()].sort((a, b) => (a.entryIndex ?? 1) - (b.entryIndex ?? 1));
       const ids = own.length ? own.map(e => e.id) : [r.uid]; // entry #1's id is the uid
       // Fallback is per LIABLE entry (feeOwed = fee × entries, shared/memberRecord) — an
@@ -332,6 +385,56 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
         //   - member owes 0     -> nothing, whatever the set says (the seeded
         //                          host: hosting is not playing).
         const chargeable = isChargeable(entryId, i);
+        // WHY a delete is refused, in the server's own order (D2 before D3 is
+        // not significant; both refuse). A row that is not a real entry
+        // document — the synthetic uid row of a joined-never-picked member, or
+        // a prize recipient — has nothing to delete.
+        // ⚠️ THE ENTRY DOCUMENT'S OWN MIRROR IS CHECKED TOO. The callable refuses
+        // on ANY of three payment sources — the dues map, the member summary
+        // fallback, and `entry.paidStatus` — because they can diverge on a
+        // legacy record. Mirroring only the first two leaves a button that
+        // opens a confirmation and then errors.
+        // The entry document's own mirror. `e` carries `paidStatus` only when
+        // this component was handed raw entry docs, which happens for the
+        // viewer's own rows and not generally — so the authoritative source is
+        // the server-supplied list, with the local field as a fallback.
+        const mirrorPaid = paidMirrorIds ? paidMirrorIds.includes(entryId) : e?.paidStatus === 'PAID';
+        const deleteRefusal: string | null =
+          !r.hasMember ? 'This row is not one of this pool’s member entries.'
+          : poolHasScored ? 'This pool has already scored a week. Entries can no longer be deleted — published standings, recaps and prizes reference them.'
+          : (entryPaid === 'PAID' || mirrorPaid) ? 'This entry is marked paid. Un-mark its payment first, so the money coming off the books is recorded.'
+          : !e ? 'This entry has no saved picks yet, so there is nothing to delete.'
+          : null;
+
+        // 🛑 WILL THIS DELETE ACTUALLY MOVE MONEY? The server's own arithmetic,
+        // reproduced from data the client legitimately has (codex).
+        //
+        // `chargeable` is NOT the answer: a participant's entry #1 carries the
+        // JOIN liability, so the row shows a fee — but deleting it leaves that
+        // liability intact (they still joined), and the callable returns
+        // `liabilityDelta: 0`. Promising a drop would contradict the outcome
+        // message a second later, at the irreversible step.
+        //
+        //   liability = max(joinLiability, playedEntries)
+        //
+        // and an entry only lowers `played` if it actually holds a pick — which
+        // is exactly the server-supplied liable set, and only meaningful once
+        // `played > 0` (below that the set is D1's synthetic `uid` fallback).
+        const mrec = membersByUid.get(r.uid) as { playableEntryCount?: unknown; hasPlayableEntry?: unknown; role?: unknown } | undefined;
+        // ⚠️ THE LEGACY-MANAGER LIMB IS PART OF THE FALLBACK, AND OMITTING IT
+        // FLIPS THE PREDICTION (codex). `memberPlayedEntries` counts a MANAGER
+        // whose record predates the latch but carries `feeOwed > 0` as ONE
+        // played entry — they were charged, so they played. Without it, such a
+        // manager deleting their only picked entry is told nothing will change
+        // while the server lowers both their dues and the pot.
+        const played = typeof mrec?.playableEntryCount === 'number' ? mrec.playableEntryCount
+          : (mrec?.hasPlayableEntry === true
+              || (mrec?.role === 'MANAGER' && Number(r.feeOwed ?? 0) > 0) ? 1 : 0);
+        const joinLiability = mrec?.role === 'MANAGER' ? 0 : 1;
+        const thisHoldsAPick = played > 0 && !!memberLiable?.includes(entryId);
+        // `null` = the liable set has not loaded, so claim NEITHER outcome.
+        const deleteMovesMoney: boolean | null = memberLiable === undefined ? null
+          : Math.max(joinLiability, played - (thisHoldsAPick ? 1 : 0)) < Math.max(joinLiability, played);
         const entryFee = r.feeOwed === null ? null
           : chargeable ? perRow + (entryId === chargeableIds[0] ? remainder : 0)
           : null;
@@ -340,6 +443,9 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
           hasMember: r.hasMember, feeOwed: entryFee, paidStatus: entryPaid, rebuyOwed, rebuyPaid: r.rebuyPaid ?? 0,
           memberTotal: r.feeOwed === null ? null : feeOwed, lastOfMember: i === ids.length - 1,
           memberName: r.userName ?? r.uid,
+          entryIndex: e?.entryIndex ?? i + 1,
+          deleteRefusal,
+          deleteMovesMoney,
           // Per-ENTRY detail when the map has it; otherwise the member-level
           // fields, which is all a pre-Phase-2 record carries.
           paidMeta: entryPaid === 'PAID'
@@ -363,12 +469,12 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     for (const p of prizeRows) {
       if (rows.some(r => r.entryId === p.entryId)) continue;
       const known = rosterUids.has(p.uid);
-      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0, memberTotal: null as number | null, lastOfMember: false, memberName: p.name };
+      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0, memberTotal: null as number | null, lastOfMember: false, memberName: p.name, entryIndex: 1, deleteRefusal: 'This row is a prize record, not a member entry.', deleteMovesMoney: null as boolean | null };
       const last = known ? rows.map(r => r.uid).lastIndexOf(p.uid) : -1;
       if (last >= 0) rows.splice(last + 1, 0, row); else rows.push(row);
     }
     return rows;
-  }, [pool, members, entries, prizeRows, duesByUid, liableByUid]);
+  }, [pool, members, entries, prizeRows, duesByUid, liableByUid, paidMirrorIds]);
 
   const totals = useMemo(() => {
     let owedIn = 0, paidIn = 0, owedOut = 0, paidOut = 0;
@@ -528,7 +634,44 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
             {ledgerRows.map(r => (
               <React.Fragment key={r.key}>
               <tr className="border-t border-line">
-                <td className={`${td} text-[color:var(--text)] font-bold`}>{r.name}</td>
+                <td className={`${td} text-[color:var(--text)] font-bold`}>
+                  <span className="inline-flex items-center gap-2">
+                    <span>{r.name}</span>
+                    {/* P2-T6 — the delete control.
+                        🛑 DISABLED WITH THE REASON, never hidden. A hidden
+                        control is indistinguishable from a missing feature, and
+                        the commissioner is left guessing why an entry they can
+                        see cannot go. The `title` carries the same sentence the
+                        server would have thrown.
+                        The refusals here MIRROR `deleteNFLEntry`; they do not
+                        gate it. The callable re-checks D2 and D3 itself, so a
+                        stale tab cannot delete a paid or scored entry. */}
+                    {onDeleteEntry && (
+                      <button
+                        type="button"
+                        aria-label={`Delete ${r.name}`}
+                        title={r.deleteRefusal ?? `Delete ${r.name} — refunds nothing, and lowers this member's dues and the pot`}
+                        disabled={!!r.deleteRefusal || deletingEntryId === r.entryId}
+                        // `chargeable` (r.feeOwed !== null) travels so the
+                        // CONFIRMATION can say what will actually move: a row
+                        // carrying no fee is not liable, so its delete changes
+                        // no dues and no pot, and promising otherwise at the
+                        // irreversible step tells the commissioner something
+                        // untrue.
+                        // The row's ACTUAL id travels, not one reconstructed
+                        // from the index: `resolveOwnedEntry` supports an
+                        // auto-generated id when the deterministic one is taken
+                        // (multiEntry.ts §0a), and a reconstructed id would
+                        // never match — leaving the row enabled during the
+                        // request and a second confirmation one click away.
+                        onClick={() => onDeleteEntry(r.uid, r.entryIndex, r.entryId, r.name, r.deleteMovesMoney)}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-line text-muted hover:text-red-600 hover:border-red-400 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-muted disabled:hover:border-line"
+                      >
+                        {deletingEntryId === r.entryId ? '…' : 'Delete'}
+                      </button>
+                    )}
+                  </span>
+                </td>
                 {/* D10: the fee and the checkbox render on EVERY row. The old
                     `r.first` gate is what put one $50 figure and one all-or-
                     nothing box beside a member's first entry. */}

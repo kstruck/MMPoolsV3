@@ -74,6 +74,16 @@ export interface PoolDuesResult {
    * Same commissioner-only boundary as `dues`, so it costs no new exposure.
    */
   liable: Record<string, string[]>;
+  /**
+   * Entry ids whose ENTRY DOCUMENT carries `paidStatus: 'PAID'`.
+   *
+   * The delete callable refuses on ANY of three payment sources, and this is the
+   * third — it can diverge from the member record on a legacy row. The
+   * commissioner ledger cannot read it for other members (raw entries are
+   * own-entry-only pre-reveal), so without this the UI cannot honestly mirror
+   * that refusal and offers a button the server rejects.
+   */
+  paidMirrors: string[];
 }
 
 export async function getPoolDuesInternal(
@@ -119,9 +129,11 @@ export async function getPoolDuesInternal(
     poolRef.collection('members').get(),
   ]);
   const pickedByOwner = new Map<string, string[]>();
+  const paidMirrors: string[] = [];
   for (const e of entriesSnap.docs) {
     const data = e.data() as Record<string, unknown>;
     const owner = typeof data.ownerUid === 'string' ? data.ownerUid : e.id;   // legacy: entry #1's id IS the uid
+    if (data.paidStatus === 'PAID') paidMirrors.push(e.id);
     if (!entryHasPick(data)) continue;
     pickedByOwner.set(owner, [...(pickedByOwner.get(owner) ?? []), e.id]);
   }
@@ -145,7 +157,7 @@ export async function getPoolDuesInternal(
       dues[uid] = map as PaidEntryMap;
     }
   }
-  return { dues, liable };
+  return { dues, liable, paidMirrors };
 }
 
 export const getPoolDues = validated(
