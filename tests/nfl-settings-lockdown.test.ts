@@ -167,7 +167,7 @@ describe('NFLManagerView — the roster toggle has no legacy payment fallback', 
     // payments ledger, the roster summary and the pot all still said UNPAID —
     // exactly the D13 defect PLAN-PAYMENT-TRUTH P1 existed to close, reachable
     // again through the error path. This pins its absence from the whole file.
-    expect(view).toContain('dbService.setPaidStatus(pool.id, uid, nextPaid)');
+    expect(view).toContain('dbService.setPaidStatus(pool.id, uid, nextPaid, undefined, entryId)');
     expect(view).not.toContain('updateBracketEntryPayment');
   });
 

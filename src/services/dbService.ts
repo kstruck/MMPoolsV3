@@ -794,17 +794,41 @@ export const dbService = {
     // with OR without an entry (writes the Member Record + ledger, and mirrors the display
     // fields onto the entry doc when one exists). Commissioner/owner only. The optional
     // details carry the Bento ledger's method/date/note (PLAN-PAYMENT-TRUTH P1).
+    // PLAN-MULTI-ENTRY-DUES P2-T2: `entryId` names WHICH entry this mark settles.
+    // Omitted = the whole member, which is the pre-Phase-2 behaviour every other
+    // caller still gets.
     setPaidStatus: async (
         poolId: string, memberUid: string, isPaid: boolean,
         details?: { paymentMethod?: string; paidAt?: number | null; paymentNote?: string | null },
+        entryId?: string,
     ): Promise<void> => {
         const fn = httpsCallable(functions, 'setPaidStatus');
         await fn(withCorrelationId({
             poolId, memberUid, isPaid,
+            ...(entryId ? { entryId } : {}),
             ...(details?.paymentMethod ? { paymentMethod: details.paymentMethod } : {}),
             ...(details?.paidAt !== undefined ? { paidAt: details.paidAt } : {}),
             ...(details?.paymentNote !== undefined ? { paymentNote: details.paymentNote } : {}),
         }));
+    },
+
+    /**
+     * PLAN-MULTI-ENTRY-DUES P2-T5: the per-entry payment map, commissioner only.
+     *
+     * A callable rather than a Firestore read because the map lives in
+     * `pools/{id}/private/dues__{uid}`, which `firestore.rules` seals to every
+     * client — its keys name entries that have committed a pick, which is
+     * commissioner-only information (the D1 amendment). Same posture as
+     * `getPoolPicks`.
+     */
+    getPoolDues: async (poolId: string): Promise<{
+        dues: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>;
+        liable: Record<string, string[]>;
+    }> => {
+        const fn = httpsCallable(functions, 'getPoolDues');
+        const res = await fn(withCorrelationId({ poolId }));
+        const d = res.data as { dues?: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>; liable?: Record<string, string[]> };
+        return { dues: d?.dues ?? {}, liable: d?.liable ?? {} };
     },
 
     // The ONLY writer of pool.coManagers (PLAN-CO-COMMISSIONERS D2). ONE uid per

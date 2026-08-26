@@ -28,6 +28,8 @@ import { assertNotBannedLive } from './lib/systemGuards';
 import { getPoolDuesSchema } from './schemas/poolCore';
 import { isPoolCommissioner } from './poolOps';
 import type { PaidEntryMap } from './lib/poolDues';
+import { entryHasPick } from './lib/multiEntry';
+import { liableEntryIds } from './shared/memberRecord';
 
 /** The NFL pool types that have per-entry dues at all. */
 const NFL_ENTRY_POOL_TYPES = new Set(['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']);
@@ -55,6 +57,23 @@ const DUES_PREFIX_END = DUES_PREFIX.slice(0, -1)
 export interface PoolDuesResult {
   /** uid → that member's per-entry payment rows. Members with no record are absent. */
   dues: Record<string, PaidEntryMap>;
+  /**
+   * uid → the entry ids that member is LIABLE for — the rows the ledger charges.
+   *
+   * 🛑 THE CLIENT CANNOT DERIVE THIS, AND THAT IS THE POINT. Liability is "this
+   * entry has committed a pick", and the Member Record deliberately carries the
+   * COUNT (`playableEntryCount`) and never WHICH — a participant-readable
+   * document must not say which entry has a pick for an unrevealed week.
+   *
+   * Without it the ledger has to guess, and both guesses are wrong: charging
+   * every entry in the roster map overstates "Owed in" for a member holding an
+   * entry that has not picked yet, and charging the first N by index
+   * mis-attributes when entry 2 picked and entry 1 did not. It also renders a
+   * checkbox whose write `setPaidStatus` refuses with ENTRY_NOT_FOUND.
+   *
+   * Same commissioner-only boundary as `dues`, so it costs no new exposure.
+   */
+  liable: Record<string, string[]>;
 }
 
 export async function getPoolDuesInternal(
@@ -93,6 +112,25 @@ export async function getPoolDuesInternal(
     .startAt(DUES_PREFIX)
     .endBefore(DUES_PREFIX_END)
     .get();
+  // The liable set, computed from the ENTRY documents — the same rule
+  // `liableEntryIds` applies server-side, and the only place it can be applied.
+  const [entriesSnap, membersSnap] = await Promise.all([
+    poolRef.collection('entries').get(),
+    poolRef.collection('members').get(),
+  ]);
+  const pickedByOwner = new Map<string, string[]>();
+  for (const e of entriesSnap.docs) {
+    const data = e.data() as Record<string, unknown>;
+    const owner = typeof data.ownerUid === 'string' ? data.ownerUid : e.id;   // legacy: entry #1's id IS the uid
+    if (!entryHasPick(data)) continue;
+    pickedByOwner.set(owner, [...(pickedByOwner.get(owner) ?? []), e.id]);
+  }
+  const liable: Record<string, string[]> = {};
+  for (const m of membersSnap.docs) {
+    const rec = m.data() as unknown as Parameters<typeof liableEntryIds>[0];
+    liable[m.id] = liableEntryIds(rec, m.id, pickedByOwner.get(m.id) ?? []);
+  }
+
   const dues: Record<string, PaidEntryMap> = {};
   for (const doc of snap.docs) {
     // Precaution 1: the id prefix. `private/access` and anything else added to
@@ -107,7 +145,7 @@ export async function getPoolDuesInternal(
       dues[uid] = map as PaidEntryMap;
     }
   }
-  return { dues };
+  return { dues, liable };
 }
 
 export const getPoolDues = validated(

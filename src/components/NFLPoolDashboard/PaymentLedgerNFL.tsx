@@ -45,7 +45,36 @@ interface Props {
   members: any[];
   entries: any[];
   /** The roster's fee toggle (setPaidStatus lives in NFLManagerView). */
-  onTogglePaid?: (uid: string, currentStatus: string) => void;
+  /**
+   * PLAN-MULTI-ENTRY-DUES D10. `entryId` is REQUIRED, not optional: a uid alone
+   * can no longer identify what is being marked once a member has more than one
+   * entry, and an optional id would let a caller silently settle the whole
+   * member when it meant one row.
+   */
+  onTogglePaid?: (uid: string, entryId: string, currentStatus: string) => void;
+  /**
+   * uid -> entryId -> payment row, from the `getPoolDues` callable. Presence of
+   * an entry id IS the paid signal (D1b). ABSENT for a member means "no
+   * per-entry detail recorded", NOT "nothing paid" — those rows fall back to
+   * the member-level `paidStatus`, which is why it is still stored.
+   */
+  duesByUid?: Record<string, Record<string, { paidAt?: number; method?: string; note?: string }>>;
+  /**
+   * uid -> the entry ids that member is LIABLE for, from the same callable.
+   *
+   * 🛑 THE CLIENT CANNOT WORK THIS OUT. The Member Record carries the liable
+   * COUNT and never WHICH — a participant-readable document must not say which
+   * entry has a pick for an unrevealed week. Charging every roster entry
+   * overstates "Owed in" for a member holding an entry that has not picked;
+   * charging the first N by index mis-attributes when entry 2 picked and entry
+   * 1 did not.
+   *
+   * ⚠️ UNDEFINED until it loads, and while undefined the ledger renders the
+   * PRE-PHASE-2 layout (one fee and one checkbox on the member's first row).
+   * That degradation is deliberate: it is the behaviour this screen had
+   * yesterday, so it is never wrong — only less detailed.
+   */
+  liableByUid?: Record<string, string[]>;
   /** Survivor rebuy dues settle independently of base dues (P3). */
   onSettleRebuys?: (uid: string, settle: boolean) => void;
   /**
@@ -53,7 +82,7 @@ interface Props {
    * Ledger's editor, folded in — codex r2/r6 on #460). Same setPaidStatus
    * callable, `isPaid: true` + details; the writer stays in NFLManagerView.
    */
-  onSavePaidDetails?: (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }) => Promise<boolean>;
+  onSavePaidDetails?: (uid: string, details: { paymentMethod: string; paidAt: number; paymentNote: string | null }, entryId?: string) => Promise<boolean>;
   /** uid currently being written by either fee handler — disables that row's fee controls. */
   savingFeeUid?: string | null;
 }
@@ -68,9 +97,11 @@ const fromYmd = (ymd: string): number => { const [y, m, d] = ymd.split('-').map(
 /** Owner uid of an entry doc: entry #1's id IS the uid; extras carry `ownerUid`. */
 const entryOwner = (e: any): string => e?.ownerUid || e?.id;
 
-export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTogglePaid, onSettleRebuys, onSavePaidDetails, savingFeeUid = null }) => {
+export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTogglePaid, onSettleRebuys, onSavePaidDetails, savingFeeUid = null, duesByUid, liableByUid }) => {
   // Inline fee-details editor: which uid is open + its draft.
-  const [editUid, setEditUid] = useState<string | null>(null);
+  // Keyed by ENTRY id, not uid (D10): two rows of the same member would both
+  // open the editor if this were a uid.
+  const [editKey, setEditKey] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ method: string; date: string; note: string }>({ method: 'Venmo', date: '', note: '' });
   const [recaps, setRecaps] = useState<WeeklyRecap[]>([]);
   const [records, setRecords] = useState<Rec[]>([]);
@@ -96,7 +127,7 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     // new snapshots arrive — award ids are deterministic and could collide
     // across pools (codex r9).
     setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null); setRecapsLoaded(false); setRecordsLoaded(false);
-    setBusy(null); setEditUid(null); setOtherDraft(null); // an in-flight toggle, open editor or award draft belongs to the previous pool (qodo #5 on #460, codex r2 on #466)
+    setBusy(null); setEditKey(null); setOtherDraft(null); // an in-flight toggle, open editor or award draft belongs to the previous pool (qodo #5 on #460, codex r2 on #466)
     const u1 = dbService.subscribeToWeeklyRecaps(pool.id, (rows) => { setRecaps(rows); setRecapsLoaded(true); });
     const u2 = dbService.subscribeToPayoutRecords(pool.id, (rows) => { setRecords(rows as Rec[]); setRecordsLoaded(true); });
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
@@ -226,6 +257,8 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     const rows: Array<{
       key: string; uid: string; entryId: string; name: string; first: boolean;
       hasMember: boolean; feeOwed: number | null; paidStatus: 'PAID' | 'UNPAID' | null;
+      /** D10: the MEMBER's total, carried on their LAST row so the subtotal can render under the group. */
+      memberTotal: number | null; lastOfMember: boolean; memberName: string;
       rebuyOwed: number; rebuyPaid: number;
       /** Payment metadata (method / date / note) — shown under the fee box, editable via onSavePaidDetails. */
       paidMeta?: string; paymentMethod?: string; paidAt?: number | null; paymentNote?: string | null;
@@ -247,14 +280,76 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       // unstamped member with two entries owes two fees, not one (codex r3 on this PR).
       const feeOwed = typeof r.feeOwed === 'number' ? r.feeOwed : rates.entryFee * Math.max(1, own.length);
       const rebuyOwed = typeof r.rebuyOwed === 'number' ? r.rebuyOwed : (r.rebuysUsed ?? 0) * rates.rebuyCost;
+      // D10: the per-entry map, when the commissioner has it. PRESENCE of an
+      // entry id IS the paid signal (D1b). An ABSENT map means "no per-entry
+      // detail recorded", NOT "nothing paid" — those rows fall back to the
+      // member-level `paidStatus` (R3), which is exactly why it is still stored.
+      const memberDues = duesByUid?.[r.uid];
+      const memberLiable = liableByUid?.[r.uid];
+      // WHICH rows carry a fee (see the note on `chargeable` below), decided
+      // ONCE so the split beneath it has a denominator.
+      const isChargeable = (entryId: string, i: number) => feeOwed === 0 ? false
+        : memberLiable ? memberLiable.includes(entryId)
+        : i === 0;
+      const chargeableIds = ids.filter((id, i) => isChargeable(id, i));
+      // 🛑 THE ROW FEES ARE SPLIT FROM THE MEMBER'S AUTHORITATIVE `feeOwed`, NOT
+      // COPIED FROM THE CURRENT POOL RATE (codex).
+      //
+      // A legacy stamp can predate a fee change, so `feeOwed` need not equal
+      // `rates.entryFee × liable`. Printing the current rate on each row while
+      // the subtotal prints `feeOwed` makes the rows NOT ADD UP to the line
+      // beneath them — and "Owed in" sums the rows, so the pool's total drifts
+      // from the sum of what its members actually owe.
+      //
+      // The remainder rides on the FIRST chargeable row, so the rows sum to
+      // `feeOwed` EXACTLY rather than to a rounded approximation of it.
+      const nCharge = chargeableIds.length;
+      const perRow = nCharge > 0 ? Math.floor(feeOwed / nCharge) : 0;
+      const remainder = nCharge > 0 ? feeOwed - perRow * nCharge : 0;
       ids.forEach((entryId, i) => {
         const e = own[i];
         const label = e?.entryName ? `${e.entryName} · ${r.userName ?? r.uid}` : (r.userName ?? r.uid);
+        const row = memberDues?.[entryId];
+        const entryPaid: 'PAID' | 'UNPAID' | null = memberDues
+          ? (Object.prototype.hasOwnProperty.call(memberDues, entryId) ? 'PAID' : 'UNPAID')
+          : r.paidStatus;
+        // The FEE ON A ROW IS ONE ENTRY'S FEE (D10), never the member's
+        // multiplied total — showing $50 beside a single checkbox is the defect
+        // Kevin reported. The member's total moves to the subtotal below.
+        //
+        // 🛑 EXCEPT A ZERO, WHICH IS AUTHORITATIVE AND MUST SURVIVE. A seeded
+        // commissioner who hosts without playing carries `feeOwed: 0`
+        // deliberately (hosting is not playing — `memberLiableEntries` gives a
+        // MANAGER a join liability of 0). Replacing that with the pool fee would
+        // charge the host on the ledger AND in `Owed in`, and hand them a
+        // checkbox whose per-entry write `setPaidStatus` refuses outright,
+        // because they have no liable entry to mark. Same member N1 keeps
+        // UNPAID in the derivation; this is that rule reaching the UI.
+        // WHICH rows carry a fee:
+        //   - liable set known  -> exactly the liable entries (D1's definition);
+        //   - not loaded yet    -> the member's FIRST row only, which is the
+        //                          pre-Phase-2 layout and never wrong;
+        //   - member owes 0     -> nothing, whatever the set says (the seeded
+        //                          host: hosting is not playing).
+        const chargeable = isChargeable(entryId, i);
+        const entryFee = r.feeOwed === null ? null
+          : chargeable ? perRow + (entryId === chargeableIds[0] ? remainder : 0)
+          : null;
         rows.push({
           key: entryId, uid: r.uid, entryId, name: i > 0 && !e?.entryName ? `${label} (Entry ${e?.entryIndex ?? i + 1})` : label, first: i === 0,
-          hasMember: r.hasMember, feeOwed, paidStatus: r.paidStatus, rebuyOwed, rebuyPaid: r.rebuyPaid ?? 0,
-          paidMeta: r.paidStatus === 'PAID' ? [r.paymentMethod, r.paidAt ? new Date(r.paidAt).toLocaleDateString() : null, r.paymentNote].filter(Boolean).join(' · ') || undefined : undefined,
-          paymentMethod: r.paymentMethod, paidAt: r.paidAt, paymentNote: r.paymentNote,
+          hasMember: r.hasMember, feeOwed: entryFee, paidStatus: entryPaid, rebuyOwed, rebuyPaid: r.rebuyPaid ?? 0,
+          memberTotal: r.feeOwed === null ? null : feeOwed, lastOfMember: i === ids.length - 1,
+          memberName: r.userName ?? r.uid,
+          // Per-ENTRY detail when the map has it; otherwise the member-level
+          // fields, which is all a pre-Phase-2 record carries.
+          paidMeta: entryPaid === 'PAID'
+            ? (row
+                ? [row.method, row.paidAt ? new Date(row.paidAt).toLocaleDateString() : null, row.note].filter(Boolean).join(' · ') || undefined
+                : [r.paymentMethod, r.paidAt ? new Date(r.paidAt).toLocaleDateString() : null, r.paymentNote].filter(Boolean).join(' · ') || undefined)
+            : undefined,
+          paymentMethod: row?.method ?? r.paymentMethod,
+          paidAt: row?.paidAt ?? r.paidAt,
+          paymentNote: row?.note ?? r.paymentNote,
         });
       });
     }
@@ -268,17 +363,32 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
     for (const p of prizeRows) {
       if (rows.some(r => r.entryId === p.entryId)) continue;
       const known = rosterUids.has(p.uid);
-      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0 };
+      const row = { key: p.entryId, uid: p.uid, entryId: p.entryId, name: p.name, first: !known, hasMember: false, feeOwed: null as number | null, paidStatus: null as 'PAID' | 'UNPAID' | null, rebuyOwed: 0, rebuyPaid: 0, memberTotal: null as number | null, lastOfMember: false, memberName: p.name };
       const last = known ? rows.map(r => r.uid).lastIndexOf(p.uid) : -1;
       if (last >= 0) rows.splice(last + 1, 0, row); else rows.push(row);
     }
     return rows;
-  }, [pool, members, entries, prizeRows]);
+  }, [pool, members, entries, prizeRows, duesByUid, liableByUid]);
 
   const totals = useMemo(() => {
     let owedIn = 0, paidIn = 0, owedOut = 0, paidOut = 0;
+    // 🛑 TWO LOOPS, AND D10 SAYS SO EXPLICITLY: "Mixing those two in one loop is
+    // exactly how a double-count gets shipped."
+    //
+    // Base dues are PER ENTRY now, so they sum over every row. Rebuys are a
+    // member-level sum (`rebuyOwed` on the Member Record is already the total
+    // across a member's entries — shared/memberRecord), so they keep the
+    // `r.first` gate. Summing rebuys per row would multiply them by the
+    // member's entry count.
     for (const r of ledgerRows) {
-      if (r.first && r.feeOwed !== null) { owedIn += r.feeOwed + r.rebuyOwed; if (r.paidStatus === 'PAID') paidIn += r.feeOwed; paidIn += Math.min(r.rebuyPaid, r.rebuyOwed); }
+      if (r.feeOwed === null) continue;          // unknown (a prize row outside the roster)
+      owedIn += r.feeOwed;
+      if (r.paidStatus === 'PAID') paidIn += r.feeOwed;
+    }
+    for (const r of ledgerRows) {
+      if (!r.first) continue;                    // ONCE per member
+      owedIn += r.rebuyOwed;
+      paidIn += Math.min(r.rebuyPaid, r.rebuyOwed);
     }
     for (const p of prizeRows) { owedOut += p.owed; if (p.settled) paidOut += p.owed; }
     // Other awards (BONUS / ADJUSTMENT / legacy free-form PLACE) count in the
@@ -416,28 +526,41 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
           </thead>
           <tbody>
             {ledgerRows.map(r => (
-              <tr key={r.key} className="border-t border-line">
+              <React.Fragment key={r.key}>
+              <tr className="border-t border-line">
                 <td className={`${td} text-[color:var(--text)] font-bold`}>{r.name}</td>
-                <td className={`${td} text-right num`}>{r.first ? (r.feeOwed === null ? <span className="text-faint">—</span> : money(r.feeOwed)) : ''}</td>
+                {/* D10: the fee and the checkbox render on EVERY row. The old
+                    `r.first` gate is what put one $50 figure and one all-or-
+                    nothing box beside a member's first entry. */}
+                <td className={`${td} text-right num`}>{r.feeOwed === null ? <span className="text-faint">—</span> : money(r.feeOwed)}</td>
                 <td className={`${td} text-center`}>
-                  {r.first && (r.paidStatus === null ? <span className="text-faint text-[10px]">unknown</span> : (
+                  {/* A row whose status is UNKNOWN renders "—", never an
+                      unticked box: an unticked box is a STATEMENT that the fee
+                      is unpaid, and "—" is the absence of one (D10).
+                      A row that carries NO FEE gets no control either: the
+                      entry is not liable, so `setPaidStatus` would refuse it
+                      with ENTRY_NOT_FOUND — a checkbox that always errors is
+                      worse than no checkbox. Covers both the seeded host who
+                      hosts without playing and an entry that has not picked. */}
+                  {(r.paidStatus === null ? <span className="text-faint text-[10px]">unknown</span>
+                    : r.feeOwed === null ? <span className="text-faint" title="This entry has no dues yet — it is charged once it commits a pick">—</span> : (
                     <span className="inline-flex flex-col items-center gap-1">
                       <input
                         type="checkbox"
                         aria-label={`${r.name} entry fee paid`}
                         checked={r.paidStatus === 'PAID'}
-                        disabled={!onTogglePaid || savingFeeUid === r.uid}
-                        onChange={() => onTogglePaid?.(r.uid, r.paidStatus ?? 'UNPAID')}
+                        disabled={!onTogglePaid || savingFeeUid === r.entryId}
+                        onChange={() => onTogglePaid?.(r.uid, r.entryId, r.paidStatus ?? 'UNPAID')}
                         className="h-4 w-4 accent-navy-600 dark:accent-gold-500"
                       />
-                      {r.paidMeta && editUid !== r.uid && <span className="text-[9px] text-faint max-w-[10rem] truncate" title={r.paidMeta}>{r.paidMeta}</span>}
-                      {onSavePaidDetails && r.hasMember && editUid !== r.uid && (
+                      {r.paidMeta && editKey !== r.entryId && <span className="text-[9px] text-faint max-w-[10rem] truncate" title={r.paidMeta}>{r.paidMeta}</span>}
+                      {onSavePaidDetails && r.hasMember && editKey !== r.entryId && (
                         <button type="button" className="text-[9px] text-muted underline hover:text-[color:var(--text)]" title="Record how / when this fee was paid (marks it paid)"
-                          onClick={() => { setEditUid(r.uid); setDraft({ method: r.paymentMethod || 'Venmo', date: localYmd(r.paidAt ? new Date(r.paidAt) : new Date()), note: r.paymentNote || '' }); }}>
+                          onClick={() => { setEditKey(r.entryId); setDraft({ method: r.paymentMethod || 'Venmo', date: localYmd(r.paidAt ? new Date(r.paidAt) : new Date()), note: r.paymentNote || '' }); }}>
                           {r.paidMeta ? 'edit details' : 'add details'}
                         </button>
                       )}
-                      {onSavePaidDetails && editUid === r.uid && (
+                      {onSavePaidDetails && editKey === r.entryId && (
                         <span className="flex flex-col gap-1 items-stretch text-left">
                           <select value={draft.method} onChange={e => setDraft(d => ({ ...d, method: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px]" aria-label="Payment method">
                             {['Venmo', 'Zelle', 'PayPal', 'Cash', 'Card', 'Other'].map(m => <option key={m} value={m}>{m}</option>)}
@@ -445,16 +568,24 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                           <input type="date" value={draft.date} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px]" aria-label="Paid date" />
                           <input type="text" value={draft.note} placeholder="Tx id / note" onChange={e => setDraft(d => ({ ...d, note: e.target.value }))} className="bg-page border border-line rounded px-1 py-0.5 text-[10px] w-28" aria-label="Payment note" />
                           <span className="flex gap-1 justify-center">
-                            <button type="button" disabled={savingFeeUid === r.uid} className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded bg-navy-800 text-white disabled:opacity-50"
-                              onClick={async () => { const ok = await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? fromYmd(draft.date) : Date.now(), paymentNote: draft.note || null }); if (ok) setEditUid(null); /* on failure keep the draft (codex r7) */ }}>
-                              {savingFeeUid === r.uid ? 'Saving…' : 'Save'}
+                            <button type="button" disabled={savingFeeUid === r.entryId} className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded bg-navy-800 text-white disabled:opacity-50"
+                              onClick={async () => { const ok = await onSavePaidDetails(r.uid, { paymentMethod: draft.method, paidAt: draft.date ? fromYmd(draft.date) : Date.now(), paymentNote: draft.note || null }, r.entryId); if (ok) setEditKey(null); /* on failure keep the draft (codex r7) */ }}>
+                              {savingFeeUid === r.entryId ? 'Saving…' : 'Save'}
                             </button>
-                            <button type="button" className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded border border-line text-muted" onClick={() => setEditUid(null)}>Cancel</button>
+                            <button type="button" className="text-[9px] font-display font-bold uppercase px-2 py-0.5 rounded border border-line text-muted" onClick={() => setEditKey(null)}>Cancel</button>
                           </span>
                         </span>
                       )}
                       {/* Rebuy dues are a SEPARATE settlement from base dues (P3): the callable needs a Member Record. */}
-                      {r.rebuyOwed > 0 && r.hasMember && onSettleRebuys && (() => {
+                      {/* 🛑 `r.first` — ONCE PER MEMBER, and it must stay.
+                          `rebuyOwed` is a member-level SUM across the member's
+                          entries (shared/memberRecord), so a control on every
+                          row would offer to settle the same money N times. It is
+                          the same reason the totals sum rebuys in their own
+                          loop (D10). The saving key is the uid here, not the
+                          entry id, because `handleSettleRebuys` stores a uid —
+                          and on the first row those are the same value. */}
+                      {r.first && r.rebuyOwed > 0 && r.hasMember && onSettleRebuys && (() => {
                         const settled = r.rebuyPaid >= r.rebuyOwed;
                         const outstanding = Math.max(0, r.rebuyOwed - r.rebuyPaid);
                         return (
@@ -475,6 +606,38 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
                 {weeks.map(w => <td key={w.week} className={`${td} text-center`}>{renderPrizeCell(r.entryId, w)}</td>)}
                 <td className={`${td} text-center`}>{renderPrizeCell(r.entryId, 'season')}</td>
               </tr>
+              {/* 🛑 THE MEMBER SUBTOTAL — this is what keeps Kevin's "group the
+                  entries together for multiple entries" reading true now that
+                  the fee moved onto each row. Rendered only when the member has
+                  MORE THAN ONE row: a subtotal under a single entry restates
+                  the line above it and is noise. */}
+              {r.lastOfMember && r.memberTotal !== null && ledgerRows.filter(x => x.uid === r.uid && x.feeOwed !== null).length > 1 && (
+                <tr className="bg-[color:var(--surface-2,transparent)]">
+                  <td className={`${td} text-right text-muted text-[10px] uppercase tracking-[0.06em]`}>
+                    {r.memberName} — total due
+                  </td>
+                  <td className={`${td} text-right num font-bold text-[color:var(--text)]`} title="The member's dues across every entry">
+                    {money(r.memberTotal)}
+                  </td>
+                  <td className={`${td} text-center text-[10px] text-faint`}>
+                    {(() => {
+                      const own = ledgerRows.filter(x => x.uid === r.uid && x.feeOwed !== null);
+                      const paid = own.filter(x => x.paidStatus === 'PAID').length;
+                      return `${paid} of ${own.length} paid`;
+                    })()}
+                  </td>
+                  {/* One spanning cell rather than a run of empty <td>s: empty
+                      cells trip jsx-a11y/control-has-associated-label, and a
+                      subtotal genuinely has nothing to say in these columns.
+                      COUNT: the table is Member + Entry fee + Fee paid + one per
+                      scored week + Season $ = weeks.length + 4. This row has
+                      already emitted three, so the span is weeks.length + 1. An
+                      over-wide span invents an unheaded column and shears the
+                      whole table. */}
+                  <td className={td} colSpan={weeks.length + 1} aria-hidden="true">&nbsp;</td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
             {ledgerRows.length === 0 && (
               <tr><td colSpan={4 + weeks.length} className="py-2 text-faint">No members yet.</td></tr>

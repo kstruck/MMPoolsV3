@@ -15,7 +15,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   it('is mounted on the NFL manager view (Record Payouts card folded in — T7), and owns the fee toggle', () => {
     const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     expect(mgr).toContain("import { PaymentLedgerNFL } from './PaymentLedgerNFL'");
-    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} />');
+    expect(mgr).toContain('<PaymentLedgerNFL pool={pool} members={members} entries={entries} onTogglePaid={handleTogglePayment} onSettleRebuys={handleSettleRebuys} onSavePaidDetails={handleSavePaidDetails} savingFeeUid={isSavingPayment} duesByUid={duesByUid} liableByUid={liableByUid} />');
     // T7: the card is gone; free-form BONUS/ADJUSTMENT live in the ledger's "Other awards" block.
     expect(mgr).not.toContain('RecordPayoutsCard');
     expect(ledger).toContain("kind: otherDraft.kind, settled: otherDraft.settled");
@@ -28,7 +28,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
     expect(dash).toContain("onManagePayments={() => setActiveTab('manager', 'members')}");
     expect(dash).toContain("initialSection={searchParams.get('section')}");
     // The modal's method/date/note editor is folded into the ledger's fee cell; the writer is the same callable, details ride only with PAID.
-    expect(mgr).toContain('dbService.setPaidStatus(pool.id, uid, true, details)');
+    expect(mgr).toContain('dbService.setPaidStatus(pool.id, uid, true, details, entryId)');
     expect(ledger).toContain('onSavePaidDetails(r.uid, { paymentMethod: draft.method');
     const bento = code('src/components/NFLPoolDashboard/NFLManagerBentoDashboard.tsx');
     expect(bento).toContain('onClick={onOpenLedger}');
@@ -37,7 +37,7 @@ describe('PaymentLedgerNFL — wiring (T5)', () => {
   it('is one spreadsheet: a column per scored week, fee paid checkbox, totals', () => {
     expect(ledger).toContain('nflWeekChip(seasonType, week)');
     expect(ledger).toContain("aria-label={`${r.name} entry fee paid`}");
-    expect(ledger).toContain('onTogglePaid?.(r.uid, r.paidStatus');
+    expect(ledger).toContain('onTogglePaid?.(r.uid, r.entryId, r.paidStatus');
     expect(ledger).toMatch(/Owed in[\s\S]*Paid in[\s\S]*Owed out[\s\S]*Paid out/);
     // Weeks scored before weekly prizes existed name the fix (rescore), not a bare empty state.
     expect(ledger).toContain('scored before weekly prizes existed');
@@ -220,5 +220,167 @@ describe('manager weekly-place editor — qodo #471 absorptions (T2)', () => {
   it('the editor buttons carry the file\'s uppercase display typography', () => {
     expect(mgr).toContain('font-display text-sm font-bold uppercase tracking-[0.05em] text-brandred-600');
     expect(mgr).toContain('font-display text-sm font-bold uppercase tracking-[0.05em] border border-line');
+  });
+});
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T5b (D10) — per-entry dues in the commissioner
+ * ledger. Root vitest has no DOM, so these are comment-stripped wiring guards,
+ * the same shape as the T5 block above.
+ *
+ * Kevin, 2026-08-25: "it shows my two entries, but only one has the payment
+ * checkbox ... have each row responsible for the entry fee."
+ */
+describe('PaymentLedgerNFL — per-entry dues (DUES T5b)', () => {
+  const ledger = code('src/components/NFLPoolDashboard/PaymentLedgerNFL.tsx');
+  const mgr = code('src/components/NFLPoolDashboard/NFLManagerView.tsx');
+  const db = code('src/services/dbService.ts');
+
+  it('the fee cell and the checkbox no longer hide behind r.first', () => {
+    // The defect in its own hand: `r.first ?` on the fee cell and `r.first &&`
+    // on the checkbox are what put ONE $50 figure and ONE all-or-nothing box
+    // beside a member's first entry.
+    expect(ledger).not.toContain('{r.first ? (r.feeOwed === null');
+    expect(ledger).not.toContain('{r.first && (r.paidStatus === null');
+    expect(ledger).toContain('{r.feeOwed === null ? <span className="text-faint">—</span> : money(r.feeOwed)}');
+  });
+
+  it('the toggle carries the ENTRY id, all the way to the callable', () => {
+    expect(ledger).toContain('onTogglePaid?: (uid: string, entryId: string, currentStatus: string) => void;');
+    expect(ledger).toContain('onTogglePaid?.(r.uid, r.entryId, r.paidStatus');
+    expect(mgr).toContain('const handleTogglePayment = async (uid: string, entryId: string, currentStatus: string)');
+    expect(mgr).toContain('dbService.setPaidStatus(pool.id, uid, nextPaid, undefined, entryId)');
+    expect(db).toContain('...(entryId ? { entryId } : {}),');
+  });
+
+  it('a row fee is ONE entry fee; the member total moves to a subtotal', () => {
+    expect(ledger).toContain('const perRow = nCharge > 0 ? Math.floor(feeOwed / nCharge) : 0;');
+    expect(ledger).toContain('memberTotal: r.feeOwed === null ? null : feeOwed');
+    expect(ledger).toContain('— total due');
+  });
+
+  it('🛑 base dues and rebuys are summed in SEPARATE loops (D10 says mixing them ships a double-count)', () => {
+    // ⚠️ The end anchor is searched FROM the start index: `for (const p of
+    // prizeRows)` also appears earlier, inside `ledgerRows`, and a plain
+    // indexOf would return an end BEFORE the start and slice to ''. An empty
+    // slice passes every `not.toMatch` below and asserts nothing.
+    const from = ledger.indexOf('let owedIn = 0, paidIn = 0');
+    const totals = ledger.slice(from, ledger.indexOf('for (const p of prizeRows)', from));
+    expect(totals.length).toBeGreaterThan(100);   // the slice must not be empty
+    // Base dues: every row, no `first` gate.
+    expect(totals).toContain('for (const r of ledgerRows) {');
+    expect(totals).toContain('owedIn += r.feeOwed;');
+    // Rebuys: ONCE per member, and the gate must still be there.
+    expect(totals).toContain('if (!r.first) continue;');
+    expect(totals).toContain('owedIn += r.rebuyOwed;');
+    // MUST catch the regression: the two must not be added in one pass.
+    expect(totals).not.toMatch(/owedIn \+= r\.feeOwed \+ r\.rebuyOwed/);
+  });
+
+  it('presence in the dues map IS the paid signal, and an ABSENT map falls back to the member flag', () => {
+    expect(ledger).toContain("Object.prototype.hasOwnProperty.call(memberDues, entryId) ? 'PAID' : 'UNPAID'");
+    expect(ledger).toContain(': r.paidStatus;');          // the R3 fallback
+  });
+
+  it('the dues map comes from the CALLABLE — it cannot be read from Firestore', () => {
+    expect(db).toContain("httpsCallable(functions, 'getPoolDues')");
+    expect(mgr).toContain('dbService.getPoolDues(forPool)');
+    // undefined, never {} — an empty object would say "nobody paid" mid-load.
+    expect(mgr).toContain('} | undefined>(undefined);');
+    // No subscription behind it, so every write pulls it again.
+    expect(mgr).toContain('await refreshDues();');
+  });
+
+  it('the dues fetch cannot render one pool payment state against another', () => {
+    // Entry ids are DETERMINISTIC (`uid`, `e2:uid`) and a member can be in many
+    // pools, so a late response would otherwise paint the previous pool's
+    // payments onto these rows — and hand the commissioner a checkbox acting on
+    // it. Cleared on pool change, and every response is stamped with the pool it
+    // was asked for.
+    expect(mgr).toContain('const forPool = pool.id;');
+    expect(mgr).toContain('setDuesPayload({ poolId: forPool, dues, liable });');
+    // Read back through a MATCH, so the stale case is unrepresentable rather
+    // than something an effect has to remember to clear.
+    expect(mgr).toContain("const duesByUid = duesPayload?.poolId === pool.id ? duesPayload.dues : undefined;");
+    expect(mgr).toContain("const liableByUid = duesPayload?.poolId === pool.id ? duesPayload.liable : undefined;");
+    // An OLDER response for the SAME pool must not land on a newer one: the
+    // mount fetch can finish after a write's refresh and revert a just-paid
+    // row, which invites the commissioner to REVERSE a payment they just made.
+    expect(mgr).toContain('const duesSeqRef = useRef(0);');
+    expect(mgr).toContain('if (seq === duesSeqRef.current) setDuesPayload({ poolId: forPool, dues, liable });');
+    // A failed READ after a successful WRITE must clear, not keep: the loaded
+    // map is pre-write, so showing it says "unpaid" about money just taken.
+    expect(mgr).toContain('setDuesPayload(prev => (prev?.poolId === forPool ? undefined : prev));');
+  });
+
+  it('the details editor is keyed by ENTRY, so two rows of one member cannot both open', () => {
+    expect(ledger).not.toContain('editUid');
+    expect(ledger).toContain('editKey === r.entryId');
+    expect(ledger).toContain('setEditKey(r.entryId)');
+  });
+
+  it('🛑 a ZERO fee survives — the seeded host is not charged by the per-entry rewrite', () => {
+    // A commissioner who hosts without playing carries feeOwed: 0 deliberately.
+    // Replacing that with rates.entryFee would charge them on the ledger and in
+    // "Owed in", and hand them a checkbox setPaidStatus refuses (no liable
+    // entry). This is N1 reaching the UI.
+    expect(ledger).toContain('const perRow = nCharge > 0 ? Math.floor(feeOwed / nCharge) : 0;');
+    // MUST catch the regression: the unconditional form.
+    expect(ledger).not.toContain('const entryFee = r.feeOwed === null ? null : rates.entryFee;');
+    // The three-way rule, in order: a member owing 0 is never charged; a known
+    // liable set decides; and until it loads, the member's FIRST row only.
+    expect(ledger).toContain('const isChargeable = (entryId: string, i: number) => feeOwed === 0 ? false');
+    expect(ledger).toContain(': memberLiable ? memberLiable.includes(entryId)');
+    expect(ledger).toContain(': i === 0;');
+  });
+
+  it('🛑 the row fees SPLIT the member authoritative feeOwed and must add up to it', () => {
+    // A legacy stamp can predate a fee change, so feeOwed need not equal
+    // rates.entryFee x liable. Copying the current rate onto each row would
+    // make the rows not add up to the subtotal beneath them — and "Owed in"
+    // sums the rows, so the pool total would drift from what members owe.
+    expect(ledger).toContain('const remainder = nCharge > 0 ? feeOwed - perRow * nCharge : 0;');
+    // The remainder rides the FIRST chargeable row, so the sum is EXACT.
+    expect(ledger).toContain("chargeable ? perRow + (entryId === chargeableIds[0] ? remainder : 0)");
+  });
+
+  it('🛑 only the server can say WHICH entries are liable, and the ledger waits for it', () => {
+    // The Member Record carries the liable COUNT and never WHICH — a
+    // participant-readable document must not say which entry has a pick for an
+    // unrevealed week. Charging every roster entry overstates "Owed in";
+    // charging the first N by index mis-attributes when entry 2 picked and
+    // entry 1 did not.
+    const fn = code('functions/src/nflPoolDues.ts');
+    expect(fn).toContain('liable: Record<string, string[]>;');
+    expect(fn).toContain('liableEntryIds(rec, m.id, pickedByOwner.get(m.id) ?? [])');
+    expect(fn).toContain('return { dues, liable };');
+    expect(ledger).toContain('const memberLiable = liableByUid?.[r.uid];');
+  });
+
+  it('a row with NO fee gets no checkbox — a control that always errors is worse than none', () => {
+    // setPaidStatus refuses a non-liable entryId with ENTRY_NOT_FOUND, so the
+    // box would be a button that cannot succeed.
+    expect(ledger).toContain('r.feeOwed === null ? <span className="text-faint" title=');
+  });
+
+  it('the rebuy control stays on ONE row per member', () => {
+    // rebuyOwed is a member-level SUM; a control per row would offer to settle
+    // the same money N times. Its saving key is the uid, matching the handler.
+    expect(ledger).toContain('{r.first && r.rebuyOwed > 0 && r.hasMember && onSettleRebuys');
+    expect(ledger).toContain('onClick={() => onSettleRebuys(r.uid, !settled)}');
+  });
+
+  it('the subtotal spans exactly the columns it has not already emitted', () => {
+    // Member + Entry fee + Fee paid + one per scored week + Season $ = weeks+4.
+    // The subtotal emits three, so the span is weeks+1. An over-wide span
+    // invents an unheaded column and shears the table.
+    expect(ledger).toContain('colSpan={weeks.length + 1}');
+    expect(ledger).not.toContain('colSpan={2 + weeks.length}');
+  });
+
+  it('an UNKNOWN status still renders "—", never an unticked box', () => {
+    // An unticked box is a statement that the fee is unpaid; "—" is the absence
+    // of one. The prize-recipient-outside-the-roster row is the case.
+    expect(ledger).toContain('r.paidStatus === null ? <span className="text-faint text-[10px]">unknown</span>');
   });
 });

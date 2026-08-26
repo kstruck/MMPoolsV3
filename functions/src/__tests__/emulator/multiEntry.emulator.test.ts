@@ -1602,6 +1602,32 @@ describe('getPoolDues — the only door into the sealed dues store', () => {
     expect(HOST in dues).toBe(false);
   }, 60000);
 
+  it('returns the LIABLE entry ids — the bit the client cannot derive', async () => {
+    // The Member Record carries the liable COUNT and never WHICH; a
+    // participant-readable document must not say which entry has a pick for an
+    // unrevealed week. So the ledger cannot know which rows to charge unless
+    // this says so.
+    await seedPool({ max: 2, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: {}, entryIndex: 2 });        // exists, no pick -> NOT liable
+    await submit(BOB, { picks: { [G1]: 'KC' } });
+
+    const { liable } = await get(HOST);
+    expect(liable[ALICE]).toEqual([ALICE]);                   // entry 2 is excluded
+    expect(liable[BOB]).toEqual([BOB]);
+    // The seeded host hosts without playing: liable for NOTHING (N1).
+    expect(liable[HOST]).toEqual([]);
+  }, 60000);
+
+  it('a joined-but-never-picked participant is liable for their SYNTHETIC row', async () => {
+    // They owe a fee from the moment they join, before an entry document
+    // exists, and entry #1's id is the bare uid.
+    await seedPool({ max: 2, entryCount: 2 });
+    const { liable } = await get(HOST);
+    expect(liable[BOB]).toEqual([BOB]);
+    expect((await member(BOB)).feeOwed).toBe(25);
+  }, 60000);
+
   it('AUTHORIZATION: refuses a participant, a stranger, and a member reading their own pool', async () => {
     await seedPool({ max: 2, entryCount: 2 });
     await submit(ALICE, { picks: { [G1]: 'KC' } });
