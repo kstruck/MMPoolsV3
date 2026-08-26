@@ -256,14 +256,30 @@ season — when only week 1 exists and is unrevealed — `entries[id].liable` an
 commissioner-blind-picks contract's payload onto a participant-readable document.
 **If a ticket concludes it needs this, STOP and ask Kevin** — same posture as D11.
 
-✅ **AND THE ARGUMENT IS FREE TO SUPPLY — no new read, in any writer.**
-`ownerStateAfter` ALREADY computes it and throws it away: it tests
-`entryHasPick(e.data)` per owned entry (`lib/multiEntry.ts:172`) and returns only
-the count plus a pick-free `entries` map. The ticket has it return the picked ids
-as a THIRD, transaction-local field — computed inside the transaction, passed to
-`liableEntryIds`, and **never written to the Member Record**, which is what keeps
-the authorization contract intact. Every writer below is already inside a
-transaction that reads the owner's entry docs, so none of them gains a read.
+✅ **ON THE SUBMIT AND DELETE PATHS THE ARGUMENT IS FREE — no new read.**
+`ownerStateAfter` already evaluates the predicate per owned entry
+(`entryHasPick(e.data)`, `lib/multiEntry.ts:172`) but **accumulates only a count**,
+returning that plus a pick-free `entries` map (`:165-176`). The ticket has it
+also accumulate the matching ids and return them as a THIRD, transaction-local
+field — computed inside a transaction that is already reading those documents,
+passed to `liableEntryIds`, and **never written to the Member Record**, which is
+what keeps the authorization contract intact.
+
+⚠️ **ONE WRITER DOES GAIN A READ, AND IT IS WRITER #5 AGAIN *(codex r5 on A)*.**
+An earlier draft of this box claimed "no new read, in ANY writer". That is false.
+`reconcilePaymentTruth`'s transaction reads exactly two documents — the member
+record and the ONE paid entry that triggered it
+(`tx.get(mRef)`, `tx.get(entryDoc.ref)`, `migrations/reconcilePaymentTruth.ts:197`)
+— and never enumerates the owner's other entries. It therefore **cannot obtain a
+sound `pickedEntryIds` set without adding a read**, and a derivation run on a
+partial set would un-pay entries it has no knowledge of.
+
+So the migration must either add the owner-entries read to its transaction, or
+write the `paidEntries` key and leave the summary to a writer that has the full
+set — a choice T-sweep makes with evidence, not by assumption. **This is the
+second independent reason #5 is the writer that will be missed**, and it is worth
+more than the first: the original note said only that it must remember to write
+the map. It also has to acquire data it does not currently read.
 
 **Every writer of `paidStatus`, today — the complete list, measured:**
 
@@ -553,13 +569,37 @@ liable"*; this section said `Math.max(0, current - 1)` with no such condition,
 and §9's gate asserted all three counters "DROP" unconditionally. Three
 statements, two of them wrong, and the gate would have **encoded** the wrong one.
 
-**A non-liable entry document is reachable, measured.** `picks: {}` is
-schema-legal on a pick'em pool and persists an entry doc (`nflPools.ts:681`),
-while `committedPickForWeek` is false for it (`:883-895`) — this is
-PLAN-EMPTY-SUBMISSION-FEE's whole subject, and the comment there records that
-passing `true` unconditionally once charged a seeded MANAGER for a pick nobody
-made. Deleting such an entry must move **nothing**: it was never in
-`playableEntryCount`, never in `feeOwed`, never in `pool.entryCount`.
+**An entry document that carries no liability is reachable, measured.** `picks: {}`
+is schema-legal on a pick'em pool and persists an entry doc (`nflPools.ts:663-681`),
+while `committedPickForWeek` is false for it (`:690`, and passed to the member
+write at `:890`) — this is PLAN-EMPTY-SUBMISSION-FEE's whole subject, and the
+comment there records that passing `true` unconditionally once charged a seeded
+MANAGER for a pick nobody made.
+
+⛔ **BUT `picks: {}` IS NOT A SYNONYM FOR "NOT LIABLE", AND AN EARLIER DRAFT OF
+THIS PARAGRAPH SAID IT WAS *(codex r5 on C)*.** It claimed such an entry "was
+never in `feeOwed`". For a **seeded MANAGER** that is true — `joinLiability` is 0.
+For an **ordinary joined participant** it is false: `joinLiability` is 1, entry
+#1's id IS `uid`, and D1's synthetic-`uid` rule makes that very entry the one
+liable row. Their `feeOwed` is one fee precisely because they joined.
+
+**The delta is the definition; the empty-picks entry is an instance.** Work it
+through `memberLiableEntries = max(joinLiability, playableEntryCount)` and every
+case falls out of the one rule:
+
+| Member | Delete | before → after | `liabilityDelta` |
+|---|---|---|---|
+| seeded MANAGER, one empty-picks entry | that entry | `max(0,0)=0` → `max(0,0)=0` | **0** |
+| participant, only an empty-picks entry | that entry | `max(1,0)=1` → `max(1,0)=1` | **0** — they still owe one fee for having JOINED, which is correct and is not what the deleted entry was for |
+| participant, entry 1 picked + entry 2 empty | entry 2 | `max(1,1)=1` → `max(1,1)=1` | **0** |
+| participant, entries 1 and 2 both picked | entry 2 | `max(1,2)=2` → `max(1,1)=1` | **−1** |
+
+The outcome my wrong reasoning predicted (nothing moves) happens to be right in
+all the empty-picks rows — which is exactly why the error was easy to miss and
+worth writing down. **Never state the gate case as "delete a `picks: {}` entry";
+state it as "delete an entry whose removal leaves `memberLiableEntries`
+unchanged".** The first phrasing invites an implementer to special-case empty
+picks; the second is the rule that is actually true.
 
 **ONE delta, computed once, applied to all three.** The delete transaction
 computes the member's liability before and after from the surviving entry
@@ -829,10 +869,14 @@ Unchanged from the standing set, listed so no ticket has to remember them:
   - pay both → PAID;
   - delete an unpaid unscored **liable** entry → `feeOwed`, `playableEntryCount`
     and `pool.entryCount` all DROP;
-  - **delete an unpaid unscored NON-LIABLE entry (a pick'em entry persisted with
-    `picks: {}`) → all three counters are UNCHANGED** *(codex r4 #3 — the earlier
-    unconditional "all DROP" would have encoded the wrong behaviour and charged
-    the pot for a delete that costs nothing)*;
+  - **delete an unpaid unscored entry whose removal leaves `memberLiableEntries`
+    UNCHANGED → all three counters are UNCHANGED.** Cover BOTH shapes, because
+    they differ in why: a seeded MANAGER's `picks: {}` entry (`joinLiability` 0,
+    so it never carried liability) **and** an ordinary participant's second
+    `picks: {}` entry (they still owe one fee for having JOINED, so `feeOwed`
+    must NOT drop either). *(codex r4 #3 — the earlier unconditional "all DROP"
+    would have encoded the wrong behaviour; codex r5 — and the first repair
+    equated `picks: {}` with non-liable, which is false for a participant.)*
   - deleting a PAID entry is refused (D2);
   - deleting an entry in a pool with a scored week is refused (D3);
   - adding an entry to a fully-paid member does NOT unpay the existing entries,

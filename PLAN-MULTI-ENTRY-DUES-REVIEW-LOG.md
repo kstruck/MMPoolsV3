@@ -150,10 +150,108 @@ evidence, and it is exactly what round 4 has now acted on.
 
 ---
 
+## Round 5 — scoped to the text written to close round 4. **2 of 3 areas NOT CLEAN**
+
+CLAUDE.md §2c: *"the code most likely to be wrong is the code written last, to
+close somebody else's finding."* Round 4's repairs were written by me in one
+pass; this round reviewed only those repairs. **Two of the three were defective.**
+
+| Area | Verdict | Detail |
+|---|---|---|
+| **A** — the two-helper split | **NOT CLEAN, 2 findings** | see below |
+| **B** — D1a row 2 + D6 (the K11 replacement) | **CLEAN** | Independently re-derived: `planMembershipWrite` creates with `'UNPAID'` (`lib/memberRecord.ts:121-123`), and on the UPDATE path the K11 branch (`:172-193`) is the only assignment; the update comment at `:164` says it preserves `paidStatus`. Replacement is required, and the plan's requirement is internally consistent. |
+| **C** — D8's single `liabilityDelta` | **NOT CLEAN, 1 finding** | see below |
+
+### A1 — "no new read, in ANY writer" was FALSE **(ACCEPTED)**
+
+My repair claimed every writer already reads the owner's entry docs
+transactionally, so supplying `pickedEntryIds` costs nothing. **Writer #5 does
+not.** `reconcilePaymentTruth`'s transaction reads exactly two documents —
+`tx.get(mRef)` and `tx.get(entryDoc.ref)`, the member record and the single paid
+entry that triggered it (`migrations/reconcilePaymentTruth.ts:197`) — and never
+enumerates the owner's other entries.
+
+Verified by reading the transaction. It **cannot obtain a sound `pickedEntryIds`
+set without adding a read**, and a derivation over a partial set would un-pay
+entries it has no knowledge of — the precise money error finding #1 existed to
+prevent, reintroduced by the fix for finding #1.
+
+Absorbed: D1a now scopes the free-argument claim to the submit and delete paths
+and states the migration's problem explicitly. **This is the second independent
+reason #5 is "the writer that will be missed", and it is the bigger one** — the
+original note said it must remember to write the map; it also has to acquire data
+it does not currently read.
+
+### A2 — "already computes it and throws it away" OVERSTATED **(ACCEPTED)**
+
+`ownerStateAfter` evaluates the predicate per owned entry (`entryHasPick(e.data)`,
+`lib/multiEntry.ts:172`) but **accumulates only a count** (`:165-176`); it never
+builds an id list to discard. The claim as written would have an implementer look
+for a variable that does not exist. Reworded to say what is actually true: the
+predicate is already evaluated, the ids are not accumulated, and accumulating
+them adds no read **on that path**.
+
+Small, and worth taking exactly because it is small — a plan that overstates what
+the code already does is how a ticket gets estimated as free and lands as a
+rewrite.
+
+### C1 — `picks: {}` is NOT a synonym for "not liable" **(ACCEPTED — the sharpest of the round)**
+
+My repair said such an entry "was never in `feeOwed`". That is true for a seeded
+MANAGER (`joinLiability` 0) and **false for an ordinary joined participant**:
+`joinLiability` is 1, entry #1's id IS `uid`, and D1's own synthetic-`uid` rule
+makes that very entry the liable row. Their `feeOwed` is one fee *because they
+joined*. So the repair for finding #3 contradicted D1 — two sections of the same
+plan disagreeing, which is the exact defect class finding #3 itself was.
+
+⚠️ **The outcome I predicted was right in every empty-picks case; the REASON was
+wrong.** Working it through `memberLiableEntries = max(joinLiability,
+playableEntryCount)`, the delta is 0 for all of them — so no test would have
+caught this, and the wrong rule would have sat in the plan being cited. **That is
+why it is logged rather than quietly corrected.**
+
+Absorbed: D8 gains the four-case table, and the §9 gate case is restated as
+*"delete an entry whose removal leaves `memberLiableEntries` unchanged"* — the
+rule that is actually true — covering BOTH shapes, since they differ in why.
+The old phrasing invited an implementer to special-case empty picks.
+
+### Two citations tightened
+
+Round 4 cited `nflPools.ts:883-895` for `committedPickForWeek`. That is where it
+is PASSED to the member write; it is COMPUTED at `:690` for pick'em, off
+`picks` built at `:663-681`. Both citations are now in the text.
+
+---
+
+## Round 6 — scoped to round 5's repairs. **CLEAN on all three**
+
+| # | Question | Verdict |
+|---|---|---|
+| **1** | Is the migration's read set stated correctly, and is the free-argument claim now correctly scoped? | **CLEAN** |
+| **2** | Does the `ownerStateAfter` wording now match the implementation? | **CLEAN** |
+| **3** | Does D8's four-case table agree with D1's synthetic-`uid` rule and with `memberLiableEntries`, and does the §9 gate case follow from it? | **CLEAN** |
+
+---
+
 ## Stopping
 
-**PENDING ROUND 5.** Round 4's three findings are absorbed above. The text
-written to close them has not been reviewed by anything yet, and CLAUDE.md §2c is
-explicit that new text written to close a finding earns its own round — *"the
-code most likely to be wrong is the code written last, to close somebody else's
-finding."* This section is replaced when round 5 runs.
+**Stopped at round 6.** CLAUDE.md §2c's two conditions (§2b DORMANT): a round
+that came back clean on every question it was asked, **and** my own read of the
+document agreeing. **No findings are left open.** Six rounds against a cap of 10.
+
+⚠️ **Rounds 1–3 should be weighted by the provenance caveat at the top of this
+file; rounds 4–6 are the normal reviewer.**
+
+🛑 **THE EARLIER STOP AT ROUND 3 WAS PREMATURE, AND THIS IS THE EVIDENCE.** It was
+recorded as satisfying the same two-condition rule — a clean round plus my own
+agreement — while three P1 defects sat in the document, one of them making P2-T1
+unimplementable. **The rule was not wrong; the reviewer was weak.** "A clean
+round" is worth exactly what the reviewer that produced it is worth, and this
+file now carries the measurement: the substitute produced 4 fabricated findings
+and 0 of these 3 defects; the normal reviewer produced 0 fabricated findings and
+all 3 — then found 3 more in the repairs.
+
+**And that last clause is the other lesson.** Round 4's three fixes were written
+carefully, by me, in one pass — and two of the three were defective. Rounds 5 and
+6 cost two runs and were the difference between a plan that reads correct and a
+plan that is correct.
