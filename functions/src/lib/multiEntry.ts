@@ -196,6 +196,73 @@ export function ownerStateAfter(
 }
 
 /**
+ * PLAN-MULTI-ENTRY-DUES D7 — the owner's state after one entry is DELETED.
+ *
+ * The mirror of `ownerStateAfter`, and a separate function rather than a flag on
+ * it: that one is built around a doc being WRITTEN, whose post-write shape is
+ * what counts. Here there is no written doc, and conflating the two would mean a
+ * `written` parameter that must sometimes be ignored.
+ *
+ * 🛑 COUNTED FROM THE SURVIVING DOCUMENTS, NEVER BY DECREMENTING A STORED
+ * NUMBER. `playableEntryCount` was a one-way latch precisely because nothing
+ * could lower it safely; what makes lowering safe now is that the value is
+ * RECOUNTED from entry existence inside the transaction that removes one. A
+ * delete/re-add cycle therefore cannot double-charge — nothing is added to,
+ * everything is recounted (D7).
+ */
+export function ownerStateWithout(
+  owned: OwnedEntry[],
+  removedId: string,
+): {
+  playableEntryCount: number;
+  entries: Record<string, { entryIndex: number; name?: string }>;
+  /** Transaction-local, and never written to the Member Record — see `ownerStateAfter`. */
+  pickedEntryIds: string[];
+} {
+  let playableEntryCount = 0;
+  const pickedEntryIds: string[] = [];
+  const entries: Record<string, { entryIndex: number; name?: string }> = {};
+  for (const e of owned) {
+    if (e.id === removedId) continue;
+    if (entryHasPick(e.data)) { playableEntryCount++; pickedEntryIds.push(e.id); }
+    const idx = typeof e.data.entryIndex === 'number' ? e.data.entryIndex : 1;
+    entries[e.id] = { entryIndex: idx, ...(typeof e.data.entryName === 'string' && e.data.entryName ? { name: e.data.entryName } : {}) };
+  }
+  return { playableEntryCount, entries, pickedEntryIds };
+}
+
+/**
+ * D8 — `pool.entryCount` for a write that LOWERS it.
+ *
+ * 🛑 WHY THIS EXISTS INSTEAD OF PASSING A NEGATIVE DELTA TO `entryCountWrite`.
+ * That function emits `FieldValue.increment(delta)` when the field is present,
+ * and an increment applies NO FLOOR. On a pool whose `entryCount` has drifted —
+ * a legacy pool where the derived value was stamped once — a decrement can take
+ * it below zero, and `potBreakdown` on a negative denominator produces a
+ * NEGATIVE POT. Its signature accepts `-1`; its behaviour is wrong for one.
+ *
+ * So the delete reads the pool document (it already does, for D3) and writes an
+ * explicit clamped value. **That costs the increment's concurrency safety**,
+ * which is acceptable only because the ENTRY DOCUMENT is in the same
+ * transaction's read set and is what actually serialises two concurrent deletes:
+ * the loser retries and finds it gone.
+ *
+ * `delta === 0` writes nothing — a non-liable entry's removal moves no counter.
+ */
+export function entryCountAfterDelete(
+  pool: { entryCount?: unknown } | undefined,
+  members: Array<Record<string, unknown>> | null,
+  delta: number,
+): Record<string, unknown> {
+  if (delta === 0) return {};
+  const current = typeof pool?.entryCount === 'number'
+    ? pool.entryCount
+    : (members === null ? null : deriveEntryCount(members));
+  if (current === null) return {};
+  return { entryCount: Math.max(0, current + delta) };
+}
+
+/**
  * D8 — `pool.entryCount` counts LIABLE entries and is server-maintained. When
  * the field is ABSENT (every NFL pool created before T2) it is derived from the
  * Member Records read in this same transaction — a from-zero increment would

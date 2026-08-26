@@ -15,7 +15,8 @@ export type LedgerEventType =
     | 'MARKED_UNPAID'    // commissioner reversed a paid mark
     | 'REBUY_DUE'        // survivor rebuy purchased — amount owed to commissioner
     | 'PAYOUT_PAID'      // commissioner marked a prize as paid out
-    | 'PAYOUT_UNPAID';   // commissioner reversed a payout mark
+    | 'PAYOUT_UNPAID'    // commissioner reversed a payout mark
+    | 'ENTRY_DELETED';   // commissioner removed an unpaid, unscored entry (DUES D12)
 
 export interface LedgerEvent {
     type: LedgerEventType;
