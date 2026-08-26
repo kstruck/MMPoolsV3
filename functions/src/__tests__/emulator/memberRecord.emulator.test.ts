@@ -1096,6 +1096,57 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
     expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(0);
   });
 
+  it('🛑 the DRY RUN reaches the same verdict as the live run on a non-liable entry', async () => {
+    // This file's contract is that the dry run IS the divergence count and
+    // lists what a live run would do. Classifying non-liability inside the
+    // transaction broke that: the transaction only runs LIVE, so the dry run
+    // reported PROMOTE_MEMBER for an entry the live run refuses (codex r9).
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' } },                 // liable, unpaid
+      { id: 'e2:dm1', picks: {}, paidStatus: 'PAID' },    // PAID, never picked
+    ] });
+
+    const dry = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    const live = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(dry.entriesPaidNotLiable).toBe(live.entriesPaidNotLiable);
+    expect(dry.membersPromoted).toBe(live.membersPromoted);
+    expect(dry.entriesPaidNotLiable).toBe(1);
+    expect(dry.membersPromoted).toBe(0);
+  });
+
+  it('🛑 folds in the LEGACY primary entry when promoting an EXTRA entry', async () => {
+    // `entries/{uid}` predates `ownerUid`, so the `where('ownerUid','==',uid)`
+    // query MISSES it. Folding it in only when it is the TRIGGERING document
+    // is not enough: promoting the paid EXTRA entry would derive liability
+    // from a set that omits the member's unpaid primary pick, and the
+    // derivation would return PAID on the evidence of ONE fee — a paid
+    // status `setPaidStatus` would never have written (codex r9, P1).
+    await seedUser('p2d_boss', 'Boss', 'SUPER_ADMIN');
+    const pool = db.collection('pools').doc(poolId);
+    await pool.set({
+      id: poolId, type: 'NFL_PICKEM', name: 'Legacy Primary', ownerId: 'p2d_boss',
+      participantIds: ['p2d_boss', 'dm1'], status: 'OPEN', settings: { entryFee: 25 },
+    });
+    await pool.collection('members').doc('dm1').set({
+      uid: 'dm1', poolId, userName: 'Dues Member', role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(), feeOwed: 50,
+      playableEntryCount: 1, hasPlayableEntry: true,     // STALE: really 2
+    });
+    // The legacy primary: has a pick, carries NO ownerUid, and is UNPAID.
+    await pool.collection('entries').doc('dm1').set({ id: 'dm1', poolId, userName: 'Dues Member', picks: { g1: 'KC' } });
+    // The extra entry: has a pick, carries ownerUid, and IS marked paid.
+    await pool.collection('entries').doc('e2:dm1').set({
+      id: 'e2:dm1', poolId, ownerUid: 'dm1', userName: 'Dues Member',
+      picks: { g1: 'BUF' }, paidStatus: 'PAID',
+    });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const m = (await pool.collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('UNPAID');    // TWO liable entries, ONE paid
+    const dues = (await pool.collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+    expect(Object.keys(dues)).toEqual(['e2:dm1']);
+  });
+
   it('DRY RUN still writes nothing at all, dues document included', async () => {
     await seedPool({ entries: [
       { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },

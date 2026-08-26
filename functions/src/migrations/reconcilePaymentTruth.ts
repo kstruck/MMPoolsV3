@@ -260,15 +260,30 @@ export const reconcilePaymentTruth = validated(
           // is reconciled: the member is UNPAID only because their OTHER liable
           // entries have not been paid, which is the correct derived answer and
           // not a disagreement to fix.
+          const liableNow = liableEntryIds(
+            member as MemberRecord, uid, pickedByOwner.get(uid) ?? []);
+
+          // 🛑 NON-LIABLE IS DECIDED HERE, NOT INSIDE THE TRANSACTION (codex r9).
           //
+          // The transaction only runs on a LIVE run, so classifying there made
+          // the dry run report PROMOTE_MEMBER for an entry the live run refuses
+          // and files as NOT_LIABLE_SKIPPED. This file's contract is that the
+          // dry run IS the divergence count and lists what a live run would do,
+          // so the two must reach the same verdict from the same evidence. The
+          // transaction keeps its own re-check as the authority — page data can
+          // be stale — but the REPORT is decided from one place.
+          if (!liableNow.includes(entryDoc.id)) {
+            report.entriesPaidNotLiable++;
+            notedFix(poolId, uid, 'NOT_LIABLE_SKIPPED');
+            continue;
+          }
+
           // ⚠️ AND ONLY WHEN THE SUMMARY IS NOT STALE (codex r8). Presence in
           // the map is not on its own a reason to skip: if EVERY liable entry
           // now has a valid row, the derived status is `PAID` and the stored
           // `UNPAID` is stale — a real divergence, which must fall through to
           // the promotion below rather than be counted as consistent.
           if (paidEntryIdsByUid.get(uid)?.has(entryDoc.id)) {
-            const liableNow = liableEntryIds(
-              member as MemberRecord, uid, pickedByOwner.get(uid) ?? []);
             const derivedNow = derivePaidStatus(
               { ...(member as MemberRecord), paidEntries: duesMapByUid.get(uid) ?? {} },
               liableNow,
@@ -318,10 +333,24 @@ export const reconcilePaymentTruth = validated(
               // the owner's entries come along, in the same transaction, before
               // any write.
               const ownedQuery = doc.ref.collection('entries').where('ownerUid', '==', uid);
-              const [freshM, freshE, ownedSnap, storedDues] = await Promise.all([
+              // 🛑 AND THE LEGACY PRIMARY, ALWAYS (codex r9, P1).
+              //
+              // `entries/{uid}` predates `ownerUid` and can carry none, so the
+              // query above MISSES it. Folding it in only when it happens to be
+              // the TRIGGERING document is not enough: promoting a paid EXTRA
+              // entry (`e2:uid`) would then derive liability from a set that
+              // omits the member's unpaid primary pick, and with a stale
+              // `playableEntryCount` of 1 the derivation returns PAID on the
+              // evidence of one fee. `setPaidStatus` reads it unconditionally,
+              // and a migration that derives from a smaller liability set than
+              // the authoritative path writes a paid status that path would
+              // never have written.
+              const primaryRef = doc.ref.collection('entries').doc(uid);
+              const [freshM, freshE, ownedSnap, primarySnap, storedDues] = await Promise.all([
                 tx.get(mRef),
                 tx.get(entryDoc.ref),
                 tx.get(ownedQuery),
+                tx.get(primaryRef),
                 readPoolDues(tx, doc.ref, uid),
               ]);
               const fm: any = freshM.data();
@@ -347,7 +376,11 @@ export const reconcilePaymentTruth = validated(
               // no `ownerUid` and so miss the query; it IS this entry when the
               // ids match, so it is folded in.
               const pickedIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
-              if (entryDoc.id === uid && !pickedIds.includes(uid) && entryHasPick(fe)) pickedIds.push(uid);
+              // The legacy primary, whether or not it is the triggering doc.
+              if (primarySnap.exists && !pickedIds.includes(uid)
+                  && entryHasPick(primarySnap.data() as Record<string, unknown>)) {
+                pickedIds.push(uid);
+              }
               const liable = liableEntryIds(fm as MemberRecord, uid, pickedIds);
 
               // 🛑 NEVER RECORD MONEY AGAINST A NON-LIABLE ENTRY (codex r8, P2).
@@ -433,11 +466,10 @@ export const reconcilePaymentTruth = validated(
               return true;
             });
             if (acted === 'NOT_LIABLE') {
-              // A PAID entry that never committed a pick. `setPaidStatus`
-              // refuses this id, and a dues row for it could never make the
-              // member paid, so there is nothing to reconcile — but it IS a
-              // divergence an operator should see, so it is reported rather
-              // than folded into `alreadyConsistent` (codex r8).
+              // Reached only when the entry LOST its liability between the page
+              // read and this transaction — the page-level test above already
+              // filtered the settled case, and wrote the report line for it.
+              // Counted once, here, because the page level did not (codex r9).
               report.entriesPaidNotLiable++;
               notedFix(poolId, uid, 'NOT_LIABLE_SKIPPED');
             } else if (acted) { report.membersPromoted++; changedThisPool++; }
