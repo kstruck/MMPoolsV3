@@ -22,11 +22,23 @@
  * the obvious case before a round trip; it is not the rule, and the server's
  * `ENTRY_NAME_TAKEN` refusal renders through the pick sheet's normal error path
  * (`getUserMessage`) when the two disagree.
+ *
+ * 🛑 RENAMING AN ENTRY THAT EXISTS IS A DIFFERENT CALLABLE (the pencil below).
+ *
+ * The draft above names an entry that does NOT exist yet — the name rides the
+ * first `submitNFLPicks`. Once the document exists that route is closed: on
+ * Survivor and Margin a submit with no team for the week is refused outright,
+ * so "resubmit with a new name" cannot work at all after a week locks, and on
+ * pick'em it would drag the lock gates, the resubmit latch, fee liability and
+ * the K11 paid-reset along with it. `renameNFLEntry` writes the name and
+ * nothing else. Same server-holds-the-rule discipline: the check in
+ * `handleRenameChange` is advisory, `ENTRY_NAME_TAKEN` is the answer.
  */
-import React, { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Check, Pencil, Plus, X } from 'lucide-react';
 import { ENTRY_NAME_MAX, defaultEntryName } from '@shared/multiEntry';
 import { sortOwnEntries, nextAddableEntryIndex, entryLabelOf, entryIndexOf, type OwnEntryLike } from '../../utils/entrySelection';
+import { getUserMessage } from '../../utils/errorMessages';
 
 /**
  * 🛑 THEME TOKENS, NEVER A FIXED HEX — this card shipped WHITE ON WHITE.
@@ -78,6 +90,13 @@ interface EntrySwitcherProps {
   onCancelDraft: () => void;
   /** Picks are closed for the week — a new entry cannot be started into it. */
   isWeekLocked?: boolean;
+  /**
+   * Rename an entry that already exists (`dbService.renameNFLEntry`). Resolves
+   * on success; REJECTS with the server's HttpsError so the message below can
+   * be the server's own (`ENTRY_NAME_TAKEN`), not a guess. Omit to hide the
+   * pencil entirely — the strip still switches and still adds.
+   */
+  onRename?: (entryIndex: number, entryName: string) => Promise<void>;
 }
 
 export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
@@ -93,8 +112,23 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
   onDraftNameChange,
   onCancelDraft,
   isWeekLocked,
+  onRename,
 }) => {
   const [nameError, setNameError] = useState<string | null>(null);
+  /** The entry whose name is being edited in place, and the text so far. */
+  const [rename, setRename] = useState<{ entryId: string; entryIndex: number; value: string } | null>(null);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  /**
+   * Focus the rename field when it opens. `autoFocus` would say this in one
+   * word, but `jsx-a11y/no-autofocus` forbids it (it moves focus on every
+   * mount, including a page load the member did not ask for); focusing in an
+   * effect keyed on the entry being renamed moves focus only on the click that
+   * opened the form.
+   */
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renamingId = rename?.entryId ?? null;
+  useEffect(() => { if (renamingId) renameInputRef.current?.focus(); }, [renamingId]);
   const sorted = sortOwnEntries(ownEntries);
 
   // Nothing to switch between and nothing to add: render nothing rather than a
@@ -140,6 +174,50 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
     onDraftNameChange(value.slice(0, ENTRY_NAME_MAX));
   };
 
+  const handleRenameChange = (value: string) => {
+    const trimmed = value.trim();
+    // 🛑 THE ENTRY BEING RENAMED IS EXCLUDED FROM ITS OWN CLASH CHECK, exactly
+    // as `assertEntryNameFree` excludes `target.ref.id`. Without the exclusion,
+    // re-opening the pencil and pressing save without typing would warn that
+    // the entry clashes with itself.
+    const clash = sorted.some(e => String(e.id) !== rename?.entryId
+      && typeof e?.entryName === 'string' && e.entryName.trim().toLowerCase() === trimmed.toLowerCase());
+    setRenameError(clash ? 'You already have an entry with that name.' : null);
+    setRename(prev => (prev ? { ...prev, value: value.slice(0, ENTRY_NAME_MAX) } : prev));
+  };
+
+  const startRename = (entry: OwnEntryLike) => {
+    setRenameError(null);
+    setRename({
+      entryId: String(entry.id),
+      entryIndex: entryIndexOf(entry),
+      // Seeded with the CURRENT name (blank for an unnamed entry #1, whose row
+      // shows the player's own name), so the pencil opens on what is there.
+      value: typeof entry.entryName === 'string' ? entry.entryName : '',
+    });
+  };
+
+  const submitRename = async () => {
+    if (!rename || !onRename) return;
+    const name = rename.value.trim();
+    // The server refuses a blank with ENTRY_NAME_EMPTY; saying so here saves a
+    // round trip and, more importantly, stops a blank save from reading as
+    // "cleared the name" — clearing a name is NOT something this callable does.
+    if (!name) { setRenameError("An entry name can't be blank."); return; }
+    setRenameSaving(true);
+    try {
+      await onRename(rename.entryIndex, name);
+      setRename(null);
+      setRenameError(null);
+    } catch (err) {
+      // The server's own words — ENTRY_NAME_TAKEN and friends are mapped in
+      // src/utils/errorMessages.ts.
+      setRenameError(getUserMessage(err, 'That name was not saved. Please try again.'));
+    } finally {
+      setRenameSaving(false);
+    }
+  };
+
   return (
     <div className="bg-card border border-line rounded-xl p-4 shadow-card" data-testid="entry-switcher">
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -161,7 +239,7 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
         {!hasPrimary && (
           <button
             type="button"
-            onClick={onSelectPrimarySlot}
+            onClick={() => { setRename(null); setRenameError(null); onSelectPrimarySlot(); }}
             aria-pressed={primarySlotActive}
             data-testid="implicit-entry-1"
             className={`px-3 py-1.5 rounded-md text-sm font-medium border border-line transition-colors ${
@@ -173,25 +251,50 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
         )}
         {sorted.map((e) => {
           const active = !draft && e.id === activeEntryId;
+          const label = entryLabelOf(e, `Entry ${entryIndexOf(e)}`);
+          // 🛑 THE PENCIL IS A SIBLING OF THE CHIP, NOT A CHILD OF IT. A
+          // <button> inside a <button> is invalid HTML and browsers recover
+          // from it by breaking the inner one — so the two live side by side in
+          // one bordered shell that carries the chip's colours, and the shell
+          // is what looks like a single chip.
+          const editing = rename?.entryId === String(e.id);
+          const showPencil = active && !!onRename;
           return (
-            <button
+            <span
               key={e.id}
-              type="button"
-              onClick={() => onSelect(String(e.id))}
-              aria-pressed={active}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border border-line transition-colors ${
+              className={`inline-flex items-center rounded-md border border-line overflow-hidden transition-colors ${
                 active ? CHIP_ACTIVE : CHIP_IDLE
               }`}
             >
-              {entryLabelOf(e, `Entry ${entryIndexOf(e)}`)}
-            </button>
+              <button
+                type="button"
+                onClick={() => { setRename(null); setRenameError(null); onSelect(String(e.id)); }}
+                aria-pressed={active}
+                className="px-3 py-1.5 text-sm font-medium"
+              >
+                {label}
+              </button>
+              {showPencil && (
+                <button
+                  type="button"
+                  onClick={() => (editing ? setRename(null) : startRename(e))}
+                  aria-expanded={editing}
+                  aria-label={`Rename ${label}`}
+                  title={`Rename ${label}`}
+                  data-testid={`rename-entry-${entryIndexOf(e)}`}
+                  className="pr-2.5 pl-1 py-1.5 opacity-80 hover:opacity-100"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+            </span>
           );
         })}
 
         {canAdd && (
           <button
             type="button"
-            onClick={onStartDraft}
+            onClick={() => { setRename(null); setRenameError(null); onStartDraft(); }}
             disabled={isWeekLocked}
             title={isWeekLocked ? 'This week is locked — a new entry starts with its first pick.' : undefined}
             className="px-3 py-1.5 rounded-md text-sm font-medium border border-dashed border-line bg-page text-muted hover:text-[color:var(--text)] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
@@ -200,6 +303,56 @@ export const EntrySwitcher: React.FC<EntrySwitcherProps> = ({
           </button>
         )}
       </div>
+
+      {rename && (
+        <div className="mt-3 pt-3 border-t border-line" data-testid="rename-entry-form">
+          {/* A <span>, not a <label> — the save and cancel BUTTONS share the row
+              below, and `aria-label` on the input is what associates the two
+              (same convention as the draft block). */}
+          <span className="block text-[11px] font-medium uppercase tracking-[0.06em] text-muted mb-1.5">
+            Rename this entry
+          </span>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              aria-label="Rename this entry"
+              value={rename.value}
+              maxLength={ENTRY_NAME_MAX}
+              ref={renameInputRef}
+              disabled={renameSaving}
+              placeholder={userName}
+              onChange={(ev) => handleRenameChange(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter') { ev.preventDefault(); void submitRename(); }
+                if (ev.key === 'Escape') { setRename(null); setRenameError(null); }
+              }}
+              className="flex-1 min-w-0 px-3 py-1.5 rounded-md border border-line bg-page text-[color:var(--text)] text-sm disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={() => void submitRename()}
+              disabled={renameSaving}
+              aria-label="Save entry name"
+              className="p-1.5 rounded-md border border-line text-muted hover:text-[color:var(--text)] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Check size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRename(null); setRenameError(null); }}
+              disabled={renameSaving}
+              aria-label="Cancel rename"
+              className="p-1.5 rounded-md border border-line text-muted hover:text-[color:var(--text)] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {renameError && <p className="mt-1.5 text-[12px] text-[#B4232A]">{renameError}</p>}
+          <p className="mt-2 text-[12px] text-muted">
+            Only the name changes. Your picks, score and dues for this entry stay exactly as they are.
+          </p>
+        </div>
+      )}
 
       {draft && (
         <div className="mt-3 pt-3 border-t border-line">
