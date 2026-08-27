@@ -355,18 +355,19 @@ describe('every schema path is explained or allowlisted', () => {
       expect(path in SCHEMA_PATH_ALLOWLIST, `${path} should no longer be allowlisted`).toBe(false);
     }
     expect(Object.keys(SCHEMA_PATH_ALLOWLIST).length).toBeLessThan(allLeaves.size);
-    // T10 closed `settings.maxStrikes`, so it is no longer a witness here. The
-    // three that remain belong to T11-T13 and go the same way; when the last of
-    // them lands this loop empties out and stops asserting anything, which is
-    // why the check below does not depend on it.
-    for (const path of ['settings.scoringSystem', 'numberSets', 'settings.payoutMode']) {
-      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} is T11-T13 content and should still be pending`).toBe(true);
+    // T10 closed `settings.maxStrikes` and `settings.tieCountsAs`; T12 closes
+    // `settings.scoringSystem`. The two that remain belong to T11 and T13 and
+    // go the same way; when the last of them lands this loop empties out and
+    // stops asserting anything, which is why the check below does not depend
+    // on it.
+    for (const path of ['numberSets', 'settings.payoutMode']) {
+      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} is T11/T13 content and should still be pending`).toBe(true);
     }
     // The non-vacuous half: a path a ticket has CLOSED must be explained for
     // every pool type whose create contract carries it, and must be gone from
     // the allowlist. An empty `explained` set or a silently re-added row fails
     // here even after the loop above has nothing left to say.
-    for (const path of ['settings.maxStrikes']) {
+    for (const path of ['settings.maxStrikes', 'settings.scoringSystem']) {
       expect(explained.has(path), `${path} is closed and must be explained`).toBe(true);
       expect(path in SCHEMA_PATH_ALLOWLIST, `${path} is closed and must not be allowlisted`).toBe(false);
     }

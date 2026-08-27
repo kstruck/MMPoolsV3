@@ -98,19 +98,16 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.weeklyPayouts.places.*.rank': 'T11: the separate weekly place list a hybrid pool may carry.',
   'settings.weeklyPayouts.places.*.percentage': 'T11: the separate weekly place list a hybrid pool may carry.',
 
-  // ---- PENDING: Bracket and Playoff (T12) --------------------------------
-  'settings.maxEntriesTotal': 'T12: the cap on entries in the whole pool. The bracket manager tab edits it (BracketPoolDashboard.tsx:109 editMaxTotal, written at :350); -1 means unlimited, which the copy has to say.',
-  'settings.customScoring': 'T12: the bracket manager tab authors the per-round point values when the scoring system is CUSTOM (BracketPoolDashboard.tsx:112 editCustomScoring, written at :353).',
-  seasonYear: 'T12: which tournament year a bracket pool covers.',
-  gender: 'T12: mens or womens tournament.',
-  tournamentType: 'T12: which tournament the bracket follows.',
-  'settings.scoringSystem': 'T12: how bracket rounds are worth points. Its labels are SCORING_SYSTEM_LABELS in BracketRulesPanel today and become this topic.',
-  'settings.tieBreakers.closestAbsolute': 'T12: tie-break on the closest total either way.',
-  'settings.tieBreakers.closestUnder': 'T12: tie-break on the closest total without going over.',
-  'settings.scoring.roundMultipliers.WILD_CARD': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.DIVISIONAL': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.CONF_CHAMP': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.SUPER_BOWL': 'T12: playoff round weighting.',
+  // ---- Bracket and Playoff (T12) -----------------------------------------
+  // T12 removed eleven rows: seasonYear, gender, tournamentType,
+  // settings.scoringSystem, settings.customScoring, both tieBreakers and all
+  // four roundMultipliers are authored in `content/bracket.ts`.
+  //
+  // `settings.maxEntriesTotal` is the one row T12 could not delete, and the
+  // reason is the code rather than missing copy — so it is RE-SCOPED, not left
+  // pending. It is now PERMANENT for the reader it was pending for.
+  'settings.maxEntriesTotal':
+    'PERMANENT for NFL_PLAYOFFS (T12, 2026-08-27). BRACKET is explained — `content/bracket.ts` covers the manager control (BracketPoolDashboard.tsx:112 editMaxTotal, written at :374) and the -1-means-no-limit gate (functions/src/bracketEntries.ts:75). The PLAYOFF create input accepts the same field and NOTHING reads it: the playoff wizard binds no control for it, submitPlayoffPicks caps on maxEntriesPerUser, the free-plan ten and the paid ceiling but never on this (functions/src/playoffPools.ts:205-217), and getPoolEntrySummary returns capacity null for a playoff pool on purpose (src/utils/poolSport.ts:105-108). There is no control to explain and no behaviour to describe, so a topic scoped to NFL_PLAYOFFS could only say something untrue. Same shape as settings.pointsPerPick above. Deleting this row needs a product decision — enforce it for playoff pools, or drop it from the playoff create input — not help copy.',
 
   // ---- PENDING: Squares and Props (T13) ----------------------------------
   maxSquaresPerPlayer: 'T13: cap on squares per person.',
@@ -254,17 +251,11 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   'settings.hybridSplit.weeklyPerEntry': 'T11: the weekly share of each entry fee on a hybrid pool.',
   'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
 
-  // ---- PENDING: Bracket and Playoff (T12) --------------------------------
-  seasonYear: 'T12: which tournament year a bracket pool covers.',
-  gender: 'T12: mens or womens tournament.',
-  tournamentType: 'T12: which tournament the bracket follows.',
-  'settings.scoringSystem': 'T12: how bracket rounds are worth points.',
-  'settings.tieBreakers.closestAbsolute': 'T12: tie-break on the closest total either way.',
-  'settings.tieBreakers.closestUnder': 'T12: tie-break on the closest total without going over.',
-  'settings.scoring.roundMultipliers.WILD_CARD': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.DIVISIONAL': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.CONF_CHAMP': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.SUPER_BOWL': 'T12: playoff round weighting.',
+  // ---- Bracket and Playoff (T12): all ten rows closed --------------------
+  // The three tournament controls and the scoring system resolve to topics of
+  // their own in `content/bracket.ts`. The two tie-break boxes and the four
+  // round multipliers carry an explicit `helpId` to a single topic each, for
+  // the reason the payment-handle rows above give: one explanation, one place.
 
   // ---- PENDING: Squares and Props (T13) ----------------------------------
   homeTeam: 'T13: the home team of the game a squares or props pool covers.',
