@@ -337,10 +337,28 @@ describe('a pool page listed from the create wizard (codex R12)', () => {
     expect(screen.getByText(picks.title)).toBeTruthy();
     // …and not linked, because `/create/pickem?tab=picks` is not a pool.
     expect(screen.queryByRole('button', { name: picks.title })).toBeNull();
-    // Discriminating: a page on THIS route is a button.
+    // Discriminating: the page for the step this harness IS on is a button.
     expect(
-      screen.getByRole('button', { name: helpRegistry.getPage('wizard.pickem.fee')!.title }),
+      screen.getByRole('button', { name: helpRegistry.getPage('wizard.pickem.rules')!.title }),
     ).toBeTruthy();
+  });
+
+  /**
+   * The same rule one level down (codex R2 on T14), at the UI.
+   *
+   * The harness publishes `tab="rules"`, so the Fee step's page is on this
+   * route but is NOT the screen the reader is looking at — and its `href` is
+   * `null`, so a click could only force its summary over the rules form.
+   * Listed, and rendered as text.
+   */
+  it('a DIFFERENT wizard step on the same route is text too', async () => {
+    const fee = helpRegistry.getPage('wizard.pickem.fee')!;
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    expect(screen.getByText(fee.title)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: fee.title })).toBeNull();
   });
 });
 
