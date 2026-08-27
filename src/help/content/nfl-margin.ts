@@ -50,7 +50,10 @@
 // GROSS and then scales the weekly allocation by `charityFactor`
 // (`prizePot.ts:61-72`), so neither typed amount is what its pot holds on a
 // pool that gives a share away — a 10% pool splitting $25 as $18/$7 fills the
-// pots from $16.20/$6.30 per entry. That is one fact about the split as a
+// pots from $16.20/$6.30 per entry. The two pots divide what charity leaves,
+// which is the only claim that holds: the season pot takes the remainder, so
+// rounding can push it ABOVE the amount typed (codex r3). That is one fact
+// about the split as a
 // whole, not two, so the two field topics were written to describe the
 // DIVISION they set rather than to promise an amount, and the deduction is
 // named once in `settings.payoutMode`.
@@ -120,17 +123,37 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // entryFee. It runs in the create schema's superRefine AND in the update
       // callable, so a save that breaks it is refused on both paths.
       // `weeklyPlacesFor` falls back to the season places when a HYBRID pool
-      // declares no weekly list (`prizePot.ts:107-108`).
-      'Hybrid pays both. It asks you to divide the entry fee into two whole-dollar amounts — one for the weekly pots, one for the season pot — and the two have to add up to the fee exactly, or the save is refused. Each pot can have its own list of prize places; leave the weekly list empty and the season places price both.',
+      // declares no weekly list (`prizePot.ts:107-108`) — "no list", NOT "an
+      // empty one". An empty ARRAY is truthy, so a stored `{ places: [] }` is
+      // returned as itself and the weekly pot has no places at all. That state
+      // is deliberate and reachable: `normalizePayoutListsPatch` exists to turn
+      // `weeklyPayouts: {}` into `{ places: [] }` precisely so it does NOT fall
+      // through (`weeklyPayoutsGate.ts:110-116`), and `NFLManagerView.tsx:406-410`
+      // preserves it across unrelated saves. So the copy states the condition
+      // `weeklyPlacesFor` actually tests — no separate list — rather than telling
+      // a commissioner to "leave it empty", which is true of the two authoring
+      // surfaces and false of that stored pool. (codex r3 [P2]; the same finding
+      // was rejected at r2 on a premise about the authoring surfaces that was
+      // right and beside the point.)
+      'Hybrid pays both. It asks you to divide the entry fee into two whole-dollar amounts — one for the weekly pots, one for the season pot — and the two have to add up to the fee exactly, or the save is refused. Each pot can have its own list of prize places. With no separate weekly list, your season places price both pots.',
       // Charity comes off BEFORE either pot exists: `potBreakdown` takes the cut
       // from the gross and then scales the weekly allocation by `charityFactor`
       // (`prizePot.ts:61-72`), so on a 10% pool an $18/$7 split fills the pots
-      // from $16.20/$6.30 per entry, not $18/$7. Stated HERE and nowhere else
+      // from $16.20/$6.30 per entry, not $18/$7.
+      //
+      // NOT "both pots hold less than the two amounts you typed" (codex r3 [P2]).
+      // The season pot is the REMAINDER — `net − floor(weekly × charityFactor)` —
+      // so it absorbs both roundings and can come out ABOVE what was typed: one
+      // $25 entry, a $25/$0 split and 10% charity gives net $23, weekly $22 and
+      // a season pot of $1 against a typed $0. What IS invariant is that the two
+      // pots divide `net` exactly, so that is what the sentence claims.
+      //
+      // Stated HERE and nowhere else
       // (voice rule 10): it is one fact about the split as a whole, and this is
       // the topic that owns the rules the two halves share. The member-facing
       // weekly tooltip already says the same thing in the same order
       // (`WeeklyWinnersList.tsx:79`, "after any charity donation").
-      'If your pool gives a share to charity, that comes off the fees before either pot is worked out, so both pots hold less than the two amounts you typed.',
+      'If your pool gives a share to charity, that comes off the fees before either pot is worked out, so the two pots divide what is left rather than the whole of what you collect.',
       // The absent-split case, which is every hybrid pool created before the
       // split existed. `potBreakdown` leaves both figures unknown, and
       // `PayoutsPanel.tsx:59` renders the honest fallback rather than a guess.

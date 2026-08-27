@@ -436,19 +436,34 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
       payouts: { places: PLACES },
     };
     const pot = potBreakdown(settings, 10)!;
-    // The case above, with a tenth given away: 180/70 becomes 162/63. Both pots
-    // are BELOW the typed split × entries, which is the claim the copy rests on.
+    // The case above, with a tenth given away: 180/70 becomes 162/63.
     expect(pot.charityCut).toBe(25);
     expect(pot.net).toBe(225);
     expect(pot.weeklySeasonAllocation).toBe(162);
     expect(pot.seasonPot).toBe(63);
-    expect(pot.weeklySeasonAllocation!).toBeLessThan(18 * 10);
-    expect(pot.seasonPot!).toBeLessThan(7 * 10);
+
+    // THE CLAIM THE COPY MAKES, and the only one that holds: the two pots
+    // divide `net` exactly. "Both pots hold less than you typed" does NOT hold
+    // — the season pot is the REMAINDER, so rounding can push it above the
+    // typed amount (codex r3 [P2]). One $25 entry, a $25/$0 split and 10%
+    // charity is the counterexample, and it is a legal split
+    // (`isHybridSplitShape` allows each half to be 0).
+    expect(pot.weeklySeasonAllocation! + pot.seasonPot!).toBe(pot.net);
+    const edge = potBreakdown(
+      { payoutMode: 'HYBRID', entryFee: 25, hybridSplit: { weeklyPerEntry: 25, seasonPerEntry: 0 }, charity: { enabled: true, percentage: 10 } },
+      1,
+    )!;
+    expect(edge.net).toBe(23);
+    expect(edge.weeklySeasonAllocation).toBe(22);
+    expect(edge.seasonPot).toBe(1); // ...against a typed $0. ABOVE, not below.
+    expect(edge.weeklySeasonAllocation! + edge.seasonPot!).toBe(edge.net);
 
     // Stated once, in the topic that owns the split as a whole (voice rule 10).
     const mode = staticCopy(helpRegistry.getTopic('settings.payoutMode')!.long);
     expect(mode).toMatch(/charity/i);
     expect(mode).toMatch(/before either pot is worked out/i);
+    expect(mode).toMatch(/divide what is left/i);
+    expect(mode, 'reinstates the claim the edge case above disproves').not.toMatch(/both pots hold less/i);
 
     // ...and not restated in the two field topics, which describe the DIVISION
     // they set. The two phrasings below are the ones that were false: both
@@ -502,20 +517,33 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
   });
 
   /**
-   * "Leave the weekly list empty and the season places price both" — REJECTED
-   * codex r2 [P2], and pinned here so the rejection is evidence rather than an
-   * opinion. The claim was that emptying the manager's weekly editor stores
-   * `{ places: [] }`, which `weeklyPlacesFor` would read as "no weekly prizes".
-   * Neither authoring surface can produce that value:
+   * "WITH NO SEPARATE WEEKLY LIST" IS THE CONDITION, NOT "LEAVE IT EMPTY".
    *
-   *   • the wizard DROPS an empty list (`buildNFLPayload`, asserted below), and
-   *   • the manager sends `weeklyPayouts: null` from exactly that branch
-   *     (`NFLManagerView.tsx:438-447`, put there by an earlier codex round).
+   * The copy used to say "leave the weekly list empty and the season places
+   * price both". Rejected at codex r2 on the grounds that neither authoring
+   * surface can store `{ places: [] }` — which is TRUE (asserted below) and
+   * beside the point, re-raised at r3 and absorbed. An empty ARRAY is truthy,
+   * so `weeklyPlacesFor` returns it as itself and the weekly pot has no places
+   * at all, and that state is deliberate and reachable through the update
+   * callable: `normalizePayoutListsPatch` exists to turn `weeklyPayouts: {}`
+   * into `{ places: [] }` precisely so it does NOT fall through
+   * (`weeklyPayoutsGate.ts:110-116`), and the manager preserves it across
+   * unrelated saves (`NFLManagerView.tsx:406-410`).
    *
-   * `weeklyPlacesFor` reads a stored null exactly like an absent field, so the
-   * season places price both pots — which is what the copy says.
+   * So all three stored states are pinned here, and the copy is required to
+   * name the condition the function tests rather than an instruction that is
+   * true of two surfaces and false of that pool.
    */
-  it('an emptied weekly editor cannot reach the stored no-weekly-prizes state', () => {
+  it('the weekly fallback is "no list", not "an empty list" — all three states', () => {
+    // The reachable, deliberate one the copy must NOT claim falls back.
+    expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES }, weeklyPayouts: { places: [] } })).toEqual([]);
+
+    const mode = staticCopy(helpRegistry.getTopic('settings.payoutMode')!.long);
+    expect(mode, 'tells a commissioner to leave the weekly list empty').not.toMatch(/weekly list empty/i);
+    expect(mode).toMatch(/no separate weekly list/i);
+  });
+
+  it('...and the two states the authoring surfaces CAN produce do fall back', () => {
     const base = {
       type: 'NFL_PICKEM',
       name: 'p',
