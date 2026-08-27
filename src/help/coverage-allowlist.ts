@@ -161,7 +161,7 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
 
   // PENDING — T14 (the two admin surfaces). T3 CLOSED the twenty-one site and
   // account rows: every one of them now has a page in
-  // `content/site-pages.ts`, and three of the reasons written here were wrong
+  // `content/site-pages.ts`, and two of the reasons written here were wrong
   // about the code, which is why they are gone rather than edited:
   //   - `/participant` had SEVEN tabs, not six (`ParticipantDashboard.tsx:67`
   //     — insights, all, open, live, completed, commissioner, entries), and
