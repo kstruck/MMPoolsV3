@@ -222,7 +222,17 @@ export function useHelpPanelState(options: { isAdmin: boolean; defaultAudience?:
       // other door (a `related` link, a `?help=` deep link someone pasted) gets
       // the same answer.
       if (!canOpenPage(next, routeContext, scope.audience)) {
-        setActiveTopicId(undefined);
+        // …but a request for a TOPIC is still answered (codex R4 on T14). The
+        // reader asked to read about one setting, not to be taken to a screen,
+        // and `HelpPanelBody` renders a topic that is not on the current page
+        // as a card of its own. Dropping it here is what made a search hit for
+        // `Logo URL` from the wizard's rules step clear the query and show
+        // nothing — the same dead click codex R9 fixed for glossary hits.
+        //
+        // The PAGE stays where it is: forcing `next` into view is exactly what
+        // `canOpenPage` just refused, and the panel must not describe a screen
+        // the reader is not looking at.
+        setActiveTopicId(target.topicId);
         return;
       }
       // Same route, or a page with no link (K13 — the super-admin sub-tabs and

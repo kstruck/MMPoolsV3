@@ -799,3 +799,35 @@ describe('search filtering (codex R3 on T14)', () => {
     );
   });
 });
+
+/**
+ * A topic search hit is ANSWERED, never merely cleared — codex R4 on T14.
+ *
+ * `goToPage` refuses to move to a page the reader cannot open, which is right;
+ * dropping the topic request with it was not. The reader asked to read about a
+ * setting, and `Logo URL` has exactly one placement — the wizard's branding
+ * step — so there is no reachable page to send them to instead. The panel shows
+ * the topic where they are.
+ */
+describe('an off-page topic request (codex R4 on T14)', () => {
+  it('shows the topic without moving the panel off the step the reader is on', async () => {
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // The rules step is the current page before the search…
+    expect(screen.getAllByText(helpRegistry.getPage('wizard.pickem.rules')!.title).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'logo' } });
+    const hit = await waitFor(() => screen.getByRole('button', { name: /Logo URL/ }));
+    fireEvent.click(hit);
+
+    // The topic is rendered…
+    await waitFor(() => expect(screen.getByText('What you searched for')).toBeTruthy());
+    expect(screen.getAllByText('Logo URL').length).toBeGreaterThan(0);
+    // …and the panel still describes the rules step, NOT the branding step
+    // whose page holds that topic. Answering the request must not smuggle the
+    // page move back in.
+    expect(screen.queryByText(helpRegistry.getPage('wizard.pickem.branding')!.summary)).toBeNull();
+    expect(screen.getAllByText(helpRegistry.getPage('wizard.pickem.rules')!.title).length).toBeGreaterThan(0);
+  });
+});

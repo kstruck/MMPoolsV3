@@ -165,6 +165,17 @@ export function HelpPanelBody({ state, searchInputRef }: {
   const activeSection = activeTopic
     ? sections.find((s) => s.topics.includes(activeTopic))?.section
     : undefined;
+  /**
+   * A topic the reader asked for that is NOT on this page (codex R4 on T14).
+   *
+   * `goToPage` refuses to move to a page the reader cannot open — an unlinkable
+   * step or tab that is not the one they are standing on — but the request was
+   * to read about a setting, not to go somewhere. Rendered as a card of its own
+   * above "On this page", because the alternative is the click doing nothing:
+   * a search hit for `Logo URL` from the wizard's rules step has no reachable
+   * placement anywhere, so there is no other page to send the reader to.
+   */
+  const offPageTopic = activeTopic && activeSection === undefined ? activeTopic : undefined;
 
   const relatedOf = (ids: readonly string[] | undefined) =>
     (ids ?? [])
@@ -221,6 +232,23 @@ export function HelpPanelBody({ state, searchInputRef }: {
               There is no guide for this screen yet. Search above, or pick a screen from the list below.
             </p>
           )}
+
+          {offPageTopic ? (
+            <section className="space-y-2">
+              <PanelSectionHeading>What you searched for</PanelSectionHeading>
+              <TopicCard
+                topic={offPageTopic}
+                poolType={scope.poolType}
+                settings={scope.settings}
+                highlighted
+                related={relatedOf(offPageTopic.related)}
+                onOpenRelated={(id) => {
+                  clearActiveTopic();
+                  openTo({ topicId: id });
+                }}
+              />
+            </section>
+          ) : null}
 
           {sections.length > 0 ? (
             <section className="space-y-2">
