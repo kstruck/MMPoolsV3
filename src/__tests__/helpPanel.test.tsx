@@ -699,3 +699,58 @@ describe('a template renders in the panel from the pool in scope', () => {
     expect(text).not.toContain('A few older pools');
   });
 });
+
+/**
+ * The admin chunk, at the surface — codex round 2 on T14.
+ *
+ * Round 2 raised a P1 saying `/tournament-sim` cannot show its help page
+ * because `TournamentSimulator.tsx` mounts no `HelpRoutePublisher`, so the
+ * audience stays `member` and an admin-only page is filtered out. The premise
+ * is wrong: `HelpPanelHost` passes `defaultAudience: isAdmin ? 'admin' :
+ * 'member'` (`useHelpPanel.ts`), and `App.tsx` gates BOTH the route and
+ * `HelpProvider` on the same `isSuperAdmin(user)`. A route that renders at all
+ * is therefore already an admin-audience route.
+ *
+ * Untested, though — the finding named a real single point of failure, so it
+ * is pinned here rather than answered in prose. This also covers the lazy
+ * admin registry end to end, which nothing else did.
+ */
+describe('the admin help chunk on an admin route (codex round 2 on T14)', () => {
+  it('summarises /tournament-sim with no publisher on the page at all', async () => {
+    render(
+      <MemoryRouter initialEntries={['/tournament-sim']}>
+        <HelpProvider isAdmin={true}>
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // The chunk is fetched when the panel opens, so the copy arrives async.
+    // Matched on the SUMMARY, which only the page heading renders — the title
+    // appears twice, as the heading and as the current row in "All pages".
+    await waitFor(() => expect(screen.getByText(/creates a test pool/)).toBeTruthy());
+    // …and it is the current page, not merely listed.
+    expect(
+      screen.getByRole('button', { name: 'Tournament Simulator' }).getAttribute('aria-current'),
+    ).toBe('true');
+  });
+
+  it('shows the same reader NOTHING there when they are not an admin', async () => {
+    // Discriminating: the assertion above must be about the admin audience and
+    // not about a page that is visible to everyone. A non-admin never reaches
+    // this route, but the panel must not describe it either.
+    render(
+      <MemoryRouter initialEntries={['/tournament-sim']}>
+        <HelpProvider isAdmin={false}>
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    expect(screen.queryByText('Tournament Simulator')).toBeNull();
+  });
+});
