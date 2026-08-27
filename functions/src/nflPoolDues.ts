@@ -27,32 +27,12 @@ import { assertCallerRole } from './lib/assertRole';
 import { assertNotBannedLive } from './lib/systemGuards';
 import { getPoolDuesSchema } from './schemas/poolCore';
 import { isPoolCommissioner } from './poolOps';
-import type { PaidEntryMap } from './lib/poolDues';
+import { DUES_PREFIX, DUES_PREFIX_END, type PaidEntryMap } from './lib/poolDues';
 import { entryHasPick } from './lib/multiEntry';
 import { liableEntryIds } from './shared/memberRecord';
 
 /** The NFL pool types that have per-entry dues at all. */
 const NFL_ENTRY_POOL_TYPES = new Set(['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']);
-
-/** The `private/` document-id prefix that marks a member's dues record. */
-const DUES_PREFIX = 'dues__';
-
-/**
- * The EXCLUSIVE upper bound of the `dues__*` id range — the prefix with its last
- * character incremented, so `dues__` becomes `dues_` + backtick.
- *
- * 🛑 NOT `dues__` + U+F8FF, WHICH IS THE CONVENTIONAL FIREBASE SENTINEL AND IS
- * WRONG HERE (codex). U+F8FF is the top of a private-use block, not the top of
- * Unicode: a document id beginning above it — `dues__` followed by an emoji,
- * say — sorts AFTER that bound and is silently skipped. The consequence is a
- * money bug in the quiet direction: that member's payments never appear in the
- * ledger, so a commissioner re-collects dues that were already paid.
- *
- * The successor bound has no codepoint ceiling. Derived FROM `DUES_PREFIX`
- * rather than written out, so the two cannot drift apart.
- */
-const DUES_PREFIX_END = DUES_PREFIX.slice(0, -1)
-  + String.fromCharCode(DUES_PREFIX.charCodeAt(DUES_PREFIX.length - 1) + 1);
 
 export interface PoolDuesResult {
   /** uid → that member's per-entry payment rows. Members with no record are absent. */

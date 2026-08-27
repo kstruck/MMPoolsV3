@@ -262,7 +262,15 @@ const RESERVED_ID = /^__.*__$/;
  * forbids; reading that as PAID would report money collected that was just
  * disclaimed. Malformed money data fails closed.
  */
-function isPaidRow(paid: PaidEntryMap, id: string): boolean {
+/**
+ * ⚠️ EXPORTED so that every consumer of the map shares ONE definition of "this
+ * entry is paid" (codex r7). `reconcilePaymentTruth` gates on the presence of an
+ * entry id in the map, and gating on `Object.keys` alone would count a malformed
+ * `null` row that this predicate — and therefore `derivePaidStatus` — treats as
+ * UNPAID. The two would then disagree about the same document, and the migration
+ * would silently skip exactly the divergence it exists to repair.
+ */
+export function isPaidRow(paid: PaidEntryMap, id: string): boolean {
   if (!Object.prototype.hasOwnProperty.call(paid, id)) return false;
   const row = paid[id];
   if (typeof row !== 'object' || row === null) return false;

@@ -1,5 +1,44 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-08-27 (latest) — **PHASE 2 IS CODE-COMPLETE. T3–T7 SHIPPED AS #603–#609. #609 IS OPEN AND GREEN, NOT MERGED.**
+>
+> **Merged overnight:** #603, #604 (T3), #605 (T5a), #606 (T5b), #607 (T6), #608.
+> **Open:** [#609](https://github.com/kstruck/MMPoolsV3/pull/609) — **P2-T7**, the
+> last ticket. All 9 CI checks green. Needs Kevin: merge, then a functions deploy.
+>
+> 🛑 **A FUNCTIONS DEPLOY IS OWED once #609 merges** — `reconcilePaymentTruth`,
+> `getPoolDues`, `lib/poolDues`. `getPoolDues` is a NEW callable, so for once the
+> verify-by-name check DOES work:
+>
+> ```
+> npx firebase functions:list | Select-String "getPoolDues"
+> ```
+>
+> **No Coolify rebuild for #609** (no `src/` change). One IS still owed for #607
+> and #608, which changed the ledger UI.
+>
+> 🔴 **#609 CARRIES ONE OPEN FINDING AND ONE OPEN DECISION. Both are in the PR
+> body; neither blocks the merge.**
+>
+> 1. **The partial-payment under-count.** Three aggregate money surfaces
+>    (`shared/memberRecord.ts:487`, `src/utils/poolRoster.ts:387,432`) treat a
+>    partially paid member as having paid nothing, because they read the
+>    all-or-nothing summary and Phase 2 made partial payment representable for the
+>    first time. It reaches the **world-readable** `stats/global.prizePot`.
+>    Direction is an UNDER-count. Every fix changes a money figure or adds a field
+>    to a participant-readable document, so it is a Rule 3 plan decision — three
+>    options in `PLAN-MULTI-ENTRY-DUES-SWEEPS.md` §7, pinned by a test so it
+>    cannot be lost.
+> 2. **Commit `6f15ec54` is past the 10-round codex cap and un-reviewed.** Round
+>    10 came back clean; self-review then found the round-8 fix was inert in
+>    production. The repair is tested and mutation-caught but has had no codex
+>    round. CLAUDE.md §2c needs Kevin's sign-off for round 11.
+>
+> **`firestore.rules` is untouched across all of Phase 2** (D11), verified by
+> `git log e6882d21..origin/main -- firestore.rules` being empty. **No rules
+> deploy at any point in Phase 2.**
+
+
 > ## 🟢 2026-08-26 (latest) — **PER-ENTRY DUES PHASE 2 T1+T2 ARE MERGED AND DEPLOYED. #599–#602 IN. FUNCTIONS DEPLOY VERIFIED BY SOURCE TIMESTAMP, NOT BY `Deploy complete!`.**
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `6d92dc61`.**

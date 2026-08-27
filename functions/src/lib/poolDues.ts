@@ -42,8 +42,30 @@ export type PaidEntryMap = Record<string, { paidAt?: number; method?: string; no
  * collide with it for ANY uid — even a hand-made uid of `access` yields
  * `dues__access`.
  */
+export const DUES_PREFIX = 'dues__';
+
+/**
+ * The EXCLUSIVE upper bound of the `dues__*` id range — the prefix with its last
+ * character incremented, so `dues__` becomes `dues_` + backtick.
+ *
+ * 🛑 NOT `dues__` + U+F8FF, which is the conventional Firebase sentinel and is
+ * WRONG: U+F8FF tops a private-use block, not Unicode, so a document id
+ * beginning above it sorts AFTER that bound and is silently skipped. The
+ * consequence is a money bug in the quiet direction — that member's payments
+ * never appear, so a commissioner re-collects dues already paid.
+ *
+ * Derived FROM `DUES_PREFIX` rather than written out, so the two cannot drift.
+ *
+ * ⚠️ LIVES HERE, NOT IN THE CALLERS. Both `getPoolDues` and
+ * `reconcilePaymentTruth` run this id-range query, and a second hand-written
+ * copy of the bound is a copy that can be fixed in one place and not the other
+ * — on a query whose failure mode is silence.
+ */
+export const DUES_PREFIX_END = DUES_PREFIX.slice(0, -1)
+  + String.fromCharCode(DUES_PREFIX.charCodeAt(DUES_PREFIX.length - 1) + 1);
+
 export const poolDuesRef = (poolRef: DocumentReference, uid: string): DocumentReference =>
-  poolRef.collection('private').doc(`dues__${uid}`);
+  poolRef.collection('private').doc(`${DUES_PREFIX}${uid}`);
 
 /**
  * This member's per-entry payment rows, read INSIDE the caller's transaction.
