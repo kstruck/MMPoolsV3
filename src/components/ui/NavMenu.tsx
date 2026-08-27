@@ -104,11 +104,19 @@ export const NavMenu: React.FC<{
                 aria-label={ariaLabel}
                 onClick={() => setOpen(o => !o)}
                 onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        focusFirstOnOpen.current = true;
-                        setOpen(true);
+                    if (e.key !== 'ArrowDown') return;
+                    e.preventDefault();
+                    if (open) {
+                        // Already open: `setOpen(true)` is a no-op, so the
+                        // effect below would never run and the flag would sit
+                        // armed until some LATER mouse click, stealing focus
+                        // from the trigger the user just pressed. Move focus
+                        // here instead and leave the flag alone.
+                        panelRef.current?.querySelector<HTMLElement>('a[href], button:not([disabled])')?.focus();
+                        return;
                     }
+                    focusFirstOnOpen.current = true;
+                    setOpen(true);
                 }}
                 className={cn(
                     'relative flex items-center gap-1 min-h-[24px] font-display font-semibold uppercase',

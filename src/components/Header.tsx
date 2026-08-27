@@ -488,7 +488,11 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                     {menuOpen && (
                         <div
                             id={MOBILE_DRAWER_ID}
-                            className="lg:hidden absolute left-0 right-0 top-full max-h-[calc(100vh-73px)] overflow-y-auto bg-navy-900 border-b border-[rgba(230,206,150,0.16)] shadow-lg px-4 py-4 flex flex-col gap-5"
+                            // max-h is 80vh, NOT 100vh minus an assumed 73px bar:
+                            // the unverified-email strip sits above this header
+                            // and makes any hardcoded bar height wrong exactly
+                            // for the users who have the most rows to scroll.
+                            className="lg:hidden absolute left-0 right-0 top-full max-h-[80vh] overflow-y-auto bg-navy-900 border-b border-[rgba(230,206,150,0.16)] shadow-lg px-4 py-4 flex flex-col gap-5"
                             onClickCapture={() => setMenuOpen(false)}
                         >
                             {!user ? (
