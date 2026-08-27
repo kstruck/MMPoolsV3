@@ -83,6 +83,97 @@ const DEFAULT_REUSE_SENTENCE = teamReuseRuleCopy(DEFAULT_MAX_TEAM_USES);
 
 const para = (...parts: string[]) => parts.join('\n\n');
 
+/**
+ * The strikes default (`CreateNFLSurvivorPool.tsx:72`). `shared/schemas/nfl.ts`
+ * makes the field required and declares no default, so the wizard's value is
+ * the one a reader with no pool in scope meets.
+ */
+const DEFAULT_MAX_STRIKES = 1;
+
+/**
+ * The pool's strike limit, or the default for anything unrecognised.
+ *
+ * `HelpCopyContext.settings` is whatever a pool doc happens to hold, so this
+ * treats the field as untrusted the way `effectiveTieCountsAs` and
+ * `effectiveMaxTeamUses` do for theirs. A negative or fractional value is not a
+ * limit the scorer could act on either.
+ */
+const effectiveMaxStrikes = (settings: Record<string, unknown> | undefined): number => {
+  const raw = settings?.maxStrikes;
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : DEFAULT_MAX_STRIKES;
+};
+
+/**
+ * WHICH WRONG PICK ENDS A SEASON, FOR THE POOL IN SCOPE (codex r4).
+ *
+ * This sentence used to be static and said "the second one ends their season"
+ * — true at the default and FALSE on both of the other two limits the manager
+ * select offers. The topic renders on the rules page and the manager settings
+ * tab, and `PoolRoute` puts the pool's own settings in scope there, so the
+ * panel can say what THIS pool does instead of a sentence widened to cover
+ * every value. That is the same resolution the three helper-backed topics use.
+ *
+ * The arithmetic is `updateSurvivorStatus`'s: it eliminates at
+ * `strikesUsed >= maxStrikes + 1`, so the limit is how many wrong picks a
+ * player SURVIVES and the one after that is the end. The wizard's number field
+ * has a floor of 0 and no ceiling, so a limit past the named ordinals falls
+ * back to counting rather than inventing a word for it.
+ */
+const ORDINALS = ['second', 'third', 'fourth', 'fifth', 'sixth'] as const;
+
+const strikeThresholdCopy = (maxStrikes: number): string => {
+  if (maxStrikes === 0) {
+    return 'This pool is sudden death: a player’s first wrong pick ends their season.';
+  }
+  const ordinal = ORDINALS[maxStrikes - 1];
+  const ending = ordinal
+    ? `the ${ordinal} one ends their season`
+    : `wrong pick number ${maxStrikes + 1} ends their season`;
+  return maxStrikes === 1
+    ? `A player’s first wrong pick costs them a strike and they carry on; ${ending}.`
+    : `A player carries on through ${maxStrikes} wrong picks, a strike each; ${ending}.`;
+};
+
+/**
+ * The whole strikes explainer at one limit. ONE builder feeds both branches of
+ * the topic's `HelpCopy`, so the sentence a pool reader gets and the sentence
+ * the wizard falls back to cannot drift apart — only the number differs.
+ */
+const strikesLong = (maxStrikes: number): string =>
+  para(
+    `One is the default. ${strikeThresholdCopy(maxStrikes)}`,
+    'Set it to none for sudden death, where the first wrong pick is the end. Raise it for a pool you want people to stay in — every extra strike is another week somebody who guessed wrong is still playing.',
+    // `evaluateSurvivorWeek` (:264-267): no pick ⇒ `strikeLogged: true`,
+    // unless `isVoidWeek(gamesInWeek)` — a slate where every game was
+    // cancelled had no legal pick to make, so it strikes nobody.
+    'Not picking counts as a wrong pick. If a player has submitted nothing by the deadline, a strike is recorded for them when the week is scored — unless every game that week was called off, which strikes nobody.',
+    // TWO REVIVAL PATHS, NOT ONE (codex r1 on this ticket). The first draft
+    // said buy-backs were the only way back and the engine disagrees:
+    // `SURVIVOR_PARITY_SETTINGS_KEYS` (functions/src/lib/survivorSettingsGate.ts:24)
+    // is `['tieCountsAs', 'maxTeamUses']` — `maxStrikes` is NOT gated once a
+    // week has been scored, and the gate's own doc comment names a partial
+    // `{maxStrikes: 2}` save on a scored pool as something it must NOT refuse.
+    // `computeSurvivorWeekUpdate` (nflScoringEngine.ts:670) then recomputes
+    // status from `pool.settings.maxStrikes` as it stands at scoring time
+    // rather than from any stored verdict, and its ELIMINATED skip is
+    // `eliminatedWeek < week` — so re-scoring the elimination week itself is
+    // NOT skipped and `updateSurvivorStatus` can return ALIVE.
+    //
+    // Reachable by the commissioner, not only by an admin: `scoreNFLWeek`
+    // (nflPools.ts:2115) gates on `assertPoolOwnerOrSuperAdmin`, the same
+    // helper `updatePoolSettings` uses (poolOps.ts:505), and it carries no
+    // already-scored refusal. The manager's Score Week button posts the
+    // dashboard's `selectedWeek`, which is a URL parameter free to name any
+    // week 1–18 (NFLPoolDashboard.tsx:190).
+    'A player who runs out of strikes is marked out. Buy-backs are how that player gets themselves back in.',
+    // "the commissioner's" rather than "yours": this topic is placed on
+    // `pool.nfl.rules` as well as the manager tab, and a member reading "it is
+    // yours" would take it for something they can do. The neighbouring
+    // sentences are imperative configuration advice a member reads as
+    // addressed past them; a possessive is not.
+    'Raising this limit is the other way back, and that one is the commissioner’s. A week is graded against the limit the pool has at the time it is scored, so raising it and scoring that player’s elimination week again returns them to the pool with their strikes still on the record.',
+  );
+
 export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
   // ---- Strikes ----------------------------------------------------------
   {
@@ -98,39 +189,10 @@ export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
     id: 'settings.maxStrikes',
     title: 'Strikes allowed',
     short: 'How many wrong picks a player lives through before they are out. One is the default.',
-    long: para(
-      'One is the default. A player’s first wrong pick costs them a strike and they carry on; the second one ends their season.',
-      'Set it to none for sudden death, where the first wrong pick is the end. Raise it for a pool you want people to stay in — every extra strike is another week somebody who guessed wrong is still playing.',
-      // `evaluateSurvivorWeek` (:264-267): no pick ⇒ `strikeLogged: true`,
-      // unless `isVoidWeek(gamesInWeek)` — a slate where every game was
-      // cancelled had no legal pick to make, so it strikes nobody.
-      'Not picking counts as a wrong pick. If a player has submitted nothing by the deadline, a strike is recorded for them when the week is scored — unless every game that week was called off, which strikes nobody.',
-      // TWO REVIVAL PATHS, NOT ONE (codex r1 on this ticket). The first draft
-      // said buy-backs were the only way back and the engine disagrees:
-      // `SURVIVOR_PARITY_SETTINGS_KEYS` (functions/src/lib/survivorSettingsGate.ts:24)
-      // is `['tieCountsAs', 'maxTeamUses']` — `maxStrikes` is NOT gated once a
-      // week has been scored, and the gate's own doc comment names a partial
-      // `{maxStrikes: 2}` save on a scored pool as something it must NOT refuse.
-      // `computeSurvivorWeekUpdate` (nflScoringEngine.ts:670) then recomputes
-      // status from `pool.settings.maxStrikes` as it stands at scoring time
-      // rather than from any stored verdict, and its ELIMINATED skip is
-      // `eliminatedWeek < week` — so re-scoring the elimination week itself is
-      // NOT skipped and `updateSurvivorStatus` can return ALIVE.
-      //
-      // Reachable by the commissioner, not only by an admin: `scoreNFLWeek`
-      // (nflPools.ts:2115) gates on `assertPoolOwnerOrSuperAdmin`, the same
-      // helper `updatePoolSettings` uses (poolOps.ts:505), and it carries no
-      // already-scored refusal. The manager's Score Week button posts the
-      // dashboard's `selectedWeek`, which is a URL parameter free to name any
-      // week 1–18 (NFLPoolDashboard.tsx:190).
-      'A player who runs out of strikes is marked out. Buy-backs are how that player gets themselves back in.',
-      // "the commissioner's" rather than "yours": this topic is placed on
-      // `pool.nfl.rules` as well as the manager tab, and a member reading "it is
-      // yours" would take it for something they can do. The neighbouring
-      // sentences are imperative configuration advice a member reads as
-      // addressed past them; a possessive is not.
-      'Raising this limit is the other way back, and that one is the commissioner’s. A week is graded against the limit the pool has at the time it is scored, so raising it and scoring that player’s elimination week again returns them to the pool with their strikes still on the record.',
-    ),
+    long: {
+      template: (ctx) => strikesLong(effectiveMaxStrikes(ctx.settings)),
+      fallback: strikesLong(DEFAULT_MAX_STRIKES),
+    },
     poolTypes: SURVIVOR,
     audience: EVERYONE,
     related: ['settings.maxRebuys', 'settings.tieCountsAs', 'settings.autoSurviveExemptionEnabled'],

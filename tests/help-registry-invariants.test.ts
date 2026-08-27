@@ -972,6 +972,20 @@ describe('the real registry — content rules', () => {
       { maxTeamUses: 23 },
       {},
     ],
+    // The strike threshold has four arms — sudden death (0), the default 1,
+    // any N in the named ordinals, and a limit past them, which counts the
+    // wrong pick out in digits instead. The manager select stops at 2; the
+    // create form's number field has a floor of 0 and NO ceiling, so the last
+    // two rows are reachable copy and not hypotheticals. `{}` is the wizard,
+    // which has no pool and must fall back rather than render NaN.
+    'settings.maxStrikes': [
+      { maxStrikes: 0 },
+      { maxStrikes: 1 },
+      { maxStrikes: 2 },
+      { maxStrikes: 6 },
+      { maxStrikes: 12 },
+      {},
+    ],
   };
 
   const isTemplate = (copy: unknown): boolean => typeof copy !== 'string';

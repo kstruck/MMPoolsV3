@@ -646,6 +646,61 @@ describe('T10 — a strikes revival is a real path, and the copy names it', () =
     expect(longFor('settings.maxStrikes')).toContain('elimination week');
   });
 
+  /**
+   * WHICH WRONG PICK ENDS A SEASON IS A NUMBER, NOT A CONSTANT (codex r4).
+   *
+   * The threshold sentence was static and said "the second one ends their
+   * season" — right at the default, wrong on BOTH of the other limits the
+   * manager select offers. `PoolRoute` puts the pool's own settings in help
+   * scope, so the panel can say what this pool does; the copy just wasn't
+   * asking.
+   *
+   * Every branch is checked against `updateSurvivorStatus` itself rather than
+   * against a table written here, so the copy and the scorer cannot disagree
+   * about the same number.
+   */
+  it('names the wrong pick that actually ends a season, at every limit', () => {
+    const endsAt = (maxStrikes: number) => {
+      // The first strike count `updateSurvivorStatus` calls ELIMINATED.
+      const pool = { settings: { maxStrikes } } as unknown as NFLSurvivorPool;
+      for (let n = 1; n <= 12; n++) {
+        const status = updateSurvivorStatus({ strikesUsed: n } as unknown as SurvivorEntry, pool).status;
+        if (status === 'ELIMINATED') return n;
+      }
+      throw new Error(`nothing eliminated at maxStrikes ${maxStrikes}`);
+    };
+
+    // The three the manager select offers, plus one past the named ordinals.
+    expect(endsAt(0)).toBe(1);
+    expect(longFor('settings.maxStrikes', { maxStrikes: 0 }))
+      .toContain('sudden death: a player’s first wrong pick ends their season');
+
+    expect(endsAt(1)).toBe(2);
+    expect(longFor('settings.maxStrikes', { maxStrikes: 1 }))
+      .toContain('the second one ends their season');
+
+    expect(endsAt(2)).toBe(3);
+    expect(longFor('settings.maxStrikes', { maxStrikes: 2 }))
+      .toContain('the third one ends their season');
+
+    expect(endsAt(9)).toBe(10);
+    expect(longFor('settings.maxStrikes', { maxStrikes: 9 }))
+      .toContain('wrong pick number 10 ends their season');
+
+    // A sudden-death pool must not still be told the default's sentence — the
+    // exact wrong claim this replaced.
+    expect(longFor('settings.maxStrikes', { maxStrikes: 0 }))
+      .not.toContain('the second one ends their season');
+    // And the no-pool fallback stays at the default, for the wizard and search.
+    expect(longFor('settings.maxStrikes')).toContain('the second one ends their season');
+    // A settings blob with no usable value falls back rather than rendering NaN.
+    for (const bad of [{}, { maxStrikes: -1 }, { maxStrikes: 1.5 }, { maxStrikes: 'two' }]) {
+      const rendered = longFor('settings.maxStrikes', bad as Record<string, unknown>);
+      expect(rendered).toContain('the second one ends their season');
+      expect(rendered).not.toContain('NaN');
+    }
+  });
+
   it('and nothing refuses the limit change on a pool that has already scored', () => {
     expect(SURVIVOR_PARITY_SETTINGS_KEYS).not.toContain('maxStrikes');
     const scored = {
