@@ -943,6 +943,60 @@ describe('the real registry — content rules', () => {
       {},
       { weeklyTiebreaker: 'MNF_LASTGAME' },
     ],
+    // T10 — the three survivor rules whose copy IS `utils/survivorRules.ts`.
+    // `survivorModeRulesCopy` and `tieOutcomeRuleCopy` branch on the PAIR
+    // (`pickLosersMode` x `tieCountsAs`), so all four combinations are listed
+    // for both, plus the absent case that resolves to the defaults.
+    'settings.pickLosersMode': [
+      { pickLosersMode: false, tieCountsAs: 'LOSS' },
+      { pickLosersMode: false, tieCountsAs: 'WIN' },
+      { pickLosersMode: true, tieCountsAs: 'LOSS' },
+      { pickLosersMode: true, tieCountsAs: 'WIN' },
+      {},
+    ],
+    'settings.tieCountsAs': [
+      { pickLosersMode: false, tieCountsAs: 'LOSS' },
+      { pickLosersMode: false, tieCountsAs: 'WIN' },
+      { pickLosersMode: true, tieCountsAs: 'LOSS' },
+      { pickLosersMode: true, tieCountsAs: 'WIN' },
+      {},
+    ],
+    // `teamReuseRuleCopy` has three arms — unlimited (0), the default 1, and
+    // any N >= 2, whose sentence interpolates the number. 23 is `MAX_TEAM_USES`,
+    // the widest value the create form accepts and therefore the longest
+    // rendering of that arm.
+    'settings.maxTeamUses': [
+      { maxTeamUses: 0 },
+      { maxTeamUses: 1 },
+      { maxTeamUses: 2 },
+      { maxTeamUses: 23 },
+      {},
+    ],
+    // The strike threshold has four arms — sudden death (0), the default 1,
+    // any N in the named ordinals, and a limit past them, which counts the
+    // wrong pick out in digits instead. The manager select stops at 2; the
+    // create form's number field has a floor of 0 and NO ceiling, so the last
+    // two rows are reachable copy and not hypotheticals. `{}` is the wizard,
+    // which has no pool and must fall back rather than render NaN.
+    'settings.maxStrikes': [
+      { maxStrikes: 0 },
+      { maxStrikes: 1 },
+      { maxStrikes: 2 },
+      { maxStrikes: 6 },
+      { maxStrikes: 12 },
+      {},
+    ],
+    // Every value `bracketScoringSystemSchema` accepts, plus the absent case.
+    // UPSET is the one the wizard offers and no engine implements, so it has no
+    // label and must render the no-system branch rather than the raw token.
+    'settings.scoringSystem': [
+      { scoringSystem: 'CLASSIC' },
+      { scoringSystem: 'ESPN' },
+      { scoringSystem: 'FIBONACCI' },
+      { scoringSystem: 'CUSTOM' },
+      { scoringSystem: 'UPSET' },
+      {},
+    ],
   };
 
   const isTemplate = (copy: unknown): boolean => typeof copy !== 'string';
@@ -1025,10 +1079,16 @@ describe('the real registry — content rules', () => {
   // page count, so it does not have to be edited on every content ticket — but
   // an accidentally-empty registry still fails here rather than looking like a
   // pass, and a route silently losing its pages does too.
-  it('T2 state: the wizard steps and the pool routes have pages, and the glossary is full', () => {
+  it('T3 state: the wizard, pool and site routes have pages, and the glossary is full', () => {
     expect(topics.length).toBeGreaterThan(20);
     expect([...new Set(PAGES.map((p) => p.route))].sort()).toEqual([
+      '/',
+      '/about',
       '/admin/:id',
+      '/browse',
+      '/charity',
+      '/contact',
+      '/create-pool',
       '/create/bracket',
       '/create/margin',
       '/create/pickem',
@@ -1036,7 +1096,22 @@ describe('the real registry — content rules', () => {
       '/create/props',
       '/create/squares',
       '/create/survivor',
+      '/features',
+      '/gameday-squares',
+      '/how-it-works',
+      '/join/:poolId',
+      '/march-madness',
+      '/nfl-playoffs',
+      '/odds/super-bowl-squares',
+      '/participant',
+      '/payment-success',
       '/pool/:id',
+      '/pricing',
+      '/privacy',
+      '/profile',
+      '/profile/:uid',
+      '/scoreboard',
+      '/terms',
     ]);
     // Every wizard has its route-level page AND one page per step, and every
     // pool route page names a tab or is the route's fallback.

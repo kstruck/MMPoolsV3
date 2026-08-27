@@ -35,7 +35,7 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   date: 'PERMANENT: derived from the chosen game.',
   gameTime: 'PERMANENT: derived from the chosen game.',
   week: 'PERMANENT: derived from the chosen game.',
-  theme: "PERMANENT: legacy single-string theme, superseded by the branding fields. No control offers it — the squares and props wizards send the constant 'default' (CreateSquaresPool.tsx:41, CreatePropsPool.tsx:81).",
+  theme: "PERMANENT: legacy single-string theme, superseded by the branding fields. No control offers it — the squares and props wizards send the constant 'default' (CreateSquaresPool.tsx:43, CreatePropsPool.tsx:83).",
 
   // ---- PERMANENT: legacy aliases kept for older payloads ------------------
   venmo: 'PERMANENT: legacy top-level alias of paymentHandles.venmo, reconciled on write. One control, one topic — the nested path is the one readers meet.',
@@ -72,7 +72,27 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.payouts.bonuses.*.percentage': 'T6: no create-wizard control; same bonus-row editor as the name above.',
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
-  seasonType: 'T13: explained for the three NFL season types by the seasonType topic (T1). SQUARES and PROPS also carry the field and have no control for it, so the row stays until their content ticket accounts for it.',
+  // SETTLED BY T13, and settled as PERMANENT rather than closed with copy.
+  //
+  // The three NFL season formats are explained by the `seasonType` topic
+  // (`content/wizard-shared.ts`), which is scoped to those three. What was left
+  // was SQUARES and PROPS, which accept the field. Measured against the
+  // sources: NEITHER create wizard binds a control to it (nothing in
+  // `CreateSquaresPool.tsx` or `CreatePropsPool.tsx`, and it is in no
+  // WIZARD_FIELD_ALLOWLIST row because no binding exists to allow), neither
+  // payload builder sends it (`buildSquaresPayload.ts`, `buildPropsPayload.ts`),
+  // and no squares or props surface reads it — every `poolSeasonType` caller is
+  // an NFL weekly-pool screen or the super-admin spreads tool. The ONE writer is
+  // the legacy squares game picker, which stamps it from the chosen game
+  // alongside `gameId` and `week` (`AdminPanel.tsx:371`), exactly as the
+  // `week` row above describes.
+  //
+  // So widening the topic's poolTypes was refused: its copy names a default
+  // ('2') that only the Pick'em wizard sets, and says members see the weeks
+  // belonging to the part chosen — neither is true of a one-game pool. It would
+  // have put a topic in the Help panel of a pool with no such control, which is
+  // voice rule 5's failure mode with a different face.
+  seasonType: 'PERMANENT: the three NFL season types are explained by the seasonType topic. SQUARES and PROPS accept the field but offer no control for it — neither create wizard binds it and neither payload builder sends it — and the only writer is the legacy squares game picker, which stamps it from the chosen game alongside gameId and week (AdminPanel.tsx:371). Derived from the chosen game, same as the week row above. (T13)',
   // T9 removed confidenceMode and isListedPublic. It WITHDREW lockMode and
   // lockBufferMinutes mid-review because the shipped client ignored lockMode;
   // 93f44bb2 (#482) fixed that, so both rows are gone and both topics are
@@ -82,43 +102,41 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // 2026-08-22 and the row is SETTLED — see below.
   'settings.pointsPerPick': "PERMANENT (Kevin, 2026-08-22 — PLAN-DELETE-INERT-PICKEM-SCORING.md). The field is INERT: `scorePickemEntry` awards exactly 1 point per correct pick on a non-confidence pool and never reads it. Every control and every member-facing row that displayed it is DELETED — the manager's Scoring Configuration card, NFLPoolRules' Base Points row, and JoinPool's rules preview. No surface writes or shows it, so there is no control for help copy to explain; the path stays here because `shared/schemas/nfl.ts` still accepts the field, which is what keeps a stored value on an existing pool from being rejected. `settings.primetimeBonus` never had a row because it is not in that schema.",
 
-  // ---- PENDING: NFL Survivor (T10) ---------------------------------------
-  'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
-  'settings.maxRebuys': 'T10: how many buy-backs a player may take.',
-  'settings.rebuyDeadlineWeek': 'T10: last week a buy-back is allowed.',
-  'settings.rebuyCost': 'T10: what a buy-back costs. Money copy, so voice rule 8 applies.',
-  'settings.tieCountsAs': 'T10: whether a tied game survives. Its copy is tieOutcomeRuleCopy() today and becomes this topic template.',
-  'settings.maxTeamUses': 'T10: how often one team may be picked. Its copy is teamReuseRuleCopy() today and becomes this topic template.',
-  'settings.pickLosersMode': 'T10: pick the loser instead of the winner. Its copy is survivorModeRulesCopy() today and becomes this topic template.',
-  'settings.autoSurviveExemptionEnabled': 'T10: whether a missed pick survives on an exemption.',
+  // ---- NFL Survivor (T10): all eight rows CLOSED --------------------------
+  // The eight survivor settings are authored in `content/nfl-survivor.ts`, all
+  // scoped to `NFL_SURVIVOR`. The three that already had shipped copy —
+  // `tieCountsAs`, `maxTeamUses`, `pickLosersMode` — did NOT get a second
+  // wording: their topics CALL `utils/survivorRules.ts` from the `template`,
+  // exactly as the note above `HelpCopy` in `help/types.ts` prescribes, and
+  // `tests/help-content-nfl-survivor.test.ts` holds every branch to the live
+  // helper byte-for-byte.
 
-  // ---- PENDING: NFL Margin, hybrid split, multi-entry (T11) ---------------
-  'settings.payoutMode': 'T11: season pot, weekly pot, or both. Money copy, so voice rule 8 applies.',
-  'settings.hybridSplit.weeklyPerEntry': 'T11: the weekly share of each entry fee on a hybrid pool.',
-  'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
-  'settings.weeklyPayouts.places.*.rank': 'T11: the separate weekly place list a hybrid pool may carry.',
-  'settings.weeklyPayouts.places.*.percentage': 'T11: the separate weekly place list a hybrid pool may carry.',
+  // ---- CLOSED BY T11 -------------------------------------------------------
+  // `settings.payoutMode`, both `settings.hybridSplit.*` amounts and both
+  // `settings.weeklyPayouts.places.*` paths are explained now. The first three
+  // are topics in `content/nfl-margin.ts`, scoped to the two types that carry
+  // them (Pick'em and Margin — Survivor has no payout mode). The weekly place
+  // paths are claimed by the EXISTING `settings.payouts.places.*` topics'
+  // `fields[]` rather than by a second pair: it is the same editor bound to a
+  // second path, and both surfaces already point its `helpId` at those topics
+  // (voice rule 10).
 
-  // ---- PENDING: Bracket and Playoff (T12) --------------------------------
-  'settings.maxEntriesTotal': 'T12: the cap on entries in the whole pool. The bracket manager tab edits it (BracketPoolDashboard.tsx:109 editMaxTotal, written at :350); -1 means unlimited, which the copy has to say.',
-  'settings.customScoring': 'T12: the bracket manager tab authors the per-round point values when the scoring system is CUSTOM (BracketPoolDashboard.tsx:112 editCustomScoring, written at :353).',
-  seasonYear: 'T12: which tournament year a bracket pool covers.',
-  gender: 'T12: mens or womens tournament.',
-  tournamentType: 'T12: which tournament the bracket follows.',
-  'settings.scoringSystem': 'T12: how bracket rounds are worth points. Its labels are SCORING_SYSTEM_LABELS in BracketRulesPanel today and become this topic.',
-  'settings.tieBreakers.closestAbsolute': 'T12: tie-break on the closest total either way.',
-  'settings.tieBreakers.closestUnder': 'T12: tie-break on the closest total without going over.',
-  'settings.scoring.roundMultipliers.WILD_CARD': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.DIVISIONAL': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.CONF_CHAMP': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.SUPER_BOWL': 'T12: playoff round weighting.',
+  // ---- Bracket and Playoff (T12) -----------------------------------------
+  // T12 removed eleven rows: seasonYear, gender, tournamentType,
+  // settings.scoringSystem, settings.customScoring, both tieBreakers and all
+  // four roundMultipliers are authored in `content/bracket.ts`.
+  //
+  // `settings.maxEntriesTotal` is the one row T12 could not delete, and the
+  // reason is the code rather than missing copy — so it is RE-SCOPED, not left
+  // pending. It is now PERMANENT for the reader it was pending for.
+  'settings.maxEntriesTotal':
+    'PERMANENT for NFL_PLAYOFFS (T12, 2026-08-27). BRACKET is explained — `content/bracket.ts` covers the manager control (BracketPoolDashboard.tsx:112 editMaxTotal, written at :374) and the -1-means-no-limit gate (functions/src/bracketEntries.ts:75). The PLAYOFF create input accepts the same field and NOTHING reads it: the playoff wizard binds no control for it, submitPlayoffPicks caps on maxEntriesPerUser, the free-plan ten and the paid ceiling but never on this (functions/src/playoffPools.ts:205-217), and getPoolEntrySummary returns capacity null for a playoff pool on purpose (src/utils/poolSport.ts:105-108). There is no control to explain and no behaviour to describe, so a topic scoped to NFL_PLAYOFFS could only say something untrue. Same shape as settings.pointsPerPick above. Deleting this row needs a product decision — enforce it for playoff pools, or drop it from the playoff create input — not help copy.',
 
-  // ---- PENDING: Squares and Props (T13) ----------------------------------
-  maxSquaresPerPlayer: 'T13: cap on squares per person.',
-  numberSets: 'T13: one set of numbers for the whole game, or a fresh set each quarter.',
-  homeTeam: 'T13: the home team of the game a squares or props pool covers.',
-  awayTeam: 'T13: the away team of the game a squares or props pool covers.',
-  'props.maxCards': 'T13: cap on cards per person.',
+  // ---- Squares and Props (T13): CLOSED ------------------------------------
+  // `maxSquaresPerPlayer`, `numberSets`, `props.maxCards` and the two team
+  // names are authored in `content/squares-props.ts`. `homeTeam` and `awayTeam`
+  // are one topic claiming both paths in `fields[]`, because they are one
+  // explanation (voice rule 10).
 });
 
 /**
@@ -141,28 +159,21 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   '/dev/dashboards': 'PERMANENT: developer preview, not reachable by a reader.',
   '/dev/profile-demo': 'PERMANENT: developer preview, not reachable by a reader.',
 
-  // PENDING — T2 (pool surfaces + wizards) and T3 (site + account).
-  '/': 'T3: marketing landing.',
-  '/gameday-squares': 'T3: marketing landing.',
-  '/march-madness': 'T3: marketing landing.',
-  '/nfl-playoffs': 'T3: marketing landing.',
-  '/pricing': 'T3: pricing page.',
-  '/payment-success': 'T3: post-checkout confirmation. Renders no Header, so it is shortcut-only.',
-  '/about': 'T3: marketing page.',
-  '/charity': 'T3: marketing page.',
-  '/browse': 'T3: public pool list.',
-  '/features': 'T3: marketing page.',
-  '/how-it-works': 'T3: has four view modes and its own FAQ, which the panel links to rather than duplicating.',
-  '/privacy': 'T3: legal page.',
-  '/terms': 'T3: legal page.',
-  '/contact': 'T3: contact form.',
-  '/profile': 'T3: your own profile and its three sections.',
-  '/profile/:uid': 'T3: another player’s public profile.',
-  '/scoreboard': 'T3: scores page with three in-memory tabs.',
-  '/odds/super-bowl-squares': 'T3: odds article page.',
-  '/participant': 'T3: My Entries, with six in-memory tabs.',
-  '/create-pool': 'T3: the pool-type picker.',
-  '/join/:poolId': 'T3: the join and pay screen.',
+  // PENDING — T14 (the two admin surfaces). T3 CLOSED the twenty-one site and
+  // account rows: every one of them now has a page in
+  // `content/site-pages.ts`, and two of the reasons written here were wrong
+  // about the code, which is why they are gone rather than edited:
+  //   - `/participant` had SEVEN tabs, not six (`ParticipantDashboard.tsx:67`
+  //     — insights, all, open, live, completed, commissioner, entries), and
+  //     the tab is NOT purely in memory: the surface adopts a valid `?tab=` on
+  //     mount, so its tab pages are linkable where the scoreboard's are not —
+  //     but only FROM `/participant`. The route redirects a signed-out visitor
+  //     to Home and nothing in `HelpRouteContext` says whether the reader is
+  //     signed in, so a link offered from anywhere else would be a dead one
+  //     (codex R1; the reasoning is in `content/site-pages.ts`'s header).
+  //   - `/join/:poolId` is not a "join and pay" screen. It takes no payment at
+  //     all — it shows the fee, the format and the prize split, and joining is
+  //     a single button. The fee is settled between the player and the host.
   '/super-admin': 'T14: seventeen admin tabs get page-level summaries only (K4 scope ii).',
   '/tournament-sim': 'T14: admin simulation surface.',
 });
@@ -194,21 +205,17 @@ export const UI_EXEMPTIONS: Readonly<
  * diff line, which is the point.
  */
 export const MANAGER_LABEL_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
-  // ---- T10: NFL Survivor rules --------------------------------------------
-  'Strikes Limit': 'T10: how many wrong picks before elimination.',
-  'Max Rebuys': 'T10: buying back in after elimination.',
-  'Rebuy Cutoff Week': 'T10: the last week a rebuy is allowed.',
-  'Rebuy Fee ($)': 'T10: what a rebuy costs. Money copy, so voice rule 8 applies.',
-  'Tie Outcome': 'T10: whether a tied game survives or eliminates.',
-  'Team-Use Limit': 'T10: how many times one team may be picked across the season.',
+  // ---- T10: NFL Survivor rules — all six rows CLOSED -----------------------
+  // The six survivor labels now carry a `helpId` to their topic in
+  // `content/nfl-survivor.ts`, so they are covered by the FieldLabel branch of
+  // `help-manager-label-coverage.test.ts` rather than exempted here.
 
-  // ---- T11: the payout-mode trio ------------------------------------------
-  // Rendered TWICE each — once on the Pick'em branch and once on the Margin
-  // one — and keyed by label text, so one row covers both. Their schema paths
-  // already sit in SCHEMA_PATH_ALLOWLIST against the same ticket.
-  'Payout Method': 'T11: season pot, weekly pot, or both. Money copy, so voice rule 8 applies.',
-  'Weekly pots ($/entry)': 'T11: the weekly share of each entry fee on a hybrid pool.',
-  'Season pot ($/entry)': 'T11: the season share of each entry fee on a hybrid pool.',
+  // ---- CLOSED BY T11 -------------------------------------------------------
+  // The payout-mode trio is rendered TWICE each — once on the Pick'em branch
+  // and once on the Margin one — and this list is keyed by label text, so one
+  // row covered both. BOTH render sites now carry the `helpId`, which is what
+  // the removal of the row required: a single site would have left the other
+  // label bare with nothing to fail on.
 
   // ---- PERMANENT: parts of an action, not options -------------------------
   // ONE topic per ACTION, placed on the form's FIRST field. A tooltip on every
@@ -248,37 +255,35 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   // ---- NFL Pick'em (T9): the confidence and lock-mode controls both resolve
   // to topics in `content/nfl-pickem.ts`, so neither needs a row here.
 
-  // ---- PENDING: NFL Survivor (T10) ---------------------------------------
-  'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
-  'settings.maxRebuys': 'T10: how many buy-backs a player may take.',
-  'settings.rebuyDeadlineWeek': 'T10: last week a buy-back is allowed.',
-  'settings.rebuyCost': 'T10: what a buy-back costs.',
-  'settings.tieCountsAs': 'T10: whether a tied game survives.',
-  'settings.maxTeamUses': 'T10: how often one team may be picked.',
-  'settings.pickLosersMode': 'T10: pick the loser instead of the winner.',
-  'settings.autoSurviveExemptionEnabled': 'T10: whether a missed pick survives on an exemption.',
+  // ---- NFL Survivor (T10): all eight rows CLOSED --------------------------
+  // Every control on `CreateNFLSurvivorPool.tsx`'s rules step resolves to a
+  // topic in `content/nfl-survivor.ts` under the `NFL_SURVIVOR` scope the
+  // wizard publishes, so none of them needs a row here.
 
-  // ---- PENDING: NFL Margin and the hybrid split (T11) ---------------------
-  'settings.payoutMode': 'T11: season pot, weekly pot, or both.',
-  'settings.hybridSplit.weeklyPerEntry': 'T11: the weekly share of each entry fee on a hybrid pool.',
-  'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
+  // ---- NFL Margin and the hybrid split (T11) ------------------------------
+  // All three controls are explained by topics in `content/nfl-margin.ts`,
+  // whose ids ARE the field paths — `SelectField` and `NumberField` default
+  // `helpId` to `name`, so each control gets its `?` with no call-site prop.
+  //
+  // `settings.payoutMode` is bound in the two type-specific wizards, so it
+  // satisfies this guard by RESOLVING there. The two split amounts are bound in
+  // `HybridSplitFields`, which every wizard reaches through
+  // `StepFeeAndPayment`, so they satisfy it by the topics' `fields[]` claim
+  // instead — the control renders only while the payout mode is HYBRID, which
+  // only Pick'em and Margin can set.
+  //
+  // The `settings.weeklyPayouts` and `*.places.*` rows above stay PERMANENT:
+  // they are the second payouts PATH and the editor's prop-bound rows, not
+  // controls of their own.
 
-  // ---- PENDING: Bracket and Playoff (T12) --------------------------------
-  seasonYear: 'T12: which tournament year a bracket pool covers.',
-  gender: 'T12: mens or womens tournament.',
-  tournamentType: 'T12: which tournament the bracket follows.',
-  'settings.scoringSystem': 'T12: how bracket rounds are worth points.',
-  'settings.tieBreakers.closestAbsolute': 'T12: tie-break on the closest total either way.',
-  'settings.tieBreakers.closestUnder': 'T12: tie-break on the closest total without going over.',
-  'settings.scoring.roundMultipliers.WILD_CARD': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.DIVISIONAL': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.CONF_CHAMP': 'T12: playoff round weighting.',
-  'settings.scoring.roundMultipliers.SUPER_BOWL': 'T12: playoff round weighting.',
+  // ---- Bracket and Playoff (T12): all ten rows closed --------------------
+  // The three tournament controls and the scoring system resolve to topics of
+  // their own in `content/bracket.ts`. The two tie-break boxes and the four
+  // round multipliers carry an explicit `helpId` to a single topic each, for
+  // the reason the payment-handle rows above give: one explanation, one place.
 
-  // ---- PENDING: Squares and Props (T13) ----------------------------------
-  homeTeam: 'T13: the home team of the game a squares or props pool covers.',
-  awayTeam: 'T13: the away team of the game a squares or props pool covers.',
-  maxSquaresPerPlayer: 'T13: cap on squares per person.',
-  numberSets: 'T13: one set of numbers for the whole game, or a fresh set each quarter.',
-  'props.maxCards': 'T13: cap on cards per person.',
+  // ---- Squares and Props (T13): CLOSED ------------------------------------
+  // All five controls resolve to topics in `content/squares-props.ts`.
+  // `homeTeam` and `awayTeam` carry an explicit helpId to the one
+  // `matchup.teams` topic that claims both paths, so neither needs a row.
 });

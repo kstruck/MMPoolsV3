@@ -1,7 +1,7 @@
 import React from 'react';
 import { HelpCircle, Award, Zap, Scale } from 'lucide-react';
 import type { BracketPool, Tournament } from '../../types';
-import { getPointsForRound, getRoundLabel } from './bracketScoring';
+import { getPointsForRound, getRoundLabel, SCORING_SYSTEM_LABELS } from './bracketScoring';
 import { PayoutsPanel } from '../PayoutsPanel';
 
 interface BracketRulesPanelProps {
@@ -9,12 +9,10 @@ interface BracketRulesPanelProps {
     tournament?: Tournament | null;
 }
 
-const SCORING_SYSTEM_LABELS: Record<string, string> = {
-    CLASSIC: 'Classic (points double each round)',
-    ESPN: 'ESPN-style (points double each round)',
-    FIBONACCI: 'Fibonacci (points grow gradually each round)',
-    CUSTOM: 'Custom (set by your commissioner)',
-};
+// SCORING_SYSTEM_LABELS moved to `./bracketScoring` in T12 so that the
+// `settings.scoringSystem` help topic can name a pool's system from the same
+// definition this panel prints. One sentence, one home (docs/help-voice.md
+// rule 10).
 
 /**
  * Member-facing scoring transparency panel for bracket pools.

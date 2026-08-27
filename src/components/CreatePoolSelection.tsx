@@ -78,27 +78,6 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* GAMEDAY SQUARES CARD */}
-                            <button
-                                onClick={canCreate ? onSelectSquares : undefined}
-                                disabled={!canCreate}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
-                            >
-                                <div className="absolute top-4 right-4 bg-brandred-600/10 p-2.5 rounded-xl group-hover:bg-brandred-600 transition-colors">
-                                    <Grid3X3 size={20} className="text-brandred-600 group-hover:text-white" />
-                                </div>
-                                <h3 className="font-display font-bold uppercase text-[22px] leading-[0.95] text-[color:var(--text)] mb-2 pr-10">Gameday Squares</h3>
-                                <p className="text-muted text-sm mb-4 flex-grow font-body">Classic 10x10 grid for the Super Bowl, MNF, Thanksgiving weekend, or any game of the season. Interactive square selection and live updates.</p>
-                                <ul className="text-xs text-muted space-y-2 mb-6 mt-auto font-body">
-                                    <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Interactive live 10x10 grid</li>
-                                    <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Automated scoring &amp; payouts</li>
-                                    <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Custom settings &amp; pricing</li>
-                                </ul>
-                                <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
-                                    {canCreate ? <>Setup Squares <ArrowRight size={14} /></> : 'Coming Soon'}
-                                </span>
-                            </button>
-
                             {/* WEEKLY PICK'EM CARD */}
                             <button
                                 onClick={canCreate ? () => navigate('/create/pickem') : undefined}
@@ -159,6 +138,27 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 </ul>
                                 <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
                                     {canCreate ? <>Setup Margin <ArrowRight size={14} /></> : 'Coming Soon'}
+                                </span>
+                            </button>
+
+                            {/* GAMEDAY SQUARES CARD */}
+                            <button
+                                onClick={canCreate ? onSelectSquares : undefined}
+                                disabled={!canCreate}
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
+                            >
+                                <div className="absolute top-4 right-4 bg-brandred-600/10 p-2.5 rounded-xl group-hover:bg-brandred-600 transition-colors">
+                                    <Grid3X3 size={20} className="text-brandred-600 group-hover:text-white" />
+                                </div>
+                                <h3 className="font-display font-bold uppercase text-[22px] leading-[0.95] text-[color:var(--text)] mb-2 pr-10">Gameday Squares</h3>
+                                <p className="text-muted text-sm mb-4 flex-grow font-body">Classic 10x10 grid for the Super Bowl, MNF, Thanksgiving weekend, or any game of the season. Interactive square selection and live updates.</p>
+                                <ul className="text-xs text-muted space-y-2 mb-6 mt-auto font-body">
+                                    <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Interactive live 10x10 grid</li>
+                                    <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Automated scoring &amp; payouts</li>
+                                    <li className="flex items-center gap-2"><Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" /> Custom settings &amp; pricing</li>
+                                </ul>
+                                <span className="inline-flex items-center gap-1.5 text-gold-700 dark:text-gold-400 text-sm font-display font-bold uppercase tracking-[0.05em] group-hover:translate-x-1 transition-transform mt-auto">
+                                    {canCreate ? <>Setup Squares <ArrowRight size={14} /></> : 'Coming Soon'}
                                 </span>
                             </button>
                         </div>
