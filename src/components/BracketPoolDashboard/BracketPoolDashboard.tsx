@@ -1623,7 +1623,10 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                         the same two words. `text-muted`, NOT the `text-faint` of
                                                         the title above it: `HelpTip` is `text-current` and
                                                         `--faint` is 2.81:1 on the light page, which is the exact
-                                                        regression `tests/help-tip-contrast.test.ts` exists for. */}
+                                                        regression `tests/help-tip-contrast.test.ts` exists for.
+                                                        Rendered even with NO bonus rows yet, deliberately: that
+                                                        is the moment a commissioner most needs to be told what a
+                                                        bonus is, and the `?` is the only thing here that says. */}
                                                     <div className="flex items-center gap-2 mb-1 text-xs text-muted">
                                                         <span className="flex-1 flex items-center gap-1.5">Name<HelpTip helpId="settings.payouts.bonuses.*.name" /></span>
                                                         <span className="w-20 flex items-center gap-1.5">Share<HelpTip helpId="settings.payouts.bonuses.*.percentage" /></span>

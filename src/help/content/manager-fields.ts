@@ -6,14 +6,14 @@
 // tickets could not write copy for a control the wizard does not have.
 //
 //   T5  `branding.backgroundColor` — the colour picker on the legacy branding
-//       step (`WizardStepBranding.tsx:83` and its admin twin
-//       `admin/WizardStepBrandingAdmin.tsx:136`), reached from the squares
+//       step (`WizardStepBranding.tsx:93` and its admin twin
+//       `admin/WizardStepBrandingAdmin.tsx:144`), reached from the squares
 //       manager's Setup Wizard tab (`AdminPanel.tsx:675`, step 6) and from the
 //       props edit wizard embedded in the props Manage tab
 //       (`PropsPoolDashboard.tsx:352` → `PropsWizard.tsx:227`, step 1).
 //
 //   T6  `settings.payouts.bonuses.*.name` and `.percentage` — the bonus-row
-//       editor in `BracketPoolDashboard.tsx:1614-1640`. `StepPayouts` edits
+//       editor in `BracketPoolDashboard.tsx:1638-1667`. `StepPayouts` edits
 //       places only, so no wizard has ever offered a bonus.
 //
 // Written against `docs/help-voice.md` (K8). Every claim below was read out of

@@ -220,6 +220,13 @@ describe('T5 + T6 — the copy is placed where the control is', () => {
  * in the suite can see it. That is why it is worth more than the two fixes.
  */
 describe('T5 + T6 — no topic claims a reader its placements cannot serve (codex r1)', () => {
+  /**
+   * The two readers a pool surface ever has. `admin` is left out on purpose:
+   * `AUDIENCE_SEES.admin` is everything, and the only surface that publishes it
+   * (`SuperAdmin.tsx:1235`) has no pool type in scope, so a type-scoped topic is
+   * never visible there. Including it would demand an admin-visible pool page
+   * for every topic in the registry — pages T14 has not written.
+   */
   const VIEWERS = ['member', 'commissioner'] as const;
 
   /** The pages this topic is placed on, resolved through the live registry. */
