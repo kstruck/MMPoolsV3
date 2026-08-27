@@ -855,7 +855,7 @@ describe('coManagers — a departed member is dropped from the array (PLAN-CO-CO
  * that writes the summary and not the map is un-paid by the next writer.
  */
 /** The shape `reconcilePaymentTruth` returns — named so these tests need no `any`. */
-type ReconcileResult = { ok: boolean; membersPromoted: number; ambiguousSkipped: number; alreadyConsistent: number; entriesPaidNotLiable: number };
+type ReconcileResult = { ok: boolean; membersPromoted: number; staleSummariesRepaired: number; ambiguousSkipped: number; alreadyConsistent: number; entriesPaidNotLiable: number };
 
 describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
   const poolId = 'p2-dues-pool';
@@ -1076,12 +1076,56 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
       type: 'MARKED_PAID', uid: 'dm1', actorUid: 'p2d_boss', at: 1, note: 'prior',
     });
 
+    const before = (await db.collection('pools').doc(poolId).collection('payments').get()).size;
+    const dues0 = (await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+
     const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
     expect(r.ambiguousSkipped).toBe(0);   // the map settles it; not the operator's problem
-    expect(r.membersPromoted).toBe(1);
     const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get())
       .data() as Record<string, unknown>;
     expect(m.paidStatus).toBe('PAID');
+
+    // 🛑 AND NOT A PENNY OF NEW MONEY (codex round 11 on `6f15ec54`).
+    //
+    // The dues map ALREADY records this payment — that is what makes the
+    // summary stale — so whatever wrote those rows also wrote their ledger
+    // events. Routing this through the promotion transaction appended a SECOND
+    // `MARKED_PAID`, duplicating a participant-visible money event to repair a
+    // flag. The r7 guard a few lines up in the source calls exactly that
+    // "worse than the divergence being repaired."
+    expect((await db.collection('pools').doc(poolId).collection('payments').get()).size).toBe(before);
+    // ...and the stored dues rows are untouched, keeping the ORIGINAL paidAt /
+    // method / note rather than the entry doc's copy of them.
+    expect((await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries).toEqual(dues0);
+    // Reported apart from a real promotion, so the operator is not told money
+    // was recorded when a flag was flipped.
+    expect(r.staleSummariesRepaired).toBe(1);
+    expect(r.membersPromoted).toBe(0);
+  });
+
+  it('🛑 the stale-summary repair reports IDENTICALLY in dry-run and live', async () => {
+    // The dry run is the operator's only preview, so it must reach the same
+    // verdict from the same page-level evidence. Deciding the counter inside
+    // the transaction alone would have made dry say `membersPromoted` and live
+    // say `staleSummariesRepaired` for the same data.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 }, 'e2:dm1': { paidAt: 2 } },
+    });
+    await db.collection('pools').doc(poolId).collection('payments').doc().set({
+      type: 'MARKED_PAID', uid: 'dm1', actorUid: 'p2d_boss', at: 1, note: 'prior',
+    });
+    const dry = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    const live = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(dry.staleSummariesRepaired).toBe(live.staleSummariesRepaired);
+    expect(dry.membersPromoted).toBe(live.membersPromoted);
+    expect(dry.staleSummariesRepaired).toBe(1);
+    expect(dry.membersPromoted).toBe(0);
   });
 
   it('🛑 refuses to record money against an entry that never PICKED', async () => {

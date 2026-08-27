@@ -163,12 +163,22 @@ describe('computeMNFTiebreakerTotal — the rule chooses the target', () => {
     expect(computeMNFTiebreakerTotal([early, late], 'NONE')).toBeNull();
   });
 
-  it('no Monday game: legacy MNF_COMBINED has no target; LAST/FIRST fall back to the final game of the week (PLAN-WEEKLY-PRIZES §2b)', () => {
+  it('no Monday game: EVERY asking rule falls back to the final game of the week — legacy MNF_COMBINED included (PLAN-TIEBREAKER-MONDAYLESS, Kevin 2026-08-27)', () => {
     const early = game('g_early', { isMonday: false, startTime: 100, scores: { home: 3, away: 3 } });
     const sunday = game('g_sun', { isMonday: false, startTime: 200, scores: { home: 10, away: 7 } });
-    expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_COMBINED')).toBeNull();
+    // MNF_COMBINED WAS null here. An unset `settings.weeklyTiebreaker` resolves
+    // to it, so that null was every legacy pool's Monday-less week — and the
+    // pick sheet, gated on a non-empty target, asked for nothing while the
+    // rules page promised the closest prediction takes the week.
+    expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_COMBINED')).toBe(17);
     expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_LAST_GAME')).toBe(17);
     expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_FIRST_GAME')).toBe(17);
+    // NONE still has no target — the fallback is for rules that ask.
+    expect(computeMNFTiebreakerTotal([early, sunday], 'NONE')).toBeNull();
+    // An in-flight week that FROZE the empty target before the fix keeps it:
+    // the freeze wins over the schedule, so members who already submitted are
+    // not beaten by a prediction they were never asked for (§2b / C2).
+    expect(computeMNFTiebreakerTotal([early, sunday], 'MNF_COMBINED', [])).toBeNull();
   });
 
   it('MNF_FIRST_GAME sums only the FIRST Monday game to kick off — the exact mirror of MNF_LAST_GAME', () => {

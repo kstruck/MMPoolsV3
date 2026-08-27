@@ -1,5 +1,77 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-08-27 (later) — **TWO PRs OPEN AND GREEN: #611 (tiebreaker) AND #612 (a duplicate money event). NEITHER MERGED. ONE PLAN NEEDS KEVIN'S SIGN-OFF (#613).**
+>
+> **#609 MERGED** as `a85c6fbf`, and the **functions deploy landed** —
+> `getPoolDues` is live, verified by name:
+> `npx firebase functions:list --project gridiron-gamble-uzuqo | Select-String "getPoolDues"`
+> returns one row. The Phase 2 deploy is no longer owed.
+>
+> ### [#611](https://github.com/kstruck/MMPoolsV3/pull/611) — the Monday-less tiebreaker (Kevin ruled A & D)
+>
+> A legacy `MNF_COMBINED` pool (absent `settings.weeklyTiebreaker`) on a week
+> with no Monday game rendered **no tiebreaker input** while the rules page
+> promised the closest prediction wins. Seen in prod on a preseason slate:
+> 16/16 picks saved, no input. 4 codex rounds, 4 findings, all fixed; round 4
+> clean. CI 9/9.
+>
+> 🛑 **IT DOES NOT RESTORE THE WEEK IN THE SCREENSHOT.** That week froze `[]` on
+> its first submission and the freeze is kept ON PURPOSE — adding a target under
+> members who already submitted is the harm it exists to prevent. The fix applies
+> from the next unfrozen week. Option C (clearing a frozen empty target) is **not
+> signed** and not built.
+>
+> **Deploy: functions + a Coolify rebuild** (`src/` changed). No rules deploy.
+>
+> ### [#612](https://github.com/kstruck/MMPoolsV3/pull/612) — codex round 11 on `6f15ec54` was NOT clean
+>
+> Kevin authorised the over-cap round; it found a **P1**. #609's `staleFullyPaid`
+> repair fell through into the promotion transaction, which always appends a
+> `MARKED_PAID` — so repairing a stale FLAG appended a **second money event for
+> one payment** into the participant-readable ledger, and overwrote the dues
+> row's original method/note. Now writes the summary only, reported as
+> `staleSummariesRepaired`. 3 rounds, round 3 clean. CI 9/9.
+>
+> **#609's PR body flags `6f15ec54` as un-reviewed — that flag can now be
+> replaced with #612.**
+>
+> ⚠️ **GATE-LIST GAP, MEASURED.** #612 round 2 found a **red `npm --prefix
+> functions run typecheck`** that every gate in the standing five-gate list was
+> green on. `npx tsc -b` at the root does **not** typecheck `functions/`. Add
+> `npm --prefix functions run typecheck` and `npm --prefix functions run build`
+> to the list. #611 was re-checked against both and is clean.
+>
+> ### [#613](https://github.com/kstruck/MMPoolsV3/pull/613) — PLAN only, BLOCKED ON KEVIN
+>
+> The partial-payment under-count (finding #1 carried out of #609). Kevin ruled
+> **Option A** (mirror a `paidEntryCount`). **D2–D5 are open and no code is
+> written until they are signed** — Rule 3 step 5.
+>
+> ### ✅ `nflDeepSweep` IS NOW VERIFIED — `{enabled: TRUE, dryRun: TRUE}`
+>
+> Read from the Firebase console by Kevin, 2026-08-27. **Half-armed, and that is
+> the designed stage 1.** `nflSchedule.ts:1387-1389` is explicit: dry-run still
+> DETECTS and REPORTS corrections and only suppresses the `nfl_games` write, "so
+> the alarm can be observed for a week before the writes are armed."
+>
+> So `nflDeepScoreSweepJob` **is running** daily (`30 11 * * *`) and **is
+> finding** anything it finds — but a FINAL or a scoring correction arriving >24h
+> after kickoff is still **never applied**. Stage 2 is `dryRun: false`, and the
+> gate for it is reading the job's own log line first:
+>
+> ```
+> npx firebase functions:log --only nflDeepScoreSweepJob --project gridiron-gamble-uzuqo
+> ```
+>
+> The line to look for is `Nd sweep: N slate(s), N correction(s), N game(s)
+> written.` **`correction(s)` is the number that decides.** Zero for several days
+> ⇒ arming writes is low-risk. Non-zero ⇒ read WHICH games before arming, because
+> those writes will rescore finished weeks.
+>
+> ⚠️ This session could NOT read it directly: the machine has a `firebase` CLI
+> login but no Application Default Credentials, so a Firestore read fails with
+> `Could not load the default credentials`. Console or `functions:log` only.
+
 > ## 🟡 2026-08-27 (latest) — **PHASE 2 IS CODE-COMPLETE. T3–T7 SHIPPED AS #603–#609. #609 IS OPEN AND GREEN, NOT MERGED.**
 >
 > **Merged overnight:** #603, #604 (T3), #605 (T5a), #606 (T5b), #607 (T6), #608.

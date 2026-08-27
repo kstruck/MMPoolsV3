@@ -379,9 +379,14 @@ describe('settings.weeklyTiebreaker renders the rule this pool is playing', () =
     // The half that makes it legacy, and the half a commissioner needs: it is
     // not offered any more, and it is not being taken away either.
     expect(l).toContain('no longer offered');
-    // Under this rule a Monday-less week asks for nothing — the second place
-    // the widened copy had to hedge.
-    expect(l).toContain('no Monday game nothing is predicted');
+    // ...AND THE MONDAY-LESS WEEK, which this branch alone used to describe as
+    // "nothing is predicted" (PLAN-TIEBREAKER-MONDAYLESS). That sentence was
+    // true of the code and was the code's defect: an unset setting resolves
+    // here, so it told every legacy pool that a Monday-less week asks nothing,
+    // while the same pool's rules page promised the closest prediction wins.
+    // All three asking rules now name the same fallback.
+    expect(l).toContain('On a week with no Monday game, the final game of the week is used instead');
+    expect(l).not.toContain('nothing is predicted');
   });
 
   it('every branch is distinct — the template is not collapsing to one string', () => {

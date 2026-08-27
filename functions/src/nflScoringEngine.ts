@@ -15,7 +15,7 @@ import {
   UNLIMITED_TEAM_USES,
 } from './shared/survivorReuse';
 import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
-import { resolveTiebreakTargetIds } from './shared/nflTiebreaker';
+import { applyFrozenTarget } from './shared/nflTiebreaker';
 import type { WeeklyPlace, WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 
 // ============================================================================
@@ -503,7 +503,7 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
  * never heard of this setting computes exactly what it always did
  * (PLAN-WEEKLY-TIEBREAKERS §4, no migration).
  *
- * WHICH game(s) are summed comes from ONE place — `resolveTiebreakTargetIds`
+ * WHICH game(s) are summed comes from ONE place — `applyFrozenTarget`
  * (`shared/nflTiebreaker.ts`), the same function the pick sheet used to tell
  * the member what they were predicting — OR, when the pool has a FROZEN target
  * for the week (`pool.frozenTiebreakTargets[week]`, set by the week's first
@@ -511,7 +511,10 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
  * frozen list wins: a flex move, a postponement, or a game gaining or losing
  * `isMonday` after members have submitted must not re-point their prediction.
  *
- *  - `MNF_COMBINED`   — every Monday game (legacy; no Monday game → no target).
+ *  - `MNF_COMBINED`   — every Monday game (legacy); Monday-less → the week's
+ *    final game, the same fallback as the other two since 2026-08-27
+ *    (`PLAN-TIEBREAKER-MONDAYLESS.md`). It returned NO target before that, and
+ *    a week that froze `[]` under the old behaviour keeps `[]`.
  *  - `MNF_LAST_GAME`  — the LAST Monday game to kick off; Monday-less → the
  *    week's final game.
  *  - `MNF_FIRST_GAME` — the FIRST Monday game to kick off; Monday-less → the
@@ -538,10 +541,9 @@ export function computeMNFTiebreakerTotal(
   if (rule === 'NONE') return null;
   // A frozen list — INCLUDING an empty one, which means "this week has no
   // target" — wins over the live schedule; only `undefined` (nothing frozen)
-  // falls through to the rule.
-  const targetIds = frozenTargetIds !== undefined
-    ? frozenTargetIds
-    : resolveTiebreakTargetIds(games, rule);
+  // falls through to the rule. That precedence is `applyFrozenTarget`'s, shared
+  // with the pick sheet and the submit path so the three cannot drift.
+  const targetIds = applyFrozenTarget(frozenTargetIds, games, rule);
   if (targetIds.length === 0) return null;
   const counted = targetIds.map(id => games.find(g => String(g.id) === id));
   if (!counted.every((g): g is NFLGame => Boolean(g) && g!.status === 'FINAL')) return null;

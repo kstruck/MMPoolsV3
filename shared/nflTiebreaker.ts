@@ -64,6 +64,30 @@ export function tiebreakerAsksForPrediction(rule: WeeklyTiebreaker): boolean {
   return rule !== 'NONE';
 }
 
+/**
+ * The pool ASKS for a tiebreaker prediction and this week has NO game to ask
+ * about — the state the pick sheet must announce instead of rendering nothing
+ * (PLAN-TIEBREAKER-MONDAYLESS D2).
+ *
+ * Lives here rather than inline in the sheet so it is a behaviour a test can
+ * break, not a string a test can match. Silence in this state is what shipped
+ * the production defect: sixteen picks saved, no input, and a rules page still
+ * promising the closest prediction takes the week.
+ *
+ * `NONE` is excluded deliberately. That pool never asks, its rules page says so
+ * outright, and a notice on every sheet all season would be noise.
+ *
+ * Since the Monday-less fallback covers every asking rule, the only way to
+ * reach `true` on a non-empty schedule is a week that FROZE an empty target
+ * before that fix — which stays frozen on purpose (§2b / C2).
+ */
+export function tiebreakerAskedButUnavailable(
+  rule: WeeklyTiebreaker,
+  targetIds: ReadonlyArray<string>,
+): boolean {
+  return tiebreakerAsksForPrediction(rule) && targetIds.length === 0;
+}
+
 /** The minimum a game must carry for the target to be resolved. */
 export interface TiebreakTargetGame {
   id: string;
@@ -99,11 +123,27 @@ export function byKickoff<T extends TiebreakTargetGame>(games: ReadonlyArray<T>)
  *    the last game of the whole week too — "first Monday game" of a Monday-less
  *    week is not a thing, and the week's first game would be a different
  *    question than the sheet asked (§2b).
- *  - `MNF_COMBINED`   → EVERY Monday game (legacy); no Monday game → `[]`.
- *    Deliberately NO fallback: this is the historical behaviour those pools
- *    are playing (§0 — nothing may change what an in-flight week means), and
- *    their sheet never asked the question on a Monday-less week.
+ *  - `MNF_COMBINED`   → EVERY Monday game (legacy); no Monday game → the last
+ *    game of the whole week, the SAME fallback as the other two.
  *  - `NONE`           → `[]`.
+ *
+ * ⚠️ `MNF_COMBINED` USED TO RETURN `[]` ON A MONDAY-LESS WEEK, and that gap is
+ * what put a pool in production whose rules page promised "the player whose
+ * predicted score is closest wins the week" while its pick sheet asked for
+ * nothing — the tiebreaker card is gated on this list being non-empty
+ * (`PickemPickEntry.tsx`, `showTiebreaker`). Absence of the setting resolves to
+ * `MNF_COMBINED`, so every pool created before 2026-08-13 and every simulator
+ * pool was on that branch. Kevin ruled the fallback applies to all three rules
+ * (2026-08-27, `PLAN-TIEBREAKER-MONDAYLESS.md`).
+ *
+ * §0 — "nothing may change what an in-flight week means" — is NOT weakened by
+ * that. It is upheld by the FREEZE (`frozenTiebreakTargetFor`, §2b): a week
+ * whose first submission already pinned `[]` keeps `[]`, because the frozen
+ * list wins over anything this returns. What changes is only the weeks nobody
+ * has submitted for yet.
+ *
+ * A Monday-FUL week is byte-identical under every rule, before and after — the
+ * reorder below can only reach a branch where `monday.length === 0`.
  *
  * Returns `[]` when the schedule is empty. Order of the returned ids is
  * kickoff order; callers compare lists as SETS-in-order (see `sameTargetIds`).
@@ -115,8 +155,10 @@ export function resolveTiebreakTargetIds(
   if (rule === 'NONE' || games.length === 0) return [];
   const ordered = byKickoff(games);
   const monday = ordered.filter(g => g.isMonday === true);
-  if (rule === 'MNF_COMBINED') return monday.map(g => String(g.id));
+  // THE MONDAY-LESS FALLBACK COMES FIRST, so it covers every rule that asks for
+  // a prediction rather than the two that happened to be checked after it.
   if (monday.length === 0) return [String(ordered[ordered.length - 1].id)];
+  if (rule === 'MNF_COMBINED') return monday.map(g => String(g.id));
   return [String(rule === 'MNF_LAST_GAME' ? monday[monday.length - 1].id : monday[0].id)];
 }
 
@@ -148,6 +190,47 @@ export function frozenTiebreakTargetFor(
 }
 
 /**
+ * THE PRECEDENCE RULE, in one place: a frozen list wins over the live schedule,
+ * and `undefined` — nothing frozen — falls through to the pool's rule.
+ *
+ * It was hand-rolled at three sites (the pick sheet, the submit path, the
+ * scorer) in three different spellings — `??`, `??` again, and an explicit
+ * `!== undefined ? … : …`. All three had to agree that an EMPTY frozen list is
+ * a REAL state ("this week has no target") and not absence, because `[]` is not
+ * nullish and a `??` reader gets that right only by accident of the operator it
+ * reached for. One definition means a future site cannot get it wrong.
+ *
+ * Returns a copy, so a caller cannot mutate the pool's stored array.
+ */
+export function applyFrozenTarget(
+  frozen: ReadonlyArray<string> | undefined,
+  games: ReadonlyArray<TiebreakTargetGame>,
+  rule: WeeklyTiebreaker,
+): string[] {
+  return frozen !== undefined ? [...frozen] : resolveTiebreakTargetIds(games, rule);
+}
+
+/**
+ * The game id(s) this pool-week's tiebreak prediction is judged against —
+ * frozen list if the week has one, else the canonical resolution from the
+ * schedule. The ONE answer the sheet displays, the submit path validates
+ * against and the scorer sums.
+ *
+ * The submit path additionally calls `frozenTiebreakTargetFor` on its own,
+ * because it must know whether a freeze EXISTS in order to decide whether to
+ * write one. That is a different question from "what is this week's target",
+ * and fusing them would hide it.
+ */
+export function weekTiebreakTargetIds(
+  pool: { frozenTiebreakTargets?: Record<string | number, unknown> } | null | undefined,
+  week: number,
+  games: ReadonlyArray<TiebreakTargetGame>,
+  rule: WeeklyTiebreaker,
+): string[] {
+  return applyFrozenTarget(frozenTiebreakTargetFor(pool, week), games, rule);
+}
+
+/**
  * The member-facing sentence, in one place so the sheet, the rules page and any
  * future email cannot disagree about what the pool is playing.
  *
@@ -171,7 +254,7 @@ export function tiebreakerCopy(rule: WeeklyTiebreaker): { label: string; hint: s
   }
   return {
     label: 'Tiebreaker: Predicted Monday Night Football Combined Score',
-    hint: 'Close counts: predict the combined final score of the MNF games. If there are 2 MNF games, we count the combined score of both games.',
+    hint: 'Close counts: predict the combined final score of the MNF games. If there are 2 MNF games, we count the combined score of both games. On a week with no Monday game, the final game of the week is used instead.',
   };
 }
 

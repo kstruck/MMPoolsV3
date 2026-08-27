@@ -144,8 +144,13 @@ describe('computeMNFTiebreakerTotal', () => {
         expect(computeMNFTiebreakerTotal(games)).toBeNull();
     });
 
-    it('returns null when the week has no Monday game', () => {
-        expect(computeMNFTiebreakerTotal([game({ isMonday: false })])).toBeNull();
+    it('falls back to the final game of the week when there is no Monday game (PLAN-TIEBREAKER-MONDAYLESS, Kevin 2026-08-27)', () => {
+        // The default rule here is MNF_COMBINED, which is also what an unset
+        // `settings.weeklyTiebreaker` resolves to. It used to return null on a
+        // Monday-less week, and the pick sheet then rendered no input at all.
+        expect(computeMNFTiebreakerTotal([game({ isMonday: false, scores: { home: 20, away: 10 } })])).toBe(30);
+        // NONE has no target under any schedule.
+        expect(computeMNFTiebreakerTotal([game({ isMonday: false })], 'NONE')).toBeNull();
     });
 });
 

@@ -86,6 +86,15 @@ export const reconcilePaymentTruth = validated(
     poolsScanned: 0,
     /** entry PAID + member UNPAID → member promoted + ledger row appended. */
     membersPromoted: 0,
+    /** entry PAID + member UNPAID, but the per-entry dues map ALREADY records
+     *  this payment and derives to PAID — only the member's summary
+     *  `paidStatus` fell behind. Repaired by writing the SUMMARY ONLY: no ledger
+     *  row, because whatever wrote the dues row also wrote its event, and a
+     *  second `MARKED_PAID` would duplicate a participant-visible money event;
+     *  and no dues rewrite, because the stored row is the original. Counted
+     *  apart from `membersPromoted` so the operator can see that these moved a
+     *  flag rather than recorded money (codex round 11 on `6f15ec54`). */
+    staleSummariesRepaired: 0,
     /** member PAID + entry UNPAID → entry display mirrored. No ledger row. */
     entriesMirrored: 0,
     alreadyConsistent: 0,
@@ -118,11 +127,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
@@ -321,8 +330,13 @@ export const reconcilePaymentTruth = validated(
             notedFix(poolId, uid, 'AMBIGUOUS_SKIPPED');
             continue;
           }
-          // The pre-P1 Bento write: commissioner marked paid, only the entry heard.
-          notedFix(poolId, uid, 'PROMOTE_MEMBER');
+          // The pre-P1 Bento write: commissioner marked paid, only the entry
+          // heard — EXCEPT under `staleFullyPaid`, where the payment is already
+          // recorded per-entry and only the summary flag is behind. The two are
+          // reported apart so an operator is not told money was recorded when a
+          // flag was flipped, and the DRY-RUN decides it from the same page-level
+          // evidence the live run does, so the two reports still agree.
+          notedFix(poolId, uid, staleFullyPaid ? 'REPAIR_SUMMARY' : 'PROMOTE_MEMBER');
           if (!dryRun) {
             // ONE transaction for the promotion + its ledger row (codex r1, P1
             // severity): written separately, a crash between the two leaves the
@@ -426,6 +440,25 @@ export const reconcilePaymentTruth = validated(
                 return false;
               }
 
+              // 🛑 IS THE PAYMENT ALREADY RECORDED? (codex round 11.)
+              //
+              // The `staleFullyPaid` path deliberately reaches this transaction
+              // with the dues row for THIS entry already present — that is what
+              // it means: the map is right and only the member's summary
+              // `paidStatus` fell behind. There is nothing to record, because
+              // whatever wrote that row (`setPaidStatus`, or an earlier run of
+              // this migration) also wrote its ledger event.
+              //
+              // Falling through to the write below would append a SECOND
+              // `MARKED_PAID` for one payment — a duplicated money event in the
+              // participant-readable ledger, which the r7 guard a few lines up
+              // calls "worse than the divergence being repaired." It would also
+              // overwrite the row's original `paidAt`/`method`/`note` with the
+              // entry doc's, quietly losing what the commissioner recorded.
+              //
+              // So a stale summary is repaired by writing the SUMMARY ONLY.
+              const alreadyRecorded = Boolean(storedDues) && isPaidRow(storedDues as PaidEntryMap, entryDoc.id);
+
               // The entry that triggered this is marked paid; everything the
               // member already had is kept. The legacy shape (no dues document)
               // starts from empty — this member has no per-entry history, which
@@ -439,6 +472,15 @@ export const reconcilePaymentTruth = validated(
               const derived = derivePaidStatus({ ...(fm as MemberRecord), paidEntries: nextDues }, liable);
               // Same field conventions as setPaidStatus's authoritative PAID write.
               const stampedPaidAt = typeof fe.paidAt === 'number' ? fe.paidAt : Date.now();
+
+              // THE STALE-SUMMARY REPAIR: the summary, and nothing else. No
+              // ledger row (the payment is already on it), and no dues rewrite
+              // (the stored row is the original and outranks the entry doc's
+              // copy of it). See `alreadyRecorded` above.
+              if (alreadyRecorded) {
+                tx.set(mRef, { paidStatus: derived }, { merge: true });
+                return 'SUMMARY_ONLY';
+              }
               // ⚠️ THE DERIVED SUMMARY, NOT A LITERAL `'PAID'`. Promoting a
               // member whose OTHER liable entries were never paid would be the
               // money lie per-entry dues exists to remove — the commissioner
@@ -490,10 +532,14 @@ export const reconcilePaymentTruth = validated(
               // Counted once, here, because the page level did not (codex r9).
               report.entriesPaidNotLiable++;
               notedFix(poolId, uid, 'NOT_LIABLE_SKIPPED');
+            } else if (acted === 'SUMMARY_ONLY') {
+              // The flag was repaired; no money was recorded and none needed to be.
+              report.staleSummariesRepaired++; changedThisPool++;
             } else if (acted) { report.membersPromoted++; changedThisPool++; }
             else report.alreadyConsistent++; // raced with a live setPaidStatus
           } else {
-            report.membersPromoted++;
+            if (staleFullyPaid) report.staleSummariesRepaired++;
+            else report.membersPromoted++;
             changedThisPool++;
           }
         } else if (memberPaid && !entryPaid) {

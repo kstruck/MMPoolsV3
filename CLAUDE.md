@@ -334,6 +334,45 @@ absorb findings, report to Kevin, and only then start the next. Batching ~10 PRs
 in a night is what produced the defect count above; throughput was never the
 constraint, correctness is.
 
+## 2e. 🛑 THE GATE LIST IS SEVEN COMMANDS, NOT FIVE — `npx tsc -b` DOES NOT TYPECHECK `functions/`
+
+Run ALL of these before opening a PR. Report the real numbers.
+
+```
+npx vitest run                                 # root suite
+npm --prefix functions test                    # functions unit suite
+npm --prefix functions run test:emulator       # emulator suite
+npm --prefix functions run test:rules          # firestore rules
+npx tsc -b  &&  npm run build                  # FRONTEND typecheck + build
+npm --prefix functions run typecheck           # FUNCTIONS typecheck (tsconfig.test.json)
+npm --prefix functions run build               # FUNCTIONS build (tsconfig.json)
+npm run lint                                   # delta must be ZERO
+```
+
+**Why the last two are on the list.** On 2026-08-27, PR #612 shipped a change
+that added a fifth literal to a four-literal union in
+`functions/src/migrations/reconcilePaymentTruth.ts`. Every one of the five gates
+then in use came back **green** — including `npx tsc -b` — while
+`npm --prefix functions run typecheck` failed with:
+
+```
+error TS2345: Argument of type '"PROMOTE_MEMBER" | "REPAIR_SUMMARY"' is not
+assignable to parameter of type '"PROMOTE_MEMBER" | "MIRROR_ENTRY" | ...'
+```
+
+That error **blocks the functions build, and therefore the deploy.** It was
+found by a codex round, not by the gates, and it would otherwise have surfaced
+as a failed `npx firebase deploy` after the PR was merged.
+
+The cause is structural, not a one-off: **the root `tsconfig` does not include
+`functions/`.** `npx tsc -b` at the repo root can never see a type error in
+Cloud Functions code, so any PR touching `functions/src/**` needs the two
+functions-scoped commands explicitly. CI runs them; the local list did not.
+
+**The lint baseline is 1881 warnings / 0 errors — MEASURE it, do not trust it.**
+Commit your work, `git checkout --detach origin/main`, re-run `npm run lint`,
+compare, come back.
+
 ## 3. Deploy facts (do not re-derive)
 
 - 🛑 **`git pull` IN `D:\march-melee-pools` BEFORE EVERY DEPLOY. THIS IS STEP

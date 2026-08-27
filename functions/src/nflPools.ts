@@ -49,7 +49,7 @@ import {
   computeWeeklyWinners,
   type WeeklyWinnerCandidate
 } from './nflScoringEngine';
-import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
+import { applyFrozenTarget, effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
 import { computeWeeklyPrizeSnapshot, priceWeeklyPlaces, rankWeeklyPlaces, type WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
@@ -254,6 +254,29 @@ export interface MemberActionContext {
   subjectUid: string;
   subjectName?: string;
   requestId?: string;
+  /**
+   * There is NO BROWSER BUNDLE behind this submission — it is server code
+   * calling in (the sim harness, ADR 0006), always running the code that was
+   * just deployed.
+   *
+   * It exists only to exempt such a caller from the tiebreak ROLLOUT guard,
+   * which infers "this client is out of date" from a missing
+   * `displayedTiebreakTargetIds`. The sim harness never sends one and never
+   * will, so without this the guard would freeze an empty tiebreak target on
+   * every simulated Monday-less week forever — permanently withholding the fix
+   * from the population that most needs it (no simulator path writes
+   * `settings.weeklyTiebreaker`, so every sim pool is a legacy MNF_COMBINED
+   * pool). codex r2 P2.
+   *
+   * 🛑 ON THE CONTEXT, NEVER THE PAYLOAD. `ctx` is built only by server code;
+   * the payload is client-supplied and schema-validated, so a field there would
+   * let any browser assert it and walk past the guard.
+   *
+   * It grants NOTHING else — not membership, not a lock bypass, not
+   * SUPER_ADMIN. Those key off `actorRole`, which the sim harness deliberately
+   * leaves undefined.
+   */
+  serverSideCaller?: boolean;
 }
 
 /**
@@ -612,18 +635,89 @@ export async function submitNFLPicksInternal(
       // reads it.
       const tiebreakRule = effectiveWeeklyTiebreaker(poolInTx.settings as { weeklyTiebreaker?: unknown } | undefined);
       if (tiebreakerAsksForPrediction(tiebreakRule)) {
+        // TWO DIFFERENT QUESTIONS, deliberately asked separately. `frozenTarget`
+        // answers "does this week already have a freeze?" — the only input to
+        // the write decision below. `authoritative` answers "what is this week's
+        // target?", and takes the precedence rule from `applyFrozenTarget`,
+        // shared with the pick sheet and the scorer.
         const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
         const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
-        const authoritative = frozenTarget ?? canonicalTarget;
+        const authoritative = applyFrozenTarget(frozenTarget, games, tiebreakRule);
+        // Hoisted: both the rejection below and the freeze guard further down
+        // are scoped to the ONE week whose meaning this release changed.
+        const noMondayGame = games.every(g => g.isMonday !== true);
         if (displayedTargetIds !== undefined && !sameTargetIds(displayedTargetIds, authoritative)) {
           throw new HttpsError('failed-precondition',
             'TIEBREAK_TARGET_STALE: the tiebreaker game shown on your sheet no longer matches the schedule for this week. Reload the page and submit again.');
+        }
+        // 🛑 THE INVERSE ORDERING (codex r3 P1). The freeze guard below covers a
+        // stale client submitting FIRST. This covers the other order: a CURRENT
+        // sheet submitted first and froze the fallback game, and a member on a
+        // stale bundle then submits. Their sheet rendered no tiebreaker card, so
+        // they send no `displayedTiebreakTargetIds` — which skips the staleness
+        // check above, because there is nothing to compare — and the freeze
+        // guard cannot help, because the week is already frozen. Their entry
+        // would be saved with no prediction and lose any tied week to the
+        // members who were asked.
+        //
+        // Refusing is SAFE here in a way it would not be in general: this state
+        // is only reachable AFTER a current client submitted, which proves the
+        // new frontend is live, so "reload and submit again" actually gets them
+        // a sheet that asks the question. Silently accepting is the only option
+        // that costs them the week.
+        //
+        // Scoped exactly as the freeze guard is — legacy `MNF_COMBINED`, no
+        // Monday game, non-empty FROZEN target. A pre-#452 client on any other
+        // week sends no displayed list either and must keep working, and a week
+        // frozen EMPTY has nothing to miss. The sim harness is exempt for the
+        // same reason as below.
+        if (frozenTarget !== undefined && frozenTarget.length > 0
+            && displayedTargetIds === undefined && tiebreakRule === 'MNF_COMBINED'
+            && noMondayGame && ctx.serverSideCaller !== true) {
+          throw new HttpsError('failed-precondition',
+            'TIEBREAK_TARGET_STALE: this week now has a tiebreaker game and your pick sheet is out of date. Reload the page and submit again.');
         }
         // Freeze even an EMPTY canonical list: "no target this week" is a
         // state that must not change under members who already submitted
         // (qodo #9 on #452).
         if (frozenTarget === undefined) {
-          frozenTargetWrite = { [`frozenTiebreakTargets.${week}`]: canonicalTarget };
+          // 🛑 THE ROLLOUT WINDOW — a submission that never saw the new target
+          // must not introduce it (codex r1 on PLAN-TIEBREAKER-MONDAYLESS).
+          //
+          // Functions and the www frontend deploy SEPARATELY (CLAUDE.md §3:
+          // Coolify is a manual trigger), so for a while the server knows about
+          // the Monday-less fallback and a member's loaded bundle does not. That
+          // member's legacy MNF_COMBINED sheet renders no tiebreaker card, sends
+          // no prediction and no `displayedTiebreakTargetIds`. If this froze the
+          // fallback game anyway, the next member to reload WOULD see the card,
+          // answer it, and take any tied week outright — `computeWeeklyWinners`
+          // DROPS a leader with no prediction as soon as one leader has one.
+          // That is exactly the harm the freeze exists to prevent, arriving
+          // through a code change instead of a schedule change.
+          //
+          // Deploying the frontend first is not an escape: a new sheet sends the
+          // fallback id, an old server resolves `[]`, and every submission is
+          // refused with TIEBREAK_TARGET_STALE.
+          //
+          // So: on the ONE week whose meaning this release changed — a legacy
+          // MNF_COMBINED pool with no Monday game — a caller that did not take
+          // part in the handshake freezes what the PREVIOUS release would have
+          // frozen, `[]`. Nobody in that week is asked, and a tied week is
+          // shared. Self-expiring: a current sheet always sends the list when it
+          // asks, so once the frontend is deployed this branch stops firing.
+          //
+          // `ctx.serverSideCaller` is exempt: the sim harness has no browser
+          // bundle to be stale and never sends a displayed list, so without the
+          // exemption this would withhold the fallback from every simulated
+          // Monday-less week permanently — and every simulator pool is a legacy
+          // MNF_COMBINED pool, because no simulator path writes
+          // `settings.weeklyTiebreaker` (codex r2 P2).
+          const introducesNewQuestion =
+            tiebreakRule === 'MNF_COMBINED' && noMondayGame
+            && displayedTargetIds === undefined && ctx.serverSideCaller !== true;
+          frozenTargetWrite = {
+            [`frozenTiebreakTargets.${week}`]: introducesNewQuestion ? [] : canonicalTarget,
+          };
         }
       }
 

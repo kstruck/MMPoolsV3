@@ -632,6 +632,14 @@ export const simSubmitPicks = onCall(async (request) => {
             // actorRole intentionally undefined: membership must bind to the subject.
             subjectUid: uid,
             subjectName: uid.slice(simUidPrefix(runId!).length) || uid,
+            // No browser bundle behind this call, so the tiebreak ROLLOUT guard
+            // does not apply — it infers a stale client from a missing
+            // `displayedTiebreakTargetIds`, and this path never sends one.
+            // Without it every simulated Monday-less week would freeze an empty
+            // tiebreak target forever (codex r2 P2). Grants nothing else: the
+            // SUPER_ADMIN membership bypass keys off `actorRole`, still
+            // deliberately undefined here (ADR 0006).
+            serverSideCaller: true,
         }, { poolId, week, picks, confidence, tiebreakerPrediction });
 
         // Stamp simRunId on the entry the real path just wrote (Phase 0.3 contract).
