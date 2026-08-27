@@ -475,6 +475,20 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
       expect(copy, `${id} promises the typed dollars reach a pot`).not.toMatch(/dollars of every entry fee go/i);
       expect(copy, `${id} restates the charity deduction (voice rule 10)`).not.toMatch(/charity/i);
     }
+
+    // Nor does the weekly topic claim the pot grows whenever the box does.
+    // `floor(w × entries × charityFactor)` is only WEAKLY monotone, so on a
+    // charity pool a one-dollar move can leave the pot exactly where it was —
+    // self-review after a clean codex round 4. Pinned as the arithmetic, so a
+    // future author who wants that sentence has to disprove this first.
+    const potFor = (weeklyPerEntry: number) => potBreakdown(
+      { payoutMode: 'HYBRID', entryFee: 20, hybridSplit: { weeklyPerEntry, seasonPerEntry: 20 - weeklyPerEntry }, charity: { enabled: true, percentage: 10 } },
+      1,
+    )!.weeklySeasonAllocation;
+    expect(potFor(10)).toBe(9);
+    expect(potFor(11)).toBe(9); // one dollar more in the box, the same pot.
+    const weeklyCopy = staticCopy(helpRegistry.getTopic('settings.hybridSplit.weeklyPerEntry')!.long);
+    expect(weeklyCopy, 'claims a strictly bigger pot for a bigger number').not.toMatch(/bigger the weekly pot/i);
   });
 
   it('HYBRID with no split: neither figure is known — the "ask your commissioner" case', () => {

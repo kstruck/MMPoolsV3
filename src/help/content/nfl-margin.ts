@@ -189,7 +189,14 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // holds once a pool gives a share away. The copy says what the box decides
       // rather than promising an amount; the deduction itself is stated once, in
       // `settings.payoutMode`.
-      'Every entry fee divides between the two pots, and this is the weekly side of that division. It covers the whole season rather than one week, and the more you put here the bigger the weekly pots are and the smaller the season pot.',
+      //
+      // It also does not say "the more you put here the bigger the weekly pots":
+      // `floor(w × entries × charityFactor)` is only WEAKLY monotone, so on a
+      // charity pool a one-dollar move can leave the pot where it was (one entry, 10%:
+      // $10 and $11 both floor to $9). The trade-off between the two halves is
+      // exact and is `settings.hybridSplit.seasonPerEntry`'s sentence anyway
+      // (voice rule 10), so this one says what the box IS instead.
+      'Every entry fee divides between the two pots, and this is the weekly side of that division. It is the money behind the weekly prizes for the whole season, not for one week.',
       // `perWeekPrizePot` (`prizePot.ts:87-91`) is that allocation divided by
       // `weeksInSeason` — the pool's OWN week count, frozen, never a hardcoded
       // 18. A preseason pool really does have four.
