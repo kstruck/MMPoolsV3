@@ -1,6 +1,9 @@
 import React from 'react';
 import { Sparkles, Trash2, Settings } from 'lucide-react';
 import type { GameState, PoolTheme } from '../../types';
+// PLAN-HELP-SYSTEM T5. Direct, not through the `ui` barrel — the barrel does
+// not export it (see `ui/Field.tsx`, which imports it the same way).
+import { HelpTip } from '../ui/HelpTip';
 
 interface WizardStepBrandingAdminProps {
     gameState: GameState;
@@ -126,8 +129,13 @@ export const WizardStepBrandingAdmin: React.FC<WizardStepBrandingAdminProps> = (
 
                     {/* Background Color */}
                     <div className="bg-card p-6 rounded-xl border border-line">
+                        {/* PLAN-HELP-SYSTEM T5: the `?` for `branding.backgroundColor`,
+                            on the heading for the same reason as the props twin
+                            (`WizardStepBranding.tsx`) — the control below is a bare
+                            `<input type="color">` with no label component. */}
                         <h4 className="font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
                             <Settings size={16} className="text-navy-600 dark:text-navy-500" /> Background color
+                            <HelpTip helpId="branding.backgroundColor" />
                         </h4>
                         <p className="text-xs text-muted mb-4">Choose a background color for your pool page.</p>
 
