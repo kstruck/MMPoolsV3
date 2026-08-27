@@ -45,6 +45,14 @@
 //   it and the JOIN SCREEN (`JoinPool.tsx:223`, `compact`) does not. A playoff
 //   pool never shows one — `PlayoffPayoutCard.tsx:36` lists places only.
 //
+//   ⚠️ THE COPY NAMES THE **RULES TAB**, NOT A "PAYMENT PAGE" (codex r3). The
+//   help PAGE ids for those two screens are titled "Rules & payment", but the
+//   pool's own tab bar says `Rules` (`BracketPoolDashboard.tsx:716`) and
+//   `Rules & Rulesets` (`NFLPoolDashboard.tsx:129`) — and both dashboards ALSO
+//   carry a separate payments screen (`pool.nfl.payments`, `pool.bracket.ledger`)
+//   which renders the ledger and not this configuration. "Rules and payment
+//   page" sent a member to the one screen that cannot show them a bonus.
+//
 // ⚠️ A TOPIC MUST NOT CLAIM A POOL TYPE ITS PLACEMENTS CANNOT SERVE (codex r1
 // on this branch, two findings). The first draft scoped each topic to every
 // type whose CREATE CONTRACT carries the path, so that the allowlist rows could
@@ -154,7 +162,7 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     long: [
       'The pot is the entry fees you collect. Nothing is held here, so this share is a record of what you owe whoever wins the bonus rather than a transfer — the money goes from you to them directly.',
       'Places and bonuses draw on that one pot and are added together, so a 5% bonus leaves 95% for the finishing places. The editor keeps a running total and marks it until the two lists come to 100%.',
-      'Members read every bonus and its share on the pool’s rules and payment page. The join screen leaves them out, so somebody deciding whether to join sees the finishing places and not this — a bonus is worth announcing yourself as well.',
+      'Members read every bonus and its share on the pool’s Rules tab, listed under the finishing places. The join screen leaves them out, so somebody deciding whether to join sees the places and not this — a bonus is worth announcing yourself as well.',
     ].join('\n\n'),
     poolTypes: BONUS_TYPES,
     audience: EVERYONE,

@@ -433,6 +433,29 @@ describe('T6 — the bonus percentage is money copy (voice rule 8)', () => {
     expect(staticCopy(percentage().long).toLowerCase()).toContain('nothing is held here');
   });
 
+  it('sends a member to the screen that CAN show them a bonus (codex r3)', () => {
+    // The regression: the first draft said "the pool's rules and payment page".
+    // `PayoutsPanel` renders the bonus list on the rules screen only, and BOTH
+    // dashboards carry a separate payments screen (`pool.nfl.payments`,
+    // `pool.bracket.ledger`) that shows the ledger and not this configuration —
+    // so "payment page" pointed at the one screen with no bonus on it.
+    const long = staticCopy(percentage().long);
+    expect(long).toContain('Rules tab');
+    for (const wrong of ['payment page', 'payments page', 'payment tab', 'payments tab']) {
+      expect(long.toLowerCase(), `points at "${wrong}"`).not.toContain(wrong);
+    }
+  });
+
+  it('and "Rules tab" is what those dashboards actually call it', () => {
+    // Read back out of the tab bars, so a rename makes the copy fail here
+    // rather than quietly misdirecting a member. The two labels differ, which
+    // is why the copy names the shared word rather than either label in full.
+    expect(read('src/components/BracketPoolDashboard/BracketPoolDashboard.tsx'))
+      .toContain("{ id: 'rules' as DashboardTab, label: 'Rules'");
+    expect(read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx'))
+      .toMatch(/\{ tab: 'rules', label: 'Rules/);
+  });
+
   it('never says "revenue" — the word voice rule 8 bans outright', () => {
     for (const t of MANAGER_FIELD_TOPICS) {
       const copy = `${t.title}\n${staticCopy(t.short)}\n${staticCopy(t.long)}`.toLowerCase();
