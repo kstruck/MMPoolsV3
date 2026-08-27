@@ -69,7 +69,12 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // `pool.nfl.manager.settings`, alongside the `contactMethod` topic that says
   // whether either of them is ever shown.
   //
-  // T5 and T6 wrote the other three, in `content/manager-fields.ts`, and each
+  // T5 and T6 wrote the other three, in `content/manager-fields.ts`. ⚠️ THAT
+  // CLOSES THESE ROWS, NOT THOSE TICKETS (codex r5): PLAN-HELP-SYSTEM.md:872-873
+  // also asks T5/T6 for the rest of the squares manager, the props wizard and
+  // manager, the playoff manager surfaces, `SCORING_SYSTEM_LABELS`, and two
+  // file deletions — none of which is done. See the header of
+  // `content/manager-fields.ts` for the outstanding list. Each path below
   // is now explained for the types that actually render it: the squares Setup
   // Wizard tab and the props Manage tab for the background colour, the bracket
   // commissioner tab plus the bracket and NFL rules pages for the bonus rows.

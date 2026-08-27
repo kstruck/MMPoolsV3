@@ -5,6 +5,26 @@
 // That is why their rows sat in `SCHEMA_PATH_ALLOWLIST` after T1: the wizard
 // tickets could not write copy for a control the wizard does not have.
 //
+// 🛑 THIS FILE IS A SLICE OF T5/T6, NOT THE WHOLE OF EITHER (codex r5). The
+// plan's rows (PLAN-HELP-SYSTEM.md:872-873) are much wider than the three
+// schema paths below, and everything in this list is STILL OUTSTANDING:
+//
+//   T5  `AdminPanel.tsx` and the rest of `admin/WizardStep*.tsx` converted to
+//       `FieldLabel` (K12); `WizardStepReminders.tsx`; DELETE the two dead
+//       legacy steps `WizardStepDetails.tsx` / `WizardStepSquaresDetails.tsx`,
+//       which K12 records as having no importers.
+//   T6  `BracketRulesPanel`'s `SCORING_SYSTEM_LABELS` moved into the registry;
+//       the rest of the bracket manager tab; `PropsWizard.tsx` and its other
+//       two child steps (`WizardStepGame`, `WizardStepReminders`);
+//       `Props/PropsManager.tsx`; the three Playoff manager surfaces
+//       (`PlayoffSettingsModal`, `RankingForm`, `PlayoffResultsManager`); and
+//       the `PayoutGallery.tsx` delete-or-exempt decision.
+//
+// Neither ticket's "coverage green" bar is met by this file, and the T4 label
+// guard's `MANAGER_FILES` list — which its own comment says "T5–T7 add theirs
+// to as they land" — is still `NFLManagerView.tsx` alone. Anything here that
+// says "CLOSED BY T5/T6" is about an ALLOWLIST ROW, never about the ticket.
+//
 //   T5  `branding.backgroundColor` — the colour picker on the legacy branding
 //       step (`WizardStepBranding.tsx:93` and its admin twin
 //       `admin/WizardStepBrandingAdmin.tsx:144`), reached from the squares
