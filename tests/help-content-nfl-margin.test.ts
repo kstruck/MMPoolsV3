@@ -491,6 +491,42 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
     expect(weeklyCopy, 'claims a strictly bigger pot for a bigger number').not.toMatch(/bigger the weekly pot/i);
   });
 
+  /**
+   * The same floor, one paragraph further down (codex r5 [P2]).
+   * `perWeekPrizePot` FLOORS, so a small weekly allocation gives the SAME
+   * whole-dollar prize at four weeks and at eighteen — "a short pool pays more
+   * per week" is not a claim the arithmetic supports. The divisor itself is
+   * exact and is what the copy now says.
+   */
+  it('a shorter season does not always pay more per week', () => {
+    expect(perWeekPrizePot(1, 4)).toBe(0);
+    expect(perWeekPrizePot(1, 18)).toBe(0); // identical, from a legal $2 pool split $1/$1.
+    // ...and the divisor claim that IS true, so this does not pass by emptiness.
+    expect(perWeekPrizePot(180, 4)).toBe(45);
+    expect(perWeekPrizePot(180, 18)).toBe(10);
+
+    const weekly = staticCopy(helpRegistry.getTopic('settings.hybridSplit.weeklyPerEntry')!.long);
+    expect(weekly, 'claims a short pool always pays more per week').not.toMatch(/pays more per week/i);
+    expect(weekly).toMatch(/divides by four/i);
+  });
+
+  /**
+   * The pre-join screen does not show the two split halves (codex r5 [P2]).
+   * `JoinPool` renders the prize panel COMPACT, and the block that prints the
+   * two per-entry amounts sits behind `!compact` — so the season topic must not
+   * tell a commissioner that joiners were shown both halves before they paid.
+   * Both ends are pinned: make the join panel non-compact, or move that block
+   * out from behind the flag, and this goes red so the copy can be restored.
+   */
+  it('the join screen renders the panel compact, and the split block is not compact', () => {
+    expect(codeOf('src/components/JoinPool.tsx')).toMatch(/<PayoutsPanel[^>]*\bcompact\b/);
+    expect(codeOf('src/components/PayoutsPanel.tsx')).toMatch(/!compact && modeCopy/);
+
+    const season = staticCopy(helpRegistry.getTopic('settings.hybridSplit.seasonPerEntry')!.long);
+    expect(season, 'claims joiners were shown both halves').not.toMatch(/see both halves/i);
+    expect(season).toMatch(/the people who already paid joined under/i);
+  });
+
   it('HYBRID with no split: neither figure is known — the "ask your commissioner" case', () => {
     const pot = potBreakdown({ payoutMode: 'HYBRID', entryFee: 25 }, 10)!;
     expect(pot.weeklySeasonAllocation).toBeUndefined();

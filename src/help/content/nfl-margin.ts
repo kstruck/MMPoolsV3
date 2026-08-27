@@ -200,7 +200,12 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // `perWeekPrizePot` (`prizePot.ts:87-91`) is that allocation divided by
       // `weeksInSeason` — the pool's OWN week count, frozen, never a hardcoded
       // 18. A preseason pool really does have four.
-      'One week is worth the whole season’s weekly money divided by the number of weeks your pool covers, so a short preseason pool pays more per week than a full season would from the same amount.',
+      //
+      // NOT "a short pool pays MORE per week" (codex r5 [P2]). `perWeekPrizePot`
+      // FLOORS, so a small allocation gives the same whole-dollar prize either
+      // way: a $1 weekly allocation is $0 a week over four weeks and $0 a week
+      // over eighteen. The divisor is the claim worth making, and it is exact.
+      'One week is worth the whole season’s weekly money divided by the number of weeks your pool covers. That is your pool’s own count — a four-week preseason pool divides by four, never by a full season.',
       // `computeWeeklyPrizeSnapshot` runs only on the FIRST publication of a
       // week and the recap keeps the snapshot; the ledger prices from it.
       'What a weekly winner is owed is worked out when that week is scored and then held still, so changing this afterwards does not re-price a week that has already been settled.',
@@ -241,7 +246,13 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // above both inputs on every screen that renders them; what is worth
       // saying HERE is the consequence for this box (voice rules 2 and 10).
       'It is the rest of the fee. Raise the weekly amount and this one has to come down, because the two together have to equal the entry fee.',
-      'Members see both halves on the rules page before they join, so changing them after the pool has filled changes what people were told when they paid.',
+      // NOT "members see both halves before they join" (codex r5 [P2]). The
+      // pre-join screen renders the prize panel COMPACT (`JoinPool.tsx:223`),
+      // and the block that prints the two per-entry amounts is behind
+      // `!compact` (`PayoutsPanel.tsx:416`) — so a joiner is never shown the
+      // split. The consequence is what the sentence was for, and it survives
+      // without the false premise about where they saw it.
+      'Changing either half after the pool has filled changes the split the people who already paid joined under.',
       MONEY_MOVES_DIRECTLY,
     ].join('\n\n'),
     // Same reason as its twin above: the control lives in a file every wizard
