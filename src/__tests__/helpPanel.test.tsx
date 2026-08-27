@@ -365,12 +365,34 @@ describe('a pool page listed from the create wizard (codex R12)', () => {
    * …and SEARCH obeys the same predicate, so it cannot offer what the panel
    * would then refuse.
    *
-   * "finishing places" matches exactly one thing in the registry — the Payouts
-   * step page — so the row either appears or the empty state does, with nothing
-   * else in the way. From the rules step that page is unreachable: no URL puts
-   * the reader on a wizard step, so the click could only force the Payouts
-   * summary over the rules form, or (once `canOpenPage` refuses that) clear the
-   * search and do nothing. Both are the defect codex R9 fixed for glossary hits.
+   * "finishing places" matches the Payouts step PAGE. From the rules step that
+   * page is unreachable: no URL puts the reader on a wizard step, so the click
+   * could only force the Payouts summary over the rules form, or (once
+   * `canOpenPage` refuses that) clear the search and do nothing. Both are the
+   * defect codex R9 fixed for glossary hits.
+   *
+   * ⚠️ THE ASSERTION IS "THAT ROW IS ABSENT", NOT "THE PANEL IS EMPTY".
+   * It was the empty state until T5/T6 (#624) landed, on the reasoning that the
+   * query matched exactly one thing in the registry so the row either appeared
+   * or the empty state did. That reasoning had a shelf life: `Bonus prize share`
+   * says "the finishing places beside it" and now matches the same query, so the
+   * empty state stopped being reachable and this test failed on content that had
+   * nothing to do with it.
+   *
+   * The empty state was only ever a PROXY, and a bad one in both directions — an
+   * `acceptHit` that dropped every hit would have satisfied it just as well. What
+   * the panel owes the reader is that THIS row is not offered while the rest of
+   * the search still works, so that is what is asserted, in three parts:
+   *
+   *   1. unfiltered, the registry really does return the Payouts page for this
+   *      query — so there is something to drop, and content drift makes this
+   *      FAIL rather than pass vacuously;
+   *   2. the panel does not render it;
+   *   3. and the panel is not empty either, which is the half a blanket filter
+   *      would fail.
+   *
+   * Nothing here names the content that made (3) true, so the next topic to use
+   * the phrase costs this test nothing.
    */
   const findingPlaces = () => {
     fireEvent.keyDown(document, { key: '?' });
@@ -382,10 +404,24 @@ describe('a pool page listed from the create wizard (codex R12)', () => {
   };
 
   it('does not offer a search hit for a step the reader cannot reach', async () => {
+    const payouts = helpRegistry.getPage('wizard.pickem.payouts')!;
+    // (1) There is a hit to drop.
+    expect(
+      helpRegistry
+        .search('finishing places', { poolType: 'NFL_PICKEM', audience: 'commissioner' })
+        .some((r) => r.kind === 'page' && r.id === payouts.id),
+    ).toBe(true);
+
     renderApp(<WizardHarness />);
     await findingPlaces();
-    await waitFor(() => expect(screen.getByText(/Nothing in Help matches/)).toBeTruthy());
-    expect(screen.queryByRole('button', { name: /Payouts/ })).toBeNull();
+    // The results section exists, so the query has landed and the assertions
+    // below are about what it produced rather than about an unrendered panel.
+    await waitFor(() => expect(screen.getByText(/^Results$|^First \d+ results$/)).toBeTruthy());
+
+    // (2) …and the panel does not offer it.
+    expect(screen.queryByRole('button', { name: new RegExp(payouts.title) })).toBeNull();
+    // (3) The rest of the search still works.
+    expect(screen.queryByText(/Nothing in Help matches/)).toBeNull();
   });
 
   it('offers the very same hit from the step it belongs to', async () => {
