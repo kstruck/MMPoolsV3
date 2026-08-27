@@ -493,6 +493,10 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
 
     const mode = staticCopy(helpRegistry.getTopic('settings.payoutMode')!.long);
     expect(mode, 'promises the places receive the whole pot').not.toMatch(/whole pot goes to the finishing places/i);
+    // The positive half: the places are named as the list that DECIDES the
+    // division, which is true at any total. Asserted rather than only banning
+    // the old phrasing, because a blacklist of wordings is not a guard.
+    expect(mode).toMatch(/season places decide how it divides/i);
     // The allocation claim that IS true, and the reason the sentence exists.
     expect(potBreakdown({ payoutMode: 'SEASON', entryFee: 20 }, 5)!.seasonPot).toBe(100);
   });
