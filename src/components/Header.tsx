@@ -100,6 +100,10 @@ const NavLink: React.FC<{
     </a>
 );
 
+/* The hamburger names the panel it controls (aria-controls), and the tests
+   address the drawer by that same id rather than by a Tailwind class. */
+const MOBILE_DRAWER_ID = 'mobile-nav-drawer';
+
 /* Compact chrome action button (header is always navy — no theme flip here) */
 const chromeBtn =
     'inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-display font-bold uppercase text-[13px] tracking-[0.05em] transition-all duration-150 hover:-translate-y-px';
@@ -247,7 +251,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                         mobile drawer below renders its own markup, because a
                         disclosure inside a drawer would be a second layer to
                         open on the smallest screen. */}
-                    <nav aria-label="Main" className="hidden md:flex flex-1 items-center gap-6">
+                    <nav aria-label="Main" className="hidden lg:flex flex-1 items-center gap-4 xl:gap-6">
                         {!user ? (
                             <>
                                 <NavMenu
@@ -354,10 +358,10 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                     </nav>
 
                     {/* Right cluster: actions, not destinations. */}
-                    <div className="hidden md:flex items-center gap-2">
+                    <div className="hidden lg:flex items-center gap-2">
                         {!user ? (
                             <>
-                                <ThemeToggle />
+                                <ThemeToggle compact />
                                 <HelpHeaderButton />
                                 <button
                                     onClick={onOpenAuth}
@@ -402,7 +406,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     label={
                                         <span className="flex items-center gap-1.5">
                                             <UserIcon size={14} aria-hidden="true" />
-                                            {user.name.split(' ')[0]}
+                                            <span className="max-w-[12ch] truncate">{user.name.split(' ')[0]}</span>
                                         </span>
                                     }
                                 >
@@ -462,16 +466,18 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
 
                     {/* ---------- MOBILE: one hamburger, one sectioned drawer ---------- */}
                     <button
-                        className="md:hidden ml-auto p-2 text-white/80 hover:text-white"
+                        className="lg:hidden ml-auto p-2 text-white/80 hover:text-white"
                         aria-label={menuOpen ? 'Close menu' : 'Open menu'}
                         aria-expanded={menuOpen}
+                        aria-controls={MOBILE_DRAWER_ID}
                         onClick={() => setMenuOpen(o => !o)}
                     >
                         {menuOpen ? <X size={22} /> : <Menu size={22} />}
                     </button>
                     {menuOpen && (
                         <div
-                            className="md:hidden absolute left-0 right-0 top-full max-h-[calc(100vh-73px)] overflow-y-auto bg-navy-900 border-b border-[rgba(230,206,150,0.16)] shadow-lg px-4 py-4 flex flex-col gap-5"
+                            id={MOBILE_DRAWER_ID}
+                            className="lg:hidden absolute left-0 right-0 top-full max-h-[calc(100vh-73px)] overflow-y-auto bg-navy-900 border-b border-[rgba(230,206,150,0.16)] shadow-lg px-4 py-4 flex flex-col gap-5"
                             onClickCapture={() => setMenuOpen(false)}
                         >
                             {!user ? (

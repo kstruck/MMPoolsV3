@@ -3,8 +3,12 @@ import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { cn } from './cn';
 
-/** Outline pill theme toggle — lives on the always-dark navy chrome. */
-export const ThemeToggle: React.FC<{ className?: string }> = ({ className }) => {
+/** Outline pill theme toggle — lives on the always-dark navy chrome.
+ *
+ * `compact` drops the word and leaves the icon. The signed-out header has no
+ * account menu to fold this into, so at 1024–1279px it is the ~40px that
+ * decides whether the nav row fits without wrapping. */
+export const ThemeToggle: React.FC<{ className?: string; compact?: boolean }> = ({ className, compact = false }) => {
     const { theme, toggleTheme } = useTheme();
     return (
         <button
@@ -19,7 +23,7 @@ export const ThemeToggle: React.FC<{ className?: string }> = ({ className }) => 
             )}
         >
             {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-            <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+            {!compact && <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>}
         </button>
     );
 };

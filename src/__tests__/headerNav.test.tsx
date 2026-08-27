@@ -229,15 +229,50 @@ describe('grouped header nav — disclosure semantics and keyboard', () => {
   });
 });
 
+describe('grouped header nav — the desktop row hands off to the drawer at lg, not md', () => {
+  // 🛑 THE DEFECT THIS PINS (codex round 1, P1). The first cut handed off at
+  // `md` (768px). Grouping shortened the row but did not shorten it THAT much:
+  // logo + the signed-in action cluster leave under ~200px for three nav
+  // items, and nothing in the new row wraps, so at 768–1023px the controls ran
+  // off the side of the viewport — unreachable, with no hamburger to fall back
+  // to. Handing off at `lg` is the whole fix, and it is invisible in jsdom
+  // (no layout), so it is asserted as the class contract it actually is.
+  it('exactly one of the two layouts is live at any width', () => {
+    const { container } = renderHeader(superAdmin, true);
+    const nav = container.querySelector('nav[aria-label="Main"]')!;
+    const burger = screen.getByRole('button', { name: /Open menu/ });
+    // Both halves of the desktop layout: the destinations (nav) AND the
+    // action cluster that sits beside it. They must appear together.
+    const actions = burger.closest('header')!.querySelector('div.hidden.items-center')!;
+    expect(actions, 'desktop action cluster not found').toBeTruthy();
+    expect(actions).not.toBe(nav);
+
+    for (const el of [nav, actions]) {
+      expect(el.className, 'desktop cluster must be hidden below lg').toContain('hidden');
+      expect(el.className, 'desktop cluster must appear at lg, not md').toContain('lg:flex');
+      expect(el.className).not.toContain('md:flex');
+    }
+    expect(burger.className, 'hamburger must survive until lg').toContain('lg:hidden');
+    expect(burger.className).not.toContain('md:hidden');
+
+    fireEvent.click(burger);
+    const drawer = document.getElementById(burger.getAttribute('aria-controls')!)!;
+    expect(drawer.className).toContain('lg:hidden');
+    expect(drawer.className).not.toContain('md:hidden');
+  });
+});
+
 describe('grouped header nav — mobile drawer', () => {
   it('one hamburger reveals every destination, in labelled sections and flat', () => {
     // Flat on purpose: an IA this shallow does not justify making a phone user
     // open a drawer AND then an accordion to reach one page.
-    const { container } = renderHeader(superAdmin, true);
+    renderHeader(superAdmin, true);
     const burger = screen.getByRole('button', { name: /Open menu/ });
     fireEvent.click(burger);
 
-    const drawer = container.querySelector('.md\\:hidden.absolute')!;
+    // The hamburger names the panel it controls, so the test addresses the
+    // drawer the way a screen reader does rather than by a Tailwind class.
+    const drawer = document.getElementById(burger.getAttribute('aria-controls')!)!;
     expect(drawer).toBeTruthy();
     const hrefs = Array.from(drawer.querySelectorAll('a')).map(a => a.getAttribute('href'));
     for (const href of [
