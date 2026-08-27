@@ -127,11 +127,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
