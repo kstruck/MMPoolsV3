@@ -19,5 +19,6 @@
 import type { HelpPage } from './types';
 import { WIZARD_PAGES } from './content/wizard-pages';
 import { POOL_PAGES } from './content/pool-pages';
+import { SITE_PAGES } from './content/site-pages';
 
-export const PAGES: readonly HelpPage[] = [...WIZARD_PAGES, ...POOL_PAGES];
+export const PAGES: readonly HelpPage[] = [...WIZARD_PAGES, ...POOL_PAGES, ...SITE_PAGES];

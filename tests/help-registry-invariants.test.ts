@@ -1079,10 +1079,16 @@ describe('the real registry — content rules', () => {
   // page count, so it does not have to be edited on every content ticket — but
   // an accidentally-empty registry still fails here rather than looking like a
   // pass, and a route silently losing its pages does too.
-  it('T2 state: the wizard steps and the pool routes have pages, and the glossary is full', () => {
+  it('T3 state: the wizard, pool and site routes have pages, and the glossary is full', () => {
     expect(topics.length).toBeGreaterThan(20);
     expect([...new Set(PAGES.map((p) => p.route))].sort()).toEqual([
+      '/',
+      '/about',
       '/admin/:id',
+      '/browse',
+      '/charity',
+      '/contact',
+      '/create-pool',
       '/create/bracket',
       '/create/margin',
       '/create/pickem',
@@ -1090,7 +1096,22 @@ describe('the real registry — content rules', () => {
       '/create/props',
       '/create/squares',
       '/create/survivor',
+      '/features',
+      '/gameday-squares',
+      '/how-it-works',
+      '/join/:poolId',
+      '/march-madness',
+      '/nfl-playoffs',
+      '/odds/super-bowl-squares',
+      '/participant',
+      '/payment-success',
       '/pool/:id',
+      '/pricing',
+      '/privacy',
+      '/profile',
+      '/profile/:uid',
+      '/scoreboard',
+      '/terms',
     ]);
     // Every wizard has its route-level page AND one page per step, and every
     // pool route page names a tab or is the route's fallback.
