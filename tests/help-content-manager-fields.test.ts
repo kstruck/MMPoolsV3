@@ -480,6 +480,66 @@ describe('T6 — the bonus percentage is money copy (voice rule 8)', () => {
   });
 });
 
+/**
+ * A COMMISSIONER CONTROL EXPLAINED TO A MEMBER MUST NOT SAY "YOU" — codex r6.
+ *
+ * The two bonus topics describe controls only a commissioner has, and their
+ * audience is `EVERYONE` because the value lands on a member-facing rules page.
+ * So every second-person verb in them was addressed to the commissioner and
+ * read as a lie to the member who met them there: "you decide, and you pay
+ * them", "add as many rows as you want", "remove one with the cross beside it".
+ *
+ * The registry cannot solve this with a variant — a variant keys on POOL TYPE,
+ * and `buildRegistry` refuses one whose audience differs from its base — so a
+ * single wording has to serve both readers, and the only wording that can is
+ * one that names the actor instead of assuming it.
+ *
+ * The rule is scoped to THIS FILE deliberately. "You" is right in a topic about
+ * something the member actually does; it is wrong only where the control
+ * belongs to somebody else, which is what every topic here has in common.
+ */
+describe('T5 + T6 — a member-visible topic here never addresses the reader as the commissioner', () => {
+  const SECOND_PERSON = /\b(you|your|yours|yourself)\b/i;
+
+  const memberVisible = MANAGER_FIELD_TOPICS.filter((t) => t.audience.includes('member'));
+
+  it('there IS such a topic — otherwise the rule below is vacuous', () => {
+    expect(memberVisible.map((t) => t.id)).toEqual([
+      'settings.payouts.bonuses.*.name',
+      'settings.payouts.bonuses.*.percentage',
+    ]);
+  });
+
+  it.each(memberVisible.map((t) => [t.id, t] as const))('%s uses no second person', (_id, topic) => {
+    const offenders = [topic.title, staticCopy(topic.short), staticCopy(topic.long), ...(topic.tips ?? [])]
+      .flatMap((block) => block.split(/(?<=[.!?])\s+/))
+      .filter((sentence) => SECOND_PERSON.test(sentence));
+    expect(offenders).toEqual([]);
+  });
+
+  it('the regex is live — it catches the exact sentences codex flagged', () => {
+    // The shipped copy, verbatim. A rule that matched nothing would pass every
+    // assertion above while the defect walked straight back in.
+    for (const was of [
+      'Nothing here works out who won it: you decide, and you pay them the same way you pay every other prize.',
+      'Add as many rows as you want, and remove one with the cross beside it.',
+      'The pot is the entry fees you collect.',
+    ]) {
+      expect(SECOND_PERSON.test(was), was).toBe(true);
+    }
+    // And it does not fire on an innocent word that merely contains "you".
+    expect(SECOND_PERSON.test('The youngest entry still counts.')).toBe(false);
+  });
+
+  it('the HOST_ONLY topic is deliberately exempt, and still says "your"', () => {
+    // Not an oversight worth silencing later: `branding.backgroundColor` has
+    // exactly one reader, and second person is right for it.
+    const background = helpRegistry.getTopic('branding.backgroundColor')!;
+    expect(background.audience).toEqual(['commissioner']);
+    expect(SECOND_PERSON.test(staticCopy(background.long))).toBe(true);
+  });
+});
+
 describe('T5 + T6 — the copy obeys the mechanical voice rules', () => {
   // The registry invariants already sweep every topic. These repeat the sweep
   // over just this file's topics so a failure names the ticket that owns it,

@@ -5,9 +5,22 @@
 // That is why their rows sat in `SCHEMA_PATH_ALLOWLIST` after T1: the wizard
 // tickets could not write copy for a control the wizard does not have.
 //
-// 🛑 THIS FILE IS A SLICE OF T5/T6, NOT THE WHOLE OF EITHER (codex r5). The
-// plan's rows (PLAN-HELP-SYSTEM.md:872-873) are much wider than the three
-// schema paths below, and everything in this list is STILL OUTSTANDING:
+// WHAT IS IN HERE:
+//
+//   T5  `branding.backgroundColor` — the colour picker on the legacy branding
+//       step (`WizardStepBranding.tsx:93` and its admin twin
+//       `admin/WizardStepBrandingAdmin.tsx:144`), reached from the squares
+//       manager's Setup Wizard tab (`AdminPanel.tsx:675`, step 6) and from the
+//       props edit wizard embedded in the props Manage tab
+//       (`PropsPoolDashboard.tsx:352` → `PropsWizard.tsx:227`, step 1).
+//
+//   T6  `settings.payouts.bonuses.*.name` and `.percentage` — the bonus-row
+//       editor in `BracketPoolDashboard.tsx:1638-1667`. `StepPayouts` edits
+//       places only, so no wizard has ever offered a bonus.
+//
+// 🛑 AND THAT IS A SLICE OF T5/T6, NOT THE WHOLE OF EITHER (codex r5). The
+// plan's rows (PLAN-HELP-SYSTEM.md:872-873) are much wider than those three
+// schema paths, and everything in this list is STILL OUTSTANDING:
 //
 //   T5  `AdminPanel.tsx` and the rest of `admin/WizardStep*.tsx` converted to
 //       `FieldLabel` (K12); `WizardStepReminders.tsx`; DELETE the two dead
@@ -22,19 +35,8 @@
 //
 // Neither ticket's "coverage green" bar is met by this file, and the T4 label
 // guard's `MANAGER_FILES` list — which its own comment says "T5–T7 add theirs
-// to as they land" — is still `NFLManagerView.tsx` alone. Anything here that
-// says "CLOSED BY T5/T6" is about an ALLOWLIST ROW, never about the ticket.
-//
-//   T5  `branding.backgroundColor` — the colour picker on the legacy branding
-//       step (`WizardStepBranding.tsx:93` and its admin twin
-//       `admin/WizardStepBrandingAdmin.tsx:144`), reached from the squares
-//       manager's Setup Wizard tab (`AdminPanel.tsx:675`, step 6) and from the
-//       props edit wizard embedded in the props Manage tab
-//       (`PropsPoolDashboard.tsx:352` → `PropsWizard.tsx:227`, step 1).
-//
-//   T6  `settings.payouts.bonuses.*.name` and `.percentage` — the bonus-row
-//       editor in `BracketPoolDashboard.tsx:1638-1667`. `StepPayouts` edits
-//       places only, so no wizard has ever offered a bonus.
+// to this list as they land" — is still `NFLManagerView.tsx` alone. Anything
+// here reading "CLOSED BY T5/T6" is about an ALLOWLIST ROW, never the ticket.
 //
 // Written against `docs/help-voice.md` (K8). Every claim below was read out of
 // the source it describes:
@@ -70,6 +72,21 @@
 //   it is listed BESIDE always share a pot, because both live on
 //   `settings.payouts` — and then names the separate-weekly case outright.
 //   "One pot" and "95% for the finishing places" were false there.
+//
+//   ⚠️ THE BONUS TOPICS ARE WRITTEN IN THE THIRD PERSON, ON PURPOSE (codex r6).
+//   They are commissioner CONTROLS, but their audience is `EVERYONE` because
+//   the value is on a member-facing rules page — so every "you" in them was
+//   addressed to the commissioner and read as a lie to the member who met them
+//   there ("you decide, and you pay them", "add as many rows as you want",
+//   "remove one with the cross beside it"). The registry has no audience-keyed
+//   copy — a variant may key on POOL TYPE only, and `buildRegistry` refuses a
+//   variant whose audience differs from its base — so one wording has to serve
+//   both readers, and the only wording that can is one that names the actor
+//   instead of assuming it. The guard is mechanical: a topic here that members
+//   can see may not use the second person at all.
+//
+//   The same is NOT true of `branding.backgroundColor`, which is `HOST_ONLY`.
+//   Its "your pool page" is addressed to the only reader it has.
 //
 //   WHERE MEMBERS READ A BONUS. `PayoutsPanel.tsx:471` renders the bonus list
 //   behind `!compact`, so the bracket rules panel and the NFL rules page show
@@ -175,11 +192,11 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     id: 'settings.payouts.bonuses.*.name',
     title: 'Bonus prize name',
     short:
-      'Names a prize you award for something the standings do not rank. Members read this label beside its share.',
+      'The label on a prize awarded for something the standings do not rank. It is what appears in the prize list beside the bonus’s share.',
     long: [
-      'A bonus is a prize for something other than a finishing position — the biggest upset, the best opening round, last place. Nothing here works out who won it: you decide, and you pay them the same way you pay every other prize.',
-      'The box starts empty, and an empty name reaches members as the bare word "Bonus", which tells them nothing. Name it for the thing you are rewarding, so a player reading the prize list knows what to aim at.',
-      'Add as many rows as you want, and remove one with the cross beside it. Removing a row leaves its share unassigned until you hand it to a place or to another bonus.',
+      'A bonus is a prize for something other than a finishing position — the biggest upset, the best opening round, last place. Nothing in the pool works out who won it: the commissioner decides, and pays the winner directly, the same way every other prize is paid.',
+      'The name is the whole of what a player sees. A bonus left unnamed reaches the prize list as the bare word "Bonus", which says nothing about what to aim at, so it is worth naming for the thing being rewarded.',
+      'A pool can carry any number of bonuses. When one is taken away its share is unassigned, and the prize list stops adding up to the whole pot until that share is given to a finishing place or to another bonus.',
     ].join('\n\n'),
     poolTypes: BONUS_TYPES,
     audience: EVERYONE,
@@ -189,11 +206,11 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     id: 'settings.payouts.bonuses.*.percentage',
     title: 'Bonus prize share',
     short:
-      'What share of the pot this bonus takes. It draws on the same pot as the finishing places beside it — the money you collect from players.',
+      'What share of the pot a bonus takes. It draws on the same pot as the finishing places beside it — the money collected from players.',
     long: [
-      'The pot is the entry fees you collect. Nothing is held here, so this share is a record of what you owe whoever wins the bonus rather than a transfer — the money goes from you to them directly.',
-      'A bonus and the places listed beside it are added together against one 100% ceiling, so a 5% bonus leaves 95% for those places. The editor keeps a running total and marks it until the list comes to 100%. If your pool pays separate weekly prizes off their own list, a bonus comes out of the season pot only and leaves the weekly prizes alone.',
-      'Members read every bonus and its share on the pool’s Rules tab, listed under the finishing places. The join screen leaves them out, so somebody deciding whether to join sees the places and not this — a bonus is worth announcing yourself as well.',
+      'The pot is the entry fees collected from players. Nothing is held here, so this share is a record of what the commissioner owes whoever wins the bonus rather than a transfer — the money goes from them to the winner directly.',
+      'A bonus and the places listed beside it are added together against one 100% ceiling, so a 5% bonus leaves 95% for those places. If the pool pays separate weekly prizes off their own list, a bonus comes out of the season pot only and leaves the weekly prizes alone.',
+      'Every bonus and its share is listed on the pool’s Rules tab, under the finishing places. The join screen leaves them out, so somebody deciding whether to join sees the finishing places and not this.',
     ].join('\n\n'),
     poolTypes: BONUS_TYPES,
     audience: EVERYONE,
