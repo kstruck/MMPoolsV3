@@ -855,7 +855,7 @@ describe('coManagers — a departed member is dropped from the array (PLAN-CO-CO
  * that writes the summary and not the map is un-paid by the next writer.
  */
 /** The shape `reconcilePaymentTruth` returns — named so these tests need no `any`. */
-type ReconcileResult = { ok: boolean; membersPromoted: number; staleSummariesRepaired: number; ambiguousSkipped: number; alreadyConsistent: number; entriesPaidNotLiable: number };
+type ReconcileResult = { ok: boolean; membersPromoted: number; staleSummariesRepaired: number; countsStamped: number; ambiguousSkipped: number; alreadyConsistent: number; entriesPaidNotLiable: number };
 
 describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
   const poolId = 'p2-dues-pool';
@@ -1103,6 +1103,83 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
     // was recorded when a flag was flipped.
     expect(r.staleSummariesRepaired).toBe(1);
     expect(r.membersPromoted).toBe(0);
+  });
+
+  it('🛑 D2 BACKFILL — a CONSISTENT member with a dues map still gets paidEntryCount stamped', async () => {
+    // The migration only ever touched members with a DIVERGENCE, so a member
+    // who is already consistent would never gain the mirrored count and the
+    // under-count would persist on every quiet pool forever. D2 = A (Kevin,
+    // 2026-08-27): this job stamps it, because it already carries the
+    // kill-switch, the dryRun default and the per-run cap Rule 1 demands.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 } },        // ONE of two liable entries paid
+    });
+    // Consistent already: one of two paid derives UNPAID, and the record says UNPAID.
+    const mRef = db.collection('pools').doc(poolId).collection('members').doc('dm1');
+    await mRef.set({ paidStatus: 'UNPAID' }, { merge: true });
+    expect((await mRef.get()).data()!.paidEntryCount).toBeUndefined();
+
+    const dry = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    expect(dry.countsStamped).toBe(1);
+    // A dry run writes NOTHING — the field is still absent.
+    expect((await mRef.get()).data()!.paidEntryCount).toBeUndefined();
+
+    const live = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(live.countsStamped).toBe(1);
+    const m = (await mRef.get()).data()!;
+    expect(m.paidEntryCount).toBe(1);
+    // Stamping is NOT a payment repair: no money moved and paidStatus is untouched.
+    expect(m.paidStatus).toBe('UNPAID');
+    expect(live.membersPromoted).toBe(0);
+
+    // IDEMPOTENT — a second live run finds nothing left to stamp.
+    const again = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(again.countsStamped).toBe(0);
+  });
+
+  it('🛑 a count stamp does NOT consume the capped plannedFixes list', async () => {
+    // `plannedFixes` is capped at 50 and is what an operator eyeballs to see WHO
+    // before going live. The stamping pass runs FIRST, so if its rows joined
+    // that list they would TRUNCATE the PROMOTE_MEMBER lines — the money
+    // repairs, the only ones a human needs to look at. Found by self-review
+    // after the codex round could not run (OpenAI at capacity).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 } },
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('dm1')
+      .set({ paidStatus: 'UNPAID' }, { merge: true });
+    const r = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as
+      ReconcileResult & { plannedFixes: Array<{ uid: string; fix: string }> };
+    expect(r.countsStamped).toBe(1);
+    // NO row of ANY kind for this member — asserting the absence of one literal
+    // would pass against a stamp pushed under a different label, which is how a
+    // guard like this goes inert. This member has no money divergence, so the
+    // list must be empty of them entirely.
+    expect(r.plannedFixes.filter(f => f.uid === 'dm1')).toHaveLength(0);
+  });
+
+  it('🛑 D2 BACKFILL — a member with NO dues document is NOT stamped', async () => {
+    // A member without a dues document cannot be partially paid:
+    // `collectedBaseDues` gives a PAID one the whole fee and an UNPAID one zero,
+    // with or without the field. Stamping them would write `paidEntryCount: 0`
+    // onto every legacy record on the platform to change nothing.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      // no `dues`
+    });
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.countsStamped).toBe(0);
   });
 
   it('🛑 the stale-summary repair reports IDENTICALLY in dry-run and live', async () => {

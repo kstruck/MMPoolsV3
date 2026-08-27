@@ -204,6 +204,85 @@ describe('PLAN-MULTI-ENTRY T2 — submit + dues paths', () => {
     expect((await ledger(ALICE)).filter(l => l.type === 'MARKED_PAID')).toHaveLength(2);
   }, 60000);
 
+  it('D1 — setPaidStatus mirrors paidEntryCount beside the map, in the SAME transaction (PLAN-PARTIAL-DUES-AGGREGATES writer #1)', async () => {
+    // The count is what makes partial payment visible to the CLIENT-SIDE money
+    // surfaces: `memberDues` and `computeRosterSummary` live in `shared/` and
+    // can never read the sealed dues map. Without it, a member who paid for one
+    // of two entries reports as having paid NOTHING — an under-count that
+    // reaches the world-readable pot.
+    await seedPool({ max: 3, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+
+    // Pay ONE of the two liable entries.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: ALICE }, auth: auth(HOST) } as never);
+    let m = await member(ALICE);
+    expect(m.paidStatus).toBe('UNPAID');          // correctly not paid in full…
+    expect(m.paidEntryCount).toBe(1);             // …but ONE entry is settled.
+    expect(Object.keys(await dues(ALICE) ?? {})).toHaveLength(1);
+
+    // Pay the second: the count and the summary agree.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    m = await member(ALICE);
+    expect(m.paidStatus).toBe('PAID');
+    expect(m.paidEntryCount).toBe(2);
+
+    // 🛑 AND THE UN-MARK BRANCH, which is where a stale count would strand.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    m = await member(ALICE);
+    expect(m.paidStatus).toBe('UNPAID');
+    expect(m.paidEntryCount).toBe(1);
+    // The count never disagrees with the map it was written beside.
+    expect(m.paidEntryCount).toBe(Object.keys(await dues(ALICE) ?? {}).length);
+  }, 60000);
+
+  it('D1 — deleting an entry moves the count with the map, even when there is NO dues document (writer #2)', async () => {
+    // `nflEntryDelete` writes the dues store only `if (storedDues)`, so a member
+    // who never had one keeps not having one. The COUNT is not gated that way:
+    // deleting an entry shrinks the LIABLE set either way, and a stale count
+    // above a shrunken liability OVER-reports money.
+    await seedPool({ max: 3, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+
+    // No payment at all — so no dues document exists.
+    expect(await dues(ALICE)).toBeUndefined();
+    await deleteNFLEntryInternal(db, { actorUid: HOST }, { poolId: POOL, targetUid: ALICE, entryIndex: 2 });
+    const m = await member(ALICE);
+    expect(await dues(ALICE)).toBeUndefined();    // still none invented (R3)
+    expect(m.paidEntryCount).toBe(0);             // …and the count is stamped anyway
+    expect(m.playableEntryCount).toBe(1);
+  }, 60000);
+
+  it('D1 — a PAID entry must be UN-MARKED before deletion, and the count follows BOTH writes (writer #2, the paid path)', async () => {
+    // D2 refuses to delete an entry that is marked paid (`ENTRY_IS_PAID`), so
+    // the money always comes off the books through `setPaidStatus` FIRST. That
+    // makes this the two-writer sequence, and the count has to be right after
+    // each of them — a stale count between the two would publish money against
+    // an entry that no longer exists.
+    await seedPool({ max: 3, entryCount: 2 });
+    await submit(ALICE, { picks: { [G1]: 'KC' } });
+    await submit(ALICE, { picks: { [G1]: 'BUF' }, entryIndex: 2 });
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: true, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidEntryCount).toBe(1);
+
+    // Deleting it while paid is REFUSED, which is the guard, not a bug.
+    await expect(deleteNFLEntryInternal(db, { actorUid: HOST }, { poolId: POOL, targetUid: ALICE, entryIndex: 2 }))
+      .rejects.toThrow(/ENTRY_IS_PAID/);
+    expect((await member(ALICE)).paidEntryCount).toBe(1);   // refusal changed nothing
+
+    // Writer #1 takes the money off: count falls with the map.
+    await wPaid({ data: { poolId: POOL, memberUid: ALICE, isPaid: false, entryId: `e2:${ALICE}` }, auth: auth(HOST) } as never);
+    expect((await member(ALICE)).paidEntryCount).toBe(0);
+
+    // Writer #2 removes the entry: count stays honest against the smaller
+    // liable set.
+    await deleteNFLEntryInternal(db, { actorUid: HOST }, { poolId: POOL, targetUid: ALICE, entryIndex: 2 });
+    const m = await member(ALICE);
+    expect(m.paidEntryCount).toBe(0);
+    expect(m.playableEntryCount).toBe(1);
+  }, 60000);
+
   it('4. a legacy pool with no entryCount derives it from the Member Records on the first write', async () => {
     await seedPool({ max: 2, entryCount: null });
     expect((await pool()).entryCount).toBeUndefined();

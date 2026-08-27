@@ -54,7 +54,7 @@ import { assertNotBannedLive } from './lib/systemGuards';
 import { membersCol } from './lib/memberRecord';
 import { entryCountAfterDelete, entryHasPick, ownerStateWithout, resolveOwnedEntry } from './lib/multiEntry';
 import { readPoolDues, writePoolDues } from './lib/poolDues';
-import { derivePaidStatus, liableEntryIds, memberLiableEntries, memberPlayedEntries, type MemberRecord } from './shared/memberRecord';
+import { derivePaidStatus, liableEntryIds, memberLiableEntries, memberPlayedEntries, paidEntryCountOf, type MemberRecord } from './shared/memberRecord';
 import { validated } from './lib/validated';
 import { deleteNFLEntrySchema } from './schemas/poolCore';
 import { isPoolCommissioner } from './poolOps';
@@ -304,10 +304,26 @@ export async function deleteNFLEntryInternal(
     // test fails and this line stops being decorative.
     const duesAfter = { ...(storedDues ?? {}) };
     delete duesAfter[entryId];
+    const liableIdsAfter = liableEntryIds(memberAfter, targetUid, after.pickedEntryIds);
     memberPatch.paidStatus = derivePaidStatus(
       { ...memberAfter, paidEntries: duesAfter },
-      liableEntryIds(memberAfter, targetUid, after.pickedEntryIds),
+      liableIdsAfter,
     );
+    // 🛑 THE MIRRORED COUNT MOVES WITH THE MAP, UNCONDITIONALLY — and NOT under
+    // the `if (storedDues)` that guards the dues write below (D1 writer #2,
+    // PLAN-PARTIAL-DUES-AGGREGATES C1).
+    //
+    // That write is conditional for a good reason (R3: do not invent a dues
+    // document for a member who never had one). The COUNT is a different animal:
+    // it lives on the Member Record, which always exists here, and deleting an
+    // entry SHRINKS the liable set whether or not a dues document exists. Gating
+    // it the same way would leave a stale count above a member whose liability
+    // just fell — the count over-reporting money is precisely the direction C2
+    // is written to prevent.
+    //
+    // Computed from `duesAfter` and `liableIdsAfter`, the same two values the
+    // summary above was derived from, so the pair cannot disagree.
+    memberPatch.paidEntryCount = paidEntryCountOf(duesAfter, liableIdsAfter);
     // A member who is no longer paid in full must not keep payment DETAIL — the
     // same clear `setPaidStatus` and `planMembershipWrite` apply.
     if (memberPatch.paidStatus === 'UNPAID' && member.paidStatus === 'PAID') {

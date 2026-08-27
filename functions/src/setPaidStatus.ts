@@ -8,7 +8,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
 import { isProvableMember, membersCol } from "./lib/memberRecord";
-import { isCanonicalMemberRecord, derivePaidStatus, liableEntryIds, type MemberRecord, type PaidEntryMap } from "./shared/memberRecord";
+import { isCanonicalMemberRecord, derivePaidStatus, liableEntryIds, paidEntryCountOf, type MemberRecord, type PaidEntryMap } from "./shared/memberRecord";
 import { readPoolDues, writePoolDues } from "./lib/poolDues";
 import { entryHasPick } from "./lib/multiEntry";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
@@ -330,6 +330,12 @@ export const setPaidStatus = validated(
     // The SUMMARY, recomputed from the map that is being written in this same
     // transaction — never from the caller's intent.
     const nextPaidStatus = derivePaidStatus({ ...member, paidEntries: nextPaidEntries }, liable);
+    // THE MIRRORED COUNT, from the SAME map and the SAME liable set the summary
+    // above was derived from, written in the SAME transaction (D1 writer #1,
+    // PLAN-PARTIAL-DUES-AGGREGATES C1). A count that can drift from the map is
+    // worse than no count, and the only way it cannot drift is to compute it
+    // here, from these two values, and write it beside `paidStatus`.
+    const nextPaidEntryCount = paidEntryCountOf(nextPaidEntries, liable);
     // WHICH rows this call actually moved. Everything the ledger says is
     // computed from this, never from the verb or the member-level flag — see
     // the ledger block below for the two ways that goes wrong.
@@ -338,6 +344,7 @@ export const setPaidStatus = validated(
     if (isPaid) {
       tx.set(mRef, {
         paidStatus: nextPaidStatus,
+        paidEntryCount: nextPaidEntryCount,
         paidAt: stampedPaidAt ?? FieldValue.delete(),
         paidBy: uid,
         ...(paymentMethod !== undefined ? { paymentMethod } : {}),
@@ -357,6 +364,11 @@ export const setPaidStatus = validated(
       // other direction.
       tx.set(mRef, {
         paidStatus: nextPaidStatus,
+        // Written on the UNPAID branch too, and that is the branch that matters
+        // most: an un-mark that leaves OTHER liable entries paid is exactly the
+        // partial state this field exists to publish. Omitting it here would
+        // strand a stale count above a shrinking map.
+        paidEntryCount: nextPaidEntryCount,
         paidBy: uid,
         ...(nextPaidStatus === 'UNPAID' ? {
           paidAt: FieldValue.delete(),

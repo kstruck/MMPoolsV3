@@ -26,7 +26,7 @@
 // `shared/memberRecord.ts` `memberDues`, and no caller of this file is a
 // SQUARES surface. Keep it that way rather than growing a second unit model.
 
-import { isProvableMember } from '@shared/memberRecord';
+import { collectedBaseDues, isProvableMember } from '@shared/memberRecord';
 
 export interface RosterInputs {
   /** The pool doc. Only `participantIds`, `ownerId` and `settings` are read. */
@@ -74,6 +74,15 @@ export interface RosterRow {
    * to key on when one exists.
    */
   hasPlayableEntry?: boolean;
+  /**
+   * Carried from the Member Record so `memberOutstanding` can price partial
+   * payment. Both are REQUIRED for that: the count says how many entries were
+   * paid for, and `playableEntryCount` is the denominator — without it
+   * `memberLiableEntries` falls back to 1 and a two-entry member's single
+   * payment would settle their whole fee.
+   */
+  playableEntryCount?: number;
+  paidEntryCount?: number;
   isOwner: boolean;
 }
 
@@ -196,6 +205,17 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
       memberPaidAt: m.paidAt,
       memberPaymentNote: m.paymentNote,
       hasPlayableEntry: m.hasPlayableEntry,
+      // 🛑 THE TWO FIELDS `memberOutstanding` NEEDS TO PRICE PARTIAL PAYMENT
+      // (codex r1 P1 on PLAN-PARTIAL-DUES-AGGREGATES). Without them the row
+      // reaching that helper has neither, so `memberLiableEntries` falls back to
+      // `hasPlayableEntry ? 1 : 0` and `collectedBaseDues` sees no count — and a
+      // member with two liable entries and one paid shows the WHOLE fee
+      // outstanding on the Buy-In Ledger while `rosterPotStats`, which reads the
+      // raw Member Records, reports the partial payment. Two surfaces
+      // contradicting each other about one member is precisely what D5 exists
+      // to prevent, so the carry-through is part of the fix, not a detail.
+      playableEntryCount: m.playableEntryCount,
+      paidEntryCount: m.paidEntryCount,
     });
   }
   for (const e of entries || []) {
@@ -384,7 +404,12 @@ export function duesRates(pool: any): DuesRates {
  */
 export function memberOutstanding(row: RosterRow, rates: DuesRates): number {
   const fee = row.feeOwed ?? rates.entryFee;
-  const base = row.paidStatus === 'PAID' ? 0 : fee;
+  // D5: what is still OWED is the fee minus what was collected, and partial
+  // payment is collectable since Phase 2. Read through the SAME helper the pot
+  // uses — otherwise the Buy-In Ledger says a member owes $50 while the pot says
+  // $25 of it is collected, two surfaces contradicting each other about one
+  // member (PLAN-PARTIAL-DUES-AGGREGATES D5).
+  const base = fee - collectedBaseDues(row, fee);
   // Un-stamped legacy rebuys fall back to entry evidence, same rule as the pot.
   const rebuyOwed =
     typeof row.rebuyOwed === 'number'
@@ -429,10 +454,12 @@ export function rosterPotStats({ pool, members, entries }: RosterInputs): PotSta
           ? m.rebuyOwed
           : ((entryByUid.get(m.uid) as any)?.rebuysUsed ?? 0) * rebuyCost;
       expected += fee + rebuyOwed;
-      if (m.paidStatus === 'PAID') {
-        collected += fee;
-        paid++;
-      }
+      // The MONEY reads through the shared helper so partial payment counts.
+      collected += collectedBaseDues(m, fee);
+      // ⚠️ THE HEAD COUNT DOES NOT MOVE (D4, Kevin 2026-08-27). `paid` counts
+      // fully-paid MEMBERS, which is what the "N of M paid" chip says — a
+      // partially paid member is not a paid member. Only the money was wrong.
+      if (m.paidStatus === 'PAID') paid++;
       collected += m.rebuyPaid ?? 0;
     }
     // Anyone on the roster with no Member Record yet still owes the fee — and
