@@ -709,10 +709,14 @@ describe('T10 — a strikes revival is a real path, and the copy names it', () =
     const long = longFor('settings.maxStrikes');
     expect(long).toContain('Buy-backs are how that player gets themselves back in');
     expect(long).toContain('Raising this limit is the other way back');
+    // Addressed to the commissioner in the third person, because this topic is
+    // on the member-facing rules page too — a member must not read the second
+    // path as something they can do.
+    expect(long).toContain('that one is the commissioner’s');
     expect(long).not.toContain('only comes back');
     // The same claim in the template's fallback branch, not only the rendered one.
     expect(staticCopy(helpRegistry.getTopic('settings.maxStrikes')!.long))
-      .toContain('Raising this limit is the other way back');
+      .toContain('that one is the commissioner’s');
     // The buy-back topic must not re-assert the absolute from the other side.
     expect(longFor('settings.maxRebuys')).not.toContain('the end of a player');
     expect(longFor('settings.maxRebuys')).toContain('no player can buy their way back in');

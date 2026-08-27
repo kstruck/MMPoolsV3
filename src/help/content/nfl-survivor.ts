@@ -124,7 +124,12 @@ export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
       // dashboard's `selectedWeek`, which is a URL parameter free to name any
       // week 1–18 (NFLPoolDashboard.tsx:190).
       'A player who runs out of strikes is marked out. Buy-backs are how that player gets themselves back in.',
-      'Raising this limit is the other way back, and it is yours. A week is graded against the limit the pool has at the time it is scored, so raising it and scoring that player’s elimination week again returns them to the pool with their strikes still on the record.',
+      // "the commissioner's" rather than "yours": this topic is placed on
+      // `pool.nfl.rules` as well as the manager tab, and a member reading "it is
+      // yours" would take it for something they can do. The neighbouring
+      // sentences are imperative configuration advice a member reads as
+      // addressed past them; a possessive is not.
+      'Raising this limit is the other way back, and that one is the commissioner’s. A week is graded against the limit the pool has at the time it is scored, so raising it and scoring that player’s elimination week again returns them to the pool with their strikes still on the record.',
     ),
     poolTypes: SURVIVOR,
     audience: EVERYONE,
