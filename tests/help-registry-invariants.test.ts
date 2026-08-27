@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { POOL_TYPES } from '../shared/poolTypes';
 import { baseTopicId, buildRegistry, helpRegistry, normalizePath, resolveCopy, SEARCH_RESULT_LIMIT, staticCopy } from '../src/help/registry';
 import { PAGES } from '../src/help/pages';
+import { ADMIN_PAGES } from '../src/help/content/super-admin';
 import { ROUTE_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { WIZARDS } from '../src/help/content/wizard-pages';
 import { BANNED_IMPLEMENTATION_WORDS, BANNED_SELLING_WORDS, COPY_LIMITS, findBannedWords } from '../src/help/voice';
@@ -28,6 +29,17 @@ import type { HelpPage, HelpTopic } from '../src/help/types';
  */
 
 const root = resolve(__dirname, '..');
+
+/**
+ * Every page the app can SHIP, base plus the lazily loaded admin chunk (T14).
+ *
+ * `src/help/admin.ts` builds a registry from `[...PAGES, ...ADMIN_PAGES]` for a
+ * super admin, so a route covered only by the admin chunk is covered. The
+ * route-coverage and page-copy guards below measure this list; the "T2 state"
+ * assertion further down deliberately still measures `PAGES`, because it is
+ * about what the BASE registry contains.
+ */
+const ALL_PAGES = [...PAGES, ...ADMIN_PAGES];
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
 const APP = read('src/App.tsx');
@@ -802,6 +814,12 @@ describe('parseRoutes — the scanner itself', () => {
 
 describe('the real registry — route coverage against src/App.tsx', () => {
   const routes = appRoutes();
+  // EVERY assertion in this block measures `ALL_PAGES` — base plus the admin
+  // chunk (T14) — because the question is whether the SHIPPED content covers a
+  // route, and `src/help/admin.ts` ships `ADMIN_PAGES` to a super admin. They
+  // are code-split, not absent, so `/super-admin` really is covered and its
+  // allowlist rows really are gone. Measuring `PAGES` alone would have forced
+  // the admin summaries into every reader's bundle purely to satisfy a test.
 
   it('reads a plausible route list out of App.tsx', () => {
     // Guards the regex itself: if App.tsx's route syntax changes, every
@@ -821,7 +839,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   });
 
   it('every HelpPage route exists in App.tsx', () => {
-    const unknown = PAGES.filter((p) => !routes.includes(p.route)).map((p) => `${p.id} → ${p.route}`);
+    const unknown = ALL_PAGES.filter((p) => !routes.includes(p.route)).map((p) => `${p.id} → ${p.route}`);
     expect(unknown).toEqual([]);
   });
 
@@ -833,7 +851,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
    * guard-that-does-not-guard shape this repo keeps producing.
    */
   it('every HelpPage altRoute exists in App.tsx', () => {
-    const unknown = PAGES.flatMap((p) =>
+    const unknown = ALL_PAGES.flatMap((p) =>
       (p.altRoutes ?? []).filter((r) => !routes.includes(r)).map((r) => `${p.id} → ${r}`),
     );
     expect(unknown).toEqual([]);
@@ -848,7 +866,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   it('every App.tsx route has a HelpPage or an allowlist row', () => {
     // An altRoute counts: `/admin/:id` is covered for a bracket commissioner by
     // the bracket dashboard's pages, which is the screen it renders.
-    const covered = new Set(PAGES.flatMap((p) => [p.route, ...(p.altRoutes ?? [])]));
+    const covered = new Set(ALL_PAGES.flatMap((p) => [p.route, ...(p.altRoutes ?? [])]));
     const uncovered = routes.filter((r) => !covered.has(r) && !(r in ROUTE_ALLOWLIST));
     expect(uncovered).toEqual([]);
   });
@@ -859,7 +877,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   });
 
   it('no route is both given a page and allowlisted', () => {
-    const both = PAGES.flatMap((p) =>
+    const both = ALL_PAGES.flatMap((p) =>
       [p.route, ...(p.altRoutes ?? [])].filter((r) => r in ROUTE_ALLOWLIST),
     );
     expect(both).toEqual([]);
@@ -1059,7 +1077,7 @@ describe('the real registry — content rules', () => {
   });
 
   it('every page obeys the length budget and the voice rules', () => {
-    const violations = PAGES.flatMap((p) => {
+    const violations = ALL_PAGES.flatMap((p) => {
       const problems: string[] = [];
       if (p.summary.length > COPY_LIMITS.pageSummary) problems.push(`summary ${p.summary.length} chars`);
       const copy = `${p.title}\n${p.summary}`;

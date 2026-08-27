@@ -175,7 +175,7 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   '/dev/dashboards': 'PERMANENT: developer preview, not reachable by a reader.',
   '/dev/profile-demo': 'PERMANENT: developer preview, not reachable by a reader.',
 
-  // PENDING — T14 (the two admin surfaces). T3 CLOSED the twenty-one site and
+  // CLOSED — T3 and T14. T3 CLOSED the twenty-one site and
   // account rows: every one of them now has a page in
   // `content/site-pages.ts`, and two of the reasons written here were wrong
   // about the code, which is why they are gone rather than edited:
@@ -190,8 +190,13 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   //   - `/join/:poolId` is not a "join and pay" screen. It takes no payment at
   //     all — it shows the fee, the format and the prize split, and joining is
   //     a single button. The fee is settled between the player and the host.
-  '/super-admin': 'T14: seventeen admin tabs get page-level summaries only (K4 scope ii).',
-  '/tournament-sim': 'T14: admin simulation surface.',
+  //
+  // PENDING — T2 (pool surfaces + wizards) and T3 (site + account).
+  // T14 CLOSED BOTH ADMIN ROWS. `/super-admin` and `/tournament-sim` are
+  // covered by `src/help/content/super-admin.ts` — page-level summaries only
+  // (K4 scope ii), in the lazily loaded admin chunk rather than in `PAGES`.
+  // The row said "seventeen admin tabs"; `SuperAdmin.tsx` `navStructure` has
+  // SIXTEEN, across eight groups.
 });
 
 /**
