@@ -8,7 +8,7 @@
 // box, the accordions and the scroll position do not survive a page change —
 // leftover state from the previous screen is worse than none.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { HelpSearchResult } from '../../help/types';
 import { SEARCH_RESULT_LIMIT } from '../../help/registry';
@@ -53,28 +53,39 @@ export function HelpPanelBody({ state, searchInputRef }: {
    * cannot open. `registry.search` cannot do this filtering itself — it knows
    * the reader's audience and pool type, not which tabs the surface rendered.
    *
-   * `canOpenPage`, NOT `isPageOffered` — the SAME predicate "All pages" and
-   * `goToPage` use, so a result cannot be offered and then refused. The tighter
-   * one matters for the pages no URL can reach (K13: the super-admin tabs, the
+   * A PAGE hit is held to the stricter `canOpenPage` — the same predicate "All
+   * pages" and `goToPage` use, so a result cannot be offered and then refused.
+   * It matters for the pages no URL can reach (K13: the super-admin tabs, the
    * wizard steps): an admin on Overview searching "operations" used to be handed
    * a row whose click forced the Operations summary over the Overview screen,
-   * and — once `canOpenPage` refused that — a row whose click cleared the search
-   * and did nothing. A clickable result that does nothing is the exact defect
-   * codex R9 fixed for glossary hits below; this keeps the search list from
-   * growing a second one.
+   * and — once `canOpenPage` refused that — a row whose click did nothing. A
+   * clickable result that does nothing is the exact defect codex R9 fixed for
+   * glossary hits below.
    *
-   * Nothing LINKABLE is lost: a page that builds an href stays reachable from
-   * any tab, so the other tabs of a pool dashboard still appear.
+   * A TOPIC hit keeps `isPageOffered`, and the difference is deliberate. A topic
+   * is copy about one setting, not a screen: a commissioner on the wizard's
+   * Basics step searching "logo" must still be shown the branding topic, even
+   * though the step page that holds it is not the step they are on. Holding
+   * topic hits to `canOpenPage` emptied that search completely — measured on
+   * this branch before it shipped, and the reason this filter is per-kind.
+   *
+   * PASSED INTO `search`, not applied to its result, so the cap is spent on hits
+   * that survive (codex R3 on T14).
    */
+  const acceptHit = useCallback(
+    (hit: HelpSearchResult) => {
+      const hitPage = hit.pageId ? registry.getPage(hit.pageId) : undefined;
+      if (!hitPage) return true;
+      return hit.kind === 'page'
+        ? canOpenPage(hitPage, routeContext, scope.audience)
+        : isPageOffered(hitPage, routeContext);
+    },
+    [registry, routeContext, scope.audience],
+  );
+
   const results = useMemo<HelpSearchResult[]>(
-    () =>
-      query.trim()
-        ? registry.search(query, scope).filter((hit) => {
-            const hitPage = hit.pageId ? registry.getPage(hit.pageId) : undefined;
-            return !hitPage || canOpenPage(hitPage, routeContext, scope.audience);
-          })
-        : [],
-    [registry, query, scope, routeContext],
+    () => (query.trim() ? registry.search(query, scope, acceptHit) : []),
+    [registry, query, scope, acceptHit],
   );
 
   const sections = useMemo(

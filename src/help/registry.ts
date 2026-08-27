@@ -210,8 +210,19 @@ export interface Registry {
    */
   placementsForPage(pageId: string, scope: TopicScope): { section: string; topics: HelpTopic[] }[];
 
-  /** Case-insensitive substring search, capped at `SEARCH_RESULT_LIMIT`. */
-  search(query: string, scope: TopicScope): HelpSearchResult[];
+  /**
+   * Case-insensitive substring search, capped at `SEARCH_RESULT_LIMIT`.
+   *
+   * `accept` drops a hit BEFORE the cap is applied. The registry knows the
+   * reader's audience and pool type; it does not know which tabs the surface
+   * rendered or which pages it can navigate to, so the panel supplies that —
+   * but it cannot supply it afterwards, because by then the cap has already
+   * spent its slots on hits about to be thrown away. Same lesson as the
+   * interleave below, one layer out (codex R3 on T14): on `/super-admin`, a
+   * broad query filled five of the seven page slots with tab pages the reader
+   * could not open, and the linkable Tournament Simulator page fell off the end.
+   */
+  search(query: string, scope: TopicScope, accept?: (hit: HelpSearchResult) => boolean): HelpSearchResult[];
 }
 
 class RegistryImpl implements Registry {
@@ -422,7 +433,7 @@ class RegistryImpl implements Registry {
     return sections;
   }
 
-  search(query: string, scope: TopicScope): HelpSearchResult[] {
+  search(query: string, scope: TopicScope, accept?: (hit: HelpSearchResult) => boolean): HelpSearchResult[] {
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
     const results: HelpSearchResult[] = [];
@@ -505,7 +516,12 @@ class RegistryImpl implements Registry {
     // lands, a broad query like "pool" matches more than the limit in topics
     // alone, and the glossary and page results become unreachable — the
     // glossary search would look broken while working perfectly.
-    const queues = [topicHits, pageHits, glossaryHits];
+    //
+    // `accept` runs HERE, before the cap, for the same reason (codex R3 on
+    // T14): a hit filtered afterwards has already taken a slot from a hit that
+    // would have been shown.
+    const keep = accept ? (q: HelpSearchResult[]) => q.filter(accept) : (q: HelpSearchResult[]) => q;
+    const queues = [keep(topicHits), keep(pageHits), keep(glossaryHits)];
     for (let i = 0; results.length < SEARCH_RESULT_LIMIT; i++) {
       if (!queues.some((q) => q.length > i)) break;
       for (const queue of queues) {

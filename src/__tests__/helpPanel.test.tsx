@@ -754,3 +754,48 @@ describe('the admin help chunk on an admin route (codex round 2 on T14)', () => 
     expect(screen.queryByText('Tournament Simulator')).toBeNull();
   });
 });
+
+/**
+ * The search filter is per-kind, and it runs BEFORE the cap — codex R3 on T14.
+ *
+ * Two separate defects, both found on this branch and both about the same
+ * filter, so they are pinned together.
+ */
+describe('search filtering (codex R3 on T14)', () => {
+  it('still finds a TOPIC whose step is not the step the reader is on', async () => {
+    // The regression half. A topic is copy about one setting, not a screen —
+    // holding topic hits to `canOpenPage` (as page hits are held) emptied this
+    // search completely, because `branding.logoUrl` is placed on the branding
+    // step and the harness is on the rules step.
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'logo' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Logo URL/ })).toBeTruthy());
+  });
+
+  it('spends the result cap on hits that survive the filter', async () => {
+    // The cap half. `/super-admin` has sixteen tab pages and the reader can
+    // open only the one they are on, so a broad query used to fill five of the
+    // seven page slots with rows about to be thrown away — and the linkable
+    // Tournament Simulator page fell off the end of a 20-result list.
+    render(
+      <MemoryRouter initialEntries={['/super-admin']}>
+        <HelpProvider isAdmin={true}>
+          <HelpRoutePublisher tab="overview" audience="admin" />
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // Wait for the admin chunk, or the query runs against the base registry.
+    await waitFor(() => expect(screen.getAllByText(/Overview: Dashboard/).length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'the' } });
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Tournament Simulator/ }).length).toBeGreaterThan(0),
+    );
+  });
+});
