@@ -717,13 +717,17 @@ describe('T10 — a strikes revival is a real path, and the copy names it', () =
    * nobody can enter.
    */
   it('a cutoff of zero disables buy-backs, and the copy says so', () => {
-    // The create form accepts it...
-    expect(WIZARD_SRC).toContain("name=\"settings.rebuyDeadlineWeek\" label=\"Rebuy deadline week\" min={0}");
+    // The create form accepts it. Matched across the whole element rather than
+    // as one exact line, so reformatting the JSX cannot fail this spuriously —
+    // only the floor actually moving can.
+    const wizardField = /<NumberField\b[^>]*\bname="settings\.rebuyDeadlineWeek"[^>]*>/s.exec(WIZARD_SRC);
+    expect(wizardField).not.toBeNull();
+    expect(wizardField![0]).toContain('min={0}');
     // ...while the manager form does not, which is why it is a create-time value.
     expect(MANAGER_SRC).toMatch(/rebuyDeadlineWeek[\s\S]{0,400}?Math\.max\(1,/);
 
-    // The server's refusal, read off the source rather than restated: it is a
-    // bare `week > deadline`, with no special case that would rescue a 0.
+    // The server's refusal is a bare `week > deadline`, with no special case
+    // that would rescue a 0 — pinned against the source, then applied below.
     const rebuy = readFileSync(resolve(root, 'functions/src/nflPools.ts'), 'utf8');
     expect(rebuy).toContain('if (week > settings.rebuyDeadlineWeek) {');
     const refuses = (week: number, deadline: number) => week > deadline;
