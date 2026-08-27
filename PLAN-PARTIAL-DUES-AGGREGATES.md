@@ -1,8 +1,8 @@
 # PLAN — partial payment is invisible to every aggregate money surface
 
-**Status: 🟡 AWAITING KEVIN'S SIGN-OFF on D2–D5. D1 is already ruled — Kevin
-chose Option A (mirror a count) on 2026-08-27, having been offered a deferral
-and declined it. Nothing is implemented until this is signed (Rule 3 step 5).**
+**Status: ✅ SIGNED 2026-08-27. Kevin ruled Option A on D1, then answered
+D2–D5 with "go with recommendations for all". Every decision below is closed;
+implementation may proceed.**
 
 Classification: **money + a new field on a participant-readable document** →
 plan-gated (`mmp-change-control` §1, Rule 3).
@@ -151,9 +151,9 @@ was larger.
 
 ---
 
-## 4. 🛑 DECISIONS NEEDED — Kevin signs these before a line is written
+## 4. ✅ DECISIONS — ALL SIGNED (Kevin, 2026-08-27: "go with recommendations for all")
 
-### D2 — how does the count reach EXISTING records?
+### D2 ✅ SIGNED → A — how does the count reach EXISTING records?
 
 Every record written before this ticket lacks the field, so until something
 stamps them the under-count persists for every pool already running.
@@ -170,7 +170,7 @@ what an existing job writes, so its dryRun report must show count stamps
 distinctly from payment repairs, or an operator reading "0 divergences" would
 not learn that 40 records were about to gain a field.
 
-### D3 — `stats/global.prizePot` is world-readable and will VISIBLY change
+### D3 ✅ SIGNED → A — `stats/global.prizePot` is world-readable and will VISIBLY change
 
 Once the count lands, published pot figures go **up** for any pool with a
 partially paid member. Nothing is wrong with the new number — the old one was
@@ -185,7 +185,7 @@ the wrong one — but it is a public figure moving without a user action.
 **Recommendation: A**, with the direction stated in the PR body so nobody reads
 a rising pot as a scoring bug.
 
-### D4 — does `rosterPotStats`'s `paid` COUNTER move too?
+### D4 ✅ SIGNED → A — does `rosterPotStats`'s `paid` COUNTER move too?
 
 `rosterPotStats` increments `paid++` in the same `if`. That counter feeds "N of
 M paid" chips.
@@ -198,7 +198,7 @@ M paid" chips.
 **Recommendation: A.** Only the MONEY is wrong; the head count is right. B is a
 UI change wearing a bugfix costume, and it is not in the finding.
 
-### D5 — is `memberOutstanding` in scope?
+### D5 ✅ SIGNED → A — is `memberOutstanding` in scope?
 
 It is the mirror of the same defect: a partially paid member's Outstanding Due
 shows their WHOLE fee.
@@ -239,4 +239,18 @@ splitting it creates the contradiction.
 
 ## 7. Implementation status
 
-**NOT STARTED.** Blocked on D2–D5.
+**NOT STARTED.** Unblocked 2026-08-27 — D2–D5 signed as recommended, so the
+shape is fully determined:
+
+| Item | Decision |
+|---|---|
+| Mirror `paidEntryCount`, all three writers, same transaction | D1 = A |
+| `reconcilePaymentTruth` stamps the count (no new job) | D2 = A |
+| Ship the corrected public pot figure | D3 = A |
+| `paid++` head count UNCHANGED | D4 = A |
+| `memberOutstanding` fixed in the same PR | D5 = A |
+
+⚠️ **The gate list this must be built against now includes
+`npm --prefix functions run typecheck` and `npm --prefix functions run build`** —
+see CLAUDE.md §2e. `npx tsc -b` at the root does not typecheck `functions/`, and
+that gap let a build-blocking TS2345 sit green through every other gate on #612.

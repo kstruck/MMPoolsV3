@@ -47,9 +47,30 @@
 > **Option A** (mirror a `paidEntryCount`). **D2–D5 are open and no code is
 > written until they are signed** — Rule 3 step 5.
 >
-> 🔴 **`nflDeepSweep` IS STILL UNVERIFIED IN PROD.** This session could not read
-> it — the machine has a `firebase` CLI login but no Application Default
-> Credentials, so a direct Firestore read fails. It needs a console read.
+> ### ✅ `nflDeepSweep` IS NOW VERIFIED — `{enabled: TRUE, dryRun: TRUE}`
+>
+> Read from the Firebase console by Kevin, 2026-08-27. **Half-armed, and that is
+> the designed stage 1.** `nflSchedule.ts:1387-1389` is explicit: dry-run still
+> DETECTS and REPORTS corrections and only suppresses the `nfl_games` write, "so
+> the alarm can be observed for a week before the writes are armed."
+>
+> So `nflDeepScoreSweepJob` **is running** daily (`30 11 * * *`) and **is
+> finding** anything it finds — but a FINAL or a scoring correction arriving >24h
+> after kickoff is still **never applied**. Stage 2 is `dryRun: false`, and the
+> gate for it is reading the job's own log line first:
+>
+> ```
+> npx firebase functions:log --only nflDeepScoreSweepJob --project gridiron-gamble-uzuqo
+> ```
+>
+> The line to look for is `Nd sweep: N slate(s), N correction(s), N game(s)
+> written.` **`correction(s)` is the number that decides.** Zero for several days
+> ⇒ arming writes is low-risk. Non-zero ⇒ read WHICH games before arming, because
+> those writes will rescore finished weeks.
+>
+> ⚠️ This session could NOT read it directly: the machine has a `firebase` CLI
+> login but no Application Default Credentials, so a Firestore read fails with
+> `Could not load the default credentials`. Console or `functions:log` only.
 
 > ## 🟡 2026-08-27 (latest) — **PHASE 2 IS CODE-COMPLETE. T3–T7 SHIPPED AS #603–#609. #609 IS OPEN AND GREEN, NOT MERGED.**
 >
