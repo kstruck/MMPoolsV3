@@ -374,6 +374,12 @@ describe('B1 — resolveTiebreakTargetIds (§2b): one function for the sheet, th
     expect(src.split(fallback).length - 1).toBe(1);
     // ...and no MNF_COMBINED branch left in the tie-copy paragraph.
     expect(src).not.toContain("tiebreakerRule === 'MNF_COMBINED'");
+    // 🛑 AND IT DEFERS THE PER-WEEK ANSWER TO THE SHEET (codex r2 P2). This
+    // page gets no `week` and no schedule, so it cannot know that a week froze
+    // an EMPTY target before the fallback existed — a week whose sheet shows
+    // "No tiebreaker this week". Stating the fallback flatly would contradict
+    // that sheet for one live week, which is this plan's own defect returning.
+    expect(src).toContain('Your pick sheet names the game each week, and tells you when a week has none');
   });
 
   it('the sheet, the submit path and the scorer all read the ONE resolver + the frozen map', () => {

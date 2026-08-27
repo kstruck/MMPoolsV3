@@ -254,6 +254,29 @@ export interface MemberActionContext {
   subjectUid: string;
   subjectName?: string;
   requestId?: string;
+  /**
+   * There is NO BROWSER BUNDLE behind this submission — it is server code
+   * calling in (the sim harness, ADR 0006), always running the code that was
+   * just deployed.
+   *
+   * It exists only to exempt such a caller from the tiebreak ROLLOUT guard,
+   * which infers "this client is out of date" from a missing
+   * `displayedTiebreakTargetIds`. The sim harness never sends one and never
+   * will, so without this the guard would freeze an empty tiebreak target on
+   * every simulated Monday-less week forever — permanently withholding the fix
+   * from the population that most needs it (no simulator path writes
+   * `settings.weeklyTiebreaker`, so every sim pool is a legacy MNF_COMBINED
+   * pool). codex r2 P2.
+   *
+   * 🛑 ON THE CONTEXT, NEVER THE PAYLOAD. `ctx` is built only by server code;
+   * the payload is client-supplied and schema-validated, so a field there would
+   * let any browser assert it and walk past the guard.
+   *
+   * It grants NOTHING else — not membership, not a lock bypass, not
+   * SUPER_ADMIN. Those key off `actorRole`, which the sim harness deliberately
+   * leaves undefined.
+   */
+  serverSideCaller?: boolean;
 }
 
 /**
@@ -652,9 +675,17 @@ export async function submitNFLPicksInternal(
           // frozen, `[]`. Nobody in that week is asked, and a tied week is
           // shared. Self-expiring: a current sheet always sends the list when it
           // asks, so once the frontend is deployed this branch stops firing.
+          //
+          // `ctx.serverSideCaller` is exempt: the sim harness has no browser
+          // bundle to be stale and never sends a displayed list, so without the
+          // exemption this would withhold the fallback from every simulated
+          // Monday-less week permanently — and every simulator pool is a legacy
+          // MNF_COMBINED pool, because no simulator path writes
+          // `settings.weeklyTiebreaker` (codex r2 P2).
           const noMondayGame = games.every(g => g.isMonday !== true);
           const introducesNewQuestion =
-            tiebreakRule === 'MNF_COMBINED' && noMondayGame && displayedTargetIds === undefined;
+            tiebreakRule === 'MNF_COMBINED' && noMondayGame
+            && displayedTargetIds === undefined && ctx.serverSideCaller !== true;
           frozenTargetWrite = {
             [`frozenTiebreakTargets.${week}`]: introducesNewQuestion ? [] : canonicalTarget,
           };

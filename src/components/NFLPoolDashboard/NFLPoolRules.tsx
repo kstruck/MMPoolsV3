@@ -165,7 +165,22 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                       page and not only on the pick sheet: the sheet asks for the
                       number, this says what the number decides — and on a NONE
                       pool the sheet asks nothing at all, so this is the only
-                      place a member can learn that a tied week is shared. */}
+                      place a member can learn that a tied week is shared.
+
+                      🛑 THIS PAGE IS POOL-LEVEL AND CANNOT SPEAK FOR ONE WEEK
+                      (codex r2 P2). It gets no `week` and no schedule, so it
+                      cannot know that a particular week froze an EMPTY target
+                      before the Monday-less fallback existed — a week whose
+                      sheet correctly shows "No tiebreaker this week". Stating
+                      the fallback flatly would contradict that sheet for the
+                      same live week, which is the exact defect
+                      PLAN-TIEBREAKER-MONDAYLESS was opened to fix.
+
+                      So it states the RULE and hands the per-week answer to the
+                      surface that actually knows it. That is a promise the
+                      sheet keeps: it names the target game
+                      (`tiebreakTargetSentence`) and renders the D2 card when a
+                      week has none. */}
                   <div className="flex justify-between gap-3">
                     <span className="text-muted font-bold flex items-center gap-1 shrink-0"><Trophy size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Weekly Tie:</span>
                     <span className="text-[color:var(--text)] font-display font-bold text-right text-[12px]">
@@ -178,7 +193,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <p className="text-[11px] text-muted leading-relaxed">
                     {tiebreakerRule === 'NONE'
                       ? 'Players who finish a week level share it — this pool asks for no tiebreaker prediction.'
-                      : 'Level on points? The player whose predicted score is closest wins the week. On a week with no Monday game, the final game of the week is the target. Still level after that, and it is shared.'}
+                      : 'Level on points? The player whose predicted score is closest wins the week. On a week with no Monday game, the final game of the week is the target. Still level after that, and it is shared. Your pick sheet names the game each week, and tells you when a week has none — that week is shared.'}
                   </p>
                   {/* Season-prize tie (PLAN-WEEKLY-PRIZES §2c / D4): pick record first, then split. */}
                   <p className="text-[11px] text-muted leading-relaxed mt-2">

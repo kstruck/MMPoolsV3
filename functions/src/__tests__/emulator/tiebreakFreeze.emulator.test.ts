@@ -191,6 +191,20 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
   }, 30000);
 
+  it('5f. the rollout guard exempts a SERVER-SIDE caller — the sim harness has no bundle to be stale (codex r2 P2)', async () => {
+    // Every simulator pool is a legacy MNF_COMBINED pool: no simulator path
+    // writes `settings.weeklyTiebreaker`. The sim harness never sends a
+    // displayed list and never will, so without the exemption the guard would
+    // freeze an empty target on every simulated Monday-less week FOREVER —
+    // permanently withholding this fix from the population it most affects.
+    await seedGames({ includeMondays: false });
+    await seedPool();
+    await submitNFLPicksInternal(db, {
+      actorUid: ALICE, subjectUid: ALICE, subjectName: ALICE, serverSideCaller: true,
+    }, { poolId: POOL, week: 1, picks: { [SUN]: 'KC' } } as never);
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+  }, 30000);
+
   it('5e. the rollout guard is scoped to the ONE week this release changed — it does not withhold a target the previous release already gave', async () => {
     // A no-handshake submission still freezes the canonical target everywhere
     // else, because everywhere else the previous release resolved the same
