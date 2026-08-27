@@ -155,9 +155,16 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // (`WeeklyWinnersList.tsx:79`, "after any charity donation").
       'If your pool gives a share to charity, that comes off the fees before either pot is worked out, so the two pots divide what is left rather than the whole of what you collect.',
       // The absent-split case, which is every hybrid pool created before the
-      // split existed. `potBreakdown` leaves both figures unknown, and
-      // `PayoutsPanel.tsx:59` renders the honest fallback rather than a guess.
-      'A Hybrid pool that has never set a split still runs. Members are shown the places without dollar figures, and told to ask you how the pots divide.',
+      // split existed. `potBreakdown` returns `net` but NEITHER pot.
+      //
+      // NOT "shown the places without dollar figures" (self-review, the class
+      // codex r5 found twice). `dollarFor` falls back to `netPot` whenever
+      // `splitPots` is undefined (`PayoutsPanel.tsx:363-370`), so on any pool
+      // whose entry count is known a place DOES carry a figure — priced off the
+      // combined pot, because neither half can be worked out. Saying members see
+      // no figure at all would leave a commissioner unable to recognise the
+      // number their members are actually looking at.
+      'A Hybrid pool that has never set a split still runs. Neither pot can be worked out until you set one, so a dollar figure shown against a place is priced off the whole pot rather than either half.',
       // Leaving HYBRID. `hybridSplitNeedsClearing` deletes the stored split and
       // `weeklyPayoutsNeedsClearing` the stored weekly list, both on the save
       // that moves the mode (`functions/src/lib/hybridSplitGate.ts:101-110`,

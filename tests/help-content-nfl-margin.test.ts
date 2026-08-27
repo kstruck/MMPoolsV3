@@ -615,6 +615,44 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
     expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES }, weeklyPayouts: null })).toBe(PLACES);
   });
 
+  /**
+   * The SHARED place-list topics say the second list is optional (codex r6
+   * [P2]). They are claimed by both `settings.payouts.places.*` and the weekly
+   * twin, so their copy is read by a commissioner editing EITHER editor — and
+   * the default Hybrid pool never opens the second one. "Keeps a list for each
+   * pot" would be false for every one of those pools.
+   */
+  it('the shared place-list topics call the weekly list optional, not automatic', () => {
+    // The fallback that makes "can" the right word, and "keeps" the wrong one.
+    expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES } })).toBe(PLACES);
+    for (const id of ['settings.payouts.places.*.rank', 'settings.payouts.places.*.percentage']) {
+      const copy = staticCopy(helpRegistry.getTopic(id)!.long);
+      expect(copy, `${id} asserts two lists always exist`).not.toMatch(/(keeps|has) a list for each/i);
+      expect(copy, `${id} never mentions the fallback`).toMatch(/with no separate weekly list/i);
+    }
+  });
+
+  /**
+   * A split-less Hybrid pool DOES show dollar figures (self-review, the class
+   * codex r5 found twice). `potBreakdown` returns `net` but neither pot, and
+   * `dollarFor` falls back to `netPot` whenever `splitPots` is undefined — so a
+   * place carries a figure priced off the COMBINED pot. The copy used to say
+   * members are shown places "without dollar figures", which would leave a
+   * commissioner unable to recognise the number their members can see.
+   */
+  it('a split-less Hybrid pool prices places off the whole pot, not off nothing', () => {
+    const pot = potBreakdown({ payoutMode: 'HYBRID', entryFee: 25 }, 10)!;
+    expect(pot.net).toBe(250);
+    expect(pot.weeklySeasonAllocation).toBeUndefined();
+    expect(pot.seasonPot).toBeUndefined();
+    // The fallback branch itself: no `splitPots`, so the figure comes from `netPot`.
+    expect(codeOf('src/components/PayoutsPanel.tsx')).toMatch(/return netPot !== undefined && netPot > 0/);
+
+    const mode = staticCopy(helpRegistry.getTopic('settings.payoutMode')!.long);
+    expect(mode, 'claims members see no dollar figures at all').not.toMatch(/without dollar figures/i);
+    expect(mode).toMatch(/priced off the whole pot rather than either half/i);
+  });
+
   it('the sum rule the copy names is the rule a save is refused on', () => {
     const ok = { payoutMode: 'HYBRID', entryFee: 25, hybridSplit: { weeklyPerEntry: 18, seasonPerEntry: 7 } };
     expect(hybridSplitProblem(ok)).toBeNull();
