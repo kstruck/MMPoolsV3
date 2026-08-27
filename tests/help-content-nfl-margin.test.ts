@@ -173,13 +173,40 @@ describe('T11 — the eleven allowlist rows are closed, and closed by real copy'
     },
   );
 
-  it('every T11 placement names a page that already exists', () => {
-    // `src/help/pages.ts` belongs to other tickets and T11 does not touch it,
-    // so a placement naming a page nobody built would fail at import — this
-    // says so here rather than as an opaque registry throw.
-    const pageIds = new Set(helpRegistry.pages.map((p) => p.id));
-    expect(NFL_MARGIN_PLACEMENTS.filter((p) => !pageIds.has(p.page)).map((p) => p.page)).toEqual([]);
+  /**
+   * T11 is placed on every screen its three controls render on, and no others.
+   *
+   * NOT "the pages exist" — `buildRegistry` throws on an unknown page before
+   * this file's first import completes, so an existence check here could never
+   * go red and would be a guard that looks like one. What IS worth checking is
+   * COVERAGE: a placement quietly dropped leaves a control with a tooltip and
+   * no entry in the panel, and nothing else notices.
+   */
+  it('the payout method is placed on all five screens that show or set it', () => {
+    const pages = NFL_MARGIN_PLACEMENTS.filter((p) => p.topic === 'settings.payoutMode')
+      .map((p) => p.page)
+      .sort();
+    expect(pages).toEqual([
+      'pool.nfl.manager.settings',
+      'pool.nfl.payments',
+      'pool.nfl.rules',
+      'wizard.margin.rules',
+      'wizard.pickem.rules',
+    ]);
   });
+
+  it.each(['settings.hybridSplit.weeklyPerEntry', 'settings.hybridSplit.seasonPerEntry'])(
+    '%s is placed on the fee step of both wizards, the rules page and the settings tab',
+    (topic) => {
+      const pages = NFL_MARGIN_PLACEMENTS.filter((p) => p.topic === topic).map((p) => p.page).sort();
+      expect(pages).toEqual([
+        'pool.nfl.manager.settings',
+        'pool.nfl.rules',
+        'wizard.margin.fee',
+        'wizard.pickem.fee',
+      ]);
+    },
+  );
 });
 
 describe('T11 — both render sites of every manager label carry the helpId', () => {
