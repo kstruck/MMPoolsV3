@@ -35,7 +35,7 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   date: 'PERMANENT: derived from the chosen game.',
   gameTime: 'PERMANENT: derived from the chosen game.',
   week: 'PERMANENT: derived from the chosen game.',
-  theme: "PERMANENT: legacy single-string theme, superseded by the branding fields. No control offers it — the squares and props wizards send the constant 'default' (CreateSquaresPool.tsx:41, CreatePropsPool.tsx:81).",
+  theme: "PERMANENT: legacy single-string theme, superseded by the branding fields. No control offers it — the squares and props wizards send the constant 'default' (CreateSquaresPool.tsx:43, CreatePropsPool.tsx:83).",
 
   // ---- PERMANENT: legacy aliases kept for older payloads ------------------
   venmo: 'PERMANENT: legacy top-level alias of paymentHandles.venmo, reconciled on write. One control, one topic — the nested path is the one readers meet.',
@@ -72,7 +72,27 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.payouts.bonuses.*.percentage': 'T6: no create-wizard control; same bonus-row editor as the name above.',
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
-  seasonType: 'T13: explained for the three NFL season types by the seasonType topic (T1). SQUARES and PROPS also carry the field and have no control for it, so the row stays until their content ticket accounts for it.',
+  // SETTLED BY T13, and settled as PERMANENT rather than closed with copy.
+  //
+  // The three NFL season formats are explained by the `seasonType` topic
+  // (`content/wizard-shared.ts`), which is scoped to those three. What was left
+  // was SQUARES and PROPS, which accept the field. Measured against the
+  // sources: NEITHER create wizard binds a control to it (nothing in
+  // `CreateSquaresPool.tsx` or `CreatePropsPool.tsx`, and it is in no
+  // WIZARD_FIELD_ALLOWLIST row because no binding exists to allow), neither
+  // payload builder sends it (`buildSquaresPayload.ts`, `buildPropsPayload.ts`),
+  // and no squares or props surface reads it — every `poolSeasonType` caller is
+  // an NFL weekly-pool screen or the super-admin spreads tool. The ONE writer is
+  // the legacy squares game picker, which stamps it from the chosen game
+  // alongside `gameId` and `week` (`AdminPanel.tsx:371`), exactly as the
+  // `week` row above describes.
+  //
+  // So widening the topic's poolTypes was refused: its copy names a default
+  // ('2') that only the Pick'em wizard sets, and says members see the weeks
+  // belonging to the part chosen — neither is true of a one-game pool. It would
+  // have put a topic in the Help panel of a pool with no such control, which is
+  // voice rule 5's failure mode with a different face.
+  seasonType: 'PERMANENT: the three NFL season types are explained by the seasonType topic. SQUARES and PROPS accept the field but offer no control for it — neither create wizard binds it and neither payload builder sends it — and the only writer is the legacy squares game picker, which stamps it from the chosen game alongside gameId and week (AdminPanel.tsx:371). Derived from the chosen game, same as the week row above. (T13)',
   // T9 removed confidenceMode and isListedPublic. It WITHDREW lockMode and
   // lockBufferMinutes mid-review because the shipped client ignored lockMode;
   // 93f44bb2 (#482) fixed that, so both rows are gone and both topics are
@@ -109,12 +129,11 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'settings.maxEntriesTotal':
     'PERMANENT for NFL_PLAYOFFS (T12, 2026-08-27). BRACKET is explained — `content/bracket.ts` covers the manager control (BracketPoolDashboard.tsx:112 editMaxTotal, written at :374) and the -1-means-no-limit gate (functions/src/bracketEntries.ts:75). The PLAYOFF create input accepts the same field and NOTHING reads it: the playoff wizard binds no control for it, submitPlayoffPicks caps on maxEntriesPerUser, the free-plan ten and the paid ceiling but never on this (functions/src/playoffPools.ts:205-217), and getPoolEntrySummary returns capacity null for a playoff pool on purpose (src/utils/poolSport.ts:105-108). There is no control to explain and no behaviour to describe, so a topic scoped to NFL_PLAYOFFS could only say something untrue. Same shape as settings.pointsPerPick above. Deleting this row needs a product decision — enforce it for playoff pools, or drop it from the playoff create input — not help copy.',
 
-  // ---- PENDING: Squares and Props (T13) ----------------------------------
-  maxSquaresPerPlayer: 'T13: cap on squares per person.',
-  numberSets: 'T13: one set of numbers for the whole game, or a fresh set each quarter.',
-  homeTeam: 'T13: the home team of the game a squares or props pool covers.',
-  awayTeam: 'T13: the away team of the game a squares or props pool covers.',
-  'props.maxCards': 'T13: cap on cards per person.',
+  // ---- Squares and Props (T13): CLOSED ------------------------------------
+  // `maxSquaresPerPlayer`, `numberSets`, `props.maxCards` and the two team
+  // names are authored in `content/squares-props.ts`. `homeTeam` and `awayTeam`
+  // are one topic claiming both paths in `fields[]`, because they are one
+  // explanation (voice rule 10).
 });
 
 /**
@@ -257,10 +276,8 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   // round multipliers carry an explicit `helpId` to a single topic each, for
   // the reason the payment-handle rows above give: one explanation, one place.
 
-  // ---- PENDING: Squares and Props (T13) ----------------------------------
-  homeTeam: 'T13: the home team of the game a squares or props pool covers.',
-  awayTeam: 'T13: the away team of the game a squares or props pool covers.',
-  maxSquaresPerPlayer: 'T13: cap on squares per person.',
-  numberSets: 'T13: one set of numbers for the whole game, or a fresh set each quarter.',
-  'props.maxCards': 'T13: cap on cards per person.',
+  // ---- Squares and Props (T13): CLOSED ------------------------------------
+  // All five controls resolve to topics in `content/squares-props.ts`.
+  // `homeTeam` and `awayTeam` carry an explicit helpId to the one
+  // `matchup.teams` topic that claims both paths, so neither needs a row.
 });
