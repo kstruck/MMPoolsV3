@@ -245,6 +245,16 @@ export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
     long: para(
       'Week 4 is the default. A player can still buy back in during that week, and is refused from the week after it.',
       'Choose a week that leaves a returning player a season worth playing. Set it late and somebody can rejoin with little left to win; set it early and a player knocked out in week one has almost no window.',
+      // ZERO IS ACCEPTED AND TURNS BUY-BACKS OFF (codex r5). The create wizard's
+      // field is `min={0}` (`CreateNFLSurvivorPool.tsx:38`) and the schema is
+      // `z.number().int().optional()` with no floor (`shared/schemas/nfl.ts:82`),
+      // so a pool can be created with 0 — and `executeSurvivorRebuyInternal`
+      // refuses `week > rebuyDeadlineWeek`, which every real week satisfies
+      // against 0. A pool set that way allows a number of buy-backs nobody can
+      // ever take. The manager form clamps to 1 (`min={1}` and a `Math.max(1,…)`
+      // on change), so this is a create-time value, and it survives until
+      // somebody edits that field.
+      'Zero is not a week, and setting it there switches buy-backs off however many you allow — every request lands after the deadline. Use week 1 for the narrowest window that still works.',
       'It changes nothing in a pool that allows no buy-backs.',
     ),
     poolTypes: SURVIVOR,

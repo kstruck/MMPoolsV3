@@ -701,6 +701,44 @@ describe('T10 — a strikes revival is a real path, and the copy names it', () =
     }
   });
 
+  /**
+   * A CUTOFF OF ZERO IS ACCEPTED AND MEANS "NEVER" (codex r5).
+   *
+   * The copy described every value as a usable last week. Zero is not one:
+   * `executeSurvivorRebuyInternal` refuses `week > rebuyDeadlineWeek`, which
+   * every real week satisfies against 0, so a pool created that way offers
+   * buy-backs nobody can take. It is reachable because the CREATE form's floor
+   * is 0 while the manager form's is 1 — the two disagree, and the create side
+   * is the one that decides what a new pool holds.
+   *
+   * Both halves are measured: that the wizard really does accept 0, and that
+   * the refusal really does fire at week 1. Raise the wizard's floor to 1 and
+   * this goes red, correctly — the copy would then be warning about a value
+   * nobody can enter.
+   */
+  it('a cutoff of zero disables buy-backs, and the copy says so', () => {
+    // The create form accepts it...
+    expect(WIZARD_SRC).toContain("name=\"settings.rebuyDeadlineWeek\" label=\"Rebuy deadline week\" min={0}");
+    // ...while the manager form does not, which is why it is a create-time value.
+    expect(MANAGER_SRC).toMatch(/rebuyDeadlineWeek[\s\S]{0,400}?Math\.max\(1,/);
+
+    // The server's refusal, read off the source rather than restated: it is a
+    // bare `week > deadline`, with no special case that would rescue a 0.
+    const rebuy = readFileSync(resolve(root, 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('if (week > settings.rebuyDeadlineWeek) {');
+    const refuses = (week: number, deadline: number) => week > deadline;
+    // Week 1 is the earliest week a rebuy can be asked for, and it is already
+    // past a deadline of 0 — so no week is ever inside the window.
+    expect([1, 2, 18].every((w) => refuses(w, 0))).toBe(true);
+    // The same predicate admits week 1 at a deadline of 1, so it is the ZERO
+    // that disables buy-backs and not the comparison being wrong.
+    expect(refuses(1, 1)).toBe(false);
+
+    const long = longFor('settings.rebuyDeadlineWeek');
+    expect(long).toContain('Zero is not a week');
+    expect(long).toContain('switches buy-backs off');
+  });
+
   it('and nothing refuses the limit change on a pool that has already scored', () => {
     expect(SURVIVOR_PARITY_SETTINGS_KEYS).not.toContain('maxStrikes');
     const scored = {
