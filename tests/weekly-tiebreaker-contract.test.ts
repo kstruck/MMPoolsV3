@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  applyFrozenTarget,
   effectiveWeeklyTiebreaker,
   frozenTiebreakTargetFor,
   PICKABLE_WEEKLY_TIEBREAKERS,
@@ -9,9 +10,11 @@ import {
   resolveTiebreakTargetIds,
   sameTargetIds,
   tiebreakTargetSentence,
+  tiebreakerAskedButUnavailable,
   tiebreakerAsksForPrediction,
   tiebreakerCopy,
   WEEKLY_TIEBREAKER_VALUES,
+  weekTiebreakTargetIds,
 } from '../shared/nflTiebreaker';
 import { WEEKLY_TIEBREAKER_OPTIONS } from '../shared/nflTiebreakerOptions';
 
@@ -76,6 +79,15 @@ describe('tiebreakerCopy — one sentence per rule, or none', () => {
 
   it('the MNF_COMBINED hint still says BOTH games — the shipped wording', () => {
     expect(tiebreakerCopy('MNF_COMBINED')!.hint).toContain('both');
+  });
+
+  it('ALL THREE asking rules name the Monday-less fallback — COMBINED was the one that did not, and its sheet asked for nothing', () => {
+    // The copy half of PLAN-TIEBREAKER-MONDAYLESS. Two of the three hints
+    // already carried this sentence; the third asserted the opposite behaviour
+    // by omission, on the exact rule an unset pool resolves to.
+    for (const rule of ['MNF_COMBINED', 'MNF_LAST_GAME', 'MNF_FIRST_GAME'] as const) {
+      expect(tiebreakerCopy(rule)!.hint).toContain('no Monday game');
+    }
   });
 
   it('the MNF_LAST_GAME copy names the LAST game and does not claim both', () => {
@@ -227,11 +239,61 @@ describe('B1 — resolveTiebreakTargetIds (§2b): one function for the sheet, th
     expect(resolveTiebreakTargetIds([b, a], 'MNF_LAST_GAME')).toEqual(['b']);
     expect(resolveTiebreakTargetIds([b, a], 'MNF_FIRST_GAME')).toEqual(['a']);
   });
-  it('Monday-less week: LAST and FIRST fall back to the FINAL game of the week; legacy COMBINED does NOT (§0: an in-flight legacy week keeps its meaning)', () => {
+  it('Monday-less week: EVERY asking rule falls back to the FINAL game of the week — legacy COMBINED included (PLAN-TIEBREAKER-MONDAYLESS, Kevin 2026-08-27)', () => {
     const early = { id: 'early', startTime: 50, isMonday: false };
     expect(resolveTiebreakTargetIds([sun, early], 'MNF_LAST_GAME')).toEqual(['sun']);
     expect(resolveTiebreakTargetIds([sun, early], 'MNF_FIRST_GAME')).toEqual(['sun']);
-    expect(resolveTiebreakTargetIds([sun, early], 'MNF_COMBINED')).toEqual([]);
+    // WAS `[]`, and that gap shipped a pool whose rules page promised a
+    // tiebreaker while its pick sheet asked for nothing — absence of the
+    // setting resolves to MNF_COMBINED, so every pre-2026-08-13 pool and every
+    // simulator pool was on this branch. An in-flight week is protected by the
+    // FREEZE instead (the next test), not by this returning nothing.
+    expect(resolveTiebreakTargetIds([sun, early], 'MNF_COMBINED')).toEqual(['sun']);
+    // NONE still asks nothing — the fallback is for rules that ask.
+    expect(resolveTiebreakTargetIds([sun, early], 'NONE')).toEqual([]);
+  });
+  it('a Monday-FUL week is byte-identical under every rule — the reorder can only reach the Monday-less branch', () => {
+    // The whole safety argument for the reorder, pinned rather than asserted in
+    // a comment. If a future edit moves the COMBINED return back above the
+    // fallback, the test above goes red; if it moves the fallback above a rule
+    // that should have matched a Monday game, this one does.
+    expect(resolveTiebreakTargetIds(wk, 'MNF_LAST_GAME')).toEqual(['mon2']);
+    expect(resolveTiebreakTargetIds(wk, 'MNF_FIRST_GAME')).toEqual(['mon1']);
+    expect(resolveTiebreakTargetIds(wk, 'MNF_COMBINED')).toEqual(['mon1', 'mon2']);
+    // A single Monday game, the ordinary week: COMBINED must still return the
+    // Monday game and NOT the week's final game, which is the same document
+    // here only by coincidence in the multi-game case above.
+    const oneMon = [{ id: 'sat', startTime: 10, isMonday: false }, { id: 'm', startTime: 20, isMonday: true }];
+    expect(resolveTiebreakTargetIds(oneMon, 'MNF_COMBINED')).toEqual(['m']);
+    // ...and when the Monday game is NOT last by kickoff, the two answers
+    // differ, so the assertion above has teeth.
+    const monThenLate = [{ id: 'm', startTime: 20, isMonday: true }, { id: 'tue', startTime: 99, isMonday: false }];
+    expect(resolveTiebreakTargetIds(monThenLate, 'MNF_COMBINED')).toEqual(['m']);
+    expect(resolveTiebreakTargetIds(monThenLate, 'MNF_LAST_GAME')).toEqual(['m']);
+  });
+  it('applyFrozenTarget / weekTiebreakTargetIds: ONE precedence rule — a frozen list wins, an EMPTY frozen list still wins, only undefined falls through', () => {
+    const monLess = [{ id: 'early', startTime: 50, isMonday: false }, sun];
+    // Nothing frozen → the rule decides.
+    expect(applyFrozenTarget(undefined, monLess, 'MNF_COMBINED')).toEqual(['sun']);
+    // A frozen list wins over the schedule.
+    expect(applyFrozenTarget(['mon1'], wk, 'MNF_LAST_GAME')).toEqual(['mon1']);
+    // 🛑 THE EMPTY ONE IS THE POINT. `[]` is not nullish, so a `??` reader gets
+    // this right only by accident of the operator it reached for. A week that
+    // froze "no target" before the fallback existed keeps no target — members
+    // who already submitted hold no prediction and must not be beaten by one.
+    expect(applyFrozenTarget([], monLess, 'MNF_COMBINED')).toEqual([]);
+    // The pool-level wrapper reads the pool-week map and applies the same rule.
+    expect(weekTiebreakTargetIds({ frozenTiebreakTargets: { 3: [] } }, 3, monLess, 'MNF_COMBINED')).toEqual([]);
+    expect(weekTiebreakTargetIds({ frozenTiebreakTargets: { 3: ['x'] } }, 3, monLess, 'MNF_COMBINED')).toEqual(['x']);
+    expect(weekTiebreakTargetIds({}, 3, monLess, 'MNF_COMBINED')).toEqual(['sun']);
+    expect(weekTiebreakTargetIds(undefined, 3, monLess, 'MNF_COMBINED')).toEqual(['sun']);
+    // Junk in the map reads as ABSENT, not as an empty freeze.
+    expect(weekTiebreakTargetIds({ frozenTiebreakTargets: { 3: 'x' } }, 3, monLess, 'MNF_COMBINED')).toEqual(['sun']);
+    // The returned array is a COPY — mutating it cannot corrupt the pool doc.
+    const stored = ['x'];
+    const got = weekTiebreakTargetIds({ frozenTiebreakTargets: { 3: stored } }, 3, monLess, 'MNF_COMBINED');
+    got.push('y');
+    expect(stored).toEqual(['x']);
   });
   it('empty schedule → []', () => {
     expect(resolveTiebreakTargetIds([], 'MNF_LAST_GAME')).toEqual([]);
@@ -259,8 +321,65 @@ describe('B1 — resolveTiebreakTargetIds (§2b): one function for the sheet, th
     expect(tiebreakTargetSentence([], games)).toBeNull();
     expect(tiebreakTargetSentence(['gone'], games)).toBeNull();
   });
+  it('D3 — the rules page cannot promise a tiebreaker the pick sheet never asks for', () => {
+    // THE EXACT CONTRADICTION THAT SHIPPED, pinned as behaviour rather than as
+    // a string match on either surface.
+    //
+    //   NFLPoolRules.tsx promises a tiebreaker whenever the rule is not NONE
+    //   — i.e. whenever `tiebreakerAsksForPrediction` is true.
+    //   PickemPickEntry.tsx renders the input only when the resolved target
+    //   list is non-empty (`showTiebreaker`).
+    //
+    // If those two predicates can ever disagree on a real schedule, a member is
+    // told a number decides tied weeks and is never asked for one. Under
+    // MNF_COMBINED on a Monday-less week they disagreed, and that is the bug.
+    const mondayLess = [
+      { id: 'fri1', startTime: 100, isMonday: false },
+      { id: 'fri2', startTime: 200, isMonday: false },
+      { id: 'sat1', startTime: 300, isMonday: false },
+      { id: 'sat2', startTime: 400, isMonday: false }, // the observed preseason slate
+    ];
+    const mondayFul = [{ id: 'sun', startTime: 100, isMonday: false }, { id: 'mon', startTime: 500, isMonday: true }];
+    for (const schedule of [mondayLess, mondayFul]) {
+      for (const rule of WEEKLY_TIEBREAKER_VALUES) {
+        const target = resolveTiebreakTargetIds(schedule, rule);
+        // The rules page promises ⇒ the sheet asks. No exceptions on a real slate.
+        expect(tiebreakerAskedButUnavailable(rule, target)).toBe(false);
+      }
+    }
+    // ...and where they genuinely CANNOT agree — a week frozen empty before the
+    // fallback existed — the sheet must say so rather than fall silent. That is
+    // the one case the D2 card exists for.
+    expect(tiebreakerAskedButUnavailable('MNF_COMBINED', weekTiebreakTargetIds({ frozenTiebreakTargets: { 2: [] } }, 2, mondayLess, 'MNF_COMBINED'))).toBe(true);
+    // NONE never triggers the card: that pool's rules page promises nothing.
+    expect(tiebreakerAskedButUnavailable('NONE', [])).toBe(false);
+  });
+
+  it('D2 — the pick sheet renders the "no tiebreaker this week" card off that predicate', () => {
+    const src = read('src/components/NFLPoolDashboard/PickemPickEntry.tsx');
+    expect(src).toContain('tiebreakerAskedButUnavailable(tiebreakerRule, tiebreakTargetIds)');
+    expect(src).toContain('tiebreakerUnavailable && (');
+    expect(src).toContain('No tiebreaker this week');
+  });
+
+  it('the rules page states the Monday-less fallback for EVERY asking rule — it used to branch MNF_COMBINED away from it', () => {
+    // The surface that lied. Its tie sub-line had a third branch whose only
+    // difference was the missing fallback sentence, and that branch is the one
+    // an unset `settings.weeklyTiebreaker` renders.
+    const src = read('src/components/NFLPoolDashboard/NFLPoolRules.tsx');
+    const fallback = 'On a week with no Monday game, the final game of the week is the target.';
+    expect(src).toContain(fallback);
+    // Exactly ONE copy of the sentence — a re-added COMBINED branch would need
+    // a second, and this catches it.
+    expect(src.split(fallback).length - 1).toBe(1);
+    // ...and no MNF_COMBINED branch left in the tie-copy paragraph.
+    expect(src).not.toContain("tiebreakerRule === 'MNF_COMBINED'");
+  });
+
   it('the sheet, the submit path and the scorer all read the ONE resolver + the frozen map', () => {
-    expect(read('src/components/NFLPoolDashboard/PickemPickEntry.tsx')).toContain('resolveTiebreakTargetIds(games, tiebreakerRule)');
+    // D1: the sheet no longer hand-rolls `frozen ?? resolved` — it asks the
+    // shared wrapper, which is where the empty-list case is decided once.
+    expect(read('src/components/NFLPoolDashboard/PickemPickEntry.tsx')).toContain('weekTiebreakTargetIds(castPool');
     expect(read('src/components/NFLPoolDashboard/PickemPickEntry.tsx')).toContain('displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined');
     const fn = read('functions/src/nflPools.ts');
     expect(fn).toContain('resolveTiebreakTargetIds(games, tiebreakRule)');

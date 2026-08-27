@@ -16,7 +16,10 @@ import { submitNFLPicksInternal } from '../../nflPools';
  *     NOT re-point the week: the frozen list stays, and a fresh submit that
  *     displays the new canonical target is refused (it must reload → frozen).
  *  4. under NONE nothing is frozen and any list is ignored.
- *  5. a legacy pool (no `weeklyTiebreaker`) freezes the whole Monday SET.
+ *  5. a legacy pool (no `weeklyTiebreaker`) freezes the whole Monday SET, and
+ *     on a Monday-less week freezes the week's FINAL GAME like every other
+ *     asking rule (PLAN-TIEBREAKER-MONDAYLESS) — while a week that ALREADY
+ *     froze an empty list keeps it (5c).
  *  6. Monday-less week under MNF_LAST_GAME freezes the week's final game.
  */
 const test = ftest();
@@ -150,18 +153,48 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [MON1, MON2] });
   }, 30000);
 
-  it('5b. a LEGACY pool on a Monday-less week freezes an EMPTY list, and a Monday game added later does not become a target (qodo #9 on #452)', async () => {
+  it('5b. a LEGACY pool on a Monday-less week now freezes the FINAL GAME of the week (PLAN-TIEBREAKER-MONDAYLESS, Kevin 2026-08-27)', async () => {
+    // WAS `{ '1': [] }`. An absent `settings.weeklyTiebreaker` resolves to the
+    // legacy MNF_COMBINED, which alone had no Monday-less fallback — so this
+    // pool froze "no target", the pick sheet (gated on a non-empty target)
+    // rendered no input, and the rules page still promised that the closest
+    // prediction takes the week. That is the production defect, at its source.
     await seedGames({ includeMondays: false });
     await seedPool();
     await submit(ALICE, { picks: { [SUN]: 'KC' } });
-    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
-    // The schedule gains Monday games after Alice submitted…
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+    // And it is still a FREEZE: Monday games appearing later do not re-point it.
     await seedGames();
-    // …Bob's sheet (which reads the frozen value) sends no target; accepted; still frozen empty.
+    await submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [SUN] });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+    await expect(submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [MON1, MON2] }))
+      .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
+  }, 30000);
+
+  it('5c. a week that ALREADY froze an EMPTY list keeps it — the fix does not add a target under members who already submitted (qodo #9 on #452; PLAN-TIEBREAKER-MONDAYLESS C2)', async () => {
+    // 🛑 THE GUARANTEE 5b USED TO CARRY, PINNED WHERE IT NOW LIVES.
+    //
+    // After the fallback change no FRESH submission can freeze `[]` on a
+    // non-empty schedule, so this state only ever arrives as data written
+    // before the fix — which is exactly the pool in Kevin's screenshot. It must
+    // stay empty. Adding a target now would hand a tied week to whoever
+    // submits next, over the members who were never asked for a prediction.
+    await seedGames({ includeMondays: false });
+    await seedPool();
+    await poolRef().set({ frozenTiebreakTargets: { 1: [] } }, { merge: true });
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
+    // The schedule gains Monday games after the fact…
+    await seedGames();
+    // …a sheet that read the freeze sends nothing; accepted; still frozen empty.
     await submit(BOB, { picks: { [SUN]: 'BUF' } });
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
     // A sheet that ignored the freeze and displayed the new Monday set is refused.
     await expect(submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [MON1, MON2] }))
+      .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
+    // ...and so is one that displayed the week's final game — the new canonical
+    // answer, which this week is NOT playing.
+    await expect(submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [SUN] }))
       .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
   }, 30000);
 

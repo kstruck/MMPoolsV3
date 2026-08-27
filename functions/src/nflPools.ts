@@ -49,7 +49,7 @@ import {
   computeWeeklyWinners,
   type WeeklyWinnerCandidate
 } from './nflScoringEngine';
-import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
+import { applyFrozenTarget, effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
 import { computeWeeklyPrizeSnapshot, priceWeeklyPlaces, rankWeeklyPlaces, type WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
@@ -612,9 +612,14 @@ export async function submitNFLPicksInternal(
       // reads it.
       const tiebreakRule = effectiveWeeklyTiebreaker(poolInTx.settings as { weeklyTiebreaker?: unknown } | undefined);
       if (tiebreakerAsksForPrediction(tiebreakRule)) {
+        // TWO DIFFERENT QUESTIONS, deliberately asked separately. `frozenTarget`
+        // answers "does this week already have a freeze?" — the only input to
+        // the write decision below. `authoritative` answers "what is this week's
+        // target?", and takes the precedence rule from `applyFrozenTarget`,
+        // shared with the pick sheet and the scorer.
         const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
         const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
-        const authoritative = frozenTarget ?? canonicalTarget;
+        const authoritative = applyFrozenTarget(frozenTarget, games, tiebreakRule);
         if (displayedTargetIds !== undefined && !sameTargetIds(displayedTargetIds, authoritative)) {
           throw new HttpsError('failed-precondition',
             'TIEBREAK_TARGET_STALE: the tiebreaker game shown on your sheet no longer matches the schedule for this week. Reload the page and submit again.');

@@ -178,9 +178,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <p className="text-[11px] text-muted leading-relaxed">
                     {tiebreakerRule === 'NONE'
                       ? 'Players who finish a week level share it — this pool asks for no tiebreaker prediction.'
-                      : tiebreakerRule === 'MNF_COMBINED'
-                        ? 'Level on points? The player whose predicted score is closest wins the week. Still level after that, and it is shared.'
-                        : 'Level on points? The player whose predicted score is closest wins the week. On a week with no Monday game, the final game of the week is the target. Still level after that, and it is shared.'}
+                      : 'Level on points? The player whose predicted score is closest wins the week. On a week with no Monday game, the final game of the week is the target. Still level after that, and it is shared.'}
                   </p>
                   {/* Season-prize tie (PLAN-WEEKLY-PRIZES §2c / D4): pick record first, then split. */}
                   <p className="text-[11px] text-muted leading-relaxed mt-2">
