@@ -283,6 +283,7 @@ export const reconcilePaymentTruth = validated(
           // now has a valid row, the derived status is `PAID` and the stored
           // `UNPAID` is stale — a real divergence, which must fall through to
           // the promotion below rather than be counted as consistent.
+          let staleFullyPaid = false;
           if (paidEntryIdsByUid.get(uid)?.has(entryDoc.id)) {
             const derivedNow = derivePaidStatus(
               { ...(member as MemberRecord), paidEntries: duesMapByUid.get(uid) ?? {} },
@@ -293,9 +294,26 @@ export const reconcilePaymentTruth = validated(
               report.alreadyConsistent++;
               continue;
             }
-            // else: fall through — the map says paid in full, the record does not.
+            staleFullyPaid = true;
           }
-          if (uidsWithLedgerHistory.has(uid)) {
+          // 🛑 `staleFullyPaid` SKIPS THE AMBIGUITY GATE, AND WITHOUT THAT THE
+          // FIX ABOVE IS INERT (found by self-review, not by codex).
+          //
+          // The gate exists for one shape: a deliberate later un-mark through
+          // `setPaidStatus` that the never-updated entry document predates. But
+          // whatever filled this member's dues map — `setPaidStatus`, or an
+          // earlier run of this migration — ALSO wrote ledger rows, so in
+          // production `uidsWithLedgerHistory` is essentially always true here
+          // and the gate would swallow every stale-summary case the check above
+          // just identified. (The r8 test passed only because it seeds no
+          // payments rows; realistic data has them.)
+          //
+          // The map settles it. D1b says an un-mark DELETES the entry's key, so
+          // a map covering every liable entry cannot be the product of one — it
+          // is a summary that fell behind its own evidence. Sending that to an
+          // operator as AMBIGUOUS is manufacturing manual work the data already
+          // answers.
+          if (!staleFullyPaid && uidsWithLedgerHistory.has(uid)) {
             // A pre-P1 un-mark through the roster toggle leaves exactly this
             // shape (member UNPAID via setPaidStatus, entry never updated) —
             // the entry is STALE, not recoverable history. Operator's call.

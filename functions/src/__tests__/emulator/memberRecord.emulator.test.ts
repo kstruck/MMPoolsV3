@@ -1066,8 +1066,18 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
       ],
       dues: { 'dm1': { paidAt: 1 }, 'e2:dm1': { paidAt: 2 } },   // BOTH liable entries paid
     });
+    // — LEDGER HISTORY IS PART OF THE SCENARIO, NOT DECORATION —
+    // Whatever filled that dues map (setPaidStatus, or an earlier run of this
+    // migration) ALSO wrote ledger rows, so in production this member ALWAYS
+    // has history here. Without these rows the test passes even when the
+    // ambiguity gate swallows the case, which is exactly how the first version
+    // of this fix shipped inert (self-review, after codex r10 came back clean).
+    await db.collection('pools').doc(poolId).collection('payments').doc().set({
+      type: 'MARKED_PAID', uid: 'dm1', actorUid: 'p2d_boss', at: 1, note: 'prior',
+    });
 
     const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.ambiguousSkipped).toBe(0);   // the map settles it; not the operator's problem
     expect(r.membersPromoted).toBe(1);
     const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get())
       .data() as Record<string, unknown>;
