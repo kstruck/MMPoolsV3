@@ -1141,6 +1141,31 @@ describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
     expect(again.countsStamped).toBe(0);
   });
 
+  it('🛑 a count stamp does NOT consume the capped plannedFixes list', async () => {
+    // `plannedFixes` is capped at 50 and is what an operator eyeballs to see WHO
+    // before going live. The stamping pass runs FIRST, so if its rows joined
+    // that list they would TRUNCATE the PROMOTE_MEMBER lines — the money
+    // repairs, the only ones a human needs to look at. Found by self-review
+    // after the codex round could not run (OpenAI at capacity).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 } },
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('dm1')
+      .set({ paidStatus: 'UNPAID' }, { merge: true });
+    const r = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as
+      ReconcileResult & { plannedFixes: Array<{ uid: string; fix: string }> };
+    expect(r.countsStamped).toBe(1);
+    // NO row of ANY kind for this member — asserting the absence of one literal
+    // would pass against a stamp pushed under a different label, which is how a
+    // guard like this goes inert. This member has no money divergence, so the
+    // list must be empty of them entirely.
+    expect(r.plannedFixes.filter(f => f.uid === 'dm1')).toHaveLength(0);
+  });
+
   it('🛑 D2 BACKFILL — a member with NO dues document is NOT stamped', async () => {
     // A member without a dues document cannot be partially paid:
     // `collectedBaseDues` gives a PAID one the whole fee and an UNPAID one zero,

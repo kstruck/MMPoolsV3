@@ -135,11 +135,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'STAMP_COUNT' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'STAMP_COUNT' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
@@ -277,8 +277,16 @@ export const reconcilePaymentTruth = validated(
         const liable = liableEntryIds(member as MemberRecord, duesUid, pickedByOwner.get(duesUid) ?? []);
         const want = paidEntryCountOf(pageMap, liable);
         if ((member as { paidEntryCount?: unknown }).paidEntryCount === want) continue;
+        // 🛑 COUNTED, BUT NOT ADDED TO `plannedFixes` — self-review, after the
+        // codex round could not run.
+        //
+        // That list is capped at 50 and is what an operator eyeballs to see WHO
+        // before going live. This pass runs FIRST, so on a platform-wide run its
+        // rows would fill the cap and TRUNCATE the PROMOTE_MEMBER lines — the
+        // money repairs, which are the only ones that need a human to look. A
+        // stamp moves no money and changes no `paidStatus`, so `countsStamped`
+        // carries everything the operator needs about it.
         report.countsStamped++;
-        notedFix(poolId, duesUid, 'STAMP_COUNT');
         changedThisPool++;
         if (dryRun) continue;
         const mRef = doc.ref.collection('members').doc(duesUid);
