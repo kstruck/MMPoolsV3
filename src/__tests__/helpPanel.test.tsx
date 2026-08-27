@@ -360,6 +360,55 @@ describe('a pool page listed from the create wizard (codex R12)', () => {
     expect(screen.getByText(fee.title)).toBeTruthy();
     expect(screen.queryByRole('button', { name: fee.title })).toBeNull();
   });
+
+  /**
+   * …and SEARCH obeys the same predicate, so it cannot offer what the panel
+   * would then refuse.
+   *
+   * "finishing places" matches exactly one thing in the registry — the Payouts
+   * step page — so the row either appears or the empty state does, with nothing
+   * else in the way. From the rules step that page is unreachable: no URL puts
+   * the reader on a wizard step, so the click could only force the Payouts
+   * summary over the rules form, or (once `canOpenPage` refuses that) clear the
+   * search and do nothing. Both are the defect codex R9 fixed for glossary hits.
+   */
+  const findingPlaces = () => {
+    fireEvent.keyDown(document, { key: '?' });
+    return waitFor(() => expect(isOpen()).toBe(true)).then(() => {
+      fireEvent.change(screen.getByPlaceholderText('Search help'), {
+        target: { value: 'finishing places' },
+      });
+    });
+  };
+
+  it('does not offer a search hit for a step the reader cannot reach', async () => {
+    renderApp(<WizardHarness />);
+    await findingPlaces();
+    await waitFor(() => expect(screen.getByText(/Nothing in Help matches/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /Payouts/ })).toBeNull();
+  });
+
+  it('offers the very same hit from the step it belongs to', async () => {
+    // The discriminating half: filtering everything would satisfy the check
+    // above. On the Payouts step the page IS the reader's screen, so the hit
+    // comes back and is clickable.
+    render(
+      <MemoryRouter initialEntries={['/create/pickem']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="commissioner">
+            <HelpRoutePublisher tab="payouts" />
+            <HelpHeaderButton />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    await findingPlaces();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: new RegExp(helpRegistry.getPage('wizard.pickem.payouts')!.title) }),
+      ).toBeTruthy(),
+    );
+  });
 });
 
 describe('a glossary search hit (codex R9)', () => {

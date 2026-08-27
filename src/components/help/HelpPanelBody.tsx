@@ -47,18 +47,31 @@ export function HelpPanelBody({ state, searchInputRef }: {
   const scrolledForTerm = useRef<string | undefined>(undefined);
 
   /**
-   * Search hits, minus anything that lands on a screen this pool has no tab for
+   * Search hits, minus anything that lands on a screen the reader cannot get to
    * (codex R5). A Survivor member searching "Results" would otherwise be handed
    * a row for the NFL Results page, and the click could only show a page they
    * cannot open. `registry.search` cannot do this filtering itself — it knows
    * the reader's audience and pool type, not which tabs the surface rendered.
+   *
+   * `canOpenPage`, NOT `isPageOffered` — the SAME predicate "All pages" and
+   * `goToPage` use, so a result cannot be offered and then refused. The tighter
+   * one matters for the pages no URL can reach (K13: the super-admin tabs, the
+   * wizard steps): an admin on Overview searching "operations" used to be handed
+   * a row whose click forced the Operations summary over the Overview screen,
+   * and — once `canOpenPage` refused that — a row whose click cleared the search
+   * and did nothing. A clickable result that does nothing is the exact defect
+   * codex R9 fixed for glossary hits below; this keeps the search list from
+   * growing a second one.
+   *
+   * Nothing LINKABLE is lost: a page that builds an href stays reachable from
+   * any tab, so the other tabs of a pool dashboard still appear.
    */
   const results = useMemo<HelpSearchResult[]>(
     () =>
       query.trim()
         ? registry.search(query, scope).filter((hit) => {
             const hitPage = hit.pageId ? registry.getPage(hit.pageId) : undefined;
-            return !hitPage || isPageOffered(hitPage, routeContext);
+            return !hitPage || canOpenPage(hitPage, routeContext, scope.audience);
           })
         : [],
     [registry, query, scope, routeContext],
