@@ -105,7 +105,26 @@ export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
       // unless `isVoidWeek(gamesInWeek)` — a slate where every game was
       // cancelled had no legal pick to make, so it strikes nobody.
       'Not picking counts as a wrong pick. If a player has submitted nothing by the deadline, a strike is recorded for them when the week is scored — unless every game that week was called off, which strikes nobody.',
-      'A player who runs out of strikes is marked out, and only comes back if you allow buy-backs.',
+      // TWO REVIVAL PATHS, NOT ONE (codex r1 on this ticket). The first draft
+      // said buy-backs were the only way back and the engine disagrees:
+      // `SURVIVOR_PARITY_SETTINGS_KEYS` (functions/src/lib/survivorSettingsGate.ts:24)
+      // is `['tieCountsAs', 'maxTeamUses']` — `maxStrikes` is NOT gated once a
+      // week has been scored, and the gate's own doc comment names a partial
+      // `{maxStrikes: 2}` save on a scored pool as something it must NOT refuse.
+      // `computeSurvivorWeekUpdate` (nflScoringEngine.ts:670) then recomputes
+      // status from `pool.settings.maxStrikes` as it stands at scoring time
+      // rather than from any stored verdict, and its ELIMINATED skip is
+      // `eliminatedWeek < week` — so re-scoring the elimination week itself is
+      // NOT skipped and `updateSurvivorStatus` can return ALIVE.
+      //
+      // Reachable by the commissioner, not only by an admin: `scoreNFLWeek`
+      // (nflPools.ts:2115) gates on `assertPoolOwnerOrSuperAdmin`, the same
+      // helper `updatePoolSettings` uses (poolOps.ts:505), and it carries no
+      // already-scored refusal. The manager's Score Week button posts the
+      // dashboard's `selectedWeek`, which is a URL parameter free to name any
+      // week 1–18 (NFLPoolDashboard.tsx:190).
+      'A player who runs out of strikes is marked out. Buy-backs are how that player gets themselves back in.',
+      'Raising this limit is the other way back, and it is yours. A week is graded against the limit the pool has at the time it is scored, so raising it and scoring that player’s elimination week again returns them to the pool with their strikes still on the record.',
     ),
     poolTypes: SURVIVOR,
     audience: EVERYONE,
@@ -127,7 +146,12 @@ export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
     title: 'Buy-backs',
     short: 'How many times a player who is out can buy back in. None is the default.',
     long: para(
-      'None is the default, so being out is the end of a player’s season.',
+      // Scoped to what THIS setting does, for the same reason as the strikes
+      // topic above: "being out is the end of a player's season" is an absolute
+      // the engine does not hold to, because raising `maxStrikes` and
+      // re-scoring the elimination week revives an eliminated player whatever
+      // this number is.
+      'None is the default, so no player can buy their way back in.',
       'Allow one or more and an eliminated player can buy themselves back in, up to that many times. Buying back in clears their strikes and takes the weeks up to and including that one out of their record, so nothing already behind them can put them out again.',
       'The teams they have already picked stay used. A buy-back returns a player to the pool, not to the start of the season.',
       'Two settings go with it: the last week a buy-back is allowed, and what one costs.',

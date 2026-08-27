@@ -23,7 +23,15 @@ import {
   UNLIMITED_TEAM_USES,
 } from '../shared/survivorReuse';
 import type { TieCountsAs } from '../shared/survivorReuse';
-import { checkAutoSurviveExemption, updateSurvivorStatus } from '../functions/src/nflScoringEngine';
+import {
+  checkAutoSurviveExemption,
+  computeSurvivorWeekUpdate,
+  updateSurvivorStatus,
+} from '../functions/src/nflScoringEngine';
+import {
+  SURVIVOR_PARITY_SETTINGS_KEYS,
+  survivorParitySettingsRefusal,
+} from '../functions/src/lib/survivorSettingsGate';
 import type { NFLGame, NFLSurvivorPool, SurvivorEntry } from '../functions/src/nflPoolTypes';
 
 /**
@@ -542,6 +550,127 @@ describe('T10 — every default the copy names is the default the code has', () 
     expect(longFor('settings.tieCountsAs')).toContain('cannot be changed once a week has been scored');
     expect(longFor('settings.maxTeamUses')).toContain('once a week has been scored');
     expect(longFor('settings.pickLosersMode')).not.toContain('cannot be changed once a week has been scored');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * THE REVIVAL PATHS, PINNED TO THE ENGINE (codex r1 on this ticket).
+ *
+ * The first draft of the strikes topic said an eliminated player "only comes
+ * back if you allow buy-backs". The engine does not agree, and this block is
+ * the measurement rather than the argument: it drives the real scorer through
+ * an elimination and a revival, and holds the copy to the outcome.
+ *
+ * Two independent facts have to BOTH hold for the second path to exist, so both
+ * are asserted, and each one is the future change that should force a copy edit:
+ *
+ *  1. `maxStrikes` is not in `SURVIVOR_PARITY_SETTINGS_KEYS`, so nothing refuses
+ *     the edit after a week has been scored. Add it to the gate and this goes
+ *     red — correctly, because the copy would then be describing a route the
+ *     server has closed.
+ *  2. `computeSurvivorWeekUpdate` recomputes status from the pool's CURRENT
+ *     `maxStrikes` rather than from a stored verdict, and its ELIMINATED skip is
+ *     `eliminatedWeek < week`, so the elimination week itself is re-evaluated.
+ *     Make it read a stored verdict and this goes red for the same reason.
+ *
+ * Reachability is not assumed either: `scoreNFLWeek` and `updatePoolSettings`
+ * gate on the same helper (`assertPoolOwnerOrSuperAdmin`), so this is a
+ * commissioner route and not an admin-only escape hatch — which is why the copy
+ * addresses it to "you" on the settings tab instead of describing something the
+ * reader cannot reach.
+ */
+describe('T10 — a strikes revival is a real path, and the copy names it', () => {
+  const KC_LOSES = [
+    {
+      id: 'g-kc-buf',
+      status: 'FINAL',
+      homeTeam: { abbreviation: 'KC' },
+      awayTeam: { abbreviation: 'BUF' },
+      scores: { home: 10, away: 20 },
+    },
+  ] as unknown as NFLGame[];
+
+  const survivorPool = (maxStrikes: number) =>
+    ({ settings: { maxStrikes } }) as unknown as NFLSurvivorPool;
+
+  const aliveEntry = () =>
+    ({
+      status: 'ALIVE',
+      strikesUsed: 0,
+      strikeWeeks: [],
+      exemptWeeks: [],
+      picks: { 3: 'KC' },
+    }) as unknown as SurvivorEntry;
+
+  const applied = (entry: SurvivorEntry, week: number, pool: NFLSurvivorPool) => {
+    const { update } = computeSurvivorWeekUpdate(entry, week, KC_LOSES, pool);
+    return { ...entry, ...update } as unknown as SurvivorEntry;
+  };
+
+  it('raising the limit and re-scoring the elimination week puts the player back in', () => {
+    // Sudden death: the week-3 loss is the end of them.
+    const out = applied(aliveEntry(), 3, survivorPool(0));
+    expect(out.status).toBe('ELIMINATED');
+    expect(out.eliminatedWeek).toBe(3);
+
+    // Same entry, same games, one more strike allowed, week 3 scored again.
+    const back = computeSurvivorWeekUpdate(out, 3, KC_LOSES, survivorPool(1));
+    expect(back.skipped).toBe(false);
+    expect(back.alive).toBe(true);
+    expect(back.update.status).toBe('ALIVE');
+    expect(back.update.eliminatedWeek).toBeNull();
+    // "with their strikes still on the record" — the strike is not forgiven,
+    // which is what separates this from a buy-back (`maxRebuys` clears them).
+    expect(back.update.strikeWeeks).toEqual([3]);
+    expect(back.update.strikesUsed).toBe(1);
+  });
+
+  it('the verdict is recomputed from the current limit, never stored', () => {
+    const out = applied(aliveEntry(), 3, survivorPool(0));
+    const back = applied(out, 3, survivorPool(1));
+    expect(back.status).toBe('ALIVE');
+    // And it round-trips: lower the limit again and the same entry is out
+    // again. A stored verdict could not do that in either direction.
+    expect(computeSurvivorWeekUpdate(back, 3, KC_LOSES, survivorPool(0)).update.status)
+      .toBe('ELIMINATED');
+  });
+
+  it('it has to be the elimination week — a later week is skipped', () => {
+    const out = applied(aliveEntry(), 3, survivorPool(0));
+    const later = computeSurvivorWeekUpdate(out, 4, KC_LOSES, survivorPool(1));
+    expect(later.skipped).toBe(true);
+    expect(later.update.status).toBe('ELIMINATED');
+    // So the copy must name the week, not just the setting.
+    expect(longFor('settings.maxStrikes')).toContain('elimination week');
+  });
+
+  it('and nothing refuses the limit change on a pool that has already scored', () => {
+    expect(SURVIVOR_PARITY_SETTINGS_KEYS).not.toContain('maxStrikes');
+    const scored = {
+      type: 'NFL_SURVIVOR',
+      publishedWeeks: { 3: true },
+      settings: { maxStrikes: 0, tieCountsAs: 'LOSS', maxTeamUses: 1 },
+    };
+    expect(survivorParitySettingsRefusal(scored, { 'settings.maxStrikes': 1 }, [])).toBeNull();
+    // The planted counter-example: the gate is not simply inert. The two fields
+    // it DOES cover are refused on the very same scored pool.
+    expect(survivorParitySettingsRefusal(scored, { 'settings.tieCountsAs': 'WIN' }, []))
+      .toMatchObject({ code: 'SETTINGS_LOCKED_AFTER_SCORING', field: 'tieCountsAs' });
+  });
+
+  it('so the copy gives both ways back, and claims neither is the only one', () => {
+    const long = longFor('settings.maxStrikes');
+    expect(long).toContain('Buy-backs are how that player gets themselves back in');
+    expect(long).toContain('Raising this limit is the other way back');
+    expect(long).not.toContain('only comes back');
+    // The same claim in the template's fallback branch, not only the rendered one.
+    expect(staticCopy(helpRegistry.getTopic('settings.maxStrikes')!.long))
+      .toContain('Raising this limit is the other way back');
+    // The buy-back topic must not re-assert the absolute from the other side.
+    expect(longFor('settings.maxRebuys')).not.toContain('the end of a player');
+    expect(longFor('settings.maxRebuys')).toContain('no player can buy their way back in');
   });
 });
 
