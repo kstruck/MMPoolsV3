@@ -23,7 +23,7 @@ import { useSiteConsensus } from './pickSheet/useSiteConsensus';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
 import { planQuickPicks, type QuickPickStrategy } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
-import { effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, tiebreakTargetSentence, tiebreakerAsksForPrediction, tiebreakerCopy } from '@shared/nflTiebreaker';
+import { effectiveWeeklyTiebreaker, tiebreakTargetSentence, tiebreakerAskedButUnavailable, tiebreakerAsksForPrediction, tiebreakerCopy, weekTiebreakTargetIds } from '@shared/nflTiebreaker';
 import { useTopicShort } from '../../help/scope';
 
 interface PickemDraft {
@@ -517,17 +517,31 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // was rendered before a schedule change (TIEBREAK_TARGET_STALE).
   const tiebreakTargetIds = useMemo(() => {
     if (!tiebreakerAsksForPrediction(tiebreakerRule)) return [] as string[];
-    return frozenTiebreakTargetFor(castPool as { frozenTiebreakTargets?: Record<string, unknown> }, week)
-      ?? resolveTiebreakTargetIds(games, tiebreakerRule);
+    return weekTiebreakTargetIds(castPool as { frozenTiebreakTargets?: Record<string, unknown> }, week, games, tiebreakerRule);
   }, [castPool, games, tiebreakerRule, week]);
   const tiebreakTargetText = useMemo(() => tiebreakTargetSentence(tiebreakTargetIds, games), [tiebreakTargetIds, games]);
 
   // Ask for the prediction only when the rule uses one AND the week has a
-  // target game under that rule (a Monday game, or — for the last/first-game
-  // rules — the week's final game on a Monday-less week). Under `NONE`, or a
-  // legacy MNF_COMBINED pool on a Monday-less week, the sheet asks nothing —
-  // the alternative is collecting a number that decides nothing.
+  // target game under that rule. Since 2026-08-27 every asking rule falls back
+  // to the week's final game on a Monday-less week, so the remaining way to
+  // have none is a week that FROZE an empty target before that fix
+  // (`PLAN-TIEBREAKER-MONDAYLESS.md` C2 — the freeze is not rewritten, because
+  // adding a target under members who already submitted is the harm it exists
+  // to prevent). Collecting a number that decides nothing is still worse.
   const showTiebreaker = tiebreakTargetIds.length > 0;
+
+  // 🛑 BUT THE SHEET MAY NOT GO SILENT ABOUT IT (D2).
+  //
+  // When the pool's rule ASKS for a prediction and this week has no target, the
+  // old sheet rendered nothing at all — indistinguishable from a bug, and that
+  // is exactly how this reached production: sixteen picks saved, no input, and
+  // a rules page still promising that the closest prediction takes the week.
+  // The member has no way to learn the difference between "not asked" and
+  // "broken" unless the sheet says so, on the surface where they noticed.
+  //
+  // `NONE` is excluded on purpose: that pool never asks, its rules page says so
+  // outright, and a notice on every sheet all season would be noise.
+  const tiebreakerUnavailable = tiebreakerAskedButUnavailable(tiebreakerRule, tiebreakTargetIds);
 
   // Spreads block the sheet ONLY on a pool whose scoring reads them — i.e. an
   // ATS pick'em. Mirrors the server's own precondition, which was scoped the
@@ -816,8 +830,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
           it is the sticky bar below now, because on a sixteen-game slate the
           old one sat past every matchup and saving meant scrolling the whole
           sheet (the tester complaint #415 fixed on the other two sheets).
-          The card renders only when there is a tiebreaker to ask for; an empty
-          bordered box on a week with no Monday game was the alternative. */}
+          The card renders only when there is a tiebreaker to ask for. When the
+          pool asks for one and the week has no target, the D2 card below says
+          so — an empty bordered INPUT was never the alternative; silence was,
+          and silence is what shipped the production defect. */}
       {games.length > 0 && !isWeekLocked && showTiebreaker && (
         <div className="bg-card border border-line rounded-xl p-6 shadow-card">
           <div className="max-w-md mx-auto space-y-3">
@@ -844,6 +860,22 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                 {tiebreakTargetText}
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* THE SAME CARD'S OTHER HALF (D2): the pool asks for a tiebreaker and
+          this week has no game to ask about. Says so, rather than rendering
+          nothing and letting the member conclude the sheet is broken. */}
+      {games.length > 0 && !isWeekLocked && tiebreakerUnavailable && (
+        <div className="bg-card border border-line rounded-xl p-6 shadow-card">
+          <div className="max-w-md mx-auto space-y-2">
+            <p className="text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-center">
+              No tiebreaker this week
+            </p>
+            <p className="text-[11px] font-body text-muted leading-normal text-center">
+              This week has no tiebreaker game, so the sheet asks for no prediction. Players who finish the week level share it.
+            </p>
           </div>
         </div>
       )}

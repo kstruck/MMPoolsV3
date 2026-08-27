@@ -468,7 +468,7 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
           return [
             'Your pool settles a level week on the Monday games together. Every player predicts their combined final score when they make their picks.',
             'Whoever is closest takes the week. Two players equally close share it.',
-            'On a week with no Monday game nothing is predicted, and everyone level at the top of that week shares it.',
+            'On a week with no Monday game, the final game of the week is used instead, and the pick sheet names the game it is asking about.',
             'This is an older rule and it is no longer offered when you set up a pool. It stays in place here so that nothing changes for a pool part-way through a season.',
           ].join('\n\n');
         }
@@ -482,8 +482,8 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
       },
       fallback: [
         'Your pool can settle a level week by asking each player to predict the combined score of one game. What you choose here is which game — or whether it asks at all.',
-        'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, those two use the last game of the week instead.',
-        'A few older pools ask about every Monday game together. Those ask for nothing on a week with no Monday game.',
+        'Monday night is the usual choice, either the last Monday game or the first. On a week with no Monday game, the last game of the week is used instead.',
+        'A few older pools ask about every Monday game together. They use the same fallback on a week with no Monday game.',
         'You can also choose no tie-breaker. Then nothing is predicted.',
         'Where a prediction is asked for, whoever is closest takes the week, and two players equally close share it. Where none is asked for, everyone level at the top shares it.',
         'Set it before you launch. Once any player has submitted picks, it is fixed for the life of the pool.',
