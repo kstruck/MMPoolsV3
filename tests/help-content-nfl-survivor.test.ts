@@ -660,6 +660,51 @@ describe('T10 — a strikes revival is a real path, and the copy names it', () =
       .toMatchObject({ code: 'SETTINGS_LOCKED_AFTER_SCORING', field: 'tieCountsAs' });
   });
 
+  /**
+   * A SETTING THE COMMISSIONER CAN CHANGE IS EXPLAINED WHERE THEY CHANGE IT
+   * (codex r2 on this ticket).
+   *
+   * `settings.pickLosersMode` was placed on the wizard, the rules page and the
+   * pick sheet, and NOT on the manager settings tab — while its own copy tells
+   * the reader they can change it "from the settings tab later". The reason it
+   * slipped is the same one the pick-loser test above records: the toggle's
+   * label is a `<p>` rather than a `FieldLabel`, so it carries no `helpId` and
+   * appears in none of the coverage allowlists either. Nothing was looking.
+   *
+   * So the placement list is not hand-checked here. The survivor branch of the
+   * manager save is READ, and every key in it that T10 explains must have a
+   * placement on that page. Add a control to the form and this fails until the
+   * help follows it.
+   */
+  it('every survivor setting the manager form saves is placed on the settings tab', () => {
+    const block = MANAGER_SRC.split("} else if (type === 'NFL_SURVIVOR') {")[1]
+      ?.split('} else if (')[0];
+    expect(block).toBeTruthy();
+    // Bare shorthand keys only — `...updatedSettings` and any `x: y` pair are
+    // not settings this form owns.
+    const saved = [...(block as string).matchAll(/^\s{10}([a-zA-Z][a-zA-Z0-9]*),$/gm)]
+      .map((m) => m[1]);
+    expect(saved).toContain('pickLosersMode'); // the one that was missing
+    expect(saved.length).toBeGreaterThanOrEqual(7);
+
+    const placedOnSettingsTab = new Set(
+      NFL_SURVIVOR_PLACEMENTS
+        .filter((p) => p.page === 'pool.nfl.manager.settings')
+        .map((p) => p.topic),
+    );
+    const explained = new Set(NFL_SURVIVOR_TOPICS.map((t) => t.id));
+    const unplaced = saved
+      .map((key) => `settings.${key}`)
+      .filter((id) => explained.has(id) && !placedOnSettingsTab.has(id));
+    expect(unplaced).toEqual([]);
+
+    // The planted counter-example: the check really is reading the save block
+    // and not just passing on an empty list. A setting the form CANNOT change
+    // is absent from both sides, so it must not appear in `saved`.
+    expect(saved).not.toContain('autoSurviveExemptionEnabled');
+    expect(placedOnSettingsTab.has('settings.autoSurviveExemptionEnabled')).toBe(false);
+  });
+
   it('so the copy gives both ways back, and claims neither is the only one', () => {
     const long = longFor('settings.maxStrikes');
     expect(long).toContain('Buy-backs are how that player gets themselves back in');

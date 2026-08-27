@@ -417,12 +417,24 @@ export const NFL_SURVIVOR_PLACEMENTS: readonly HelpPlacement[] = [
   { topic: 'settings.tieCountsAs', page: 'pool.nfl.picks', section: 'survivor', order: 1 },
   { topic: 'settings.maxTeamUses', page: 'pool.nfl.picks', section: 'survivor', order: 2 },
 
-  // Commissioner settings tab — the six controls the manager form renders
-  // (`NFLManagerView.tsx:1601-1677`), each wired to its topic by `helpId`.
+  // Commissioner settings tab — the SEVEN survivor settings the manager form can
+  // change, in the order they render (`NFLManagerView.tsx:1601-1691`).
+  //
+  // Six are `FieldLabel`s wired to their topic by `helpId`, so they carry an
+  // inline tip as well as a panel row. The seventh, `pickLosersMode`, is the
+  // Pick-Loser Mode checkbox at :1680 — its label is a `<p>` and it has no
+  // `helpId`, which is why it was missing from this list entirely (codex r2).
+  // The placement is what puts it in the page's Help panel; the inline tip
+  // beside the toggle needs the label itself changed and is T4's, not T10's.
+  //
+  // The set is not hand-kept: `tests/help-content-nfl-survivor.test.ts` reads
+  // the survivor branch of the manager save and requires a placement here for
+  // every key in it that T10 explains.
   { topic: 'settings.maxStrikes', page: 'pool.nfl.manager.settings', section: 'survivor', order: 0 },
   { topic: 'settings.maxRebuys', page: 'pool.nfl.manager.settings', section: 'survivor', order: 1 },
   { topic: 'settings.rebuyDeadlineWeek', page: 'pool.nfl.manager.settings', section: 'survivor', order: 2 },
   { topic: 'settings.rebuyCost', page: 'pool.nfl.manager.settings', section: 'survivor', order: 3 },
   { topic: 'settings.tieCountsAs', page: 'pool.nfl.manager.settings', section: 'survivor', order: 4 },
   { topic: 'settings.maxTeamUses', page: 'pool.nfl.manager.settings', section: 'survivor', order: 5 },
+  { topic: 'settings.pickLosersMode', page: 'pool.nfl.manager.settings', section: 'survivor', order: 6 },
 ];
