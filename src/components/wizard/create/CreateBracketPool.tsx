@@ -45,8 +45,12 @@ function StepBracketDetails() {
         { value: 'UPSET', label: 'Upset bonus' },
         { value: 'CUSTOM', label: 'Custom' },
       ]} />
-      <CheckboxField name="settings.tieBreakers.closestAbsolute" label="Tiebreaker: closest to final score (absolute)" />
-      <CheckboxField name="settings.tieBreakers.closestUnder" label="Tiebreaker: closest without going over" />
+      {/* ONE topic for both boxes (T12). They are not two independent rules:
+          every reader in the repo branches on `closestUnder` alone, so the
+          explanation is one sentence and lives in one place (voice rule 10).
+          Neither path is the topic's id, so both name it explicitly. */}
+      <CheckboxField name="settings.tieBreakers.closestAbsolute" helpId="bracket.tieBreak" label="Tiebreaker: closest to final score (absolute)" />
+      <CheckboxField name="settings.tieBreakers.closestUnder" helpId="bracket.tieBreak" label="Tiebreaker: closest without going over" />
     </div>
   );
 }

@@ -986,6 +986,17 @@ describe('the real registry — content rules', () => {
       { maxStrikes: 12 },
       {},
     ],
+    // Every value `bracketScoringSystemSchema` accepts, plus the absent case.
+    // UPSET is the one the wizard offers and no engine implements, so it has no
+    // label and must render the no-system branch rather than the raw token.
+    'settings.scoringSystem': [
+      { scoringSystem: 'CLASSIC' },
+      { scoringSystem: 'ESPN' },
+      { scoringSystem: 'FIBONACCI' },
+      { scoringSystem: 'CUSTOM' },
+      { scoringSystem: 'UPSET' },
+      {},
+    ],
   };
 
   const isTemplate = (copy: unknown): boolean => typeof copy !== 'string';

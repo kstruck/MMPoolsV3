@@ -32,10 +32,14 @@ function StepPlayoffDetails() {
       </Field>
       <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Round multipliers</p>
       <div className="grid grid-cols-2 gap-x-4">
-        <NumberField name="settings.scoring.roundMultipliers.WILD_CARD" label="Wild Card" min={0} />
-        <NumberField name="settings.scoring.roundMultipliers.DIVISIONAL" label="Divisional" min={0} />
-        <NumberField name="settings.scoring.roundMultipliers.CONF_CHAMP" label="Conf. Championship" min={0} />
-        <NumberField name="settings.scoring.roundMultipliers.SUPER_BOWL" label="Super Bowl" min={0} />
+        {/* ONE topic for all four (T12). Four boxes are one decision — how
+            steeply a round outweighs the one before it — and four tooltips
+            would be four copies of the same sentence (voice rule 10). None of
+            the four paths is the topic's id, so each names it explicitly. */}
+        <NumberField name="settings.scoring.roundMultipliers.WILD_CARD" helpId="playoff.roundMultipliers" label="Wild Card" min={0} />
+        <NumberField name="settings.scoring.roundMultipliers.DIVISIONAL" helpId="playoff.roundMultipliers" label="Divisional" min={0} />
+        <NumberField name="settings.scoring.roundMultipliers.CONF_CHAMP" helpId="playoff.roundMultipliers" label="Conf. Championship" min={0} />
+        <NumberField name="settings.scoring.roundMultipliers.SUPER_BOWL" helpId="playoff.roundMultipliers" label="Super Bowl" min={0} />
       </div>
     </div>
   );

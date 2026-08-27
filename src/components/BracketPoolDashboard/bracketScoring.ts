@@ -11,6 +11,28 @@ import { getSeedForTeam } from '../../utils/bracketScoring';
 const ROUND_VALUES_CLASSIC = [10, 20, 40, 80, 160, 320];
 const ROUND_VALUES_FIBONACCI = [10, 20, 30, 50, 80, 130];
 
+/**
+ * How each scoring system is NAMED to a reader.
+ *
+ * Lives beside `getPointsForRound` — the function that turns the same setting
+ * into numbers — because two things read it and neither may hold a copy
+ * (`docs/help-voice.md` rule 10): `BracketRulesPanel` prints it on the pool's
+ * rules page, and the `settings.scoringSystem` help topic
+ * (`src/help/content/bracket.ts`) names the pool's own system with it. It was
+ * declared inside `BracketRulesPanel.tsx` until T12 needed the second reader.
+ *
+ * `UPSET` is deliberately absent: the create wizard offers it, no scoring path
+ * implements it, and inventing a label here would make a broken value look
+ * supported. Callers fall back — the panel to the raw value, the help topic to
+ * copy that names no system at all.
+ */
+export const SCORING_SYSTEM_LABELS: Record<string, string> = {
+    CLASSIC: 'Classic (points double each round)',
+    ESPN: 'ESPN-style (points double each round)',
+    FIBONACCI: 'Fibonacci (points grow gradually each round)',
+    CUSTOM: 'Custom (set by your commissioner)',
+};
+
 export interface ScoringResult {
     score: number;
     maxPossibleScore: number;
