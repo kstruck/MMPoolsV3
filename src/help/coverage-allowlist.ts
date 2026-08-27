@@ -82,15 +82,14 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // 2026-08-22 and the row is SETTLED — see below.
   'settings.pointsPerPick': "PERMANENT (Kevin, 2026-08-22 — PLAN-DELETE-INERT-PICKEM-SCORING.md). The field is INERT: `scorePickemEntry` awards exactly 1 point per correct pick on a non-confidence pool and never reads it. Every control and every member-facing row that displayed it is DELETED — the manager's Scoring Configuration card, NFLPoolRules' Base Points row, and JoinPool's rules preview. No surface writes or shows it, so there is no control for help copy to explain; the path stays here because `shared/schemas/nfl.ts` still accepts the field, which is what keeps a stored value on an existing pool from being rejected. `settings.primetimeBonus` never had a row because it is not in that schema.",
 
-  // ---- PENDING: NFL Survivor (T10) ---------------------------------------
-  'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
-  'settings.maxRebuys': 'T10: how many buy-backs a player may take.',
-  'settings.rebuyDeadlineWeek': 'T10: last week a buy-back is allowed.',
-  'settings.rebuyCost': 'T10: what a buy-back costs. Money copy, so voice rule 8 applies.',
-  'settings.tieCountsAs': 'T10: whether a tied game survives. Its copy is tieOutcomeRuleCopy() today and becomes this topic template.',
-  'settings.maxTeamUses': 'T10: how often one team may be picked. Its copy is teamReuseRuleCopy() today and becomes this topic template.',
-  'settings.pickLosersMode': 'T10: pick the loser instead of the winner. Its copy is survivorModeRulesCopy() today and becomes this topic template.',
-  'settings.autoSurviveExemptionEnabled': 'T10: whether a missed pick survives on an exemption.',
+  // ---- NFL Survivor (T10): all eight rows CLOSED --------------------------
+  // The eight survivor settings are authored in `content/nfl-survivor.ts`, all
+  // scoped to `NFL_SURVIVOR`. The three that already had shipped copy —
+  // `tieCountsAs`, `maxTeamUses`, `pickLosersMode` — did NOT get a second
+  // wording: their topics CALL `utils/survivorRules.ts` from the `template`,
+  // exactly as the note above `HelpCopy` in `help/types.ts` prescribes, and
+  // `tests/help-content-nfl-survivor.test.ts` holds every branch to the live
+  // helper byte-for-byte.
 
   // ---- PENDING: NFL Margin, hybrid split, multi-entry (T11) ---------------
   'settings.payoutMode': 'T11: season pot, weekly pot, or both. Money copy, so voice rule 8 applies.',
@@ -194,13 +193,10 @@ export const UI_EXEMPTIONS: Readonly<
  * diff line, which is the point.
  */
 export const MANAGER_LABEL_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
-  // ---- T10: NFL Survivor rules --------------------------------------------
-  'Strikes Limit': 'T10: how many wrong picks before elimination.',
-  'Max Rebuys': 'T10: buying back in after elimination.',
-  'Rebuy Cutoff Week': 'T10: the last week a rebuy is allowed.',
-  'Rebuy Fee ($)': 'T10: what a rebuy costs. Money copy, so voice rule 8 applies.',
-  'Tie Outcome': 'T10: whether a tied game survives or eliminates.',
-  'Team-Use Limit': 'T10: how many times one team may be picked across the season.',
+  // ---- T10: NFL Survivor rules — all six rows CLOSED -----------------------
+  // The six survivor labels now carry a `helpId` to their topic in
+  // `content/nfl-survivor.ts`, so they are covered by the FieldLabel branch of
+  // `help-manager-label-coverage.test.ts` rather than exempted here.
 
   // ---- T11: the payout-mode trio ------------------------------------------
   // Rendered TWICE each — once on the Pick'em branch and once on the Margin
@@ -248,15 +244,10 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   // ---- NFL Pick'em (T9): the confidence and lock-mode controls both resolve
   // to topics in `content/nfl-pickem.ts`, so neither needs a row here.
 
-  // ---- PENDING: NFL Survivor (T10) ---------------------------------------
-  'settings.maxStrikes': 'T10: how many wrong picks before elimination.',
-  'settings.maxRebuys': 'T10: how many buy-backs a player may take.',
-  'settings.rebuyDeadlineWeek': 'T10: last week a buy-back is allowed.',
-  'settings.rebuyCost': 'T10: what a buy-back costs.',
-  'settings.tieCountsAs': 'T10: whether a tied game survives.',
-  'settings.maxTeamUses': 'T10: how often one team may be picked.',
-  'settings.pickLosersMode': 'T10: pick the loser instead of the winner.',
-  'settings.autoSurviveExemptionEnabled': 'T10: whether a missed pick survives on an exemption.',
+  // ---- NFL Survivor (T10): all eight rows CLOSED --------------------------
+  // Every control on `CreateNFLSurvivorPool.tsx`'s rules step resolves to a
+  // topic in `content/nfl-survivor.ts` under the `NFL_SURVIVOR` scope the
+  // wizard publishes, so none of them needs a row here.
 
   // ---- PENDING: NFL Margin and the hybrid split (T11) ---------------------
   'settings.payoutMode': 'T11: season pot, weekly pot, or both.',
