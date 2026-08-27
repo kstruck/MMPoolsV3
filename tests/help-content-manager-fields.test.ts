@@ -446,6 +446,22 @@ describe('T6 — the bonus percentage is money copy (voice rule 8)', () => {
     }
   });
 
+  it('does not claim one pot where the panel prices two (codex r4)', () => {
+    // An NFL pool may run `payoutMode: 'HYBRID'`. Where it ALSO declares its own
+    // weekly place list, `PayoutsPanel` prices a bonus off the season pot alone
+    // and the weekly list separately — so "that one pot" and "95% for the
+    // finishing places" were both false for that reader.
+    const long = staticCopy(percentage().long);
+    expect(long).toContain('weekly prizes');
+    // The two lines the copy is written against, read back out of the panel, so
+    // a change to either fails here instead of silently making the copy wrong.
+    const panel = read('src/components/PayoutsPanel.tsx');
+    expect(panel).toContain(
+      "const separateWeekly = payoutMode === 'HYBRID' && Array.isArray(settings.weeklyPayouts?.places);",
+    );
+    expect(panel).toContain("separateWeekly ? 'the season pot' : 'the pot'");
+  });
+
   it('and "Rules tab" is what those dashboards actually call it', () => {
     // Read back out of the tab bars, so a rename makes the copy fail here
     // rather than quietly misdirecting a member. The two labels differ, which

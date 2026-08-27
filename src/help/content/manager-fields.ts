@@ -40,6 +40,17 @@
 //   the same sum. NOTHING awards a bonus: no scorer reads `bonuses`, so the
 //   commissioner decides the winner and pays them.
 //
+//   ⚠️ "THE POT" IS NOT ALWAYS ONE POT (codex r4). An NFL pool may run
+//   `payoutMode: 'HYBRID'`, and `PayoutsPanel` then prices every percentage off
+//   BOTH pots — except where the pool also declares its own weekly place list.
+//   `separateWeekly` (`PayoutsPanel.tsx:376`) is `HYBRID` plus
+//   `settings.weeklyPayouts.places`, and under it a bonus renders as "% of the
+//   season pot" and the weekly list is priced separately. So the copy is
+//   written against the ONE thing true in every mode — a bonus and the places
+//   it is listed BESIDE always share a pot, because both live on
+//   `settings.payouts` — and then names the separate-weekly case outright.
+//   "One pot" and "95% for the finishing places" were false there.
+//
 //   WHERE MEMBERS READ A BONUS. `PayoutsPanel.tsx:471` renders the bonus list
 //   behind `!compact`, so the bracket rules panel and the NFL rules page show
 //   it and the JOIN SCREEN (`JoinPool.tsx:223`, `compact`) does not. A playoff
@@ -158,10 +169,10 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     id: 'settings.payouts.bonuses.*.percentage',
     title: 'Bonus prize share',
     short:
-      'What share of the pot this bonus takes. It draws on the same pot as the finishing places — the money you collect from players.',
+      'What share of the pot this bonus takes. It draws on the same pot as the finishing places beside it — the money you collect from players.',
     long: [
       'The pot is the entry fees you collect. Nothing is held here, so this share is a record of what you owe whoever wins the bonus rather than a transfer — the money goes from you to them directly.',
-      'Places and bonuses draw on that one pot and are added together, so a 5% bonus leaves 95% for the finishing places. The editor keeps a running total and marks it until the two lists come to 100%.',
+      'A bonus and the places listed beside it are added together against one 100% ceiling, so a 5% bonus leaves 95% for those places. The editor keeps a running total and marks it until the list comes to 100%. If your pool pays separate weekly prizes off their own list, a bonus comes out of the season pot only and leaves the weekly prizes alone.',
       'Members read every bonus and its share on the pool’s Rules tab, listed under the finishing places. The join screen leaves them out, so somebody deciding whether to join sees the places and not this — a bonus is worth announcing yourself as well.',
     ].join('\n\n'),
     poolTypes: BONUS_TYPES,
