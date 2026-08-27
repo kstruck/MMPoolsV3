@@ -1456,7 +1456,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               </div>
 
               <div>
-                <FieldLabel tone="muted">Payout Method</FieldLabel>
+                <FieldLabel tone="muted" helpId="settings.payoutMode">Payout Method</FieldLabel>
                 <select
                   value={payoutMode}
                   onChange={e => {
@@ -1509,13 +1509,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <FieldLabel tone="muted">Weekly pots ($/entry)</FieldLabel>
+                      <FieldLabel tone="muted" helpId="settings.hybridSplit.weeklyPerEntry">Weekly pots ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitWeekly}
                         onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
                     </div>
                     <div>
-                      <FieldLabel tone="muted">Season pot ($/entry)</FieldLabel>
+                      <FieldLabel tone="muted" helpId="settings.hybridSplit.seasonPerEntry">Season pot ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitSeason}
                         onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
@@ -1697,7 +1697,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             <div className="space-y-4">
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted border-b border-line pb-2">Margin Rules</p>
               <div>
-                <FieldLabel tone="muted">Payout Method</FieldLabel>
+                <FieldLabel tone="muted" helpId="settings.payoutMode">Payout Method</FieldLabel>
                 <select
                   value={marginPayoutMode}
                   onChange={e => {
@@ -1748,13 +1748,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <FieldLabel tone="muted">Weekly pots ($/entry)</FieldLabel>
+                      <FieldLabel tone="muted" helpId="settings.hybridSplit.weeklyPerEntry">Weekly pots ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitWeekly}
                         onChange={e => { setSplitDeclared(true); setSplitWeekly(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
                     </div>
                     <div>
-                      <FieldLabel tone="muted">Season pot ($/entry)</FieldLabel>
+                      <FieldLabel tone="muted" helpId="settings.hybridSplit.seasonPerEntry">Season pot ($/entry)</FieldLabel>
                       <input type="number" min={0} value={splitSeason}
                         onChange={e => { setSplitDeclared(true); setSplitSeason(Math.max(0, Math.floor(Number(e.target.value) || 0))); }}
                         className="w-full font-body bg-card border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm num" />
