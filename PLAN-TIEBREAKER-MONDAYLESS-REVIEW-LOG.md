@@ -200,4 +200,42 @@ Guards: emulator **5g** (the refusal, and that a reload then succeeds) and **5h*
 
 ## Round 4 — codex
 
-**PENDING.**
+**VERDICT: CLEAN.** No findings.
+
+> The changes consistently apply the Monday-less fallback while preserving
+> existing frozen empty targets and handling the separate frontend/backend
+> rollout paths. TypeScript compilation succeeds; targeted Vitest runs could not
+> start because the sandbox blocks child-process spawning (EPERM).
+
+⚠️ Noted honestly: codex could not run the tests in its sandbox. Its clean
+verdict rests on reading and on `tsc`, not on a green suite. **The suites were
+run here** — see the gate table in the PR body — and every new guard was
+mutation-tested.
+
+---
+
+## Resolution
+
+**CONVERGED at round 4.** 4 rounds, 4 findings (1 P1, 2 P2, 1 P1), **4 accepted,
+0 rejected, 0 open.** Finding count fell 1 → 2 → 1 → 0.
+
+Both stopping conditions met: a codex round came back clean **AND** my own read
+of the diff agrees. qodo is dormant (§2b) and was not waited for. Well inside
+the 10-round cap.
+
+**What self-review contributed beyond the rounds** — the thing §2c says earns its
+keep:
+
+- After round 2 it found the inverse-ordering residual that round 3 then turned
+  into a P1. Self-review found the hole; codex found that my proposed
+  *disposition* of it ("not fixable from the server") was wrong. Neither alone
+  would have closed it.
+- It checked that the r1 guard reads `games` (the week's slate, not the season),
+  so `noMondayGame` is a statement about this week.
+- It confirmed `frozenTargetWrite` is still written on the same condition as
+  before (`frozenTarget === undefined`), so the guards change the VALUE frozen
+  and never whether a freeze happens — an empty freeze remains a real, permanent
+  state, which is what qodo #9 on #452 requires.
+
+**Every finding across all four rounds was about the ROLLOUT, not the ruled
+behaviour.** The A & D change Kevin signed was never disputed by any round.
