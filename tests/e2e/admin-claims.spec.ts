@@ -15,8 +15,13 @@ async function reachSuperAdmin(page: Page, email: string): Promise<void> {
     await page.goto('/');
     await page.reload();
     // Confirm the client reflects SUPER_ADMIN before hitting the gated route.
+    // The 2026-08-27 grouped-nav redesign dropped the old "(ROLE)" suffix that
+    // printed beside every name — "(MEMBER)" told nobody anything and was part
+    // of the clutter that redesign answered. The ELEVATED roles kept a signal:
+    // the account trigger carries a gold SUPER_ADMIN / MODERATOR chip, which is
+    // the same fact this wait needs, minus the parentheses.
     const promoted = await page
-      .getByText('(SUPER_ADMIN)')
+      .getByText('SUPER_ADMIN', { exact: true })
       .first()
       .waitFor({ state: 'visible', timeout: 20_000 })
       .then(() => true)
