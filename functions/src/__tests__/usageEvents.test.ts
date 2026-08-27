@@ -16,9 +16,12 @@ import * as path from 'path';
  *    cannot be mistaken for a cheap month (cost sums NULL as nothing).
  */
 
+type MockDocRef = { __collection: string; __id: string };
+type MockDocData = Record<string, unknown>;
+
 const h = vi.hoisted(() => ({
-  added: [] as any[],
-  setCalls: [] as { id: string; data: any }[],
+  added: [] as { collection: string; doc: MockDocData }[],
+  setCalls: [] as { id: string; data: MockDocData }[],
   addShouldThrow: false,
 }));
 
@@ -27,11 +30,11 @@ vi.mock('firebase-admin', () => {
   // The recorder writes BOTH docs in one batch (codex round 2, finding 3), so
   // the mock models a batch: staged writes are only visible after commit(), and
   // a failing commit must leave BOTH unrecorded.
-  const firestore: any = () => ({
+  const firestore = Object.assign(() => ({
     batch: () => {
-      const staged: { ref: any; data: any }[] = [];
+      const staged: { ref: MockDocRef; data: MockDocData }[] = [];
       return {
-        set: (ref: any, data: any) => { staged.push({ ref, data }); },
+        set: (ref: MockDocRef, data: MockDocData) => { staged.push({ ref, data }); },
         commit: async () => {
           if (h.addShouldThrow) throw new Error('Firestore unavailable');
           for (const { ref, data } of staged) {
@@ -45,10 +48,9 @@ vi.mock('firebase-admin', () => {
       };
     },
     collection: (name: string) => ({
-      doc: (id?: string) => ({ __collection: name, __id: id ?? 'auto-id' }),
+      doc: (id?: string): MockDocRef => ({ __collection: name, __id: id ?? 'auto-id' }),
     }),
-  });
-  firestore.Timestamp = Timestamp;
+  }), { Timestamp });
   return { firestore, default: { firestore } };
 });
 
@@ -115,7 +117,7 @@ describe('usageEvents — what gets written', () => {
   it('stamps a TTL expiry the configured number of days out', async () => {
     const before = Date.now();
     await recordUsageEvent({ provider: 'gemini', feature: 'ai.recap', outcome: 'success' });
-    const expiresAt = h.added[0].doc.expiresAt.__ts;
+    const expiresAt = (h.added[0].doc.expiresAt as { __ts: number }).__ts;
     const expectedMin = before + RAW_EVENT_TTL_DAYS * 24 * 60 * 60 * 1000 - 5000;
     expect(expiresAt).toBeGreaterThan(expectedMin);
   });

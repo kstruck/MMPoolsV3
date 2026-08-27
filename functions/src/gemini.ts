@@ -147,7 +147,8 @@ export const generateAIResponse = async (
         // measured token count available, and Phase 2.3's spend breaker is built
         // on it. Field names vary across SDK versions, so read defensively; a
         // missing count records as unpriced rather than as zero.
-        const usage: any = (result as any)?.usageMetadata ?? {};
+        const usage: Record<string, unknown> =
+            (result as { usageMetadata?: Record<string, unknown> } | undefined)?.usageMetadata ?? {};
         const inputTokens = typeof usage.promptTokenCount === "number" ? usage.promptTokenCount : null;
         const outputTokens = typeof usage.candidatesTokenCount === "number"
             ? usage.candidatesTokenCount

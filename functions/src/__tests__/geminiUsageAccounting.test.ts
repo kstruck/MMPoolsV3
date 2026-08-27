@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { UsageEventInput } from '../lib/usageEvents';
 
 /**
  * PLAN-COST-CONTROLS Phase 1.3 — ONE provider call must produce ONE usage event.
@@ -17,14 +18,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 const h = vi.hoisted(() => ({
-  events: [] as any[],
+  events: [] as UsageEventInput[],
   responseText: '',
   shouldThrowApi: false,
   apiKey: 'test-key' as string,
 }));
 
 vi.mock('../lib/usageEvents', () => ({
-  recordUsageEvent: async (e: any) => { h.events.push(e); },
+  recordUsageEvent: async (e: UsageEventInput) => { h.events.push(e); },
 }));
 
 vi.mock('firebase-functions/params', () => ({
@@ -37,7 +38,7 @@ vi.mock('@google/genai', () => ({
     models = {
       generateContent: async () => {
         if (h.shouldThrowApi) {
-          const err: any = new Error('upstream exploded');
+          const err = new Error('upstream exploded') as Error & { status?: number };
           err.status = 503;
           throw err;
         }
