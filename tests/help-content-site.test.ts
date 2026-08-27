@@ -248,6 +248,67 @@ describe('T3 — /participant is covered tab by tab', () => {
     expect(source).toMatch(/managed > 0 \? \[\{ id: 'commissioner'/);
   });
 
+  /**
+   * CODEX R2 [P2] — REJECTED, with the evidence, and pinned so the rejection is
+   * reviewable rather than silent.
+   *
+   * The finding: `/participant?tab=commissioner` is still accepted by the mount
+   * effect's fixed `valid` list for a reader whose strip omits the tab, so the
+   * hub renders and Help resolves its page. The prescribed fix was to validate
+   * the requested tab against `tabStrip`/`offeredTabs` and fall back.
+   *
+   * WHY THAT FIX IS WORSE THAN THE DEFECT. `myPools` starts `[]` and fills
+   * asynchronously, and `setIsLoading(false)` lives inside `processPools`, which
+   * `mergeAndUpdate` calls from EACH of three independent subscriptions
+   * (participating, owned, co-commissioned). So neither mount time nor
+   * `!isLoading` means "every feed has reported": a commissioner who owns pools
+   * but participates in none has `managed === 0` at the moment the participating
+   * feed returns. Validating there would bounce a REAL commissioner off their own
+   * deep link — a worse failure than an empty hub for someone who typed the URL.
+   * Fixing it properly needs a readiness signal the loader does not have, which
+   * is a product change to that component and not this content ticket.
+   *
+   * AND HELP IS NOT LYING IN THAT STATE. `HelpRoutePublisher` publishes
+   * `activeTab` — the tab actually RENDERED — and `useHelpPanel.ts` states the
+   * rule: the panel must describe the screen, not the link. While the hub is on
+   * screen, the hub page is the correct description. `offeredTabs` governs
+   * NAVIGATION (`isPageOffered` is read only by "All pages" and `hrefForPage`),
+   * never resolution. The two checks below pin both halves of that.
+   */
+  it('offeredTabs governs navigation, not which page the panel resolves', () => {
+    const withoutHub = tabs.filter((t) => t !== 'commissioner');
+    const here = ctx({ pathname: '/participant', tab: 'commissioner', offeredTabs: withoutHub });
+    // Resolution follows the RENDERED tab, so the reader looking at the hub is
+    // told about the hub…
+    expect(resolveHelpPage(helpRegistry.pages, here, MEMBER)?.id).toBe('account.entries.commissioner');
+    // …while navigation to it from the strip is still refused. If these two ever
+    // agree, one of them has taken over the other's job.
+    expect(isPageOffered(helpRegistry.getPage('account.entries.commissioner')!, here)).toBe(false);
+  });
+
+  it('the loader has no all-feeds-reported signal, which is why the tab is not validated', () => {
+    // The evidence for the rejection above, read from the source rather than
+    // asserted. The day `setIsLoading(false)` means "all three feeds reported",
+    // a fallback becomes implementable and this rejection should be revisited.
+    //
+    // SLICED, not regex-matched. A non-greedy `[\s\S]*?setIsLoading` from the
+    // function header matches straight past the end of `processPools` into the
+    // error handlers below it, so it stays green when the call is REMOVED from
+    // the body — measured: mutation 10 deleted the line and the check did not
+    // notice. Bounding the slice is what makes it a guard.
+    const start = source.indexOf('const processPools = (allPools: Pool[]) => {');
+    const end = source.indexOf('if (isSuperAdmin(user)) {');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const body = source.slice(start, end);
+    expect(body).toContain('setMyPools(unique);');
+    expect(body).toContain('setIsLoading(false);');
+    // Three subscriptions, each calling mergeAndUpdate -> processPools.
+    expect([...source.matchAll(/mergeAndUpdate\(\);/g)].length).toBeGreaterThanOrEqual(3);
+    // And the mount effect's accept-list is still the fixed union, not the strip.
+    expect(source).toMatch(/const valid = \['insights'/);
+  });
+
   it('each tab page links to its own tab', () => {
     const own = SITE_PAGES.filter((p) => p.route === '/participant' && p.tab !== undefined);
     expect(own.length).toBe(tabs.length);
