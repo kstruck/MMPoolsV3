@@ -252,9 +252,9 @@ describe('the panel contents', () => {
     // that it was measuring the wrong subject: the guard is for the PANEL's
     // no-page branch, and pointing it at whichever real screen currently lacks
     // help makes it a coverage assertion in disguise — one that fails, by
-    // design, every time the content improves. Re-pointing it at another real
-    // route (`/super-admin` is uncovered today, until T14) would buy one
-    // ticket's grace and then break again for the same reason.
+    // design, every time the content improves. Re-pointing it at whichever real
+    // route `ROUTE_ALLOWLIST` still marks pending would buy one ticket's grace
+    // and then break again for exactly the same reason.
     //
     // The branch it guards stays reachable in the live app: any `App.tsx` route
     // the registry does not cover renders it, which is precisely what

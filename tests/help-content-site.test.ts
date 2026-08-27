@@ -371,9 +371,11 @@ describe('T3 — every link is a working path or a deliberate null', () => {
    * `pathname`, `search`, the published tab/pool-type/manager flag and nothing
    * about auth. The honest answer while that is true is to decline the link.
    *
-   * These three checks are the whole of that decision, in the order it was made:
-   * the gate is really in `App.tsx`; there is really no auth axis to read; and
-   * the pages therefore offer no cross-route link.
+   * The five checks below are the whole of that decision, in the order it was
+   * made: the gate is really in `App.tsx`; there is really no auth axis to
+   * read; the pages therefore offer no cross-route link; the `/participant`
+   * tab links survive only from `/participant`; and that from-own-route branch
+   * is used only where its exact path compare is sound.
    */
   it('App.tsx really turns a signed-out reader away from all three', () => {
     const app = read('src/App.tsx');
