@@ -8,6 +8,7 @@ import { NFL_SHARED_PLACEMENTS, NFL_SHARED_TOPICS } from './nfl-shared';
 import { NFL_PICKEM_PLACEMENTS, NFL_PICKEM_TOPICS } from './nfl-pickem';
 import { NFL_SURVIVOR_PLACEMENTS, NFL_SURVIVOR_TOPICS } from './nfl-survivor';
 import { BRACKET_PLACEMENTS, BRACKET_TOPICS } from './bracket';
+import { SQUARES_PROPS_PLACEMENTS, SQUARES_PROPS_TOPICS } from './squares-props';
 import type { HelpPlacement, HelpTopic } from '../types';
 
 export { WIZARD_PAGES } from './wizard-pages';
@@ -18,6 +19,7 @@ export const TOPICS: readonly HelpTopic[] = [
   ...NFL_PICKEM_TOPICS,
   ...NFL_SURVIVOR_TOPICS,
   ...BRACKET_TOPICS,
+  ...SQUARES_PROPS_TOPICS,
 ];
 
 export const PLACEMENTS: readonly HelpPlacement[] = [
@@ -26,4 +28,5 @@ export const PLACEMENTS: readonly HelpPlacement[] = [
   ...NFL_PICKEM_PLACEMENTS,
   ...NFL_SURVIVOR_PLACEMENTS,
   ...BRACKET_PLACEMENTS,
+  ...SQUARES_PROPS_PLACEMENTS,
 ];

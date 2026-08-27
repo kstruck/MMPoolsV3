@@ -29,8 +29,10 @@ function StepPropsSetup() {
       <p className="mb-5 text-sm text-slate-400">The matchup and the questions players answer.</p>
 
       <div className="grid grid-cols-2 gap-x-4">
-        <TextField name="homeTeam" label="Home team" placeholder="Optional" />
-        <TextField name="awayTeam" label="Away team" placeholder="Optional" />
+        {/* One explanation, two fields (voice rule 10) — both point at the
+            shared `matchup.teams` topic rather than repeating it. */}
+        <TextField name="homeTeam" label="Home team" placeholder="Optional" helpId="matchup.teams" />
+        <TextField name="awayTeam" label="Away team" placeholder="Optional" helpId="matchup.teams" />
       </div>
       <NumberField name="props.maxCards" label="Max cards per player" min={1} />
 
