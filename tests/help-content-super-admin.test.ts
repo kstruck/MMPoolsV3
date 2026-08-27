@@ -211,6 +211,42 @@ describe('T14 — K13 linkability', () => {
     expect(canOpenPage(page, here, 'admin')).toBe(true);
     expect(canOpenPage(page, elsewhere, 'admin')).toBe(false);
   });
+
+  /**
+   * …and IN PLACE means THIS tab, not any tab on this route (codex R2 on T14).
+   *
+   * The two decisions that make this reachable are each right on their own:
+   * K13 gives every tab page `href: () => null`, and `canOpenPage` lets an
+   * unlinkable page open where the reader already stands. Together they let an
+   * admin sitting on Overview select Operations from "All pages" and be shown
+   * the Operations summary while `SuperAdmin.tsx` still renders Overview —
+   * a guide for a screen the reader is not looking at, which is the one thing
+   * the panel must never do.
+   *
+   * Pinned across the whole matrix rather than on one pair, because the fix is
+   * a general rule in `route-match.ts` and a per-page fix would pass a
+   * single-pair assertion.
+   */
+  it('does NOT open a tab page for a tab the reader is not on', () => {
+    const leaked = NAV_TABS.flatMap((reader) =>
+      NAV_TABS.filter(
+        (other) => other !== reader && canOpenPage(admin.getPage(`super-admin.${other}`)!, onTab(reader), 'admin'),
+      ).map((other) => `on ${reader}, opened ${other}`),
+    );
+    expect(leaked).toEqual([]);
+  });
+
+  /**
+   * The discriminating half. Refusing everything would satisfy the check above,
+   * and it would also break the panel: the tab the reader IS on must open, and
+   * so must the route page that has no tab of its own.
+   */
+  it('still opens the tab the reader IS on, and the tab-less root, on every tab', () => {
+    const refused = NAV_TABS.filter((tab) => !canOpenPage(admin.getPage(`super-admin.${tab}`)!, onTab(tab), 'admin'));
+    expect(refused).toEqual([]);
+    const rootRefused = NAV_TABS.filter((tab) => !canOpenPage(admin.getPage('super-admin')!, onTab(tab), 'admin'));
+    expect(rootRefused).toEqual([]);
+  });
 });
 
 describe('T14 — the copy', () => {
