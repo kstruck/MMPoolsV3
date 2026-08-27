@@ -215,6 +215,21 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
   },
 
   // ---- Payouts -----------------------------------------------------------
+  //
+  // T11: THESE TWO TOPICS ALSO EXPLAIN THE HYBRID POOL'S SECOND PLACE LIST.
+  //
+  // A pool on the Hybrid payout method has two pots, so the same editor is
+  // bound a second time to `settings.weeklyPayouts` — in the wizard
+  // (`StepPayouts.tsx:104-117`) and on the manager form (`NFLManagerView.tsx`
+  // `WeeklyPlacesEditor`). Both already point their controls' `helpId` at the
+  // ids below, because the rows are the same two settings under another path
+  // and the explanation does not change: a rank is a finishing position and a
+  // percentage is a share of whichever pot its list prices.
+  //
+  // So the weekly paths are claimed HERE, in `fields[]`, rather than by a
+  // second pair of topics. Voice rule 10: a sentence explaining what a setting
+  // means exists in exactly one place. Naming `fields[]` at all overrides the
+  // "id is the path" default, which is why each list names its own id too.
   {
     id: 'settings.payouts.places.*.rank',
     title: 'Prize place',
@@ -222,7 +237,9 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
     long: [
       'Add one row per paid position: 1 for the winner, 2 for the runner-up, and so on.',
       'Two rows with the same place are refused, because the pool would then have two conflicting answers for who is owed what.',
+      'A pool that pays weekly AND on the final season standings keeps a list for each of the two pots. The rule is the same in both.',
     ].join('\n\n'),
+    fields: ['settings.payouts.places.*.rank', 'settings.weeklyPayouts.places.*.rank'],
     poolTypes: 'all',
     audience: EVERYONE,
     related: ['settings.payouts.places.*.percentage'],
@@ -235,11 +252,13 @@ export const WIZARD_TOPICS: readonly HelpTopic[] = [
       'The pot is the entry fees you have collected. Nothing is held here, so these shares are a record of what you owe each winner, not a transfer.',
       'Shares totalling less than 100% are allowed — hosts do that when part of the pot goes to a charity or to a prize you award yourself.',
       'Members see the split before they join, so they know what first place is worth.',
+      'A pool that pays weekly AND on the final season standings has a list for each pot, and each list is a share of its own pot — the weekly one of a single week, the season one of the end-of-season pot.',
     ].join('\n\n'),
+    fields: ['settings.payouts.places.*.percentage', 'settings.weeklyPayouts.places.*.percentage'],
     poolTypes: 'all',
     audience: EVERYONE,
-    terms: ['season-prize'],
-    related: ['settings.payouts.places.*.rank', 'settings.entryFee'],
+    terms: ['season-prize', 'weekly-prize'],
+    related: ['settings.payouts.places.*.rank', 'settings.entryFee', 'settings.payoutMode'],
   },
 
   // ---- Branding ----------------------------------------------------------

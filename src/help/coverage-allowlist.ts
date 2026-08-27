@@ -111,12 +111,15 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // `tests/help-content-nfl-survivor.test.ts` holds every branch to the live
   // helper byte-for-byte.
 
-  // ---- PENDING: NFL Margin, hybrid split, multi-entry (T11) ---------------
-  'settings.payoutMode': 'T11: season pot, weekly pot, or both. Money copy, so voice rule 8 applies.',
-  'settings.hybridSplit.weeklyPerEntry': 'T11: the weekly share of each entry fee on a hybrid pool.',
-  'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
-  'settings.weeklyPayouts.places.*.rank': 'T11: the separate weekly place list a hybrid pool may carry.',
-  'settings.weeklyPayouts.places.*.percentage': 'T11: the separate weekly place list a hybrid pool may carry.',
+  // ---- CLOSED BY T11 -------------------------------------------------------
+  // `settings.payoutMode`, both `settings.hybridSplit.*` amounts and both
+  // `settings.weeklyPayouts.places.*` paths are explained now. The first three
+  // are topics in `content/nfl-margin.ts`, scoped to the two types that carry
+  // them (Pick'em and Margin — Survivor has no payout mode). The weekly place
+  // paths are claimed by the EXISTING `settings.payouts.places.*` topics'
+  // `fields[]` rather than by a second pair: it is the same editor bound to a
+  // second path, and both surfaces already point its `helpId` at those topics
+  // (voice rule 10).
 
   // ---- Bracket and Playoff (T12) -----------------------------------------
   // T12 removed eleven rows: seasonYear, gender, tournamentType,
@@ -214,13 +217,12 @@ export const MANAGER_LABEL_ALLOWLIST: Readonly<Record<string, string>> = Object.
   // `content/nfl-survivor.ts`, so they are covered by the FieldLabel branch of
   // `help-manager-label-coverage.test.ts` rather than exempted here.
 
-  // ---- T11: the payout-mode trio ------------------------------------------
-  // Rendered TWICE each — once on the Pick'em branch and once on the Margin
-  // one — and keyed by label text, so one row covers both. Their schema paths
-  // already sit in SCHEMA_PATH_ALLOWLIST against the same ticket.
-  'Payout Method': 'T11: season pot, weekly pot, or both. Money copy, so voice rule 8 applies.',
-  'Weekly pots ($/entry)': 'T11: the weekly share of each entry fee on a hybrid pool.',
-  'Season pot ($/entry)': 'T11: the season share of each entry fee on a hybrid pool.',
+  // ---- CLOSED BY T11 -------------------------------------------------------
+  // The payout-mode trio is rendered TWICE each — once on the Pick'em branch
+  // and once on the Margin one — and this list is keyed by label text, so one
+  // row covered both. BOTH render sites now carry the `helpId`, which is what
+  // the removal of the row required: a single site would have left the other
+  // label bare with nothing to fail on.
 
   // ---- PERMANENT: parts of an action, not options -------------------------
   // ONE topic per ACTION, placed on the form's FIRST field. A tooltip on every
@@ -265,10 +267,21 @@ export const WIZARD_FIELD_ALLOWLIST: Readonly<Record<string, string>> = Object.f
   // topic in `content/nfl-survivor.ts` under the `NFL_SURVIVOR` scope the
   // wizard publishes, so none of them needs a row here.
 
-  // ---- PENDING: NFL Margin and the hybrid split (T11) ---------------------
-  'settings.payoutMode': 'T11: season pot, weekly pot, or both.',
-  'settings.hybridSplit.weeklyPerEntry': 'T11: the weekly share of each entry fee on a hybrid pool.',
-  'settings.hybridSplit.seasonPerEntry': 'T11: the season share of each entry fee on a hybrid pool.',
+  // ---- NFL Margin and the hybrid split (T11) ------------------------------
+  // All three controls are explained by topics in `content/nfl-margin.ts`,
+  // whose ids ARE the field paths — `SelectField` and `NumberField` default
+  // `helpId` to `name`, so each control gets its `?` with no call-site prop.
+  //
+  // `settings.payoutMode` is bound in the two type-specific wizards, so it
+  // satisfies this guard by RESOLVING there. The two split amounts are bound in
+  // `HybridSplitFields`, which every wizard reaches through
+  // `StepFeeAndPayment`, so they satisfy it by the topics' `fields[]` claim
+  // instead — the control renders only while the payout mode is HYBRID, which
+  // only Pick'em and Margin can set.
+  //
+  // The `settings.weeklyPayouts` and `*.places.*` rows above stay PERMANENT:
+  // they are the second payouts PATH and the editor's prop-bound rows, not
+  // controls of their own.
 
   // ---- Bracket and Playoff (T12): all ten rows closed --------------------
   // The three tournament controls and the scoring system resolve to topics of
