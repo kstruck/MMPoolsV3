@@ -8,7 +8,7 @@ import {
   type MemberRecord,
   type PaidEntryMap,
 } from '../shared/memberRecord';
-import { memberOutstanding, rosterPotStats } from '../src/utils/poolRoster';
+import { buildPoolRoster, memberOutstanding, rosterPotStats } from '../src/utils/poolRoster';
 
 /**
  * PLAN-PARTIAL-DUES-AGGREGATES — partial payment reaches the money surfaces.
@@ -165,6 +165,23 @@ describe('poolRoster — the two client surfaces read the SAME helper', () => {
     expect(memberOutstanding(row(member(2, 1, 50)), { entryFee: 25, rebuyCost: 25 })).toBe(25);
     expect(memberOutstanding(row(member(2, undefined, 50)), { entryFee: 25, rebuyCost: 25 })).toBe(50);
     expect(memberOutstanding(row(member(2, 2, 50, 'PAID')), { entryFee: 25, rebuyCost: 25 })).toBe(0);
+  });
+
+  it('🛑 D5 THROUGH THE REAL PATH — a row from buildPoolRoster carries what the helper needs (codex r1 P1)', () => {
+    // THE TEST ABOVE WAS INERT AGAINST THIS DEFECT, and codex found it. It hands
+    // `memberOutstanding` a raw Member Record, but the Buy-In Ledger hands it a
+    // RosterRow — and the builder copied neither `paidEntryCount` nor
+    // `playableEntryCount`. So the helper saw no count and a liability of 1, and
+    // the ledger showed the WHOLE fee outstanding while the pot beside it
+    // reported the partial payment. Testing the helper is not testing the wiring.
+    const m = { ...member(2, 1, 50), uid: 'u1', userName: 'A', joinedAt: 1 } as unknown as MemberRecord;
+    const rows = buildPoolRoster({ pool, members: [m], entries: [] });
+    const built = rows.find(r => r.uid === 'u1')!;
+    expect(built.paidEntryCount).toBe(1);
+    expect(built.playableEntryCount).toBe(2);
+    expect(memberOutstanding(built, { entryFee: 25, rebuyCost: 25 })).toBe(25);
+    // ...and the ledger row and the pot now agree about this member's money.
+    expect(rosterPotStats({ pool, members: [m], entries: [] }).collected).toBe(25);
   });
 
   it('Outstanding is never negative, whatever the count says', () => {

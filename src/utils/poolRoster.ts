@@ -74,6 +74,15 @@ export interface RosterRow {
    * to key on when one exists.
    */
   hasPlayableEntry?: boolean;
+  /**
+   * Carried from the Member Record so `memberOutstanding` can price partial
+   * payment. Both are REQUIRED for that: the count says how many entries were
+   * paid for, and `playableEntryCount` is the denominator — without it
+   * `memberLiableEntries` falls back to 1 and a two-entry member's single
+   * payment would settle their whole fee.
+   */
+  playableEntryCount?: number;
+  paidEntryCount?: number;
   isOwner: boolean;
 }
 
@@ -196,6 +205,17 @@ export function buildPoolRoster({ pool, members, entries }: RosterInputs): Roste
       memberPaidAt: m.paidAt,
       memberPaymentNote: m.paymentNote,
       hasPlayableEntry: m.hasPlayableEntry,
+      // 🛑 THE TWO FIELDS `memberOutstanding` NEEDS TO PRICE PARTIAL PAYMENT
+      // (codex r1 P1 on PLAN-PARTIAL-DUES-AGGREGATES). Without them the row
+      // reaching that helper has neither, so `memberLiableEntries` falls back to
+      // `hasPlayableEntry ? 1 : 0` and `collectedBaseDues` sees no count — and a
+      // member with two liable entries and one paid shows the WHOLE fee
+      // outstanding on the Buy-In Ledger while `rosterPotStats`, which reads the
+      // raw Member Records, reports the partial payment. Two surfaces
+      // contradicting each other about one member is precisely what D5 exists
+      // to prevent, so the carry-through is part of the fix, not a detail.
+      playableEntryCount: m.playableEntryCount,
+      paidEntryCount: m.paidEntryCount,
     });
   }
   for (const e of entries || []) {
