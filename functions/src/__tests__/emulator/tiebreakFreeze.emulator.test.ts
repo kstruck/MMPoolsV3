@@ -191,6 +191,43 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
   }, 30000);
 
+  it('5g. THE INVERSE ORDERING — once a CURRENT sheet froze the fallback, a stale no-handshake submit is REFUSED rather than saved without a prediction (codex r3 P1)', async () => {
+    // 5d covers the stale client submitting FIRST. This is the other order.
+    // Alice is current: her sheet rendered the new card and sent the list.
+    await seedGames({ includeMondays: false });
+    await seedPool();
+    await submit(ALICE, { picks: { [SUN]: 'KC' }, displayedTiebreakTargetIds: [SUN], tiebreakerPrediction: 44 });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+
+    // Bob is on a stale bundle: no card, so no displayed list and no
+    // prediction. Accepting would save his entry unable to win a tied week.
+    // Refusing is safe HERE because Alice's submit proves the new frontend is
+    // live, so a reload actually gets Bob a sheet that asks the question.
+    await expect(submit(BOB, { picks: { [SUN]: 'BUF' } }))
+      .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
+    // After reloading he sends the list and is accepted.
+    await submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [SUN], tiebreakerPrediction: 41 });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+  }, 30000);
+
+  it('5h. that refusal is scoped — a week frozen EMPTY, and every non-legacy rule, still accept a no-handshake submit', async () => {
+    // A week frozen EMPTY has no prediction to miss, so refusing would lock
+    // members out of a week for nothing.
+    await seedGames({ includeMondays: false });
+    await seedPool();
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });          // freezes []
+    await submit(BOB, { picks: { [SUN]: 'BUF' } });           // accepted
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
+
+    // And a pre-#452 client on a NON-legacy rule sends no displayed list
+    // either. It must keep working — that week's target did not change.
+    await seedPool({ weeklyTiebreaker: 'MNF_LAST_GAME' });
+    await submit(ALICE, { picks: { [SUN]: 'KC' }, displayedTiebreakTargetIds: [SUN] });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+    await submit(BOB, { picks: { [SUN]: 'BUF' }, tiebreakerPrediction: 40 });   // no list
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
+  }, 30000);
+
   it('5f. the rollout guard exempts a SERVER-SIDE caller — the sim harness has no bundle to be stale (codex r2 P2)', async () => {
     // Every simulator pool is a legacy MNF_COMBINED pool: no simulator path
     // writes `settings.weeklyTiebreaker`. The sim harness never sends a

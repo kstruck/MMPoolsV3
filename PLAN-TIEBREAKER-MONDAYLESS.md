@@ -228,6 +228,22 @@ test 5e.
 - **No `firestore.rules` change.** `frozenTiebreakTargets` is already
   server-only and its shape is unchanged.
 - **No prod-data mutation.** Nothing to backfill; nothing to run.
+- ✅ **THE INVERSE ORDERING — found by self-review after round 2, and CLOSED by
+  codex round 3.** The D4 guard covers a stale client submitting FIRST. The
+  reverse — a current sheet freezes a real target and a stale-bundle member then
+  submits with no prediction — would have cost that member a tied week.
+
+  I first wrote this up as an accepted residual that "is not fixable from the
+  server." **That was wrong.** The server can detect it (a current sheet always
+  sends the displayed list when the target is non-empty and the rule asks), and
+  refusing is safe here specifically because the state is only reachable AFTER a
+  current client submitted — which proves the new frontend is live, so a reload
+  gets them a sheet that asks. Such a submission is now refused with
+  `TIEBREAK_TARGET_STALE`; emulator 5g and 5h pin it and its scoping.
+
+  Deploying functions and triggering the Coolify rebuild in the same sitting is
+  still the right operational practice, but the correctness no longer rests on
+  it.
 
 ---
 

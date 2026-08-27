@@ -643,9 +643,39 @@ export async function submitNFLPicksInternal(
         const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
         const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
         const authoritative = applyFrozenTarget(frozenTarget, games, tiebreakRule);
+        // Hoisted: both the rejection below and the freeze guard further down
+        // are scoped to the ONE week whose meaning this release changed.
+        const noMondayGame = games.every(g => g.isMonday !== true);
         if (displayedTargetIds !== undefined && !sameTargetIds(displayedTargetIds, authoritative)) {
           throw new HttpsError('failed-precondition',
             'TIEBREAK_TARGET_STALE: the tiebreaker game shown on your sheet no longer matches the schedule for this week. Reload the page and submit again.');
+        }
+        // 🛑 THE INVERSE ORDERING (codex r3 P1). The freeze guard below covers a
+        // stale client submitting FIRST. This covers the other order: a CURRENT
+        // sheet submitted first and froze the fallback game, and a member on a
+        // stale bundle then submits. Their sheet rendered no tiebreaker card, so
+        // they send no `displayedTiebreakTargetIds` — which skips the staleness
+        // check above, because there is nothing to compare — and the freeze
+        // guard cannot help, because the week is already frozen. Their entry
+        // would be saved with no prediction and lose any tied week to the
+        // members who were asked.
+        //
+        // Refusing is SAFE here in a way it would not be in general: this state
+        // is only reachable AFTER a current client submitted, which proves the
+        // new frontend is live, so "reload and submit again" actually gets them
+        // a sheet that asks the question. Silently accepting is the only option
+        // that costs them the week.
+        //
+        // Scoped exactly as the freeze guard is — legacy `MNF_COMBINED`, no
+        // Monday game, non-empty FROZEN target. A pre-#452 client on any other
+        // week sends no displayed list either and must keep working, and a week
+        // frozen EMPTY has nothing to miss. The sim harness is exempt for the
+        // same reason as below.
+        if (frozenTarget !== undefined && frozenTarget.length > 0
+            && displayedTargetIds === undefined && tiebreakRule === 'MNF_COMBINED'
+            && noMondayGame && ctx.serverSideCaller !== true) {
+          throw new HttpsError('failed-precondition',
+            'TIEBREAK_TARGET_STALE: this week now has a tiebreaker game and your pick sheet is out of date. Reload the page and submit again.');
         }
         // Freeze even an EMPTY canonical list: "no target this week" is a
         // state that must not change under members who already submitted
@@ -682,7 +712,6 @@ export async function submitNFLPicksInternal(
           // Monday-less week permanently — and every simulator pool is a legacy
           // MNF_COMBINED pool, because no simulator path writes
           // `settings.weeklyTiebreaker` (codex r2 P2).
-          const noMondayGame = games.every(g => g.isMonday !== true);
           const introducesNewQuestion =
             tiebreakRule === 'MNF_COMBINED' && noMondayGame
             && displayedTargetIds === undefined && ctx.serverSideCaller !== true;
