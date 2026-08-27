@@ -38,8 +38,10 @@ vi.mock('react-router', async () => {
   return { ...actual, useNavigate: () => navigateSpy };
 });
 
+// 'MEMBER' is the canonical non-elevated role (src/utils/roles.ts) — it cannot
+// create pools, so `canManage` is driven purely by the isManager prop here.
 const member: User = {
-  id: 'u1', name: 'Kevin Struck', email: 'k@example.com', role: 'USER',
+  id: 'u1', name: 'Kevin Struck', email: 'k@example.com', role: 'MEMBER',
   emailVerified: true, provider: 'password',
 } as unknown as User;
 
@@ -130,6 +132,24 @@ describe('grouped header nav — nothing became unreachable', () => {
     expect(screen.getByRole('link', { name: /My Profile/ }).getAttribute('href')).toBe('/profile');
     expect(screen.getByRole('button', { name: /Theme/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Log Out/ })).toBeTruthy();
+  });
+
+  it('an ELEVATED role is still legible without opening anything; an ordinary one is not', () => {
+    // 🛑 THE DEFECT THIS PINS. The first cut folded the whole "(ROLE)" suffix
+    // into the account panel, and tests/e2e/admin-claims.spec.ts caught it by
+    // timing out: it waits for the client to reflect SUPER_ADMIN before it
+    // touches a claim-gated route, and there was no longer anything to wait
+    // for. The e2e failure was the symptom; the real cost is that an admin
+    // would have had to open a menu to learn they are holding elevated rights.
+    // Dropping "(MEMBER)" was right — it told nobody anything. Dropping the
+    // admin signal was not.
+    renderHeader(superAdmin);
+    expect(screen.getByText('SUPER_ADMIN')).toBeTruthy();
+    cleanup();
+
+    renderHeader(member); // MEMBER — no chip; the bar shows the name alone
+    expect(screen.queryByText(/^(SUPER_ADMIN|MODERATOR)$/)).toBeNull();
+    expect(screen.getByRole('button', { name: /Account menu/ })).toBeTruthy();
   });
 
   it('SuperAdmin lives in the account menu for an admin, and nowhere for a member', () => {

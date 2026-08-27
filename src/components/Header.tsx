@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { isSuperAdmin, canCreatePool, canAccessPoolCreation } from '../utils/auth';
+import { normalizeRole } from '../utils/roles';
 import { logger } from '../utils/logger';
 import { useNavigate, useLocation } from 'react-router';
 import { ThemeToggle } from './ui/ThemeToggle';
@@ -184,6 +185,14 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
 
     // Both "My Entries" and "Manage My Pools" are tabs of ONE page, which is
     // why grouping them under a single trigger is honest rather than cosmetic.
+    // The old bar printed every role next to the name — "KEVIN (SUPER_ADMIN)",
+    // but also "(MEMBER)", which told nobody anything and was part of the
+    // clutter. The signal worth keeping is the ELEVATED one: an admin should
+    // never have to open a menu to learn they are operating with elevated
+    // rights. So the chip survives for SUPER_ADMIN and MODERATOR and vanishes
+    // for everyone else. (tests/e2e/admin-claims.spec.ts waits on this text to
+    // confirm the client saw the promotion before it hits the gated route.)
+    const elevatedRole = user && (['SUPER_ADMIN', 'MODERATOR'] as const).find(r => r === normalizeRole(user.role));
     const canManage = isManager || canCreatePool(user);
     const canCreate = canAccessPoolCreation(user);
     const createLabel = canCreate ? 'Create a New Pool' : 'Pool Creation Coming Soon';
@@ -418,6 +427,11 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                         <span className="flex items-center gap-1.5">
                                             <UserIcon size={14} aria-hidden="true" />
                                             <span className="max-w-[12ch] truncate">{user.name.split(' ')[0]}</span>
+                                            {elevatedRole && (
+                                                <span className="rounded-[4px] bg-gold-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-[0.08em] text-gold-300">
+                                                    {elevatedRole}
+                                                </span>
+                                            )}
                                         </span>
                                     }
                                 >
