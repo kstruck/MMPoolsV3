@@ -127,6 +127,59 @@ export function staticCopy(copy: HelpCopy): string {
   return typeof copy === 'string' ? copy : copy.fallback;
 }
 
+/** A hit plus the score that decides which hits the cap keeps. Never exported. */
+interface ScoredHit {
+  hit: HelpSearchResult;
+  score: number;
+}
+
+/**
+ * How directly a hit answers THIS reader. Each queue is ordered by it BEFORE
+ * the cap, and declaration order is only the tie-break.
+ *
+ * FILTERING BEFORE THE CAP WAS NECESSARY AND NOT SUFFICIENT (codex R3 on T14
+ * fixed the first half; T3 landing thirty-five site pages exposed the second).
+ * Once `accept` has dropped the hits that could not be shown, the survivors
+ * were still handed to the cap in content-authoring order — an order that
+ * carries no information about the query or the reader. A cap over an
+ * unordered list returns a PREFIX OF THE CONTENT FILE, so every broad query
+ * returns the same rows, and any block of content declared earlier silently
+ * buries everything declared after it. Measured on `/super-admin` as an admin:
+ * "the", "pool" and "a" each returned the identical seven marketing pages, and
+ * the three pages actually written for an admin — including the linkable
+ * Tournament Simulator — sat at ranks 16–18 of 18 survivors for seven slots.
+ *
+ * Two signals, both measured on this registry, both about the reader rather
+ * than about the content's position in a file:
+ *
+ *  - **A title match beats a body-only match** (weight 2). It is the words the
+ *    reader typed appearing in the name of the thing. Measured: "pool" had
+ *    three title-matching pages among sixteen survivors and showed none of
+ *    them, because `site.home` — whose title does not contain "pool" — is
+ *    declared first.
+ *
+ *  - **Written FOR this reader beats inherited by them** (weight 1). An admin
+ *    sees member copy because `AUDIENCE_SEES` widens their view, which is
+ *    right for visibility and wrong for ranking: the marketing pages are
+ *    reachable to them only as a side effect of also being a member, while the
+ *    admin pages are the ones addressed to them. Measured: this is the signal
+ *    that separates the three admin pages from the fifteen site pages for
+ *    "the", where no title matches at all.
+ *
+ * Pool-type specificity is deliberately NOT a third signal. Nothing measured
+ * needs it, and every extra term reorders results nobody complained about.
+ *
+ * RANKING IS WITHIN A KIND, NEVER ACROSS ONE. The interleave below still hands
+ * topics, pages and glossary terms their slots in turn, so a page scoring 3
+ * cannot take a topic's slot from a topic scoring 0. That is the same rule the
+ * interleave was written for — a query matching a lot of one kind must not make
+ * the other two look broken — and ranking is about which member of a kind gets
+ * that kind's slot, not about how many slots a kind gets.
+ */
+function relevance(needle: string, title: string, audience: readonly Audience[], viewer: Audience): number {
+  return (title.toLowerCase().includes(needle) ? 2 : 0) + (audience.includes(viewer) ? 1 : 0);
+}
+
 function extractSnippet(haystack: string, needle: string): string {
   const at = haystack.toLowerCase().indexOf(needle);
   if (at === -1) return haystack.slice(0, SNIPPET_RADIUS * 2).trim();
@@ -211,7 +264,12 @@ export interface Registry {
   placementsForPage(pageId: string, scope: TopicScope): { section: string; topics: HelpTopic[] }[];
 
   /**
-   * Case-insensitive substring search, capped at `SEARCH_RESULT_LIMIT`.
+   * Case-insensitive substring search, RANKED, then capped at
+   * `SEARCH_RESULT_LIMIT`.
+   *
+   * Ranking is not a nicety here — it is what makes the cap mean something.
+   * See `relevance` for the two signals; without it the cap returns a prefix
+   * of the content files and every broad query returns the same rows.
    *
    * `accept` drops a hit BEFORE the cap is applied. The registry knows the
    * reader's audience and pool type; it does not know which tabs the surface
@@ -459,9 +517,9 @@ class RegistryImpl implements Registry {
       return undefined;
     };
 
-    const topicHits: HelpSearchResult[] = [];
-    const pageHits: HelpSearchResult[] = [];
-    const glossaryHits: HelpSearchResult[] = [];
+    const topicHits: ScoredHit[] = [];
+    const pageHits: ScoredHit[] = [];
+    const glossaryHits: ScoredHit[] = [];
 
     for (const [id, topic] of this.topicIndex) {
       if (!isVisible(topic.poolTypes, topic.audience, scope)) continue;
@@ -489,11 +547,14 @@ class RegistryImpl implements Registry {
       ].join('\n');
       if (!haystack.toLowerCase().includes(needle)) continue;
       topicHits.push({
-        kind: 'topic',
-        id,
-        title: topic.title,
-        snippet: extractSnippet(haystack, needle),
-        pageId: pageForResult(id),
+        hit: {
+          kind: 'topic',
+          id,
+          title: topic.title,
+          snippet: extractSnippet(haystack, needle),
+          pageId: pageForResult(id),
+        },
+        score: relevance(needle, topic.title, topic.audience, scope.audience),
       });
     }
 
@@ -501,14 +562,20 @@ class RegistryImpl implements Registry {
       if (!isVisible(page.poolTypes, page.audience, scope)) continue;
       const haystack = `${page.title}\n${page.summary}`;
       if (!haystack.toLowerCase().includes(needle)) continue;
-      pageHits.push({ kind: 'page', id, title: page.title, snippet: extractSnippet(haystack, needle), pageId: id });
+      pageHits.push({
+        hit: { kind: 'page', id, title: page.title, snippet: extractSnippet(haystack, needle), pageId: id },
+        score: relevance(needle, page.title, page.audience, scope.audience),
+      });
     }
 
     for (const term of this.glossary) {
       if (!audienceSatisfies(term.audience, scope.audience)) continue;
       const haystack = `${term.term}\n${term.short}\n${term.long}`;
       if (!haystack.toLowerCase().includes(needle)) continue;
-      glossaryHits.push({ kind: 'glossary', id: term.id, title: term.term, snippet: extractSnippet(haystack, needle) });
+      glossaryHits.push({
+        hit: { kind: 'glossary', id: term.id, title: term.term, snippet: extractSnippet(haystack, needle) },
+        score: relevance(needle, term.term, term.audience, scope.audience),
+      });
     }
 
     // Interleaved, NOT concatenated then truncated. Appending topics first and
@@ -520,7 +587,18 @@ class RegistryImpl implements Registry {
     // `accept` runs HERE, before the cap, for the same reason (codex R3 on
     // T14): a hit filtered afterwards has already taken a slot from a hit that
     // would have been shown.
-    const keep = accept ? (q: HelpSearchResult[]) => q.filter(accept) : (q: HelpSearchResult[]) => q;
+    //
+    // And each queue is RANKED here too, for the third instance of the same
+    // lesson: whatever the cap keeps has to be chosen by relevance and not by
+    // where the content sits in a file. See `relevance` above for the two
+    // signals and the numbers that justify them. `sort` is stable per spec, so
+    // an equal score leaves declaration order alone — the ranking only ever
+    // moves hits that have a reason to move.
+    const keep = (q: ScoredHit[]): HelpSearchResult[] =>
+      (accept ? q.filter((s) => accept(s.hit)) : q)
+        .slice()
+        .sort((a, b) => b.score - a.score)
+        .map((s) => s.hit);
     const queues = [keep(topicHits), keep(pageHits), keep(glossaryHits)];
     for (let i = 0; results.length < SEARCH_RESULT_LIMIT; i++) {
       if (!queues.some((q) => q.length > i)) break;

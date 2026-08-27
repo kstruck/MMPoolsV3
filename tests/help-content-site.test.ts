@@ -86,12 +86,31 @@ describe('T3 — every site and account route resolves a page', () => {
     expect(resolveHelpPage(helpRegistry.pages, ctx({ pathname: '/no/such/route' }), MEMBER)).toBeUndefined();
   });
 
-  it('takes all twenty-one rows out of ROUTE_ALLOWLIST and leaves the rest alone', () => {
+  it('takes all twenty-one rows out of ROUTE_ALLOWLIST and leaves the rest alone', async () => {
     const stillListed = T3_ROUTES.filter((route) => route in ROUTE_ALLOWLIST);
     expect(stillListed).toEqual([]);
-    // T14's rows are not this ticket's to delete.
-    expect(ROUTE_ALLOWLIST['/super-admin']).toBeDefined();
-    expect(ROUTE_ALLOWLIST['/tournament-sim']).toBeDefined();
+
+    // THE OTHER HALF: this ticket's deletions must not leave a route covered by
+    // nothing. `/super-admin` and `/tournament-sim` are the two routes T3 does
+    // not own, and the original pin here — that both still had an allowlist
+    // row — stopped meaning that the moment T14 landed and deleted the rows to
+    // ship the pages. The row was never the point; being ACCOUNTED FOR was.
+    //
+    // So assert the invariant that survives both tickets, and that
+    // `help-registry-invariants.test.ts` enforces for App.tsx as a whole: every
+    // route is covered by an allowlist row OR by a page, and a deletion that
+    // removes the row without adding the page is a hole. The admin pages live
+    // in the lazily imported chunk, so they are read from their own module
+    // rather than from `helpRegistry`, which does not carry them.
+    const { ADMIN_PAGES } = await import('../src/help/content/super-admin');
+    const routesWithPages = new Set([...helpRegistry.pages, ...ADMIN_PAGES].map((p) => p.route));
+    const accountedFor = (route: string) => route in ROUTE_ALLOWLIST || routesWithPages.has(route);
+    expect(accountedFor('/super-admin')).toBe(true);
+    expect(accountedFor('/tournament-sim')).toBe(true);
+    // Discriminating half: the predicate is not true of everything, so the two
+    // assertions above cannot pass vacuously — a route with neither a row nor a
+    // page is exactly what they would catch.
+    expect(accountedFor('/no/such/route')).toBe(false);
   });
 });
 

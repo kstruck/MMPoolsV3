@@ -762,6 +762,111 @@ describe('search', () => {
     expect(hits.some((h) => h.kind === 'glossary')).toBe(true);
   });
 
+  /**
+   * RANKING IS WHAT MAKES THE CAP MEAN SOMETHING (T14, after T3).
+   *
+   * Filtering before the cap (codex R3) stopped slots being spent on hits that
+   * would be thrown away. It did not give the survivors an ORDER: they reached
+   * the cap in content-declaration order, so a cap over them returned a prefix
+   * of the content file. The live symptom was measured on `/super-admin` as an
+   * admin — "the", "pool" and "a" each returned the identical seven marketing
+   * pages, and the three pages written for an admin sat at ranks 16-18 of 18.
+   *
+   * Both fixtures below flood the queue with enough earlier-declared pages to
+   * fill the cap on their own, so a page that ranks is a page that displaced
+   * one of them.
+   */
+  const flood = (n: number, summary: string) =>
+    Array.from({ length: n }, (_, i) => page({ id: `filler${i}`, title: `Filler ${i}`, summary }));
+
+  it('ranks a title match above a body-only match, whatever the declaration order', () => {
+    const ranked = buildRegistry({
+      topics: [topic()],
+      // The wanted page is declared LAST, so declaration order alone buries it.
+      pages: [...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about a pool.'), page({ id: 'wanted', title: 'Pool rules' })],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    const hits = ranked.search('pool', { audience: 'member' });
+    expect(hits.map((h) => h.id)).toContain('wanted');
+    // …and it is FIRST among the pages, not merely present.
+    expect(hits.filter((h) => h.kind === 'page')[0].id).toBe('wanted');
+    // Discriminating half: without a title match it is judged like any other
+    // filler and declaration order rightly leaves it out. So the assertion
+    // above is about the ranking and not about a cap that happens to be roomy.
+    const unranked = buildRegistry({
+      topics: [topic()],
+      pages: [
+        ...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about a pool.'),
+        page({ id: 'wanted', title: 'Rules', summary: 'Everything about a pool.' }),
+      ],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    expect(unranked.search('pool', { audience: 'member' }).map((h) => h.id)).not.toContain('wanted');
+  });
+
+  it('ranks content written FOR the reader above content they merely inherit', () => {
+    // An admin sees member copy because `AUDIENCE_SEES` widens their view.
+    // That is right for visibility and wrong for ranking: the admin page is the
+    // one addressed to them. No title matches here at all, which is the case
+    // `/super-admin` actually hit.
+    const ranked = buildRegistry({
+      topics: [topic()],
+      pages: [
+        ...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about the sport.'),
+        page({ id: 'wanted', title: 'Simulator', summary: 'Runs the whole bracket.', audience: ['admin'] }),
+      ],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    expect(ranked.search('the', { audience: 'admin' }).map((h) => h.id)).toContain('wanted');
+    // Discriminating half: the same registry read by a COMMISSIONER cannot see
+    // the admin page at all, so a hit for them would mean the rank had leaked
+    // past visibility.
+    expect(ranked.search('the', { audience: 'commissioner' }).map((h) => h.id)).not.toContain('wanted');
+    // And with the page scoped to `member` like the filler, the boost is gone
+    // and declaration order buries it again.
+    const unranked = buildRegistry({
+      topics: [topic()],
+      pages: [
+        ...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about the sport.'),
+        page({ id: 'wanted', title: 'Simulator', summary: 'Runs the whole bracket.' }),
+      ],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    expect(unranked.search('the', { audience: 'admin' }).map((h) => h.id)).not.toContain('wanted');
+  });
+
+  it('leaves an equal-scoring queue in declaration order', () => {
+    // The ranking must only move hits that have a reason to move: a stable sort
+    // is what keeps "ties break by declaration order" true everywhere else in
+    // this file, including the pageId-preference test above.
+    //
+    // Six of them, declared in REVERSE alphabetical order, and both details are
+    // load-bearing. Two entries is too few — a comparator that reorders ties
+    // can leave a two-element array untouched by luck. And ids that ascend with
+    // declaration order would be satisfied by any deterministic tiebreak
+    // someone adds to the comparator later, which is the realistic way this
+    // stops being stable.
+    const tied = ['f', 'e', 'd', 'c', 'b', 'a'].map((id) =>
+      page({ id: `tied-${id}`, route: `/tied-${id}`, summary: 'A pool page.' }),
+    );
+    const registryOfTies = buildRegistry({
+      topics: [topic()],
+      pages: tied,
+      placements: [{ topic: 'settings.entryFee', page: 'tied-f' }],
+      glossary: [],
+    });
+    expect(
+      registryOfTies
+        .search('pool', { audience: 'member' })
+        .filter((h) => h.kind === 'page')
+        .map((h) => h.id),
+    ).toEqual(tied.map((p) => p.id));
+  });
+
   it('still returns every kind it has when under the limit', () => {
     const hits = registry.search('tie', { audience: 'member' });
     expect(hits.length).toBeLessThanOrEqual(SEARCH_RESULT_LIMIT);
