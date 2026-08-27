@@ -57,7 +57,9 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'props.questions.*.points': 'PERMANENT: accepted but not offered by the props wizard, which scores every question equally.',
   'props.questions.*.type': 'PERMANENT: accepted but not offered by the props wizard.',
 
-  // ---- PENDING: settings with no control in the create wizard -------------
+  // ---- CLOSED: settings with no control in the create wizard --------------
+  // This block held four rows and now holds none; the notes stay because the
+  // next reader's question is "why was this ever allowlisted".
   // Re-ticketed in T1: measured against the wizard sources, none of these three
   // has a control there, so T1 could not have written their copy. Each is edited
   // on the manager surface named below, and moves with that surface's ticket.
@@ -67,9 +69,14 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // `content/wizard-shared.ts` beside `contactEmail` and is placed on
   // `pool.nfl.manager.settings`, alongside the `contactMethod` topic that says
   // whether either of them is ever shown.
-  'branding.backgroundColor': 'T5: the legacy branding step has a colour picker for it (admin/WizardStepBranding.tsx:97), reached from the squares manager and the props edit wizard. The unified wizard offers only primaryColor and secondaryColor.',
-  'settings.payouts.bonuses.*.name': 'T6: no create-wizard control — StepPayouts edits places only. BracketPoolDashboard.tsx:1556 is the bonus-row editor.',
-  'settings.payouts.bonuses.*.percentage': 'T6: no create-wizard control; same bonus-row editor as the name above.',
+  // `branding.backgroundColor` CLOSED BY T5, and the two
+  // `settings.payouts.bonuses.*` rows CLOSED BY T6. All three are manager-only
+  // fields the unified create wizard never offers, which is why T1 could not
+  // write their copy. The topics live in `content/manager-fields.ts` and are
+  // placed on the surfaces that actually render each control: the squares
+  // Setup Wizard tab and the props Manage tab for the background colour, and
+  // the bracket commissioner tab plus the bracket and NFL rules pages for the
+  // bonus rows.
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
   // SETTLED BY T13, and settled as PERMANENT rather than closed with copy.
