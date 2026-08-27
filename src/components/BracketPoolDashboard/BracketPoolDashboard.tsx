@@ -4,6 +4,9 @@ import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { HelpRoutePublisher } from '../../help/publish';
+// PLAN-HELP-SYSTEM T6. Direct, not through the `ui` barrel — the barrel does
+// not export it (see `ui/Field.tsx`, which imports it the same way).
+import { HelpTip } from '../ui/HelpTip';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail, AlertTriangle } from 'lucide-react';
@@ -1611,9 +1614,28 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {/* Bonuses */}
                                                 <div className="pt-2 border-t border-line">
                                                     <p className="text-xs text-faint mb-2">Bonus Payouts</p>
+                                                    {/* PLAN-HELP-SYSTEM T6: the two `?`s for the bonus rows.
+                                                        ON A COLUMN HEADER, ONCE, rather than on every row — the
+                                                        list repeats and a tip per input would draw two icons per
+                                                        bonus for one explanation each (voice rule 10). The two
+                                                        inputs below carry no label at all today, so this row is
+                                                        also what names them; `aria-label` gives a screen reader
+                                                        the same two words. `text-muted`, NOT the `text-faint` of
+                                                        the title above it: `HelpTip` is `text-current` and
+                                                        `--faint` is 2.81:1 on the light page, which is the exact
+                                                        regression `tests/help-tip-contrast.test.ts` exists for. */}
+                                                    <div className="flex items-center gap-2 mb-1 text-xs text-muted">
+                                                        <span className="flex-1 flex items-center gap-1.5">Name<HelpTip helpId="settings.payouts.bonuses.*.name" /></span>
+                                                        <span className="w-20 flex items-center gap-1.5">Share<HelpTip helpId="settings.payouts.bonuses.*.percentage" /></span>
+                                                        {/* Keeps the two headings over their columns: the `%`
+                                                            suffix and the remove button sit to the right of the
+                                                            share input on every row below. */}
+                                                        <span className="w-[38px]" aria-hidden="true" />
+                                                    </div>
                                                     {editPayouts.bonuses.map((b, i) => (
                                                         <div key={i} className="flex items-center gap-2 mb-2">
                                                             <input value={b.name}
+                                                                aria-label="Bonus name"
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, name: e.target.value };
@@ -1621,6 +1643,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                                 }}
                                                                 className="flex-1 bg-surface border border-line rounded p-2 text-[color:var(--text)] text-sm" placeholder="Bonus name" />
                                                             <input type="number" value={b.percentage}
+                                                                aria-label="Bonus share, percent"
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, percentage: Number(e.target.value) };

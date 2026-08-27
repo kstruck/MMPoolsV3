@@ -30,7 +30,8 @@
 //   `branding.bgColor` instead (`PlayoffDashboard.tsx:101`), and the NFL
 //   dashboards go through `brandingStyles()`, whose `page` background is the
 //   legacy field or a tint of the primary colour — `backgroundColor` is not in
-//   `PoolBranding` at all. So the copy says squares and props and stops there.
+//   `PoolBranding` at all. So the TOPIC is scoped to squares and props and
+//   stops there; see `COLOURED_TYPES`.
 //
 //   WHAT A BONUS PERCENTAGE IS A PERCENTAGE OF (voice rule 8). The pot, which
 //   is entry fees the commissioner collects peer to peer — the platform holds
@@ -43,35 +44,66 @@
 //   behind `!compact`, so the bracket rules panel and the NFL rules page show
 //   it and the JOIN SCREEN (`JoinPool.tsx:223`, `compact`) does not. A playoff
 //   pool never shows one — `PlayoffPayoutCard.tsx:36` lists places only.
+//
+// ⚠️ A TOPIC MUST NOT CLAIM A POOL TYPE ITS PLACEMENTS CANNOT SERVE (codex r1
+// on this branch, two findings). The first draft scoped each topic to every
+// type whose CREATE CONTRACT carries the path, so that the allowlist rows could
+// be deleted outright — six types for the colour, five for the bonus rows —
+// while the placements below cover only the surfaces that render each control.
+// The gap is not cosmetic. `Registry.search` picks a result's page with
+// `pageForResult`, which keeps only placements on a page THIS reader may see;
+// with none it returns `pageId: undefined`, `useHelpPanel.pageForTopic` then
+// falls back to `candidates[0].page`, and `canOpenPage` refuses it because the
+// page belongs to another pool type. So an NFL commissioner searching Help for
+// "background" got a result that could not be opened, and a playoff reader the
+// same for a bonus.
+//
+// The scopes below are therefore the types that actually RENDER the control or
+// the value, and the residual paths go back to `SCHEMA_PATH_ALLOWLIST` as
+// PERMANENT rows — the same shape `seasonType` has carried since T1 and the
+// same call T9 made on `settings.pointsPerPick`. A wider scope would have let
+// the schema audit report a setting as explained for a type that shows nothing,
+// which `registry.ts` already names as "the one way an allowlist row could be
+// deleted while the option it covered stayed unexplained".
+//
+// `tests/help-content-manager-fields.test.ts` guards the class, not the three
+// cases: every (pool type, audience) a topic here is visible to must have a
+// placement on a page visible to that same reader.
 
 import type { HelpPlacement, HelpTopic } from '../types';
 import type { PoolType } from '@shared/poolTypes';
 
 /**
- * The types whose create contract carries `branding` — every one but Bracket,
- * which has no branding block (`shared/schemas/bracket.ts`).
+ * The types with a background-colour CONTROL and a page that paints with it.
  *
- * The topic has to name all six or the schema audit reports the path
- * unexplained for the four that get no placement, which is the state the
- * allowlist row was holding open.
+ * Six types carry `brandingSchema` (every one but Bracket), but only these two
+ * ever meet the setting: `WizardStepBrandingAdmin` is reached from the squares
+ * manager and `WizardStepBranding` from the props edit wizard, and those are
+ * the only two colour pickers in the app — `StepBranding`, the unified create
+ * wizard's step, writes `logoUrl`, `primaryColor` and `secondaryColor` and
+ * nothing else. The two pages that read the value belong to the same two types.
+ *
+ * `branding.backgroundColor` therefore stays allowlisted for the other four:
+ * nothing writes it there and nothing reads it, so there is no control for copy
+ * to explain.
  */
-const BRANDED_TYPES: readonly PoolType[] = [
-  'SQUARES',
-  'PROPS',
-  'NFL_PLAYOFFS',
-  'NFL_PICKEM',
-  'NFL_SURVIVOR',
-  'NFL_MARGIN',
-];
+const COLOURED_TYPES: readonly PoolType[] = ['SQUARES', 'PROPS'];
 
 /**
- * The types whose payout settings carry a bonus list: everyone using
- * `payoutsSchema`. Squares and Props do not — squares splits by quarter and the
- * props payout array is a legacy per-place list with no bonuses in it.
+ * The types that show a bonus to somebody: Bracket, whose commissioner tab is
+ * the only bonus EDITOR in the app, and the three NFL season formats, whose
+ * rules page renders the list through `PayoutsPanel` (`!compact`).
+ *
+ * Squares and Props are out because their payout settings carry no bonus list
+ * at all — squares splits by quarter and the props array is a legacy per-place
+ * list. NFL_PLAYOFFS carries the list in its create contract and is out for the
+ * other reason: `StepPayouts` edits places only, no playoff surface edits
+ * payouts at all, and `PlayoffPayoutCard.tsx:36` renders places only — so a
+ * playoff pool's bonus list is always empty and never shown. Its two paths stay
+ * allowlisted.
  */
 const BONUS_TYPES: readonly PoolType[] = [
   'BRACKET',
-  'NFL_PLAYOFFS',
   'NFL_PICKEM',
   'NFL_SURVIVOR',
   'NFL_MARGIN',
@@ -92,9 +124,9 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     long: [
       'Pick a colour and the pool page is painted with it behind the cards and the text. Reset to Default puts it back to #0f172a.',
       'Change it when you want the pool to carry a team colour, or to match the event you are running it for. The cards and the text were drawn against a dark background, so a pale colour makes them hard to read.',
-      'Members see the new colour the next time they open the pool. Squares and props pool pages are the only ones that use it — an NFL or playoff pool keeps the value you set and does not paint its page with it.',
+      'Members see the new colour the next time they open the pool. Nothing else moves with it: your logo, the cards and the type on them stay exactly as they were.',
     ].join('\n\n'),
-    poolTypes: BRANDED_TYPES,
+    poolTypes: COLOURED_TYPES,
     audience: HOST_ONLY,
     related: ['branding.primaryColor', 'branding.secondaryColor', 'branding.logoUrl'],
   },
@@ -122,7 +154,7 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     long: [
       'The pot is the entry fees you collect. Nothing is held here, so this share is a record of what you owe whoever wins the bonus rather than a transfer — the money goes from you to them directly.',
       'Places and bonuses draw on that one pot and are added together, so a 5% bonus leaves 95% for the finishing places. The editor keeps a running total and marks it until the two lists come to 100%.',
-      'Where members read it depends on the format. A bracket or NFL pool lists every bonus and its share on its rules and payment page. The join screen leaves bonuses out, and a playoff pool shows its finishing places only, so a bonus is worth announcing yourself as well.',
+      'Members read every bonus and its share on the pool’s rules and payment page. The join screen leaves them out, so somebody deciding whether to join sees the finishing places and not this — a bonus is worth announcing yourself as well.',
     ].join('\n\n'),
     poolTypes: BONUS_TYPES,
     audience: EVERYONE,

@@ -57,26 +57,30 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'props.questions.*.points': 'PERMANENT: accepted but not offered by the props wizard, which scores every question equally.',
   'props.questions.*.type': 'PERMANENT: accepted but not offered by the props wizard.',
 
-  // ---- CLOSED: settings with no control in the create wizard --------------
-  // This block held four rows and now holds none; the notes stay because the
-  // next reader's question is "why was this ever allowlisted".
-  // Re-ticketed in T1: measured against the wizard sources, none of these three
+  // ---- settings with no control in the create wizard ----------------------
+  // Re-ticketed in T1: measured against the wizard sources, none of these four
   // has a control there, so T1 could not have written their copy. Each is edited
   // on the manager surface named below, and moves with that surface's ticket.
+  //
   // `contactPhone` CLOSED BY T4. It has no create-wizard control and never
   // will — the unified wizard collects an email and nothing else — so its copy
   // had to wait for the manager form that does edit it. The topic lives in
   // `content/wizard-shared.ts` beside `contactEmail` and is placed on
   // `pool.nfl.manager.settings`, alongside the `contactMethod` topic that says
   // whether either of them is ever shown.
-  // `branding.backgroundColor` CLOSED BY T5, and the two
-  // `settings.payouts.bonuses.*` rows CLOSED BY T6. All three are manager-only
-  // fields the unified create wizard never offers, which is why T1 could not
-  // write their copy. The topics live in `content/manager-fields.ts` and are
-  // placed on the surfaces that actually render each control: the squares
-  // Setup Wizard tab and the props Manage tab for the background colour, and
-  // the bracket commissioner tab plus the bracket and NFL rules pages for the
-  // bonus rows.
+  //
+  // T5 and T6 wrote the other three, in `content/manager-fields.ts`, and each
+  // is now explained for the types that actually render it: the squares Setup
+  // Wizard tab and the props Manage tab for the background colour, the bracket
+  // commissioner tab plus the bracket and NFL rules pages for the bonus rows.
+  // The rows below are what is LEFT — the types whose create contract carries
+  // the path with no control and no reader anywhere. They are PERMANENT for the
+  // same reason `theme` and `props.questions.*.points` are, and they read the
+  // way `seasonType` does: a real topic covers part of the field's reach and a
+  // written reason covers the rest.
+  'branding.backgroundColor': 'PERMANENT for NFL_PLAYOFFS / NFL_PICKEM / NFL_SURVIVOR / NFL_MARGIN, CLOSED BY T5 for SQUARES and PROPS. The only two colour pickers in the app are WizardStepBranding (props edit wizard) and admin/WizardStepBrandingAdmin (squares manager); the unified wizard\'s StepBranding writes logoUrl, primaryColor and secondaryColor and nothing else. The only two readers are PoolRoute.tsx:507 (squares) and PropsPoolDashboard.tsx:90 (props) — the playoff dashboard reads the legacy branding.bgColor and the NFL dashboards go through brandingStyles(), which has no backgroundColor branch. So on those four types the field is written by nothing and read by nothing, and there is no control for copy to explain.',
+  'settings.payouts.bonuses.*.name': 'PERMANENT for NFL_PLAYOFFS, CLOSED BY T6 for BRACKET and the three NFL season formats. A playoff pool has no bonus editor — StepPayouts edits places only, and no playoff surface edits payouts at all — and no bonus reader: PlayoffPayoutCard.tsx:36 lists finishing places only, where the bracket and NFL rules pages render the list through PayoutsPanel. Its bonus list is therefore always empty and never shown. If a playoff surface ever renders one, this row goes and NFL_PLAYOFFS joins BONUS_TYPES in content/manager-fields.ts.',
+  'settings.payouts.bonuses.*.percentage': 'PERMANENT for NFL_PLAYOFFS, CLOSED BY T6 elsewhere; same editor and same readers as the bonus name above.',
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
   // SETTLED BY T13, and settled as PERMANENT rather than closed with copy.

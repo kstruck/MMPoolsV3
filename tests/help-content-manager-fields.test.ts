@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { POOL_TYPES } from '../shared/poolTypes';
 import type { PoolType } from '../shared/poolTypes';
-import { helpRegistry, resolveCopy, staticCopy } from '../src/help/registry';
+import { baseTopicId, helpRegistry, resolveCopy, staticCopy } from '../src/help/registry';
+import { isEntryVisible } from '../src/help/visibility';
+import type { HelpPage, HelpTopic } from '../src/help/types';
 import { SCHEMA_PATH_ALLOWLIST } from '../src/help/coverage-allowlist';
 import {
   MANAGER_FIELD_PLACEMENTS,
@@ -23,12 +25,16 @@ import {
  * is left unaccounted for. This file proves the things specific to these two
  * tickets, which nothing else can see:
  *
- *  1. **The three allowlist rows are really closed.** A row may only be deleted
- *     when EVERY pool type whose create contract carries that path resolves a
- *     topic for it — a topic scoped to Squares alone would leave the four NFL
- *     and playoff types explaining nothing while the guard reported coverage.
- *     Each check is paired with a planted counter-example, so a scope that
- *     stopped discriminating fails here rather than going quietly green.
+ *  1. **Every pool type that carries one of the three paths is accounted for**,
+ *     either by a topic that resolves for it or by a written allowlist row —
+ *     and the two sets do not overlap and do not leave a gap. A topic scoped to
+ *     Squares alone would otherwise leave the four NFL and playoff types
+ *     explaining nothing while the guard reported coverage. Each check is
+ *     paired with a planted counter-example, so a scope that stopped
+ *     discriminating fails here rather than going quietly green.
+ *
+ *  1b. **No topic here claims a pool type its placements cannot serve** — the
+ *     defect class codex found on round 1, twice. See its own describe block.
  *
  *  2. **The named default is the one the code uses.** Voice rule 5 says name
  *     the default exactly, and no test can catch copy that names it wrongly —
@@ -48,21 +54,44 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 const MEMBER = { audience: 'member' } as const;
 const HOST = { audience: 'commissioner' } as const;
 
-/** The three paths these tickets closed, with the types whose contract carries each. */
-const CLOSED: readonly { path: string; carriers: readonly PoolType[] }[] = [
+/**
+ * The three paths these tickets cover.
+ *
+ * `explained` is the set of types that resolve one of this file's topics;
+ * `allowlisted` is what is LEFT — types whose create contract carries the path
+ * with no control and no reader, held by a written PERMANENT row. Together they
+ * must be exactly `carriers`, the types whose schema has the leaf at all.
+ *
+ * The split is codex r1's doing. The first draft made `explained` equal
+ * `carriers` so that every row could be deleted, which produced a topic that
+ * resolved for four types whose surfaces show nothing — see the reachability
+ * block below for what that broke.
+ */
+const COVERED: readonly {
+  path: string;
+  carriers: readonly PoolType[];
+  explained: readonly PoolType[];
+  allowlisted: readonly PoolType[];
+}[] = [
   {
     // `brandingSchema` is on every create input but Bracket's.
     path: 'branding.backgroundColor',
     carriers: ['SQUARES', 'PROPS', 'NFL_PLAYOFFS', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
+    explained: ['SQUARES', 'PROPS'],
+    allowlisted: ['NFL_PLAYOFFS', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
   },
   {
     // `payoutsSchema` — Squares splits by quarter, Props has a legacy array.
     path: 'settings.payouts.bonuses.*.name',
     carriers: ['BRACKET', 'NFL_PLAYOFFS', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
+    explained: ['BRACKET', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
+    allowlisted: ['NFL_PLAYOFFS'],
   },
   {
     path: 'settings.payouts.bonuses.*.percentage',
     carriers: ['BRACKET', 'NFL_PLAYOFFS', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
+    explained: ['BRACKET', 'NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
+    allowlisted: ['NFL_PLAYOFFS'],
   },
 ];
 
@@ -73,23 +102,44 @@ function typesExplaining(path: string): PoolType[] {
   );
 }
 
-describe('T5 + T6 — the three allowlist rows are closed, not merely deleted', () => {
-  it('no longer names any of the three paths', () => {
-    for (const { path } of CLOSED) {
-      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} should no longer be allowlisted`).toBe(false);
+describe('T5 + T6 — every carrier of the three paths is accounted for', () => {
+  it('the table itself is consistent: explained + allowlisted, no overlap, no gap', () => {
+    // Guards the guard. If a future edit moved a type from one column to the
+    // other and forgot `carriers`, every assertion below would still pass while
+    // a pool type quietly went missing from both halves.
+    for (const { path, carriers, explained, allowlisted } of COVERED) {
+      expect([...explained, ...allowlisted].sort(), path).toEqual([...carriers].sort());
+      expect(explained.filter((t) => allowlisted.includes(t)), path).toEqual([]);
     }
   });
 
-  it.each(CLOSED)('$path resolves a topic for every pool type that carries it', ({ path, carriers }) => {
-    expect(typesExplaining(path).sort()).toEqual([...carriers].sort());
+  it.each(COVERED)('$path resolves a topic for exactly the types that render it', ({ path, explained }) => {
+    expect(typesExplaining(path).sort()).toEqual([...explained].sort());
+  });
+
+  it.each(COVERED)('$path is allowlisted exactly while some carrier is unexplained', ({ path, allowlisted }) => {
+    expect(path in SCHEMA_PATH_ALLOWLIST, `${path} allowlist row`).toBe(allowlisted.length > 0);
+  });
+
+  it.each(COVERED)('$path — the row NAMES the types it is still covering', ({ path, allowlisted }) => {
+    // A reason that does not name them rots the moment the topic's scope moves:
+    // the row would keep suppressing the audit for types the topic had grown to
+    // cover, which is how an allowlist becomes a list of things that used to be
+    // true. Skipped where there is no row.
+    if (allowlisted.length === 0) return;
+    // `?? ''` so a DELETED row fails as "these types are unnamed" rather than
+    // as a TypeError — the row above already says the row must exist, and a
+    // stack trace there would bury which of the two rules broke.
+    const reason = SCHEMA_PATH_ALLOWLIST[path] ?? '';
+    expect(allowlisted.filter((t) => !reason.includes(t)), `${path}: ${reason}`).toEqual([]);
   });
 
   it('and the topic it resolves to is the one authored here', () => {
     // Otherwise the assertion above could be satisfied by somebody else's
     // topic claiming the path, and these tickets would be done by accident.
     const authored = new Set(MANAGER_FIELD_TOPICS.map((t) => t.id));
-    for (const { path, carriers } of CLOSED) {
-      const topic = helpRegistry.resolveTopic({ poolType: carriers[0], ...HOST }, path);
+    for (const { path, explained } of COVERED) {
+      const topic = helpRegistry.resolveTopic({ poolType: explained[0], ...HOST }, path);
       expect(authored.has(topic!.id), `${path} resolved to ${topic?.id}`).toBe(true);
     }
   });
@@ -150,6 +200,173 @@ describe('T5 + T6 — the copy is placed where the control is', () => {
     ] as const) {
       expect(visibleOn(page, type, 'member')).toContain('settings.payouts.bonuses.*.percentage');
     }
+  });
+});
+
+/**
+ * THE DEFECT CLASS, not the two cases — codex r1 raised it twice on this file
+ * and the guard is written for the shape rather than for either instance.
+ *
+ * A topic scoped to a pool type that NO placement page serves is a search
+ * result the panel cannot open. `Registry.search` picks a hit's page with
+ * `pageForResult`, which keeps only placements on a page THIS reader may see;
+ * with none it returns `pageId: undefined`, `useHelpPanel.pageForTopic` falls
+ * back to `placements[0].page`, and `canOpenPage` then refuses it because that
+ * page belongs to another pool type or another audience. The reader gets a row
+ * they can click and nothing happens.
+ *
+ * It type-checks, `buildRegistry` accepts it, the schema audit REWARDS it — a
+ * wider `poolTypes` is what lets an allowlist row be deleted — so nothing else
+ * in the suite can see it. That is why it is worth more than the two fixes.
+ */
+describe('T5 + T6 — no topic claims a reader its placements cannot serve (codex r1)', () => {
+  const VIEWERS = ['member', 'commissioner'] as const;
+
+  /** The pages this topic is placed on, resolved through the live registry. */
+  const pagesFor = (topic: HelpTopic): HelpPage[] => {
+    const base = baseTopicId(topic.id);
+    return helpRegistry.placements
+      .filter((p) => p.topic === base)
+      .map((p) => helpRegistry.getPage(p.page))
+      .filter((p): p is HelpPage => p !== undefined);
+  };
+
+  /**
+   * Every `(pool type, audience)` that can SEE this topic and has no page to be
+   * shown it on. Empty is the invariant.
+   */
+  function unreachableScopes(topic: HelpTopic): string[] {
+    const pages = pagesFor(topic);
+    const types: PoolType[] = topic.poolTypes === 'all' ? [...POOL_TYPES] : [...topic.poolTypes];
+    const out: string[] = [];
+    for (const poolType of types) {
+      for (const audience of VIEWERS) {
+        const scope = { poolType, audience };
+        // Not visible to this reader — nothing to reach.
+        if (!isEntryVisible(topic.poolTypes, topic.audience, scope)) continue;
+        if (pages.some((page) => isEntryVisible(page.poolTypes, page.audience, scope))) continue;
+        out.push(`${topic.id} @ ${poolType}/${audience}`);
+      }
+    }
+    return out;
+  }
+
+  it.each(MANAGER_FIELD_TOPICS.map((t) => [t.id, t] as const))(
+    '%s has a placement page for every reader who can find it',
+    (_id, topic) => {
+      expect(unreachableScopes(topic)).toEqual([]);
+    },
+  );
+
+  it('the check is live — the exact scope codex found is reported', () => {
+    // THE PLANTED COUNTER-EXAMPLE, and it is the shipped defect verbatim: the
+    // first draft scoped the colour to all six branded types while placing it
+    // only on the squares and props manager surfaces. Widen it back by one type
+    // and the guard names that reader.
+    const background = MANAGER_FIELD_TOPICS.find((t) => t.id === 'branding.backgroundColor')!;
+    const widened: HelpTopic = {
+      ...background,
+      poolTypes: [...(background.poolTypes as readonly PoolType[]), 'NFL_PICKEM'],
+    };
+    expect(unreachableScopes(widened)).toEqual(['branding.backgroundColor @ NFL_PICKEM/commissioner']);
+  });
+
+  it('and the same for the bonus rows on a playoff pool', () => {
+    const share = MANAGER_FIELD_TOPICS.find((t) => t.id === 'settings.payouts.bonuses.*.percentage')!;
+    const widened: HelpTopic = {
+      ...share,
+      poolTypes: [...(share.poolTypes as readonly PoolType[]), 'NFL_PLAYOFFS'],
+    };
+    // Both audiences, because these topics are member-visible too — the bonus
+    // list is on the rules page, and a playoff pool has neither.
+    expect(unreachableScopes(widened)).toEqual([
+      'settings.payouts.bonuses.*.percentage @ NFL_PLAYOFFS/member',
+      'settings.payouts.bonuses.*.percentage @ NFL_PLAYOFFS/commissioner',
+    ]);
+  });
+
+  it('END TO END: a real search hit for one of these topics always names a page the reader may see', () => {
+    // The structural check above reasons about placements. This one drives the
+    // code path the reader actually takes, so the two cannot agree while the
+    // product misbehaves.
+    const ours = new Set(MANAGER_FIELD_TOPICS.map((t) => t.id));
+    const bad: string[] = [];
+    let seen = 0;
+    for (const poolType of POOL_TYPES) {
+      for (const audience of VIEWERS) {
+        for (const topic of MANAGER_FIELD_TOPICS) {
+          for (const hit of helpRegistry.search(topic.title, { poolType, audience })) {
+            if (hit.kind !== 'topic' || !ours.has(hit.id)) continue;
+            seen++;
+            const page = hit.pageId ? helpRegistry.getPage(hit.pageId) : undefined;
+            if (!page || !isEntryVisible(page.poolTypes, page.audience, { poolType, audience })) {
+              bad.push(`${hit.id} @ ${poolType}/${audience} → ${hit.pageId ?? 'NO PAGE'}`);
+            }
+          }
+        }
+      }
+    }
+    // Without this the loop could match nothing and pass on an empty list.
+    expect(seen, 'search returned no hit for any of these topics').toBeGreaterThan(0);
+    expect(bad).toEqual([]);
+  });
+});
+
+/**
+ * THE CONTROL ITSELF — codex r1 [P1]. Registry content only populates the Help
+ * panel; a commissioner standing in front of the colour picker or the bonus
+ * rows meets a `?` only if the component renders one. These three files are the
+ * whole surface area of both tickets, so the wiring is asserted here rather
+ * than trusted.
+ *
+ * `HelpTip` returns null on an id that does not resolve rather than throwing —
+ * that is what lets content land ticket by ticket — so a typo would be
+ * invisible on the screen and in every other test. The second assertion is the
+ * join that catches it.
+ */
+describe('T5 + T6 — the controls carry the `?` (codex r1 [P1])', () => {
+  const WIRED: readonly { file: string; helpIds: readonly string[]; poolType: PoolType }[] = [
+    {
+      // The squares manager's Setup Wizard tab (AdminPanel.tsx:675, step 6).
+      file: 'src/components/admin/WizardStepBrandingAdmin.tsx',
+      helpIds: ['branding.backgroundColor'],
+      poolType: 'SQUARES',
+    },
+    {
+      // The props edit wizard inside the props Manage tab (PropsWizard.tsx step 1).
+      file: 'src/components/WizardStepBranding.tsx',
+      helpIds: ['branding.backgroundColor'],
+      poolType: 'PROPS',
+    },
+    {
+      // The only bonus-row editor in the app.
+      file: 'src/components/BracketPoolDashboard/BracketPoolDashboard.tsx',
+      helpIds: ['settings.payouts.bonuses.*.name', 'settings.payouts.bonuses.*.percentage'],
+      poolType: 'BRACKET',
+    },
+  ];
+
+  const renderedIds = (file: string): string[] =>
+    [...read(file).matchAll(/<HelpTip\s+helpId="([^"]+)"/g)].map((m) => m[1]);
+
+  it.each(WIRED)('$file renders a HelpTip for each topic it owns', ({ file, helpIds }) => {
+    const rendered = renderedIds(file);
+    for (const id of helpIds) {
+      expect(rendered, `${file} renders no HelpTip for ${id}`).toContain(id);
+    }
+  });
+
+  it.each(WIRED)('$file — every id it renders resolves for a $poolType commissioner', ({ file, poolType }) => {
+    const unresolved = renderedIds(file).filter(
+      (id) => helpRegistry.resolveTopic({ poolType, ...HOST }, id) === undefined,
+    );
+    expect(unresolved, `${file}`).toEqual([]);
+  });
+
+  it('the grep is live — it finds nothing in a file that renders no tip', () => {
+    // Without this, a renamed component or a moved file would make every
+    // assertion above vacuous rather than red.
+    expect(renderedIds('src/components/wizard/steps/StepBranding.tsx')).toEqual([]);
   });
 });
 
