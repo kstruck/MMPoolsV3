@@ -41,7 +41,7 @@ import { validated } from "../lib/validated";
 import { reconcilePaymentTruthSchema } from "../schemas/migrations";
 import { readPoolDues, writePoolDues, DUES_PREFIX, DUES_PREFIX_END, type PaidEntryMap } from "../lib/poolDues";
 import { entryHasPick } from "../lib/multiEntry";
-import { derivePaidStatus, isPaidRow, liableEntryIds, type MemberRecord } from "../shared/memberRecord";
+import { derivePaidStatus, isPaidRow, liableEntryIds, paidEntryCountOf, type MemberRecord } from "../shared/memberRecord";
 
 /** The pool types whose authoritative payment store is the Member Record. */
 const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -95,6 +95,14 @@ export const reconcilePaymentTruth = validated(
      *  apart from `membersPromoted` so the operator can see that these moved a
      *  flag rather than recorded money (codex round 11 on `6f15ec54`). */
     staleSummariesRepaired: 0,
+    /** Member Records whose mirrored `paidEntryCount` was absent or wrong and
+     *  has been stamped from their per-entry dues map — the D2 backfill half of
+     *  PLAN-PARTIAL-DUES-AGGREGATES. NOT a payment repair: no money moves, no
+     *  ledger row, no `paidStatus` change. Counted separately so a dry-run
+     *  report of "0 divergences, 40 counts stamped" cannot read as "nothing to
+     *  do". Only members WITH a dues document are ever counted: one without cannot
+     *  be partially paid, so the field would change nothing for them. */
+    countsStamped: 0,
     /** member PAID + entry UNPAID → entry display mirrored. No ledger row. */
     entriesMirrored: 0,
     alreadyConsistent: 0,
@@ -127,11 +135,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'STAMP_COUNT' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'STAMP_COUNT' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
@@ -241,6 +249,53 @@ export const reconcilePaymentTruth = validated(
         }
       }
       let changedThisPool = 0;
+
+      // ---- D2: STAMP THE MIRRORED `paidEntryCount` ---------------------------
+      //
+      // PLAN-PARTIAL-DUES-AGGREGATES D2 = A (Kevin, 2026-08-27): this migration
+      // stamps the count rather than a new backfill job existing. It already
+      // carries the kill-switch, the dryRun default and the per-run cap Rule 1
+      // demands, already reads both the dues maps and the liability evidence,
+      // and is already the operator-run repair tool for this class of drift.
+      //
+      // 🛑 ONLY MEMBERS WITH A DUES DOCUMENT, and that is a correctness argument
+      // rather than an optimisation. A member with no dues document cannot be
+      // partially paid: `collectedBaseDues` gives a PAID one the whole fee and
+      // an UNPAID one zero, with or without the field. Stamping them would write
+      // `paidEntryCount: 0` onto every legacy record in the platform to change
+      // nothing.
+      //
+      // ⚠️ THIS RUNS BEFORE THE ENTRY LOOP, DELIBERATELY. That loop's promotion
+      // writes the count transactionally from a map it re-read inside the
+      // transaction. Running afterwards, this pass would compute from the
+      // page-level snapshot and could OVERWRITE the fresher transactional value
+      // with a stale one. Ordering it first makes the authoritative write the
+      // last one.
+      for (const [duesUid, pageMap] of duesMapByUid) {
+        const member = membersById.get(duesUid);
+        if (!member) continue;   // dues without a member record: nothing to stamp.
+        const liable = liableEntryIds(member as MemberRecord, duesUid, pickedByOwner.get(duesUid) ?? []);
+        const want = paidEntryCountOf(pageMap, liable);
+        if ((member as { paidEntryCount?: unknown }).paidEntryCount === want) continue;
+        report.countsStamped++;
+        notedFix(poolId, duesUid, 'STAMP_COUNT');
+        changedThisPool++;
+        if (dryRun) continue;
+        const mRef = doc.ref.collection('members').doc(duesUid);
+        // Re-read both inputs inside the transaction. A commissioner marking
+        // someone paid between the page read and here would otherwise have their
+        // fresh count clobbered by this stale one — the same race the promotion
+        // transaction below guards, and the same answer.
+        await db.runTransaction(async (tx) => {
+          const [freshM, freshDues] = await Promise.all([tx.get(mRef), readPoolDues(tx, doc.ref, duesUid)]);
+          if (!freshM.exists) return;
+          const fm = freshM.data() as MemberRecord & { paidEntryCount?: number };
+          const freshLiable = liableEntryIds(fm, duesUid, pickedByOwner.get(duesUid) ?? []);
+          const freshWant = paidEntryCountOf(freshDues ?? undefined, freshLiable);
+          if (fm.paidEntryCount === freshWant) return;
+          tx.set(mRef, { paidEntryCount: freshWant }, { merge: true });
+        });
+      }
 
       for (const entryDoc of entriesSnap.docs) {
         const entry: any = entryDoc.data();
@@ -478,7 +533,13 @@ export const reconcilePaymentTruth = validated(
               // (the stored row is the original and outranks the entry doc's
               // copy of it). See `alreadyRecorded` above.
               if (alreadyRecorded) {
-                tx.set(mRef, { paidStatus: derived }, { merge: true });
+                tx.set(mRef, {
+                  paidStatus: derived,
+                  // The count rides along on the repair: this member's summary
+                  // was stale, and an un-stamped `paidEntryCount` beside it is
+                  // the same staleness in the field the money surfaces read.
+                  paidEntryCount: paidEntryCountOf(nextDues, liable),
+                }, { merge: true });
                 return 'SUMMARY_ONLY';
               }
               // ⚠️ THE DERIVED SUMMARY, NOT A LITERAL `'PAID'`. Promoting a
@@ -489,6 +550,8 @@ export const reconcilePaymentTruth = validated(
               // `'PAID'` and the behaviour is unchanged from before this ticket.
               tx.set(mRef, {
                 paidStatus: derived,
+                // D1 writer #3, same transaction as `writePoolDues` below.
+                paidEntryCount: paidEntryCountOf(nextDues, liable),
                 paidAt: stampedPaidAt,
                 paidBy: actorUid,
                 ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod
