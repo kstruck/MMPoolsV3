@@ -89,6 +89,35 @@ export interface MemberRecord {
    */
   playableEntryCount?: number;
   /**
+   * PLAN-PARTIAL-DUES-AGGREGATES D1 (Kevin, 2026-08-27 — Option A). How many of
+   * this member's LIABLE entries have been paid for.
+   *
+   * 🛑 A COUNT, NEVER THE MAP. The per-entry dues map is sealed in
+   * `pools/{poolId}/private/dues__{uid}` (`allow read: if false`) precisely
+   * because its KEYS name entries that have committed a pick — publishing them
+   * would tell the whole pool which of another player's entries is live. A
+   * count names no entry, and publishing a count is already what
+   * `playableEntryCount` above does.
+   *
+   * WHY IT HAS TO BE MIRRORED AT ALL: `memberDues` and `computeRosterSummary`
+   * live in `shared/` and run CLIENT-SIDE, so they can never read the sealed
+   * map under any amount of plumbing. Phase 2 made partial payment
+   * representable for the first time, and without this every aggregate money
+   * surface reads the all-or-nothing `paidStatus` and reports a member who owes
+   * $50 and paid $25 as having paid NOTHING — an under-count that reaches the
+   * world-readable `stats/global.prizePot`.
+   *
+   * ⚠️ COUNTED WITH `isPaidRow` OVER THE LIABLE IDS, never
+   * `Object.keys(map).length` — see `paidEntryCountOf`. Every writer of the
+   * dues map writes this in the SAME transaction; a count that can drift from
+   * the map is worse than no count.
+   *
+   * ABSENT on every record written before this ticket. Readers fall back to
+   * today's all-or-nothing behaviour (`collectedBaseDues`), so nothing
+   * regresses before the backfill stamps it.
+   */
+  paidEntryCount?: number;
+  /**
    * PLAN-MULTI-ENTRY D2/D6 — the authorization-safe roster of this member's
    * entries: existence + index + display name, NEVER picks and never per-entry
    * weeks (a participant-readable record must not say which entry has a pick
@@ -332,6 +361,80 @@ export function derivePaidStatus(
 }
 
 /**
+ * PLAN-PARTIAL-DUES-AGGREGATES C2 — the mirrored `paidEntryCount`, computed
+ * from the map a writer is about to store. EVERY writer of the dues map calls
+ * this in the SAME transaction as the map write.
+ *
+ * 🛑 THE LIABLE IDS, FILTERED BY `isPaidRow`. NOT `Object.keys(paid).length`.
+ *
+ * Two different ways the naive count is wrong, and both OVER-count — the
+ * direction that publishes money nobody paid:
+ *
+ *  1. A key stranded by the D7a cleanup path names an entry the member is no
+ *     longer liable for. It is still in the map; it must not be counted.
+ *  2. A malformed row (`null`, a `Timestamp` from a writer that did
+ *     `paidEntries[id] = serverTimestamp()`) is a key with no payment behind
+ *     it. `isPaidRow` rejects it, and `derivePaidStatus` already does — so
+ *     counting keys would make the count and the summary disagree about the
+ *     same document, which is exactly the drift this whole field risks.
+ *
+ * Sharing `isPaidRow` and the liable set with `derivePaidStatus` is what keeps
+ * `paidEntryCount === liable.length` true whenever the summary says `PAID`.
+ */
+export function paidEntryCountOf(
+  paid: PaidEntryMap | undefined,
+  liable: readonly string[],
+): number {
+  if (!paid) return 0;
+  // Sanitized HERE for the same reason `derivePaidStatus` sanitizes its own
+  // argument: this is exported and a writer may hand-build a list.
+  return sanitizeEntryIds(liable).filter(id => isPaidRow(paid, id)).length;
+}
+
+/**
+ * The base dues COLLECTED from one member — the ONE piece of arithmetic every
+ * aggregate money surface calls, so the three cannot drift (C4).
+ *
+ * `fee` is the member's WHOLE base liability (`feeOwed`, i.e. the entry fee
+ * times their liable entries), which is what each call site already computed.
+ *
+ * 🛑 PAID COLLECTS THE FULL FEE, BYTE-IDENTICALLY TO BEFORE THIS TICKET. The
+ * mirrored count is used ONLY to add partial credit to a member the summary
+ * calls UNPAID. That asymmetry is deliberate and is the whole non-regression
+ * argument: collected can only ever go UP, never down, so no pool's published
+ * figure can fall because of this change, and a record with no `paidEntryCount`
+ * behaves exactly as it did yesterday.
+ *
+ * `Math.floor` matches `calculatePoolPot`'s floor — voice rule 8's discipline
+ * in arithmetic form: never over-report money.
+ *
+ * 🛑 ONE CLAMP, NOT TWO, AND THAT IS A CORRECTION. The first draft also wrapped
+ * the result in `Math.min(fee, …)` and its comment called both clamps
+ * load-bearing. Mutation testing disproved it: `capped <= liable` already makes
+ * `fee * capped / liable <= fee`, so the outer clamp was unreachable — and while
+ * both stood, EACH masked the other's mutation, so neither could be pinned by a
+ * test. Two spellings of one guard, and the pair was untestable precisely
+ * because it was redundant.
+ *
+ * What survives is the one that states the domain fact: you cannot have paid for
+ * more entries than you are liable for. A stored count that outran its map — a
+ * stale mirror, an entry deleted after the count was stamped — is clamped here,
+ * and `tests/partial-dues-aggregates.test.ts` goes red if this line is removed.
+ */
+export function collectedBaseDues(
+  m: Pick<MemberRecord, 'role' | 'feeOwed' | 'hasPlayableEntry' | 'playableEntryCount'>
+     & { paidStatus?: string; paidEntryCount?: number },
+  fee: number,
+): number {
+  if (m.paidStatus === 'PAID') return fee;
+  const liable = memberLiableEntries(m);
+  const paid = m.paidEntryCount;
+  if (liable <= 0 || typeof paid !== 'number' || !Number.isFinite(paid) || paid <= 0) return 0;
+  const capped = Math.min(Math.floor(paid), liable);
+  return Math.max(0, Math.floor((fee * capped) / liable));
+}
+
+/**
  * D8 — `pool.entryCount` for an NFL pool that never had one, derived from the
  * Member Records' liabilities. Only CANONICAL records count: a forged
  * `{memberReportedPaid}` doc (#344) is not a member and owes nothing.
@@ -492,7 +595,13 @@ export function memberDues(m: MemberRecord, inputs: DuesInputs): { expected: num
     // for records that predate the stamp.
     const fee = m.feeOwed ?? inputs.entryFee ?? 0;
     expected += fee;
-    if (m.paidStatus === 'PAID') collected += fee;
+    // WAS `if (m.paidStatus === 'PAID') collected += fee;`. Phase 2 made partial
+    // payment representable, and the all-or-nothing read then booked a member
+    // who paid for two of their three entries as having paid NOTHING — an
+    // under-count reaching the world-readable pot. `collectedBaseDues` still
+    // returns the whole fee for a PAID member, so this can only ever collect
+    // MORE, never less (PLAN-PARTIAL-DUES-AGGREGATES C3).
+    collected += collectedBaseDues(m, fee);
   }
   expected += m.rebuyOwed ?? 0;
   collected += m.rebuyPaid ?? 0;
