@@ -42,6 +42,8 @@ import { cn } from './ui/cn';
  *   Pools in the header", and the Help system's own topics name these
  *   controls; a tidier label would have silently falsified all of it. Nothing
  *   was removed either — every route reachable before is still reachable.
+ *   `/features` GAINED a door: it was signed-out-only before, and once
+ *   Explore existed there was room to end that asymmetry.
  *
  * - ONE PRIMARY ACTION STAYS VISIBLE. Create a New Pool is the only red
  *   control and never moves behind a disclosure. Hiding the money-making
@@ -324,7 +326,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     <Trophy size={14} /> Live Scores
                                 </NavLink>
 
-                                <NavMenu label="Explore" active={isAnyActive('/browse', '/how-it-works', '/pricing')}>
+                                <NavMenu label="Explore" active={isAnyActive('/browse', '/how-it-works', '/features', '/pricing')}>
                                     <NavMenuItem
                                         to="/browse"
                                         active={isActive('/browse')}
@@ -342,6 +344,15 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                         hint="Run or join a pool, start to finish"
                                     >
                                         How it Works
+                                    </NavMenuItem>
+                                    <NavMenuItem
+                                        to="/features"
+                                        active={isActive('/features')}
+                                        onClick={() => navigate('/features')}
+                                        icon={<Sparkles size={15} />}
+                                        hint="Everything the platform does"
+                                    >
+                                        Features
                                     </NavMenuItem>
                                     <NavMenuItem
                                         to="/pricing"
@@ -555,6 +566,9 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                         </DrawerLink>
                                         <DrawerLink to="/how-it-works" active={isActive('/how-it-works')} onClick={() => navigate('/how-it-works')} icon={<BookOpen size={16} />}>
                                             How it Works
+                                        </DrawerLink>
+                                        <DrawerLink to="/features" active={isActive('/features')} onClick={() => navigate('/features')} icon={<Sparkles size={16} />}>
+                                            Features
                                         </DrawerLink>
                                         <DrawerLink to="/pricing" active={isActive('/pricing')} onClick={() => navigate('/pricing')} icon={<TagIcon size={16} />}>
                                             Pricing

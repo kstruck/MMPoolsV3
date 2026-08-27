@@ -104,12 +104,18 @@ describe('grouped header nav — nothing became unreachable', () => {
     expect(entries.getAttribute('href')).toBe('/participant?tab=entries');
   });
 
-  it('Explore holds the three marketing pages and each one navigates', () => {
+  it('Explore holds every marketing page, signed in as well as signed out', () => {
+    // Parity, not just presence. `/features` used to be a signed-out-only door
+    // — a signed-in member had NO header path to it at any width. Codex read
+    // that asymmetry as this redesign dropping the route (it did not; see
+    // `git show HEAD~2:src/components/Header.tsx`), and the honest answer to a
+    // reviewer tripping over it twice is to remove the asymmetry.
     renderHeader(member);
     openMenu(/^Explore$/);
     for (const [name, href] of [
       [/Public Pools/, '/browse'],
       [/How it Works/, '/how-it-works'],
+      [/Features/, '/features'],
       [/Pricing/, '/pricing'],
     ] as const) {
       expect(screen.getByRole('link', { name }).getAttribute('href')).toBe(href);
@@ -277,7 +283,7 @@ describe('grouped header nav — mobile drawer', () => {
     const hrefs = Array.from(drawer.querySelectorAll('a')).map(a => a.getAttribute('href'));
     for (const href of [
       '/participant?tab=entries', '/participant?tab=commissioner', '/scoreboard',
-      '/browse', '/how-it-works', '/pricing', '/profile/u1', '/profile', '/super-admin',
+      '/browse', '/how-it-works', '/features', '/pricing', '/profile/u1', '/profile', '/super-admin',
     ]) {
       expect(hrefs, `mobile drawer lost ${href}`).toContain(href);
     }
