@@ -1598,7 +1598,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <FieldLabel tone="muted">Strikes Limit</FieldLabel>
+                  <FieldLabel tone="muted" helpId="settings.maxStrikes">Strikes Limit</FieldLabel>
                   <select
                     value={maxStrikes}
                     onChange={e => setMaxStrikes(parseInt(e.target.value))}
@@ -1610,7 +1610,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <FieldLabel tone="muted">Max Rebuys</FieldLabel>
+                  <FieldLabel tone="muted" helpId="settings.maxRebuys">Max Rebuys</FieldLabel>
                   <select
                     value={maxRebuys}
                     onChange={e => setMaxRebuys(parseInt(e.target.value))}
@@ -1627,7 +1627,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               {maxRebuys > 0 && (
                 <div className="grid grid-cols-2 gap-4 bg-page p-4 border border-line rounded-lg">
                   <div>
-                    <FieldLabel tone="muted">Rebuy Cutoff Week</FieldLabel>
+                    <FieldLabel tone="muted" helpId="settings.rebuyDeadlineWeek">Rebuy Cutoff Week</FieldLabel>
                     <input
                       type="number"
                       value={rebuyDeadlineWeek}
@@ -1638,7 +1638,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     />
                   </div>
                   <div>
-                    <FieldLabel tone="muted">Rebuy Fee ($)</FieldLabel>
+                    <FieldLabel tone="muted" helpId="settings.rebuyCost">Rebuy Fee ($)</FieldLabel>
                     <input
                       type="number"
                       value={rebuyCost}
@@ -1652,7 +1652,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <FieldLabel tone="muted">Tie Outcome</FieldLabel>
+                  <FieldLabel tone="muted" helpId="settings.tieCountsAs">Tie Outcome</FieldLabel>
                   <select
                     value={tieCountsAs}
                     onChange={e => setTieCountsAs(e.target.value === 'WIN' ? 'WIN' : 'LOSS')}
@@ -1664,7 +1664,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <p className="font-body text-[10px] text-faint mt-1">Cannot be changed once a week has been scored.</p>
                 </div>
                 <div>
-                  <FieldLabel tone="muted">Team-Use Limit</FieldLabel>
+                  <FieldLabel tone="muted" helpId="settings.maxTeamUses">Team-Use Limit</FieldLabel>
                   <input
                     type="number"
                     value={maxTeamUses}

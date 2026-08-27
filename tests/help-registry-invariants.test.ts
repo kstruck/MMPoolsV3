@@ -943,6 +943,35 @@ describe('the real registry — content rules', () => {
       {},
       { weeklyTiebreaker: 'MNF_LASTGAME' },
     ],
+    // T10 — the three survivor rules whose copy IS `utils/survivorRules.ts`.
+    // `survivorModeRulesCopy` and `tieOutcomeRuleCopy` branch on the PAIR
+    // (`pickLosersMode` x `tieCountsAs`), so all four combinations are listed
+    // for both, plus the absent case that resolves to the defaults.
+    'settings.pickLosersMode': [
+      { pickLosersMode: false, tieCountsAs: 'LOSS' },
+      { pickLosersMode: false, tieCountsAs: 'WIN' },
+      { pickLosersMode: true, tieCountsAs: 'LOSS' },
+      { pickLosersMode: true, tieCountsAs: 'WIN' },
+      {},
+    ],
+    'settings.tieCountsAs': [
+      { pickLosersMode: false, tieCountsAs: 'LOSS' },
+      { pickLosersMode: false, tieCountsAs: 'WIN' },
+      { pickLosersMode: true, tieCountsAs: 'LOSS' },
+      { pickLosersMode: true, tieCountsAs: 'WIN' },
+      {},
+    ],
+    // `teamReuseRuleCopy` has three arms — unlimited (0), the default 1, and
+    // any N >= 2, whose sentence interpolates the number. 23 is `MAX_TEAM_USES`,
+    // the widest value the create form accepts and therefore the longest
+    // rendering of that arm.
+    'settings.maxTeamUses': [
+      { maxTeamUses: 0 },
+      { maxTeamUses: 1 },
+      { maxTeamUses: 2 },
+      { maxTeamUses: 23 },
+      {},
+    ],
   };
 
   const isTemplate = (copy: unknown): boolean => typeof copy !== 'string';
