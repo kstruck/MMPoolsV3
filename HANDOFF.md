@@ -1,5 +1,52 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-27 (latest) — **PARTIAL DUES SHIPPED AND DEPLOYED (#615). A COOLIFY REBUILD IS OWED FOR #614 + #615.**
+>
+> **Functions are deployed from <!-- deploy-state:current --> `main` @ `291e949a`.**
+>
+> ✅ **VERIFIED BY SOURCE TIMESTAMP, not by "Deploy complete!".** #615 merged at
+> `14:26:43Z`; the three dues writers uploaded after it —
+> `deleteNFLEntry` 14:34:47Z, `setPaidStatus` 14:35:19Z,
+> `reconcilePaymentTruth` 14:36:44Z. All ACTIVE. This deploy added no new
+> callable, so verify-by-name would have proved nothing (CLAUDE.md §3).
+>
+> ### 🔴 OWED: a Coolify rebuild
+>
+> Two merges since the last frontend deploy changed `src/`:
+> **#614** (Header regrouped, 13 top-level controls → 6) and **#615**
+> (`src/utils/poolRoster.ts`). Neither is live on www until Kevin triggers it.
+>
+> ### 🔴 OWED: the partial-dues BACKFILL has not been run
+>
+> #615 shipped the readers and all three writers, so **new** payments carry
+> `paidEntryCount` from now on. **Existing** Member Records do not, and until
+> they do those pools keep under-counting partial payment.
+>
+> The backfill is `reconcilePaymentTruth` (D2 = A — no new job; it already
+> carries the kill-switch, the dryRun default and the per-run cap). It is
+> **dry-run by default at the schema layer**. Run the dry run first and read
+> `countsStamped` — that is how many records would gain the field. Stamps are
+> deliberately NOT in `plannedFixes` (capped at 50), so the money repairs stay
+> visible in the operator's preview.
+>
+> ### `nflDeepSweep` — VERIFIED, and deliberately NOT armed
+>
+> `{enabled: TRUE, dryRun: TRUE}` (Kevin read the console 2026-08-27). Stage 1
+> by design: the job runs daily, DETECTS and REPORTS corrections, and suppresses
+> the `nfl_games` write. Two observed runs (08-25, 08-26), both
+> `0 correction(s)`.
+>
+> **Do not arm writes yet, and the reason is not caution — it is that arming buys
+> nothing today.** `reportStatCorrections` PAGES (admin audit + pager sink) even
+> in dry-run, so a real correction reaches Kevin without writes; lookback is 7
+> days (configurable to 30), so arming reactively still catches it. Meanwhile
+> `dryRun:false` would write ALL 20 games of the slate every day — the live path
+> writes every `freshGame`, not just changed ones. That is safe (the only
+> `nfl_games` trigger, `nflSpreadRescoreTrigger`, early-returns unless a LOCKED
+> spread changed, and the sweep preserves locked spreads) but it is 20 writes/day
+> for zero benefit. Arm when a correction actually pages, or after ~a week of
+> zeroes.
+
 > ## 🟡 2026-08-27 (later) — **TWO PRs OPEN AND GREEN: #611 (tiebreaker) AND #612 (a duplicate money event). NEITHER MERGED. ONE PLAN NEEDS KEVIN'S SIGN-OFF (#613).**
 >
 > **#609 MERGED** as `a85c6fbf`, and the **functions deploy landed** —
@@ -113,7 +160,7 @@
 
 > ## 🟢 2026-08-26 (latest) — **PER-ENTRY DUES PHASE 2 T1+T2 ARE MERGED AND DEPLOYED. #599–#602 IN. FUNCTIONS DEPLOY VERIFIED BY SOURCE TIMESTAMP, NOT BY `Deploy complete!`.**
 >
-> **Functions are deployed from <!-- deploy-state:current --> `main` @ `6d92dc61`.**
+> **Functions are deployed from <!-- deploy-state:ignore --> `main` @ `6d92dc61`.**
 > ⚠️ Updated 2026-08-26 evening — Kevin deployed after #602 merged. The previous
 > tagged claim, `e6882d21`, is now `<!-- deploy-state:ignore -->`.
 >
