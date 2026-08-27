@@ -21,6 +21,7 @@ import { HelpRoutePublisher } from '../help/publish';
 import { HelpScopeProvider } from '../help/scope';
 import { HelpTip } from '../components/ui/HelpTip';
 import { helpRegistry, staticCopy } from '../help/registry';
+import { onCurrentRoute } from '../help/route-match';
 import { __resetOverlayStack, useOverlayOwner } from '../components/ui/overlayStack';
 
 beforeAll(() => {
@@ -244,9 +245,41 @@ describe('the panel contents', () => {
   });
 
   it('says so plainly when a screen has no guide yet, rather than rendering blank', async () => {
-    renderApp(<WizardHarness />, { path: '/privacy' });
+    // A SYNTHETIC path, deliberately not a route this app has.
+    //
+    // This test stood on `/privacy` until T3 wrote that page, and then went red
+    // without one thing about the empty state having changed. That is the tell
+    // that it was measuring the wrong subject: the guard is for the PANEL's
+    // no-page branch, and pointing it at whichever real screen currently lacks
+    // help makes it a coverage assertion in disguise — one that fails, by
+    // design, every time the content improves. Re-pointing it at another real
+    // route (`/super-admin` is uncovered today, until T14) would buy one
+    // ticket's grace and then break again for the same reason.
+    //
+    // The branch it guards stays reachable in the live app: any `App.tsx` route
+    // the registry does not cover renders it, which is precisely what
+    // `ROUTE_ALLOWLIST` exists to enumerate.
+    const path = '/__a-screen-with-no-help-page__';
+
+    // THE PREMISE, asserted rather than assumed. Without this the test would
+    // still pass on the day some page started claiming this path — for the
+    // wrong reason, and silently. `onCurrentRoute` is audience- and
+    // pool-type-blind on purpose: no page may match this path for ANY reader.
+    expect(helpRegistry.pages.filter((p) => onCurrentRoute(p, { pathname: path }))).toEqual([]);
+
+    renderApp(<WizardHarness />, { path });
     fireEvent.keyDown(document, { key: '?' });
     await waitFor(() => expect(screen.getByText(/no guide for this screen yet/i)).toBeTruthy());
+  });
+
+  it('and does NOT say that on a screen that has one', async () => {
+    // The discriminating half. The assertion above passes on a panel that
+    // renders the empty state unconditionally; this is what stops it.
+    renderApp(<WizardHarness />, { path: '/privacy' });
+    fireEvent.keyDown(document, { key: '?' });
+    const privacy = helpRegistry.getPage('site.privacy')!;
+    await waitFor(() => expect(screen.getByRole('heading', { name: privacy.title })).toBeTruthy());
+    expect(screen.queryByText(/no guide for this screen yet/i)).toBeNull();
   });
 
   it('hides commissioner-only pages from a member in "All pages"', async () => {

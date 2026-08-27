@@ -37,7 +37,33 @@
 // WHICH PAGES ARE LINKABLE, AND WHY THE REST ARE NOT.
 //
 // `href` is how "All pages" and a search result NAVIGATE (see `HelpPage.href`).
-// Four reasons a page here returns `null` instead of a path, each measured:
+// FIVE reasons a page here returns `null` instead of a path, each measured:
+//
+//   THE ROUTE TURNS A SIGNED-OUT READER AWAY — `/profile`, `/participant` and
+//   `/create-pool`. All three are wrapped in `App.tsx` as
+//   `user ? <Screen/> : <Navigate to="/" replace/>` (`App.tsx:396-404`,
+//   `:416-422`, `:485-498`; the pool picker also needs
+//   `canAccessPoolCreation`, `utils/auth.ts:89-91`), so a static path here is a
+//   button that lands a logged-out visitor on Home instead of the screen the
+//   panel just described (codex R1 P2 ×2).
+//
+//   🛑 AND `HelpRouteContext` CANNOT SAY WHETHER THE READER IS SIGNED IN. There
+//   is no auth axis on it: `useHelpPanel.ts:127-148` builds the context from
+//   `pathname`, `search` and the publishers, and `HelpProvider` is handed
+//   `isAdmin` and nothing else (`HelpPanel.tsx:47`). `audience` is a different
+//   question — it says WHICH READER, not whether there is one, and every site
+//   route resolves it to `member` for signed-out and signed-in alike (rule 2
+//   above). So this file cannot ask, and does not pretend to: it declines the
+//   cross-route link rather than guessing. The gap is real and is reported
+//   rather than papered over — closing it means an `isSignedIn` on
+//   `HelpRouteContext`, threaded `App.tsx → HelpProvider → useHelpPanelState`,
+//   which is T2 machinery and not this content ticket's to add.
+//
+//   The `/participant` TAB pages keep their links, but only FROM
+//   `/participant` (`tabHref` below). Standing on that route is proof the
+//   reader is signed in — the redirect above is what makes it proof — and a
+//   `?tab=` switch is only useful from the surface that has the tabs anyway.
+//   Anywhere else they are listed and not linked, exactly like the ones below.
 //
 //   NO ID TO BUILD A URL FROM — `/profile/:uid` and `/join/:poolId`. This file
 //   cannot know a player id or a pool id, and `HelpRouteContext.routeParams` is
@@ -58,12 +84,12 @@
 //   holds its tab in `useState` and never reads `?tab=`, so `/scoreboard?tab=
 //   college` would render the NFL tab and the link would lie.
 //
-// Everything else is a static path, including the `/participant` tabs: that
-// surface DOES read `?tab=` on mount and adopts a valid value
-// (`ParticipantDashboard.tsx:71-75`), so `/participant?tab=live` really does
-// land on Live Pools.
+// Everything else is a static path. The `/participant` tab links work at all
+// only because that surface DOES read `?tab=` on mount and adopts a valid
+// value (`ParticipantDashboard.tsx:71-75`), so `/participant?tab=live` really
+// does land on Live Pools rather than on Empire Overview.
 
-import type { Audience, HelpPage, PoolTypeScope } from '../types';
+import type { Audience, HelpPage, HelpRouteContext, PoolTypeScope } from '../types';
 
 /** See rule 2 in the header comment. Not a shortcut — a decision. */
 const SITE_AUDIENCE: readonly Audience[] = ['member'];
@@ -75,16 +101,41 @@ interface SiteSpec {
   route: string;
   title: string;
   summary: string;
-  /** Omitted means "link to `route`"; `null` means deliberately unlinkable. */
-  href?: string | null;
+  /**
+   * Omitted means "link to `route`"; `null` means deliberately unlinkable;
+   * `{ fromOwnRouteOnly }` means the link is offered ONLY to a reader already
+   * standing on `route` — see the signed-out reason in the header comment.
+   */
+  href?: string | null | { fromOwnRouteOnly: string };
+}
+
+/**
+ * The `href` this spec resolves to, in the three shapes `SiteSpec.href` allows.
+ *
+ * The third shape compares `ctx.pathname` to `spec.route` EXACTLY rather than
+ * matching the pattern. It is only ever used for `/participant`, a literal path
+ * with no parameters — the two routes that do have parameters (`/profile/:uid`,
+ * `/join/:poolId`) are unlinkable for the different reason above and never take
+ * this branch. `tests/help-content-site.test.ts` fails if a spec with a
+ * parameterised route ever asks for it, which is the guard against this
+ * shortcut being copied somewhere it does not hold.
+ */
+function hrefFor(spec: SiteSpec): (ctx: HelpRouteContext) => string | null {
+  if (spec.href === undefined) return () => spec.route;
+  if (spec.href === null) return () => null;
+  if (typeof spec.href === 'string') {
+    const target = spec.href;
+    return () => target;
+  }
+  const target = spec.href.fromOwnRouteOnly;
+  return (ctx) => (ctx.pathname === spec.route ? target : null);
 }
 
 function page(spec: SiteSpec): HelpPage {
-  const target = spec.href === undefined ? spec.route : spec.href;
   return {
     id: spec.id,
     route: spec.route,
-    href: () => target,
+    href: hrefFor(spec),
     title: spec.title,
     summary: spec.summary,
     poolTypes: SITE_POOL_TYPES,
@@ -224,6 +275,8 @@ const POOL_ENTRY_PAGES: readonly HelpPage[] = [
   page({
     id: 'site.create-pool',
     route: '/create-pool',
+    // Signed-in only, and this file cannot tell; see the header comment.
+    href: null,
     title: 'Choose your game',
     summary:
       'The pool picker, and the first screen of hosting one. Four formats start now — Weekly Pick’em, Survivor Pool, Margin Pool and Gameday Squares — with Side Hustle props below them. Brackets and the Playoff Challenge are shown out of season.',
@@ -256,7 +309,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'insights',
     id: 'account.entries.insights',
     route: '/participant',
-    href: '/participant?tab=insights',
+    href: { fromOwnRouteOnly: '/participant?tab=insights' },
     title: 'My Entries — Empire Overview',
     summary:
       'The tab the page opens on. A banner for picks about to lock, your winnings plotted by month, and how your pools split across the formats you play. It is a read-only view — the pools themselves are on the other tabs.',
@@ -265,7 +318,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'entries',
     id: 'account.entries.entries',
     route: '/participant',
-    href: '/participant?tab=entries',
+    href: { fromOwnRouteOnly: '/participant?tab=entries' },
     title: 'My Entries — pools you play in',
     summary:
       'The pools you are a member of, whoever runs them. NFL pools you have not picked in yet carry a picks-due badge and sort to the top, so the pools waiting on you are the ones you see first.',
@@ -274,7 +327,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'commissioner',
     id: 'account.entries.commissioner',
     route: '/participant',
-    href: '/participant?tab=commissioner',
+    href: { fromOwnRouteOnly: '/participant?tab=commissioner' },
     title: 'My Entries — Commissioner Hub',
     summary:
       'Every pool you own or co-run, gathered in one place to manage rather than to play in. The tab appears only once you own or co-run at least one pool; with none, the strip has no Commissioner Hub on it.',
@@ -283,7 +336,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'live',
     id: 'account.entries.live',
     route: '/participant',
-    href: '/participant?tab=live',
+    href: { fromOwnRouteOnly: '/participant?tab=live' },
     title: 'My Entries — Live Pools',
     summary:
       'Your pools that have locked and are being played, but have not finished. A pool moves here the moment picks close and leaves it when the last game is final.',
@@ -292,7 +345,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'open',
     id: 'account.entries.open',
     route: '/participant',
-    href: '/participant?tab=open',
+    href: { fromOwnRouteOnly: '/participant?tab=open' },
     title: 'My Entries — Open',
     summary:
       'Your pools that have not locked yet. These are the ones you can still change something in — picks, an invite, a setting if you run it.',
@@ -301,7 +354,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'completed',
     id: 'account.entries.completed',
     route: '/participant',
-    href: '/participant?tab=completed',
+    href: { fromOwnRouteOnly: '/participant?tab=completed' },
     title: 'My Entries — Completed',
     summary: 'Your pools whose games are over. They stay here so you can go back and read the final standings.',
   },
@@ -309,7 +362,7 @@ const ENTRIES_TABS: readonly (SiteSpec & { tab: string })[] = [
     tab: 'all',
     id: 'account.entries.all',
     route: '/participant',
-    href: '/participant?tab=all',
+    href: { fromOwnRouteOnly: '/participant?tab=all' },
     title: 'My Entries — All Pools',
     summary: 'Everything of yours in one list, whatever state it is in and whether you play in it or run it.',
   },
@@ -355,6 +408,11 @@ const ACCOUNT_PAGES: readonly HelpPage[] = [
   page({
     id: 'account.profile',
     route: '/profile',
+    // Signed-in only, and this file cannot tell; see the header comment. There
+    // is no same-route link worth keeping either — the tab pages below have one
+    // because a `?tab=` switch does something; a link from `/profile` to
+    // `/profile` does not.
+    href: null,
     title: 'Your profile',
     summary:
       'Your own account, and the only place you edit it. Three sections save together: Basic Information, Payment Info — the handles that fill themselves in when you create a pool — and Social Links. Your season history sits above them.',
@@ -375,6 +433,10 @@ const ACCOUNT_PAGES: readonly HelpPage[] = [
   page({
     id: 'account.entries',
     route: '/participant',
+    // Signed-in only, and this file cannot tell; see the header comment. Same
+    // as `/profile`: the tab pages keep a from-own-route link because switching
+    // tab is a real destination, and this one has none to offer.
+    href: null,
     title: 'My Entries',
     summary:
       'Every pool you play in or run, with your lifetime pools, entries, wins and net winnings across the top. The tabs sort them, and the page opens on Empire Overview. Searching filters whichever tab you are on.',

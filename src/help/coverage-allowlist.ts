@@ -166,7 +166,11 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   //   - `/participant` had SEVEN tabs, not six (`ParticipantDashboard.tsx:67`
   //     — insights, all, open, live, completed, commissioner, entries), and
   //     the tab is NOT purely in memory: the surface adopts a valid `?tab=` on
-  //     mount, so its tab pages are linkable where the scoreboard's are not.
+  //     mount, so its tab pages are linkable where the scoreboard's are not —
+  //     but only FROM `/participant`. The route redirects a signed-out visitor
+  //     to Home and nothing in `HelpRouteContext` says whether the reader is
+  //     signed in, so a link offered from anywhere else would be a dead one
+  //     (codex R1; the reasoning is in `content/site-pages.ts`'s header).
   //   - `/join/:poolId` is not a "join and pay" screen. It takes no payment at
   //     all — it shows the fee, the format and the prize split, and joining is
   //     a single button. The fee is settled between the player and the host.

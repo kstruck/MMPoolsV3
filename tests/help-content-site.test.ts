@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { helpRegistry } from '../src/help/registry';
 import { SITE_PAGES } from '../src/help/content/site-pages';
 import { ROUTE_ALLOWLIST } from '../src/help/coverage-allowlist';
-import { canOpenPage, hrefForPage, resolveHelpPage } from '../src/help/route-match';
+import { canOpenPage, hrefForPage, isPageOffered, resolveHelpPage } from '../src/help/route-match';
 import { AUDIENCES, type Audience, type HelpPage, type HelpRouteContext } from '../src/help/types';
 
 /**
@@ -211,6 +211,43 @@ describe('T3 — /participant is covered tab by tab', () => {
     expect(accepted.sort()).toEqual([...tabs].sort());
   });
 
+  /**
+   * CODEX R1 P2 — the Commissioner Hub tab is CONDITIONAL, and Help was
+   * offering its page unconditionally.
+   *
+   * `ParticipantDashboard` renders that tab only for someone who owns or
+   * co-runs a pool, so for everyone else the "All pages" row navigated to
+   * `?tab=commissioner` — a tab their own strip does not have.
+   * `HelpRouteContext.offeredTabs` exists for exactly this: the surface
+   * publishes the list it just rendered. These two checks are the mechanism
+   * (does the page respect the list) and the wiring (does the surface send it).
+   */
+  it('a tab the surface did not render is neither offered nor openable', () => {
+    const hub = helpRegistry.getPage('account.entries.commissioner')!;
+    const overview = helpRegistry.getPage('account.entries.insights')!;
+    const withoutHub = tabs.filter((t) => t !== 'commissioner');
+
+    expect(isPageOffered(hub, ctx({ pathname: '/participant', offeredTabs: withoutHub }))).toBe(false);
+    expect(canOpenPage(hub, ctx({ pathname: '/participant', offeredTabs: withoutHub }), MEMBER)).toBe(false);
+    expect(hrefForPage(hub, ctx({ pathname: '/participant', offeredTabs: withoutHub }))).toBeNull();
+    // Discriminating half, twice over: an unconditional tab survives the same
+    // filter, and the hub itself comes back the moment the strip carries it —
+    // so this is measuring the published list and not simply refusing the page.
+    expect(canOpenPage(overview, ctx({ pathname: '/participant', offeredTabs: withoutHub }), MEMBER)).toBe(true);
+    expect(canOpenPage(hub, ctx({ pathname: '/participant', offeredTabs: tabs }), MEMBER)).toBe(true);
+  });
+
+  it('the surface publishes offeredTabs, built from the array it renders the strip from', () => {
+    // DRIFT PIN. The whole value of the check above is that the published list
+    // is the RENDERED list; a second copy of the ownership test would drift from
+    // the strip and put the dead row straight back.
+    expect(source).toContain('<HelpRoutePublisher tab={activeTab} offeredTabs={offeredTabs} />');
+    expect(source).toMatch(/const offeredTabs = useMemo\(\(\) => tabStrip\.map\(t => t\.id\), \[tabStrip\]\);/);
+    expect(source).toContain('{tabStrip.map(tab => (');
+    // And the conditional member of that one array is the Commissioner Hub.
+    expect(source).toMatch(/managed > 0 \? \[\{ id: 'commissioner'/);
+  });
+
   it('each tab page links to its own tab', () => {
     const own = SITE_PAGES.filter((p) => p.route === '/participant' && p.tab !== undefined);
     expect(own.length).toBe(tabs.length);
@@ -287,6 +324,9 @@ describe('T3 — your profile and a player profile are two screens', () => {
 describe('T3 — every link is a working path or a deliberate null', () => {
   /** The pages that CANNOT be linked to, with the reason, so the set is reviewable. */
   const UNLINKABLE: Readonly<Record<string, string>> = {
+    'account.profile': 'signed-in only, and nothing in HelpRouteContext says whether the reader is',
+    'account.entries': 'signed-in only, and a link from /participant to /participant is not a destination',
+    'site.create-pool': 'signed-in only, and also gated on canAccessPoolCreation',
     'site.payment-success': 'renders no Header, so no Help button; nothing should link to a stale receipt',
     'site.join': 'the URL needs a pool id this file cannot know',
     'account.player-profile': 'the URL needs a player id this file cannot know',
@@ -320,6 +360,89 @@ describe('T3 — every link is a working path or a deliberate null', () => {
     const receipt = helpRegistry.getPage('site.payment-success')!;
     expect(canOpenPage(receipt, ctx({ pathname: '/payment-success' }), MEMBER)).toBe(true);
     expect(canOpenPage(receipt, ctx({ pathname: '/' }), MEMBER)).toBe(false);
+  });
+
+  /**
+   * CODEX R1 P2 (×2) — a page advertised to a reader who cannot open it.
+   *
+   * `/profile`, `/participant` and `/create-pool` all render
+   * `<Navigate to="/" replace/>` for a signed-out visitor, and the panel has no
+   * way to know whether the reader is signed in: `HelpRouteContext` carries
+   * `pathname`, `search`, the published tab/pool-type/manager flag and nothing
+   * about auth. The honest answer while that is true is to decline the link.
+   *
+   * These three checks are the whole of that decision, in the order it was made:
+   * the gate is really in `App.tsx`; there is really no auth axis to read; and
+   * the pages therefore offer no cross-route link.
+   */
+  it('App.tsx really turns a signed-out reader away from all three', () => {
+    const app = read('src/App.tsx');
+    // The gate itself. If any of these three stops redirecting, the `null`
+    // above stops being the honest answer and these pages should get links.
+    expect(app).toMatch(/path="\/profile"[\s\S]{0,500}\) : <Navigate to="\/" replace \/>/);
+    expect(app).toMatch(/path="\/participant"[\s\S]{0,500}<Navigate to="\/" replace \/>/);
+    expect(app).toMatch(/path="\/create-pool"[\s\S]{0,900}\) : <Navigate to="\/" replace \/>/);
+    // …and the pool picker carries a second gate on top of the auth one.
+    expect(app).toContain('user && canAccessPoolCreation(user) ? (');
+  });
+
+  it('the panel has no way to know whether the reader is signed in', () => {
+    // The reason the fix is a declined link rather than a conditional one. If
+    // an auth axis is ever added to `HelpRouteContext`, this fails and the three
+    // pages above can become conditional links instead of dead ones.
+    const types = read('src/help/types.ts');
+    const ctxBlock = /export interface HelpRouteContext \{[\s\S]*?[\r\n]\}/.exec(types);
+    expect(ctxBlock).not.toBeNull();
+    expect(ctxBlock![0]).not.toMatch(/isSignedIn|isAuthenticated|signedIn|currentUser/);
+    // And nothing hands one in: the provider takes `isAdmin` and children.
+    expect(read('src/components/help/HelpPanel.tsx')).toContain(
+      'export function HelpProvider({ isAdmin, children }: { isAdmin: boolean; children: ReactNode })',
+    );
+  });
+
+  it('offers no signed-in-only page as a link from a route a visitor can be on', () => {
+    // The defect in its live shape: a logged-out visitor on the front page opens
+    // Help, searches, and is handed a button that lands them back on the front
+    // page. Every page in the file is checked, so a new one cannot quietly
+    // reintroduce it — the expectation names the three by id.
+    const SIGNED_IN_ONLY = ['account.profile', 'account.entries', 'site.create-pool'];
+    const linkableFromHome = SITE_PAGES.filter(
+      (page) => page.route !== '/' && hrefForPage(page, ctx({ pathname: '/' })) !== null,
+    ).map((p) => p.id);
+    for (const id of SIGNED_IN_ONLY) expect(linkableFromHome).not.toContain(id);
+    // Discriminating half: a page that is NOT gated still links from there, so
+    // the check above is about the gate and not about `hrefForPage` returning
+    // null off-route for everything.
+    expect(hrefForPage(helpRegistry.getPage('site.pricing')!, ctx({ pathname: '/' }))).toBe('/pricing');
+  });
+
+  it('the /participant tab links are offered from that route and nowhere else', () => {
+    // The one concession: standing on `/participant` PROVES the reader is signed
+    // in, because the route redirects otherwise — so a `?tab=` switch offered
+    // there is a link that works, while the same link from `/` is not.
+    const tabPages = SITE_PAGES.filter((p) => p.route === '/participant' && p.tab !== undefined);
+    expect(tabPages.length).toBeGreaterThan(0);
+    expect(tabPages.map((p) => hrefForPage(p, ctx({ pathname: '/participant' })))).toEqual(
+      tabPages.map((p) => `/participant?tab=${p.tab}`),
+    );
+    expect(tabPages.map((p) => hrefForPage(p, ctx({ pathname: '/' })))).toEqual(tabPages.map(() => null));
+    expect(tabPages.map((p) => canOpenPage(p, ctx({ pathname: '/' }), MEMBER))).toEqual(tabPages.map(() => false));
+  });
+
+  it('the from-own-route link is only used where an exact path compare is valid', () => {
+    // `hrefFor`'s third branch compares `ctx.pathname` to `spec.route` exactly
+    // rather than matching the pattern. That is only sound on a route with no
+    // parameters. Every page whose link appears on its own route but not on
+    // another must therefore have a parameterless route.
+    const conditional = SITE_PAGES.filter(
+      (p) =>
+        hrefForPage(p, ctx({ pathname: concretePath(p.route) })) !== null &&
+        hrefForPage(p, ctx({ pathname: '/somewhere-else' })) === null,
+    );
+    expect(conditional.map((p) => p.id).sort()).toEqual(
+      SITE_PAGES.filter((p) => p.route === '/participant' && p.tab !== undefined).map((p) => p.id).sort(),
+    );
+    expect(conditional.filter((p) => p.route.includes(':')).map((p) => p.id)).toEqual([]);
   });
 
   /**
