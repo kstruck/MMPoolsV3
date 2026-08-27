@@ -45,6 +45,16 @@
 // times. Each split topic explains its own half; the rule they share lives in
 // the topic for the choice that turns them on.
 //
+// THE CHARITY DEDUCTION IS STATED ONCE, IN THE SAME PLACE, FOR THE SAME REASON
+// (codex r1 [P2] on this file). `potBreakdown` takes the charity cut off the
+// GROSS and then scales the weekly allocation by `charityFactor`
+// (`prizePot.ts:61-72`), so neither typed amount is what its pot holds on a
+// pool that gives a share away — a 10% pool splitting $25 as $18/$7 fills the
+// pots from $16.20/$6.30 per entry. That is one fact about the split as a
+// whole, not two, so the two field topics were written to describe the
+// DIVISION they set rather than to promise an amount, and the deduction is
+// named once in `settings.payoutMode`.
+//
 // WHY THE SPLIT TOPIC IDS ARE THE FIELD PATHS. `NumberField` defaults its
 // `helpId` to the field `name` (`wizard/fields.tsx:100-107`), so a topic whose
 // id IS the path gets a `?` on the wizard control with no call-site change. An
@@ -99,6 +109,15 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // `weeklyPlacesFor` falls back to the season places when a HYBRID pool
       // declares no weekly list (`prizePot.ts:107-108`).
       'Hybrid pays both. It asks you to divide the entry fee into two whole-dollar amounts — one for the weekly pots, one for the season pot — and the two have to add up to the fee exactly, or the save is refused. Each pot can have its own list of prize places; leave the weekly list empty and the season places price both.',
+      // Charity comes off BEFORE either pot exists: `potBreakdown` takes the cut
+      // from the gross and then scales the weekly allocation by `charityFactor`
+      // (`prizePot.ts:61-72`), so on a 10% pool an $18/$7 split fills the pots
+      // from $16.20/$6.30 per entry, not $18/$7. Stated HERE and nowhere else
+      // (voice rule 10): it is one fact about the split as a whole, and this is
+      // the topic that owns the rules the two halves share. The member-facing
+      // weekly tooltip already says the same thing in the same order
+      // (`WeeklyWinnersList.tsx:79`, "after any charity donation").
+      'If your pool gives a share to charity, that comes off the fees before either pot is worked out, so both pots hold less than the two amounts you typed.',
       // The absent-split case, which is every hybrid pool created before the
       // split existed. `potBreakdown` leaves both figures unknown, and
       // `PayoutsPanel.tsx:59` renders the honest fallback rather than a guess.
@@ -126,15 +145,19 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
   {
     id: 'settings.hybridSplit.weeklyPerEntry',
     title: 'Weekly share of the entry fee',
-    short: 'How many dollars of every entry fee go into the weekly prize pots. Only a Hybrid pool has this.',
+    short: 'Which part of every entry fee the weekly prize pots draw on, in whole dollars. Only a Hybrid pool has this.',
     long: [
       // `potBreakdown` (`prizePot.ts:69-72`): the season-long weekly allocation
-      // is `weeklyPerEntry × entries`, after charity.
-      'Each entry puts this many dollars towards weekly prizes for the whole season.',
+      // is `floor(weeklyPerEntry × entries × charityFactor)` — so this box sets
+      // the DIVISION of the fee, and the dollars typed here are not what the pot
+      // holds once a pool gives a share away. The copy says what the box decides
+      // rather than promising an amount; the deduction itself is stated once, in
+      // `settings.payoutMode`.
+      'Every entry fee divides between the two pots, and this is the weekly side of that division. It covers the whole season rather than one week, and the more you put here the bigger the weekly pots are and the smaller the season pot.',
       // `perWeekPrizePot` (`prizePot.ts:87-91`) is that allocation divided by
       // `weeksInSeason` — the pool's OWN week count, frozen, never a hardcoded
       // 18. A preseason pool really does have four.
-      'One week is worth that season-long weekly money divided by the number of weeks your pool covers, so a short preseason pool pays more per week than a full season would from the same amount.',
+      'One week is worth the whole season’s weekly money divided by the number of weeks your pool covers, so a short preseason pool pays more per week than a full season would from the same amount.',
       // `computeWeeklyPrizeSnapshot` runs only on the FIRST publication of a
       // week and the recap keeps the snapshot; the ledger prices from it.
       'What a weekly winner is owed is worked out when that week is scored and then held still, so changing this afterwards does not re-price a week that has already been settled.',
@@ -164,11 +187,13 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
     id: 'settings.hybridSplit.seasonPerEntry',
     title: 'Season share of the entry fee',
     short:
-      'How many dollars of every entry fee go into the one season pot, paid on the final standings. Only a Hybrid pool has this.',
+      'Which part of every entry fee the one season pot draws on, paid on the final standings. Only a Hybrid pool has this.',
     long: [
-      // `potBreakdown` (`prizePot.ts:71`): `seasonPot = net − weeklySeasonAllocation`.
-      // `computeSeasonPrizeSnapshot` prices it against `settings.payouts.places`.
-      'Each entry puts this many dollars towards the single prize paid once the season is over, split across your season prize places.',
+      // `potBreakdown` (`prizePot.ts:72`): `seasonPot = net − weeklySeasonAllocation`,
+      // and `net` is already charity-deducted — so, like its twin, this box sets
+      // a share and not an amount. `computeSeasonPrizeSnapshot` prices it against
+      // `settings.payouts.places`.
+      'This is the season side of how each entry fee divides. It stands behind the single prize paid once the season is over, split across your season prize places.',
       // The sum rule itself is stated in the payout-method topic and printed
       // above both inputs on every screen that renders them; what is worth
       // saying HERE is the consequence for this box (voice rules 2 and 10).

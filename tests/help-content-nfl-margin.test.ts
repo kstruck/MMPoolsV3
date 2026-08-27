@@ -410,6 +410,56 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
     expect(perWeekPrizePot(pot.weeklySeasonAllocation, 18)).toBe(10);
   });
 
+  /**
+   * THE CHARITY ORDER, PINNED TO THE COPY THAT DEPENDS ON IT (codex r1 [P2]).
+   *
+   * `potBreakdown` takes the charity cut off the GROSS and then scales the
+   * weekly allocation by `charityFactor` (`prizePot.ts:61-72`), so the two
+   * amounts a commissioner types are NOT what either pot holds on a pool that
+   * gives a share away. That is why neither split topic promises a number of
+   * dollars into a pot, and why the payout-method topic says the share comes
+   * off first.
+   *
+   * Both halves are asserted in ONE test on purpose: move the deduction to
+   * after the split and the arithmetic below goes red, which forces whoever
+   * moved it to read the copy assertions sitting beside it. Behaviour and copy
+   * drifting apart silently is the whole failure mode this file exists for.
+   */
+  it('HYBRID: charity comes off before either pot, and the copy says so', () => {
+    const settings = {
+      payoutMode: 'HYBRID' as const,
+      entryFee: 25,
+      hybridSplit: { weeklyPerEntry: 18, seasonPerEntry: 7 },
+      charity: { enabled: true, percentage: 10 },
+      payouts: { places: PLACES },
+    };
+    const pot = potBreakdown(settings, 10)!;
+    // The case above, with a tenth given away: 180/70 becomes 162/63. Both pots
+    // are BELOW the typed split × entries, which is the claim the copy rests on.
+    expect(pot.charityCut).toBe(25);
+    expect(pot.net).toBe(225);
+    expect(pot.weeklySeasonAllocation).toBe(162);
+    expect(pot.seasonPot).toBe(63);
+    expect(pot.weeklySeasonAllocation!).toBeLessThan(18 * 10);
+    expect(pot.seasonPot!).toBeLessThan(7 * 10);
+
+    // Stated once, in the topic that owns the split as a whole (voice rule 10).
+    const mode = staticCopy(helpRegistry.getTopic('settings.payoutMode')!.long);
+    expect(mode).toMatch(/charity/i);
+    expect(mode).toMatch(/before either pot is worked out/i);
+
+    // ...and not restated in the two field topics, which describe the DIVISION
+    // they set. The two phrasings below are the ones that were false: both
+    // promised the typed dollars arrive, which charity makes untrue.
+    for (const id of ['settings.hybridSplit.weeklyPerEntry', 'settings.hybridSplit.seasonPerEntry']) {
+      const topic = helpRegistry.getTopic(id)!;
+      const copy = `${staticCopy(topic.short)} ${staticCopy(topic.long)}`;
+      expect(copy, `${id} promises the typed dollars reach a pot`).not.toMatch(/this many dollars/i);
+      expect(copy, `${id} promises the typed dollars reach a pot`).not.toMatch(/dollars of every entry fee go/i);
+      expect(copy, `${id} restates the charity deduction (voice rule 10)`).not.toMatch(/charity/i);
+    }
+  });
+
   it('HYBRID with no split: neither figure is known — the "ask your commissioner" case', () => {
     const pot = potBreakdown({ payoutMode: 'HYBRID', entryFee: 25 }, 10)!;
     expect(pot.weeklySeasonAllocation).toBeUndefined();
