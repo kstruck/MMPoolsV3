@@ -159,28 +159,21 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   '/dev/dashboards': 'PERMANENT: developer preview, not reachable by a reader.',
   '/dev/profile-demo': 'PERMANENT: developer preview, not reachable by a reader.',
 
-  // PENDING — T2 (pool surfaces + wizards) and T3 (site + account).
-  '/': 'T3: marketing landing.',
-  '/gameday-squares': 'T3: marketing landing.',
-  '/march-madness': 'T3: marketing landing.',
-  '/nfl-playoffs': 'T3: marketing landing.',
-  '/pricing': 'T3: pricing page.',
-  '/payment-success': 'T3: post-checkout confirmation. Renders no Header, so it is shortcut-only.',
-  '/about': 'T3: marketing page.',
-  '/charity': 'T3: marketing page.',
-  '/browse': 'T3: public pool list.',
-  '/features': 'T3: marketing page.',
-  '/how-it-works': 'T3: has four view modes and its own FAQ, which the panel links to rather than duplicating.',
-  '/privacy': 'T3: legal page.',
-  '/terms': 'T3: legal page.',
-  '/contact': 'T3: contact form.',
-  '/profile': 'T3: your own profile and its three sections.',
-  '/profile/:uid': 'T3: another player’s public profile.',
-  '/scoreboard': 'T3: scores page with three in-memory tabs.',
-  '/odds/super-bowl-squares': 'T3: odds article page.',
-  '/participant': 'T3: My Entries, with six in-memory tabs.',
-  '/create-pool': 'T3: the pool-type picker.',
-  '/join/:poolId': 'T3: the join and pay screen.',
+  // PENDING — T14 (the two admin surfaces). T3 CLOSED the twenty-one site and
+  // account rows: every one of them now has a page in
+  // `content/site-pages.ts`, and two of the reasons written here were wrong
+  // about the code, which is why they are gone rather than edited:
+  //   - `/participant` had SEVEN tabs, not six (`ParticipantDashboard.tsx:67`
+  //     — insights, all, open, live, completed, commissioner, entries), and
+  //     the tab is NOT purely in memory: the surface adopts a valid `?tab=` on
+  //     mount, so its tab pages are linkable where the scoreboard's are not —
+  //     but only FROM `/participant`. The route redirects a signed-out visitor
+  //     to Home and nothing in `HelpRouteContext` says whether the reader is
+  //     signed in, so a link offered from anywhere else would be a dead one
+  //     (codex R1; the reasoning is in `content/site-pages.ts`'s header).
+  //   - `/join/:poolId` is not a "join and pay" screen. It takes no payment at
+  //     all — it shows the fee, the format and the prize split, and joining is
+  //     a single button. The fee is settled between the player and the host.
   '/super-admin': 'T14: seventeen admin tabs get page-level summaries only (K4 scope ii).',
   '/tournament-sim': 'T14: admin simulation surface.',
 });
