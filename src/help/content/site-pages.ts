@@ -405,6 +405,57 @@ const SCOREBOARD_TABS: readonly (SiteSpec & { tab: string })[] = [
   },
 ];
 
+/**
+ * The tabs of a player's public profile.
+ *
+ * Unlinkable for the SAME reason the parent page is — there is no player id to
+ * build a URL from — but covered tab by tab all the same, because
+ * `PlayerProfile.tsx:80-81` reads `?tab=` straight out of the URL. Nothing on
+ * that route publishes a help route, so `useHelpPanel` falls through to
+ * `searchParams.get('tab')` and the panel's context really does carry
+ * `weekly`, `picks` or `achievements`. Without these four the panel would
+ * answer every one of them with the generic profile summary — the same defect
+ * the `/participant` and `/scoreboard` tab pages exist to avoid (codex R3).
+ */
+const PLAYER_PROFILE_TABS: readonly (SiteSpec & { tab: string })[] = [
+  {
+    tab: 'stats',
+    id: 'account.player-profile.stats',
+    route: '/profile/:uid',
+    href: null,
+    title: 'A player’s profile — Stats',
+    summary:
+      'The tab the page opens on. Their headline numbers — accuracy, correct out of total, points, and pools entered — then weekly accuracy plotted against the site average, their profit, their record picking each team, and a record per season.',
+  },
+  {
+    tab: 'weekly',
+    id: 'account.player-profile.weekly',
+    route: '/profile/:uid',
+    href: null,
+    title: 'A player’s profile — Weekly Records',
+    summary:
+      'One row per week, added up across every pool they play in. A strong week and a weak one sit side by side here rather than being buried inside one pool’s standings.',
+  },
+  {
+    tab: 'picks',
+    id: 'account.player-profile.picks',
+    route: '/profile/:uid',
+    href: null,
+    title: 'A player’s profile — Pick History',
+    summary:
+      'Every pick of theirs that has been scored. A pick appears here once its week is scored, so the week in progress is missing until its games are final — nobody’s live picks are on show.',
+  },
+  {
+    tab: 'achievements',
+    id: 'account.player-profile.achievements',
+    route: '/profile/:uid',
+    href: null,
+    title: 'A player’s profile — Achievements',
+    summary:
+      'The badges they have earned, each shown at the tier it was awarded — gold, silver or bronze. The tab is always on the strip, so a player who has earned none yet has an empty one rather than a missing one.',
+  },
+];
+
 const ACCOUNT_PAGES: readonly HelpPage[] = [
   page({
     id: 'account.profile',
@@ -431,6 +482,7 @@ const ACCOUNT_PAGES: readonly HelpPage[] = [
     summary:
       'Another player’s record, as anyone with the link sees it: accuracy, points, pools entered, and how they compare with the site average. Four tabs — Stats, Weekly Records, Pick History and Achievements.',
   }),
+  ...PLAYER_PROFILE_TABS.map(tabPage),
   page({
     id: 'account.entries',
     route: '/participant',

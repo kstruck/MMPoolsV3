@@ -360,6 +360,63 @@ describe('T3 — /scoreboard is covered tab by tab', () => {
   });
 });
 
+/**
+ * CODEX R3 [P2] — a URL-addressable tab surface that was covered route-only.
+ *
+ * `PlayerProfile.tsx` reads `?tab=` straight from the URL and publishes no help
+ * route, so `useHelpPanel` falls through to `searchParams.get('tab')` and the
+ * panel's context carries `weekly`, `picks` or `achievements` on that screen.
+ * With only the tabless page, all four tabs resolved to the same generic
+ * summary. Same rule as `/participant` and `/scoreboard`, so the same shape of
+ * guard: the ids are PARSED from the surface, not restated here.
+ */
+describe('T3 — a player profile is covered tab by tab', () => {
+  const source = read('src/pages/PlayerProfile.tsx');
+  const union = /type TabId = ([^;]+);/.exec(source);
+  const tabs = union ? [...union[1].matchAll(/'([^']+)'/g)].map((hit) => hit[1]) : [];
+
+  it('reads a plausible tab list out of the surface', () => {
+    expect(union).not.toBeNull();
+    expect(tabs).toEqual(['stats', 'weekly', 'picks', 'achievements']);
+    // Voice rule 5: the Stats page's copy says it is the tab the page opens on,
+    // which is what this fallback makes true.
+    expect(source).toContain("TABS.some(t => t.id === rawTab) ? (rawTab as TabId) : 'stats'");
+  });
+
+  it('every tab resolves to its own page, not to the route page', () => {
+    const missing = tabs.filter((tab) => {
+      const id = pageForTab('/profile/:uid', tab);
+      return id === undefined || id === 'account.player-profile';
+    });
+    expect(missing).toEqual([]);
+    // Discriminating fixture: an unknown tab still falls back to the route page,
+    // so the check above is reading the tab rather than finding one page always.
+    expect(pageForTab('/profile/:uid', 'no-such-tab')).toBe('account.player-profile');
+    expect(pageForTab('/profile/:uid', undefined)).toBe('account.player-profile');
+  });
+
+  /**
+   * DRIFT PIN on the reason these five pages are unlinkable while
+   * `/participant`'s tabs are not: the tab really is in the URL here, so the
+   * usual objection does not apply — the PLAYER ID is what this file cannot
+   * know. If the route ever stops taking a parameter, they should gain links.
+   */
+  it('is unlinkable for the id, not for the tab', () => {
+    expect(source).toContain("searchParams.get('tab')");
+    const own = SITE_PAGES.filter((p) => p.route === '/profile/:uid');
+    expect(own.length).toBe(tabs.length + 1);
+    expect(own.map((p) => hrefForPage(p, ctx({ pathname: '/profile/abc123' })))).toEqual(own.map(() => null));
+    // Unlinkable is not unreachable: the reader standing on the tab opens it.
+    expect(
+      canOpenPage(
+        helpRegistry.getPage('account.player-profile.picks')!,
+        ctx({ pathname: '/profile/abc123', tab: 'picks' }),
+        MEMBER,
+      ),
+    ).toBe(true);
+  });
+});
+
 describe('T3 — your profile and a player profile are two screens', () => {
   it('resolves distinctly, and neither is an altRoute of the other', () => {
     const mine = resolveHelpPage(helpRegistry.pages, ctx({ pathname: '/profile' }), MEMBER);
@@ -391,6 +448,10 @@ describe('T3 — every link is a working path or a deliberate null', () => {
     'site.payment-success': 'renders no Header, so no Help button; nothing should link to a stale receipt',
     'site.join': 'the URL needs a pool id this file cannot know',
     'account.player-profile': 'the URL needs a player id this file cannot know',
+    'account.player-profile.stats': 'same as its parent — no player id, so no URL',
+    'account.player-profile.weekly': 'same as its parent — no player id, so no URL',
+    'account.player-profile.picks': 'same as its parent — no player id, so no URL',
+    'account.player-profile.achievements': 'same as its parent — no player id, so no URL',
     'site.scoreboard.nfl': 'the tab is held in memory and no query parameter selects it',
     'site.scoreboard.college': 'the tab is held in memory and no query parameter selects it',
     'site.scoreboard.basketball': 'the tab is held in memory and no query parameter selects it',
