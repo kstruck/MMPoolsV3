@@ -628,7 +628,36 @@ export async function submitNFLPicksInternal(
         // state that must not change under members who already submitted
         // (qodo #9 on #452).
         if (frozenTarget === undefined) {
-          frozenTargetWrite = { [`frozenTiebreakTargets.${week}`]: canonicalTarget };
+          // 🛑 THE ROLLOUT WINDOW — a submission that never saw the new target
+          // must not introduce it (codex r1 on PLAN-TIEBREAKER-MONDAYLESS).
+          //
+          // Functions and the www frontend deploy SEPARATELY (CLAUDE.md §3:
+          // Coolify is a manual trigger), so for a while the server knows about
+          // the Monday-less fallback and a member's loaded bundle does not. That
+          // member's legacy MNF_COMBINED sheet renders no tiebreaker card, sends
+          // no prediction and no `displayedTiebreakTargetIds`. If this froze the
+          // fallback game anyway, the next member to reload WOULD see the card,
+          // answer it, and take any tied week outright — `computeWeeklyWinners`
+          // DROPS a leader with no prediction as soon as one leader has one.
+          // That is exactly the harm the freeze exists to prevent, arriving
+          // through a code change instead of a schedule change.
+          //
+          // Deploying the frontend first is not an escape: a new sheet sends the
+          // fallback id, an old server resolves `[]`, and every submission is
+          // refused with TIEBREAK_TARGET_STALE.
+          //
+          // So: on the ONE week whose meaning this release changed — a legacy
+          // MNF_COMBINED pool with no Monday game — a caller that did not take
+          // part in the handshake freezes what the PREVIOUS release would have
+          // frozen, `[]`. Nobody in that week is asked, and a tied week is
+          // shared. Self-expiring: a current sheet always sends the list when it
+          // asks, so once the frontend is deployed this branch stops firing.
+          const noMondayGame = games.every(g => g.isMonday !== true);
+          const introducesNewQuestion =
+            tiebreakRule === 'MNF_COMBINED' && noMondayGame && displayedTargetIds === undefined;
+          frozenTargetWrite = {
+            [`frozenTiebreakTargets.${week}`]: introducesNewQuestion ? [] : canonicalTarget,
+          };
         }
       }
 

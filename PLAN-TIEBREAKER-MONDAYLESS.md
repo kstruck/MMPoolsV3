@@ -158,6 +158,47 @@ still resolves to no target, and that is exactly the week Kevin is looking at.
 
 So a future surface cannot reopen the gap.
 
+### D4 — the rollout window (added after codex round 1, finding R1-1)
+
+🛑 **Functions and the www frontend deploy SEPARATELY** (CLAUDE.md §3 — Coolify
+is a manual trigger). So there is a real window, and stale browser tabs extend
+it past the deploy, in which the SERVER knows about the fallback and a member's
+loaded bundle does not.
+
+That member's legacy `MNF_COMBINED` sheet renders no tiebreaker card, and sends
+neither a prediction nor `displayedTiebreakTargetIds`. If the server froze the
+fallback game on that submission, the next member to reload WOULD see the card,
+answer it, and take any tied week outright — `computeWeeklyWinners` **drops** a
+leader with no prediction the moment another leader has one
+(`nflScoringEngine.ts`: *"they lose a tiebreak somebody else can win"*). That is
+the same harm C2 protects against, arriving through a code change instead of a
+schedule change.
+
+**Deploying the frontend first is not an escape.** A new sheet sends the
+fallback id, an old server resolves `[]`, and `sameTargetIds` refuses every
+submission with `TIEBREAK_TARGET_STALE`. Both orders are unsafe.
+
+**The guard.** On the ONE week whose meaning this release changed — a legacy
+`MNF_COMBINED` pool with no Monday game — a submission that did NOT take part in
+the handshake freezes what the previous release would have frozen, `[]`. Nobody
+in that week is asked, and a tied week is shared.
+
+```ts
+const noMondayGame = games.every(g => g.isMonday !== true);
+const introducesNewQuestion =
+  tiebreakRule === 'MNF_COMBINED' && noMondayGame && displayedTargetIds === undefined;
+```
+
+**Self-expiring.** A current sheet always sends the list when it asks
+(`displayedTiebreakTargetIds: showTiebreaker ? tiebreakTargetIds : undefined`),
+so once the frontend is deployed this branch stops firing and every Monday-less
+week freezes the fallback normally.
+
+**Deliberately NOT widened past `MNF_COMBINED`.** A pre-#452 client sends no
+displayed list either, so a universal handshake requirement would withhold a
+target the previous release already gave — a regression. Pinned by emulator
+test 5e.
+
 ---
 
 ## 5. Out of scope — named so the absence is a decision

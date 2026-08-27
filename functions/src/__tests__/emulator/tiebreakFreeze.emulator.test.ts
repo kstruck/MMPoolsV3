@@ -161,7 +161,8 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     // prediction takes the week. That is the production defect, at its source.
     await seedGames({ includeMondays: false });
     await seedPool();
-    await submit(ALICE, { picks: { [SUN]: 'KC' } });
+    // The displayed list is what proves the sheet RENDERED the new card — see 5d.
+    await submit(ALICE, { picks: { [SUN]: 'KC' }, displayedTiebreakTargetIds: [SUN] });
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
     // And it is still a FREEZE: Monday games appearing later do not re-point it.
     await seedGames();
@@ -169,6 +170,40 @@ describe('PLAN-WEEKLY-PRIZES §2b — frozen tiebreak target', () => {
     expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
     await expect(submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [MON1, MON2] }))
       .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
+  }, 30000);
+
+  it('5d. THE ROLLOUT WINDOW — a legacy sheet that never rendered the new card cannot introduce the target (codex r1 on PLAN-TIEBREAKER-MONDAYLESS)', async () => {
+    // 🛑 Functions and the www frontend deploy SEPARATELY, so a member can
+    // submit from a bundle whose MNF_COMBINED sheet shows no tiebreaker card at
+    // all. It sends no prediction and no displayed list. Freezing the fallback
+    // on that submission would let the next member to reload answer a question
+    // the first was never asked — and `computeWeeklyWinners` DROPS a leader
+    // with no prediction the moment another leader has one.
+    await seedGames({ includeMondays: false });
+    await seedPool();
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });   // no displayedTiebreakTargetIds
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
+    // ...and it STAYS empty for everyone, current bundle or not. Nobody is
+    // asked, so a tied week is shared — the previous release's meaning, kept.
+    await expect(submit(BOB, { picks: { [SUN]: 'BUF' }, displayedTiebreakTargetIds: [SUN] }))
+      .rejects.toThrow(/TIEBREAK_TARGET_STALE/);
+    await submit(BOB, { picks: { [SUN]: 'BUF' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [] });
+  }, 30000);
+
+  it('5e. the rollout guard is scoped to the ONE week this release changed — it does not withhold a target the previous release already gave', async () => {
+    // A no-handshake submission still freezes the canonical target everywhere
+    // else, because everywhere else the previous release resolved the same
+    // list. Widening the guard would REGRESS pools that already had a target
+    // (a pre-#452 client sends no displayed list either).
+    await seedPool();                       // legacy MNF_COMBINED, Monday games present
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [MON1, MON2] });
+
+    await seedGames({ includeMondays: false });
+    await seedPool({ weeklyTiebreaker: 'MNF_LAST_GAME' });   // Monday-less, but NOT legacy
+    await submit(ALICE, { picks: { [SUN]: 'KC' } });
+    expect((await pool()).frozenTiebreakTargets).toEqual({ '1': [SUN] });
   }, 30000);
 
   it('5c. a week that ALREADY froze an EMPTY list keeps it — the fix does not add a target under members who already submitted (qodo #9 on #452; PLAN-TIEBREAKER-MONDAYLESS C2)', async () => {
