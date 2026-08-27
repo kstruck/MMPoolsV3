@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { POOL_TYPES } from '../shared/poolTypes';
 import { baseTopicId, buildRegistry, helpRegistry, normalizePath, resolveCopy, SEARCH_RESULT_LIMIT, staticCopy } from '../src/help/registry';
 import { PAGES } from '../src/help/pages';
+import { ADMIN_PAGES } from '../src/help/content/super-admin';
 import { ROUTE_ALLOWLIST } from '../src/help/coverage-allowlist';
 import { WIZARDS } from '../src/help/content/wizard-pages';
 import { BANNED_IMPLEMENTATION_WORDS, BANNED_SELLING_WORDS, COPY_LIMITS, findBannedWords } from '../src/help/voice';
@@ -28,6 +29,17 @@ import type { HelpPage, HelpTopic } from '../src/help/types';
  */
 
 const root = resolve(__dirname, '..');
+
+/**
+ * Every page the app can SHIP, base plus the lazily loaded admin chunk (T14).
+ *
+ * `src/help/admin.ts` builds a registry from `[...PAGES, ...ADMIN_PAGES]` for a
+ * super admin, so a route covered only by the admin chunk is covered. The
+ * route-coverage and page-copy guards below measure this list; the "T2 state"
+ * assertion further down deliberately still measures `PAGES`, because it is
+ * about what the BASE registry contains.
+ */
+const ALL_PAGES = [...PAGES, ...ADMIN_PAGES];
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
 const APP = read('src/App.tsx');
@@ -750,6 +762,111 @@ describe('search', () => {
     expect(hits.some((h) => h.kind === 'glossary')).toBe(true);
   });
 
+  /**
+   * RANKING IS WHAT MAKES THE CAP MEAN SOMETHING (T14, after T3).
+   *
+   * Filtering before the cap (codex R3) stopped slots being spent on hits that
+   * would be thrown away. It did not give the survivors an ORDER: they reached
+   * the cap in content-declaration order, so a cap over them returned a prefix
+   * of the content file. The live symptom was measured on `/super-admin` as an
+   * admin — "the", "pool" and "a" each returned the identical seven marketing
+   * pages, and the three pages written for an admin sat at ranks 16-18 of 18.
+   *
+   * Both fixtures below flood the queue with enough earlier-declared pages to
+   * fill the cap on their own, so a page that ranks is a page that displaced
+   * one of them.
+   */
+  const flood = (n: number, summary: string) =>
+    Array.from({ length: n }, (_, i) => page({ id: `filler${i}`, title: `Filler ${i}`, summary }));
+
+  it('ranks a title match above a body-only match, whatever the declaration order', () => {
+    const ranked = buildRegistry({
+      topics: [topic()],
+      // The wanted page is declared LAST, so declaration order alone buries it.
+      pages: [...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about a pool.'), page({ id: 'wanted', title: 'Pool rules' })],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    const hits = ranked.search('pool', { audience: 'member' });
+    expect(hits.map((h) => h.id)).toContain('wanted');
+    // …and it is FIRST among the pages, not merely present.
+    expect(hits.filter((h) => h.kind === 'page')[0].id).toBe('wanted');
+    // Discriminating half: without a title match it is judged like any other
+    // filler and declaration order rightly leaves it out. So the assertion
+    // above is about the ranking and not about a cap that happens to be roomy.
+    const unranked = buildRegistry({
+      topics: [topic()],
+      pages: [
+        ...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about a pool.'),
+        page({ id: 'wanted', title: 'Rules', summary: 'Everything about a pool.' }),
+      ],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    expect(unranked.search('pool', { audience: 'member' }).map((h) => h.id)).not.toContain('wanted');
+  });
+
+  it('ranks content written FOR the reader above content they merely inherit', () => {
+    // An admin sees member copy because `AUDIENCE_SEES` widens their view.
+    // That is right for visibility and wrong for ranking: the admin page is the
+    // one addressed to them. No title matches here at all, which is the case
+    // `/super-admin` actually hit.
+    const ranked = buildRegistry({
+      topics: [topic()],
+      pages: [
+        ...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about the sport.'),
+        page({ id: 'wanted', title: 'Simulator', summary: 'Runs the whole bracket.', audience: ['admin'] }),
+      ],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    expect(ranked.search('the', { audience: 'admin' }).map((h) => h.id)).toContain('wanted');
+    // Discriminating half: the same registry read by a COMMISSIONER cannot see
+    // the admin page at all, so a hit for them would mean the rank had leaked
+    // past visibility.
+    expect(ranked.search('the', { audience: 'commissioner' }).map((h) => h.id)).not.toContain('wanted');
+    // And with the page scoped to `member` like the filler, the boost is gone
+    // and declaration order buries it again.
+    const unranked = buildRegistry({
+      topics: [topic()],
+      pages: [
+        ...flood(SEARCH_RESULT_LIMIT + 5, 'Everything about the sport.'),
+        page({ id: 'wanted', title: 'Simulator', summary: 'Runs the whole bracket.' }),
+      ],
+      placements: [{ topic: 'settings.entryFee', page: 'filler0' }],
+      glossary: [],
+    });
+    expect(unranked.search('the', { audience: 'admin' }).map((h) => h.id)).not.toContain('wanted');
+  });
+
+  it('leaves an equal-scoring queue in declaration order', () => {
+    // The ranking must only move hits that have a reason to move: a stable sort
+    // is what keeps "ties break by declaration order" true everywhere else in
+    // this file, including the pageId-preference test above.
+    //
+    // Six of them, declared in REVERSE alphabetical order, and both details are
+    // load-bearing. Two entries is too few — a comparator that reorders ties
+    // can leave a two-element array untouched by luck. And ids that ascend with
+    // declaration order would be satisfied by any deterministic tiebreak
+    // someone adds to the comparator later, which is the realistic way this
+    // stops being stable.
+    const tied = ['f', 'e', 'd', 'c', 'b', 'a'].map((id) =>
+      page({ id: `tied-${id}`, route: `/tied-${id}`, summary: 'A pool page.' }),
+    );
+    const registryOfTies = buildRegistry({
+      topics: [topic()],
+      pages: tied,
+      placements: [{ topic: 'settings.entryFee', page: 'tied-f' }],
+      glossary: [],
+    });
+    expect(
+      registryOfTies
+        .search('pool', { audience: 'member' })
+        .filter((h) => h.kind === 'page')
+        .map((h) => h.id),
+    ).toEqual(tied.map((p) => p.id));
+  });
+
   it('still returns every kind it has when under the limit', () => {
     const hits = registry.search('tie', { audience: 'member' });
     expect(hits.length).toBeLessThanOrEqual(SEARCH_RESULT_LIMIT);
@@ -802,6 +919,12 @@ describe('parseRoutes — the scanner itself', () => {
 
 describe('the real registry — route coverage against src/App.tsx', () => {
   const routes = appRoutes();
+  // EVERY assertion in this block measures `ALL_PAGES` — base plus the admin
+  // chunk (T14) — because the question is whether the SHIPPED content covers a
+  // route, and `src/help/admin.ts` ships `ADMIN_PAGES` to a super admin. They
+  // are code-split, not absent, so `/super-admin` really is covered and its
+  // allowlist rows really are gone. Measuring `PAGES` alone would have forced
+  // the admin summaries into every reader's bundle purely to satisfy a test.
 
   it('reads a plausible route list out of App.tsx', () => {
     // Guards the regex itself: if App.tsx's route syntax changes, every
@@ -821,7 +944,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   });
 
   it('every HelpPage route exists in App.tsx', () => {
-    const unknown = PAGES.filter((p) => !routes.includes(p.route)).map((p) => `${p.id} → ${p.route}`);
+    const unknown = ALL_PAGES.filter((p) => !routes.includes(p.route)).map((p) => `${p.id} → ${p.route}`);
     expect(unknown).toEqual([]);
   });
 
@@ -833,7 +956,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
    * guard-that-does-not-guard shape this repo keeps producing.
    */
   it('every HelpPage altRoute exists in App.tsx', () => {
-    const unknown = PAGES.flatMap((p) =>
+    const unknown = ALL_PAGES.flatMap((p) =>
       (p.altRoutes ?? []).filter((r) => !routes.includes(r)).map((r) => `${p.id} → ${r}`),
     );
     expect(unknown).toEqual([]);
@@ -848,7 +971,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   it('every App.tsx route has a HelpPage or an allowlist row', () => {
     // An altRoute counts: `/admin/:id` is covered for a bracket commissioner by
     // the bracket dashboard's pages, which is the screen it renders.
-    const covered = new Set(PAGES.flatMap((p) => [p.route, ...(p.altRoutes ?? [])]));
+    const covered = new Set(ALL_PAGES.flatMap((p) => [p.route, ...(p.altRoutes ?? [])]));
     const uncovered = routes.filter((r) => !covered.has(r) && !(r in ROUTE_ALLOWLIST));
     expect(uncovered).toEqual([]);
   });
@@ -859,7 +982,7 @@ describe('the real registry — route coverage against src/App.tsx', () => {
   });
 
   it('no route is both given a page and allowlisted', () => {
-    const both = PAGES.flatMap((p) =>
+    const both = ALL_PAGES.flatMap((p) =>
       [p.route, ...(p.altRoutes ?? [])].filter((r) => r in ROUTE_ALLOWLIST),
     );
     expect(both).toEqual([]);
@@ -1059,7 +1182,7 @@ describe('the real registry — content rules', () => {
   });
 
   it('every page obeys the length budget and the voice rules', () => {
-    const violations = PAGES.flatMap((p) => {
+    const violations = ALL_PAGES.flatMap((p) => {
       const problems: string[] = [];
       if (p.summary.length > COPY_LIMITS.pageSummary) problems.push(`summary ${p.summary.length} chars`);
       const copy = `${p.title}\n${p.summary}`;
