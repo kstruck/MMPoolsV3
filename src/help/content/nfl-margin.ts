@@ -97,7 +97,15 @@ export const NFL_MARGIN_TOPICS: readonly HelpTopic[] = [
       // `computeWeeklyPrizeSnapshot` returns undefined for any mode that is not
       // WEEKLY or HYBRID (`weeklyPrizes.ts:98-99`). The week still publishes —
       // with no prize against it (D7).
-      'Paying only on the final standings is the default. The whole pot goes to the finishing places you set, and a week you score names its winner without carrying a prize.',
+      // NOT "the whole pot goes to the finishing places you set" (codex r2 [P2]):
+      // `payoutsSchema` accepts a place list totalling UNDER 100%, and bonuses
+      // take their share of the same 100% (`shared/schemas/common.ts:78-93`), so
+      // that wording promised a distribution the schema does not require. What
+      // SEASON actually decides is which pot the money sits in — `seasonPot = net`,
+      // `weeklySeasonAllocation` undefined — and how the places then divide it is
+      // `settings.payouts.places.*.percentage`'s sentence to own (voice rule 10;
+      // it already says shares may total less than 100%).
+      'Paying only on the final standings is the default. Nothing is set aside for the weeks — the whole pot waits for the final standings and the finishing places you set, and a week you score names its winner without carrying a prize.',
       // WEEKLY. `potBreakdown`: `weeklySeasonAllocation = net` (`:76-77`), no
       // `seasonPot`. `computeSeasonPrizeSnapshot` returns undefined outright
       // for WEEKLY (`seasonPrizes.ts:70`).

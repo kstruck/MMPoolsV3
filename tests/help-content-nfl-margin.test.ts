@@ -20,6 +20,8 @@ import { perWeekPrizePot, potBreakdown, weeklyPlacesFor } from '../shared/prizeP
 import { computeSeasonPrizeSnapshot } from '../shared/seasonPrizes';
 import { computeWeeklyPrizeSnapshot } from '../shared/weeklyPrizes';
 import { marginCreateInputSchema, pickemCreateInputSchema } from '../shared/schemas/nfl';
+import { payoutsSchema } from '../shared/schemas/common';
+import { buildNFLPayload } from '../src/components/wizard/create/buildNFLPayload';
 
 /**
  * T11 content guard — PLAN-HELP-SYSTEM.md §7.
@@ -470,6 +472,65 @@ describe('T11 — the behaviour the copy describes is the behaviour the code has
     expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES } })).toBe(PLACES);
     const weekly = [{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }];
     expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES }, weeklyPayouts: { places: weekly } })).toBe(weekly);
+  });
+
+  /**
+   * SEASON does not promise that the places distribute the whole pot
+   * (codex r2 [P2]). `payoutsSchema` accepts a place list totalling under
+   * 100%, and bonuses take their share of the same 100% — a commissioner who
+   * pays 60/25 and keeps the rest for a prize they award themselves is in a
+   * VALID configuration, and `settings.payouts.places.*.percentage` already
+   * tells the reader so. What SEASON decides is which pot holds the money.
+   */
+  it('SEASON: the copy claims an allocation, not a full distribution to places', () => {
+    const under = payoutsSchema.safeParse({ places: [{ rank: 1, percentage: 60 }], bonuses: [] });
+    expect(under.success).toBe(true);
+    const withBonus = payoutsSchema.safeParse({
+      places: [{ rank: 1, percentage: 60 }],
+      bonuses: [{ name: 'Highest single week', percentage: 40 }],
+    });
+    expect(withBonus.success).toBe(true);
+
+    const mode = staticCopy(helpRegistry.getTopic('settings.payoutMode')!.long);
+    expect(mode, 'promises the places receive the whole pot').not.toMatch(/whole pot goes to the finishing places/i);
+    // The allocation claim that IS true, and the reason the sentence exists.
+    expect(potBreakdown({ payoutMode: 'SEASON', entryFee: 20 }, 5)!.seasonPot).toBe(100);
+  });
+
+  /**
+   * "Leave the weekly list empty and the season places price both" — REJECTED
+   * codex r2 [P2], and pinned here so the rejection is evidence rather than an
+   * opinion. The claim was that emptying the manager's weekly editor stores
+   * `{ places: [] }`, which `weeklyPlacesFor` would read as "no weekly prizes".
+   * Neither authoring surface can produce that value:
+   *
+   *   • the wizard DROPS an empty list (`buildNFLPayload`, asserted below), and
+   *   • the manager sends `weeklyPayouts: null` from exactly that branch
+   *     (`NFLManagerView.tsx:438-447`, put there by an earlier codex round).
+   *
+   * `weeklyPlacesFor` reads a stored null exactly like an absent field, so the
+   * season places price both pots — which is what the copy says.
+   */
+  it('an emptied weekly editor cannot reach the stored no-weekly-prizes state', () => {
+    const base = {
+      type: 'NFL_PICKEM',
+      name: 'p',
+      season: 2026,
+      settings: {
+        entryFee: 10,
+        payouts: { places: PLACES },
+        payoutMode: 'HYBRID',
+        hybridSplit: { weeklyPerEntry: 6, seasonPerEntry: 4 },
+        weeklyPayouts: { places: [] },
+      },
+    } as Record<string, unknown>;
+    const built = buildNFLPayload(base, 'NFL_PICKEM');
+    expect((built.settings as { weeklyPayouts?: unknown }).weeklyPayouts).toBeUndefined();
+
+    // ...and both of the values those surfaces CAN store fall back to the
+    // season list, which is the sentence under test.
+    expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES } })).toBe(PLACES);
+    expect(weeklyPlacesFor({ payoutMode: 'HYBRID', payouts: { places: PLACES }, weeklyPayouts: null })).toBe(PLACES);
   });
 
   it('the sum rule the copy names is the rule a save is refused on', () => {
