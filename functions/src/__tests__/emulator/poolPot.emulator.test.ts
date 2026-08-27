@@ -111,6 +111,51 @@ describe('calculatePoolPot — NFL season pools read Member Records (§2.8)', ()
     expect(prizePot).toBe(20); // base fee only — the $20 rebuy is invisible
   });
 
+  it('OPEN FINDING (PLAN-MULTI-ENTRY-DUES §7): a PARTIALLY paid member funds the pot with ZERO', async () => {
+    // Found by the P2-T7 sweep, and NEW to Phase 2 — before it, a partial
+    // payment was not representable at all. One checkbox meant $0 or the whole
+    // amount, and `memberDues` was right in both cases.
+    //
+    // Per-entry dues made the middle reachable: the commissioner can mark entry
+    // 1 paid and leave entry 2 unpaid. `derivePaidStatus` then correctly returns
+    // UNPAID — the member is not paid IN FULL — but `memberDues`
+    // (shared/memberRecord.ts:487) is all-or-nothing:
+    //
+    //     if (m.paidStatus === 'PAID') collected += fee;
+    //
+    // so the $25 that WAS collected counts as $0, in a world-readable figure.
+    // `src/utils/poolRoster.ts:387,432` have the same shape and show the member
+    // owing their full dues rather than the remainder.
+    //
+    // Direction is an UNDER-count: the published pot reads low, nobody is
+    // over-charged, no payout is inflated. Same failure direction as the
+    // rebuyPaid gap above.
+    //
+    // NOT fixed here, deliberately, for the same reason that one is not: the
+    // honest figure needs a per-entry-aware number, and the per-entry map is
+    // SEALED by D1 (`private/dues__{uid}`, `allow read: if false`), while
+    // `memberDues` lives in shared/ and runs on the client too. Every option —
+    // mirror a `paidEntryCount` onto the participant-readable Member Record,
+    // teach only the Admin-SDK pot to read the sealed map, or accept the
+    // under-count — changes a money figure. That is a Rule 3 plan decision, not
+    // a sweep. §7 of PLAN-MULTI-ENTRY-DUES-SWEEPS.md carries the three options.
+    //
+    // Pinned so the gap is a recorded decision rather than a surprise, and so
+    // whoever fixes it has a test that flips.
+    const pool = { type: 'NFL_PICKEM', settings: { entryFee: 25 } };
+    await db.collection('pools').doc('p8').set(pool);
+    // Exactly the shape production produces: two liable entries, `feeOwed`
+    // already the multiplied figure (D2), entry 1 paid and entry 2 not, so the
+    // derived summary is UNPAID.
+    await member('p8', 'partial', { paidStatus: 'UNPAID', feeOwed: 50 });
+    // Control in the same pool, so the assertion cannot pass by reading zero
+    // members: this one IS paid in full and contributes all of it.
+    await member('p8', 'full', { paidStatus: 'PAID', feeOwed: 50 });
+
+    const { prizePot } = await calculatePoolPot(db, 'p8', pool);
+    expect(prizePot).toBe(50); // 50 from `full`, and 0 — not 25 — from `partial`
+  });
+
   it('honours the per-record feeOwed stamp — a seeded owner who never played owes 0', async () => {
     // ADR 0005: hosting is not playing. Without the feeOwed stamp this would
     // silently invent an extra entry fee per pool across the whole platform.
