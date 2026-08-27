@@ -60,9 +60,10 @@
 //   which is T2 machinery and not this content ticket's to add.
 //
 //   The `/participant` TAB pages keep their links, but only FROM
-//   `/participant` (`tabHref` below). Standing on that route is proof the
-//   reader is signed in — the redirect above is what makes it proof — and a
-//   `?tab=` switch is only useful from the surface that has the tabs anyway.
+//   `/participant` (`hrefFor`'s third branch, below). Standing on that route
+//   is proof the reader is signed in — the redirect above is what makes it
+//   proof — and a `?tab=` switch is only useful from the surface that has the
+//   tabs anyway.
 //   Anywhere else they are listed and not linked, exactly like the ones below.
 //
 //   NO ID TO BUILD A URL FROM — `/profile/:uid` and `/join/:poolId`. This file

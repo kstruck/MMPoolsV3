@@ -473,7 +473,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col selection:bg-gold-500 selection:text-navy-950">
             {/* T2: My Entries' tab is in memory. Published so the Help panel can
-                tell the six lists apart. The page copy is T3. */}
+                tell the SEVEN lists apart (the comment said six; the union at
+                :67 has always had seven). `offeredTabs` is the strip actually
+                rendered — see `tabStrip` above. The page copy is T3. */}
             <HelpRoutePublisher tab={activeTab} offeredTabs={offeredTabs} />
             <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} onCreatePool={onCreatePool} />
 
