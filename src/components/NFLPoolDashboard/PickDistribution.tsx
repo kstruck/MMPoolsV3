@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart2, Eye } from 'lucide-react';
 import { dbService } from '../../services/dbService';
+import { useSiteConsensusState } from './pickSheet/useSiteConsensus';
 import type { Pool, NFLGame } from '../../types';
 
 interface PickDistributionProps {
@@ -8,6 +9,29 @@ interface PickDistributionProps {
   games: NFLGame[];
   week: number;
 }
+
+/** Which aggregate the card is showing. Persisted per browser, not per pool. */
+export type DistributionScope = 'pool' | 'site';
+
+const SCOPE_KEY = 'mmp:pickDistributionScope';
+
+export const readStoredScope = (): DistributionScope => {
+  try {
+    return localStorage.getItem(SCOPE_KEY) === 'site' ? 'site' : 'pool';
+  } catch {
+    // Storage unavailable (private mode, blocked cookies) — the default is not a
+    // failure state, so this is silent rather than logged.
+    return 'pool';
+  }
+};
+
+const writeStoredScope = (scope: DistributionScope): void => {
+  try {
+    localStorage.setItem(SCOPE_KEY, scope);
+  } catch {
+    /* storage unavailable — the toggle still works for this session */
+  }
+};
 
 // Reads the server Pool Consensus aggregate (ADR 0004/0005) rather than computing
 // the distribution client-side from raw entries — members cannot read other
@@ -29,11 +53,29 @@ interface PickDistributionProps {
 // ⚠️ Small pools make the aggregate less anonymous — in a 2-person pool the split
 // identifies both picks. That is a known and accepted consequence of the ruling,
 // not an oversight. Reopening it is a product decision for Kevin, not a bug fix.
+//
+// 🔨 KEVIN 2026-08-27 — SCOPE TOGGLE. The card now reads EITHER the pool-scoped
+// aggregate (`pools/{id}/consensus`) or the Site-Wide one
+// (`consensus/{season}_{seasonType}_{week}/{poolType}`), and the reader chooses.
+// Both projections already existed and are written by the same recompute
+// (`functions/src/consensus.ts`); the site one was already on the pick rows, and
+// only this card was not wired to it. Site scope is confined to pools of the SAME
+// type, season and seasonType — a Pick'em pool never sees Survivor or Margin
+// picks — and it is the same counts-only aggregate, so it widens the crowd, not
+// the disclosure. It also fixes the small-pool anonymity problem above for anyone
+// who prefers the wider number: a one-player pool reads as its own picks, the
+// site number does not.
 export const PickDistribution: React.FC<PickDistributionProps> = ({
   pool,
   games,
   week,
 }) => {
+  const [scope, setScope] = useState<DistributionScope>(readStoredScope);
+  const selectScope = (next: DistributionScope) => {
+    setScope(next);
+    writeStoredScope(next);
+  };
+
   // `loaded` is not ceremony. Until the first snapshot arrives every game is
   // absent from the map, and rendering that as "0 picks / No picks yet" states a
   // fact the client does not have — the same substitute-for-unavailable-data
@@ -44,7 +86,8 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   // read FAILURE by calling back with `{}` (dbService), so a permission error
   // and an empty pool are indistinguishable here and both land as "no picks
   // yet". Narrowing that means changing the subscription's error contract, which
-  // every other consensus reader shares — out of this PR's bounds.
+  // every other consensus reader shares — out of this PR's bounds. The
+  // site-scoped path shares the ambiguity for the same reason.
   const [consensus, setConsensus] = useState<Record<string, any>>({});
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -55,12 +98,26 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
     });
   }, [pool.id]);
 
-  // Compile pick distribution statistics from the server aggregate
+  // BOTH subscriptions run regardless of scope. Subscribing only to the selected
+  // one would make every toggle a fresh round-trip that shows "Loading picks…"
+  // for a card the reader has already seen — and the site projection is a small
+  // per-week document set that the pick rows on this same screen are already
+  // reading, so it costs nothing new.
+  const site = useSiteConsensusState(pool, week);
+
+  const isSite = scope === 'site';
+  const scopeLoaded = isSite ? site.loaded : loaded;
+
+  // Compile pick distribution statistics from the selected server aggregate
   const distributionData = useMemo(() => {
     if (games.length === 0) return [];
 
     return games.map(game => {
-      const c = consensus[game.id];
+      // The two projections are the same shape by construction (`projDoc` in
+      // functions/src/consensus.ts writes both), but the site hook has already
+      // dropped rows with no picks and narrowed the types, so it is read directly
+      // rather than through the same `typeof` guards.
+      const c = isSite ? site.byGame[game.id] : consensus[game.id];
       // `undefined` where the aggregate has nothing for this game — NOT 0.
       // The renderer distinguishes "not loaded" from "loaded, nobody picked".
       return {
@@ -70,13 +127,57 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         awayPct: typeof c?.awayPct === 'number' ? c.awayPct : undefined,
       };
     });
-  }, [consensus, games, week]);
+  }, [consensus, site.byGame, isSite, games, week]);
+
+  const tabClass = (active: boolean) =>
+    `px-2.5 py-1 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-colors ${
+      active
+        ? 'bg-navy-700 text-white dark:bg-gold-400 dark:text-navy-900'
+        : 'text-muted hover:text-[color:var(--text)]'
+    }`;
 
   return (
     <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-5">
-      <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
-        <BarChart2 size={15} className="text-navy-700 dark:text-gold-400" /> Pick Distribution
-      </h3>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
+          <BarChart2 size={15} className="text-navy-700 dark:text-gold-400" /> Pick Distribution
+        </h3>
+        {/* The toggle is a radio group, not two independent buttons: exactly one
+            scope is showing at a time, and a screen reader must be told which. */}
+        <div
+          role="radiogroup"
+          aria-label="Pick distribution scope"
+          className="flex items-center gap-1 bg-page border border-line rounded-lg p-0.5"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!isSite}
+            onClick={() => selectScope('pool')}
+            className={tabClass(!isSite)}
+          >
+            My Pool
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={isSite}
+            onClick={() => selectScope('site')}
+            className={tabClass(isSite)}
+          >
+            Site
+          </button>
+        </div>
+      </div>
+
+      {/* Says WHOSE picks the numbers below are. Without it the two scopes are
+          indistinguishable on a week where they happen to agree, and "42 picks"
+          on a three-player pool reads as a defect rather than a wider crowd. */}
+      <p className="font-body text-[12px] text-faint">
+        {isSite
+          ? 'Everyone on the site playing this pool type, this week.'
+          : 'This pool only.'}
+      </p>
 
       <div className="space-y-4">
         {games.length === 0 ? (
@@ -89,21 +190,21 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
                 <span>{game.awayTeam.abbreviation} vs {game.homeTeam.abbreviation}</span>
                 <span className="text-navy-700 dark:text-gold-400 flex items-center gap-1 num">
                   <Eye size={10} aria-hidden="true" />{' '}
-                  {/* `loaded` IS THE DISCRIMINATOR, not the presence of a
+                  {/* `scopeLoaded` IS THE DISCRIMINATOR, not the presence of a
                       per-game entry. Once the snapshot has arrived, a game the
                       aggregate says nothing about genuinely has NO picks — the
                       consensus doc is written on the first pick, so an unpicked
                       game never has one. Testing `totalPicksForGame !== undefined`
                       instead made every such game read "—" (and, below, "Loading
                       picks…") for ever. */}
-                  {!loaded ? '—' : `${totalPicksForGame ?? 0} ${(totalPicksForGame ?? 0) === 1 ? 'pick' : 'picks'}`}
+                  {!scopeLoaded ? '—' : `${totalPicksForGame ?? 0} ${(totalPicksForGame ?? 0) === 1 ? 'pick' : 'picks'}`}
                 </span>
               </div>
 
               {/* Progress Bar Distribution */}
-              {!loaded || !totalPicksForGame ? (
+              {!scopeLoaded || !totalPicksForGame ? (
                 <div className="h-10 border border-dashed border-line rounded-md flex items-center justify-center font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint bg-page/50">
-                  {loaded ? 'No picks yet' : 'Loading picks…'}
+                  {scopeLoaded ? 'No picks yet' : 'Loading picks…'}
                 </div>
               ) : (
                 <div className="space-y-1.5">

@@ -20,6 +20,7 @@ import { TeamPickButton } from './pickSheet/TeamPickButton';
 import { pickemOutcome, pickOutcomeCardClass, pickOutcomeLabel } from './pickSheet/pickOutcome';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
+import { pickemDraftHint } from './pickSheet/draftHint';
 import { QuickPicksDialog } from './pickSheet/QuickPicksDialog';
 import { planQuickPicks, type QuickPickStrategy } from './pickSheet/quickPicks';
 import type { User, Pool, NFLGame } from '../../types';
@@ -906,6 +907,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                     ? `Pick all ${openGames.length} open ${openGames.length === 1 ? 'game' : 'games'} to submit`
                     : 'Set a confidence weight for every game'
           }
+          // 🔨 KEVIN 2026-08-27: tell the member a half-finished sheet is not
+          // lost. The sentence and the conditions under which it is true live in
+          // `pickSheet/draftHint` — the wording is narrow on purpose (the draft
+          // is localStorage, not the server) and it disappears on a locked week,
+          // where the draft effect above has stopped writing.
+          hint={pickemDraftHint(isWeekLocked)}
           onSave={handleSubmit}
         />
       )}
