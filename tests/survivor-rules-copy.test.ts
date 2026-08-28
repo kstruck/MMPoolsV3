@@ -249,7 +249,11 @@ describe('survivorRebuyRuleCopy / survivorRebuyJoinCopy — "through", never "be
     // `week > 0` is true of every real week — so a pool set there offers
     // buy-backs nobody can take. Both surfaces used to name a moment
     // ("the season starts" / "season start") that reads like an open window.
-    for (const deadline of [0, -3, undefined, Number.NaN]) {
+    //
+    // `null` and `''` are in the list because the SERVER coerces them to 0 the
+    // same way: `w > null` applies ToNumber to both sides. The helper must land
+    // on the same side of the line the callable does.
+    for (const deadline of [0, -3, null, '']) {
       const rules = survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: deadline }), label);
       const join = survivorRebuyJoinCopy(settings({ rebuyDeadlineWeek: deadline }), label);
       expect(rules, String(deadline)).toMatch(/none can actually be taken/);
@@ -258,7 +262,66 @@ describe('survivorRebuyRuleCopy / survivorRebuyJoinCopy — "through", never "be
       expect(join, String(deadline)).not.toMatch(/season start/);
       expect(rules, String(deadline)).not.toContain('NaN');
       expect(join, String(deadline)).not.toContain('NaN');
+      // The claim, measured against the server's own comparison: week 1 — the
+      // earliest a buy-back can be asked for — is already past this deadline.
+      expect(1 > (deadline as number), String(deadline)).toBe(true);
     }
+  });
+
+  /**
+   * AN ABSENT CUTOFF IS THE OPPOSITE OF ZERO (codex round 1, P2).
+   *
+   * `rebuyDeadlineWeek` is `.optional()` in the create schema, and
+   * `week > undefined` is `false` for every week — so a pool with nothing
+   * stored has NO cutoff and buy-backs run all season. Telling those members
+   * "none can be taken" would be the same defect this PR fixes, pointed the
+   * other way.
+   */
+  it('an absent cutoff reads as no cutoff, because the callable never refuses one', () => {
+    for (const deadline of [undefined, Number.NaN, 'not-a-week']) {
+      const rules = survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      const join = survivorRebuyJoinCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      expect(rules, String(deadline)).toContain('no cutoff week set');
+      expect(join, String(deadline)).toContain('no cutoff week set');
+      expect(rules, String(deadline)).not.toMatch(/none can actually be taken/);
+      expect(join, String(deadline)).not.toMatch(/none can be taken/);
+      expect(rules, String(deadline)).not.toContain('NaN');
+      expect(join, String(deadline)).not.toContain('NaN');
+      // The server really does let every week through against this value.
+      expect([1, 9, 18].some((w) => w > (deadline as number)), String(deadline)).toBe(false);
+    }
+  });
+
+  /**
+   * THE PRICE MUST BE THE PRICE THE CALLABLE CHARGES (codex round 1, P1).
+   *
+   * `rebuyCost` is `.optional()`, and `executeSurvivorRebuyInternal` charges
+   * `settings.rebuyCost ?? settings.entryFee ?? 0`
+   * (`functions/src/nflPools.ts:1079`). Copy reading `rebuyCost` alone would
+   * tell a member with a legacy pool that a charged buy-back is free.
+   */
+  it('the price falls back to the entry fee, exactly as the callable does', () => {
+    const rebuy = readFileSync(resolve(__dirname, '..', 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('settings.rebuyCost ?? settings.entryFee ?? 0');
+
+    // No rebuyCost stored: the entry fee is what gets charged, so it is what
+    // gets shown.
+    expect(survivorRebuyRuleCopy(
+      { maxRebuys: 2, rebuyDeadlineWeek: 4, entryFee: 25 }, label,
+    )).toContain('$25');
+    // An explicit 0 is a free buy-back and must NOT fall through to the fee.
+    expect(survivorRebuyRuleCopy(
+      { maxRebuys: 2, rebuyDeadlineWeek: 4, rebuyCost: 0, entryFee: 25 }, label,
+    )).toContain('$0');
+    // A stored cost wins over the fee.
+    expect(survivorRebuyRuleCopy(
+      { maxRebuys: 2, rebuyDeadlineWeek: 4, rebuyCost: 15, entryFee: 25 }, label,
+    )).toContain('$15');
+    // Neither stored: zero, never "$undefined" or "$NaN".
+    const bare = survivorRebuyRuleCopy({ maxRebuys: 2, rebuyDeadlineWeek: 4 }, label);
+    expect(bare).toContain('$0');
+    expect(bare).not.toContain('undefined');
+    expect(bare).not.toContain('NaN');
   });
 
   it('the week label is asked for exactly once, with the cutoff week', () => {

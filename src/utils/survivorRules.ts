@@ -75,17 +75,54 @@ export function autoSurviveRuleCopy(settings: { autoSurviveExemptionEnabled?: un
  * taken however many the pool allows. The create wizard's floor is 0
  * (`CreateNFLSurvivorPool.tsx:38`) so it is reachable; the manager form clamps
  * to 1, so it is a create-time value.
+ *
+ * AN ABSENT CUTOFF IS A THIRD STATE, AND IT IS THE OPPOSITE OF ZERO (codex r1
+ * P2). `rebuyDeadlineWeek` is `.optional()` (`shared/schemas/nfl.ts:82`), and
+ * `week > undefined` is `false` for every week — so a pool with nothing stored
+ * has NO cutoff and buy-backs run all season. Saying "none can be taken" there
+ * would be as wrong as the "before" it replaced, in the other direction.
+ *
+ * `Number()` is used because it reproduces the server's own coercion: the
+ * relational operator applies ToNumber to both sides, so `null` and `''`
+ * become 0 (a closed window, same as a stored 0) while `undefined` and any
+ * non-numeric value become NaN, which no comparison can be true against (an
+ * open one).
  */
-function rebuyWindowIsOpen(rebuyDeadlineWeek: unknown): boolean {
+type RebuyWindow =
+  | { kind: 'THROUGH'; week: number }
+  /** Nothing stored — the callable's comparison never refuses. */
+  | { kind: 'NO_CUTOFF' }
+  /** Stored below week 1 — every real week is already past it. */
+  | { kind: 'CLOSED' };
+
+function rebuyWindow(rebuyDeadlineWeek: unknown): RebuyWindow {
   const week = Number(rebuyDeadlineWeek);
-  return Number.isFinite(week) && week >= 1;
+  if (!Number.isFinite(week)) return { kind: 'NO_CUTOFF' };
+  if (week < 1) return { kind: 'CLOSED' };
+  return { kind: 'THROUGH', week };
 }
 
 type RebuySettings = {
   maxRebuys?: unknown;
   rebuyDeadlineWeek?: unknown;
   rebuyCost?: unknown;
+  entryFee?: unknown;
 };
+
+/**
+ * What a buy-back actually costs.
+ *
+ * THE ENTRY FEE IS THE FALLBACK, NOT ZERO (codex r1 P1). `rebuyCost` is
+ * `.optional()` (`shared/schemas/nfl.ts:83`) and the callable charges
+ * `settings.rebuyCost ?? settings.entryFee ?? 0`
+ * (`functions/src/nflPools.ts:1079`). `SurvivorPickEntry.tsx:80` already reads
+ * it that way; copy that read `rebuyCost` alone would tell a member with a
+ * legacy pool that a charged buy-back is free.
+ */
+function rebuyCostOf(settings: RebuySettings | undefined): number {
+  const cost = Number(settings?.rebuyCost ?? settings?.entryFee ?? 0);
+  return Number.isFinite(cost) ? cost : 0;
+}
 
 /** The rules-page bullet: how many buy-backs, until when, at what price. */
 export function survivorRebuyRuleCopy(
@@ -94,12 +131,15 @@ export function survivorRebuyRuleCopy(
 ): string {
   const maxRebuys = Number(settings?.maxRebuys ?? 0);
   if (!Number.isFinite(maxRebuys) || maxRebuys <= 0) return 'Disabled in this pool.';
-  const cost = Number(settings?.rebuyCost ?? 0);
-  if (!rebuyWindowIsOpen(settings?.rebuyDeadlineWeek)) {
+  const cost = rebuyCostOf(settings);
+  const window = rebuyWindow(settings?.rebuyDeadlineWeek);
+  if (window.kind === 'CLOSED') {
     return `Up to ${maxRebuys} allowed on paper, but the cutoff week is set before week 1, so none can actually be taken.`;
   }
-  const label = labelForWeek(Number(settings?.rebuyDeadlineWeek));
-  return `Allowed up to ${maxRebuys} rebuys through ${label} at a cost of $${cost} per rebuy.`;
+  const when = window.kind === 'NO_CUTOFF'
+    ? 'with no cutoff week set, so all season'
+    : `through ${labelForWeek(window.week)}`;
+  return `Allowed up to ${maxRebuys} rebuys ${when} at a cost of $${cost} per rebuy.`;
 }
 
 /** The join-page bullet: the same window, said shorter. */
@@ -109,10 +149,13 @@ export function survivorRebuyJoinCopy(
 ): string {
   const maxRebuys = Number(settings?.maxRebuys ?? 0);
   if (!Number.isFinite(maxRebuys) || maxRebuys <= 0) return 'No rebuys/buy-backs allowed';
-  if (!rebuyWindowIsOpen(settings?.rebuyDeadlineWeek)) {
+  const window = rebuyWindow(settings?.rebuyDeadlineWeek);
+  if (window.kind === 'CLOSED') {
     return `${maxRebuys} rebuys on paper, but the cutoff week is before week 1, so none can be taken`;
   }
-  return `${maxRebuys} rebuys permitted through ${labelForWeek(Number(settings?.rebuyDeadlineWeek))}`;
+  return window.kind === 'NO_CUTOFF'
+    ? `${maxRebuys} rebuys permitted, with no cutoff week set`
+    : `${maxRebuys} rebuys permitted through ${labelForWeek(window.week)}`;
 }
 
 /** Convenience for components holding a raw settings blob. */
