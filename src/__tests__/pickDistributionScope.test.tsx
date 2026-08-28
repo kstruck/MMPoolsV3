@@ -21,14 +21,23 @@
 // `@testing-library/jest-dom` is not installed in this repo (see
 // overlayRoot.test.tsx), so attributes are read with `getAttribute` rather than
 // `toHaveAttribute`.
+import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 
+/** One row of either consensus projection (`projDoc`, functions/src/consensus.ts). */
+type ProjectionRow = {
+  gameId: string; away: number; home: number; total: number;
+  awayPct: number | null; homePct: number | null;
+};
+type Projection = Record<string, ProjectionRow>;
+type ConsensusCb = (byGame: Projection) => void;
+
 // Hoisted so the dbService mock factory can reach them.
 const h = vi.hoisted(() => ({
-  poolCb: null as null | ((byGame: Record<string, any>) => void),
-  siteCb: null as null | ((byGame: Record<string, any>) => void),
-  siteArgs: [] as any[],
+  poolCb: null as null | ((byGame: Record<string, unknown>) => void),
+  siteCb: null as null | ((byGame: Record<string, unknown>) => void),
+  siteArgs: [] as Array<[string, number, number, string]>,
   poolUnsub: vi.fn(),
   siteUnsub: vi.fn(),
 }));
@@ -41,13 +50,13 @@ vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
 
 vi.mock('../services/dbService', () => ({
   dbService: {
-    subscribeToPoolConsensus: (_poolId: string, cb: (byGame: Record<string, any>) => void) => {
+    subscribeToPoolConsensus: (_poolId: string, cb: (byGame: Record<string, unknown>) => void) => {
       h.poolCb = cb;
       return h.poolUnsub;
     },
     subscribeToSiteConsensus: (
       season: string, seasonType: number, week: number, poolType: string,
-      cb: (byGame: Record<string, any>) => void,
+      cb: (byGame: Record<string, unknown>) => void,
     ) => {
       h.siteArgs.push([season, seasonType, week, poolType]);
       h.siteCb = cb;
@@ -58,24 +67,36 @@ vi.mock('../services/dbService', () => ({
 
 import { PickDistribution } from '../components/NFLPoolDashboard/PickDistribution';
 
-const pool: any = { id: 'p1', type: 'NFL_PICKEM', season: '2026', seasonType: 2 };
+// Only the fields the card and the site hook actually read. Cast at the prop
+// rather than typed `any`, so a future field the card starts depending on shows
+// up here as a compile error instead of `undefined` at runtime.
+const pool = { id: 'p1', type: 'NFL_PICKEM', season: '2026', seasonType: 2 };
 
-const games: any[] = [{
+const games = [{
   id: 'g1',
   week: 1,
   awayTeam: { abbreviation: 'NE', name: 'Patriots' },
   homeTeam: { abbreviation: 'SEA', name: 'Seahawks' },
 }];
 
+type CardProps = React.ComponentProps<typeof PickDistribution>;
+const card = (week = 1) => (
+  <PickDistribution
+    pool={pool as unknown as CardProps['pool']}
+    games={games as unknown as CardProps['games']}
+    week={week}
+  />
+);
+
 /** The projection shape both aggregates share (`projDoc`, functions/src/consensus.ts). */
-const projection = (away: number, home: number) => ({
+const projection = (away: number, home: number): Projection => ({
   g1: { gameId: 'g1', away, home, total: away + home,
         awayPct: Math.round((away / (away + home)) * 100),
         homePct: 100 - Math.round((away / (away + home)) * 100) },
 });
 
-const deliverPool = (doc: Record<string, any>) => act(() => { h.poolCb!(doc); });
-const deliverSite = (doc: Record<string, any>) => act(() => { h.siteCb!(doc); });
+const deliverPool: ConsensusCb = (doc) => { act(() => { h.poolCb!(doc); }); };
+const deliverSite: ConsensusCb = (doc) => { act(() => { h.siteCb!(doc); }); };
 
 beforeEach(() => {
   h.poolCb = null; h.siteCb = null; h.siteArgs = [];
@@ -86,7 +107,7 @@ afterEach(cleanup);
 
 describe('PickDistribution scope toggle', () => {
   it('defaults to the pool aggregate and shows the pool split', () => {
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     // 3 away / 1 home = 75/25 in THIS pool.
     deliverPool(projection(3, 1));
     deliverSite(projection(1, 3));   // deliberately the mirror image
@@ -97,7 +118,7 @@ describe('PickDistribution scope toggle', () => {
   });
 
   it('switches to the site aggregate — a different projection, not the pool one', () => {
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     deliverPool(projection(3, 1));
     deliverSite(projection(1, 3));
 
@@ -111,14 +132,14 @@ describe('PickDistribution scope toggle', () => {
   });
 
   it('subscribes site-wide with the pool type, season and seasonType — never a bare week', () => {
-    render(<PickDistribution pool={pool} games={games} week={3} />);
+    render(card(3));
     // A Pick'em pool must never be shown Survivor or Margin picks, and week 3 of
     // the PRESEASON is a different slate from week 3 of the regular season.
     expect(h.siteArgs[0]).toEqual(['2026', 2, 3, 'NFL_PICKEM']);
   });
 
   it('says "Loading picks…", NOT "No picks yet", before the site snapshot arrives', () => {
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     deliverPool(projection(3, 1));   // pool loaded, site NOT
 
     fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
@@ -134,7 +155,7 @@ describe('PickDistribution scope toggle', () => {
   });
 
   it('says "No picks yet" once the site snapshot arrives empty', () => {
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
     deliverSite({});
 
@@ -143,7 +164,7 @@ describe('PickDistribution scope toggle', () => {
   });
 
   it('drops a site row with no picks rather than rendering it as 0%', () => {
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
     // The recompute writes a row with `awayPct: null` when a game has no picks.
     deliverSite({ g1: { gameId: 'g1', away: 0, home: 0, total: 0, awayPct: null, homePct: null } });
@@ -153,7 +174,7 @@ describe('PickDistribution scope toggle', () => {
   });
 
   it('keeps both subscriptions live across a toggle — no re-subscribe, no flicker', () => {
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     deliverPool(projection(3, 1));
     deliverSite(projection(1, 3));
 
@@ -170,11 +191,11 @@ describe('PickDistribution scope toggle', () => {
   });
 
   it('remembers the scope across a remount, and tolerates unreadable storage', () => {
-    const { unmount } = render(<PickDistribution pool={pool} games={games} week={1} />);
+    const { unmount } = render(card());
     fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
     unmount();
 
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     expect(screen.getByRole('radio', { name: 'Site' }).getAttribute('aria-checked')).toBe('true');
     cleanup();
 
@@ -183,7 +204,7 @@ describe('PickDistribution scope toggle', () => {
     const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage disabled');
     });
-    render(<PickDistribution pool={pool} games={games} week={1} />);
+    render(card());
     expect(screen.getByRole('radio', { name: 'My Pool' }).getAttribute('aria-checked')).toBe('true');
     getItem.mockRestore();
   });

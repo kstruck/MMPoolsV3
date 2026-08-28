@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart2, Eye } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { useSiteConsensusState } from './pickSheet/useSiteConsensus';
+import { readStoredScope, writeStoredScope, type DistributionScope } from './pickSheet/distributionScope';
 import type { Pool, NFLGame } from '../../types';
 
 interface PickDistributionProps {
@@ -9,29 +10,6 @@ interface PickDistributionProps {
   games: NFLGame[];
   week: number;
 }
-
-/** Which aggregate the card is showing. Persisted per browser, not per pool. */
-export type DistributionScope = 'pool' | 'site';
-
-const SCOPE_KEY = 'mmp:pickDistributionScope';
-
-export const readStoredScope = (): DistributionScope => {
-  try {
-    return localStorage.getItem(SCOPE_KEY) === 'site' ? 'site' : 'pool';
-  } catch {
-    // Storage unavailable (private mode, blocked cookies) — the default is not a
-    // failure state, so this is silent rather than logged.
-    return 'pool';
-  }
-};
-
-const writeStoredScope = (scope: DistributionScope): void => {
-  try {
-    localStorage.setItem(SCOPE_KEY, scope);
-  } catch {
-    /* storage unavailable — the toggle still works for this session */
-  }
-};
 
 // Reads the server Pool Consensus aggregate (ADR 0004/0005) rather than computing
 // the distribution client-side from raw entries — members cannot read other

@@ -81,6 +81,12 @@ export function useSiteConsensusState(
   return state;
 }
 
-export function useSiteConsensus(pool: any, week: number): Record<string, GameConsensus> {
+// The parameter type is BORROWED rather than redeclared. Spelling `pool: any`
+// again here would add a second `no-explicit-any` warning to the repo's lint
+// baseline for a signature that is required to stay identical to the one above.
+export function useSiteConsensus(
+  pool: Parameters<typeof useSiteConsensusState>[0],
+  week: number,
+): Record<string, GameConsensus> {
   return useSiteConsensusState(pool, week).byGame;
 }
