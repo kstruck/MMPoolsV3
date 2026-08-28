@@ -44,7 +44,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     };
 });
 
-import { resolveOwnerNames, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
+import { resolveOwnerNames, ownerSetKey, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { StandingsTable } from './StandingsTable';
 import type { BracketEntry, BracketPool, Tournament } from '../../types';
@@ -177,6 +177,35 @@ describe('resolveOwnerNames', () => {
 
         expect(map[UID_B]).toBe('Grace Hopper');
         expect(map[UID_A]).toBe('Ada Bracket');
+    });
+});
+
+describe('ownerSetKey', () => {
+    it('is unchanged when only scores change', () => {
+        // The entries subscription hands back a new array on every snapshot, and
+        // during live scoring one lands whenever any score changes. Keying the
+        // re-resolve on `entries` identity would re-read every profile from the
+        // server each time — cost-free before this fix only because the reads
+        // were being denied.
+        const before = [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')];
+        const after = before.map(e => ({ ...e, score: 42 }));
+
+        expect(ownerSetKey(after)).toBe(ownerSetKey(before));
+    });
+
+    it('ignores owner ORDER and duplicate owners', () => {
+        const a = [entry('e1', UID_A, 'One'), entry('e2', UID_B, 'Two'), entry('e3', UID_A, 'Three')];
+        const b = [entry('e9', UID_B, 'Two'), entry('e8', UID_A, 'One')];
+
+        expect(ownerSetKey(a)).toBe(ownerSetKey(b));
+    });
+
+    it('changes when a new owner joins', () => {
+        // The one case that MUST re-resolve: a name nobody has fetched yet.
+        const before = [entry('e1', UID_A, 'Ada Bracket')];
+        const after = [...before, entry('e2', UID_B, 'Grace Bracket')];
+
+        expect(ownerSetKey(after)).not.toBe(ownerSetKey(before));
     });
 });
 

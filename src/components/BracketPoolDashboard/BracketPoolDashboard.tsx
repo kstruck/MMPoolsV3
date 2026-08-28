@@ -13,7 +13,7 @@ import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2,
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
-import { resolveOwnerNames } from './ownerNames';
+import { resolveOwnerNames, ownerSetKey } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
@@ -231,16 +231,42 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // ordinary member may only read their OWN user doc, so the old code hit
     // permission-denied once per other member and reported every one of them to
     // Sentry + logClientError. See ownerNames.ts for the full note.
+    //
+    // Re-resolving is keyed on the OWNER SET, not on `entries`: the entries
+    // subscription hands back a new array on every snapshot, and during live
+    // scoring a snapshot lands whenever any score changes. Names cannot have
+    // changed unless the owner set did, and re-reading N profiles per snapshot
+    // is a real cost now that these reads succeed.
+    const resolvedOwnersRef = React.useRef<string | null>(null);
     useEffect(() => {
         if (entries.length === 0) return;
+        const key = ownerSetKey(entries);
+        if (key === resolvedOwnersRef.current) return;
+        resolvedOwnersRef.current = key;
+
         let cancelled = false;
+        let applied = false;
         resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid))
-            .then(map => { if (!cancelled) setUserNames(map); })
+            .then(map => {
+                if (cancelled) return;
+                applied = true;
+                setUserNames(map);
+            })
             // resolveOwnerNames swallows per-uid failures by contract, so this
             // only fires on a real bug. Log it rather than dropping it silently;
             // StandingsTable already renders 'Unknown' for a missing name.
-            .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
-        return () => { cancelled = true; };
+            .catch(err => {
+                resolvedOwnersRef.current = null; // let the next snapshot retry
+                logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err);
+            });
+        return () => {
+            cancelled = true;
+            // The key is claimed BEFORE the read so a second snapshot cannot start
+            // a duplicate one. If this run never applied its result — unmount, a
+            // StrictMode double-invoke, or a re-entry mid-flight — release it, or
+            // an identical owner set would never be resolved again.
+            if (!applied) resolvedOwnersRef.current = null;
+        };
     }, [entries]);
 
     // Listen for master bracket print event

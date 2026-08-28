@@ -38,6 +38,27 @@ export type PublicProfileFetcher = (uid: string) => Promise<OwnerNameProfile | n
 /** Shown when neither the public profile nor the entry supplies a usable name. */
 export const OWNER_NAME_FALLBACK = 'Unknown';
 
+/**
+ * A stable key for the SET of owners in a list of entries.
+ *
+ * The entries subscription hands back a fresh array on every snapshot, and
+ * during live scoring a snapshot lands whenever any score changes. Re-running
+ * the resolver on each one would re-read every profile from the server — free
+ * before this change only because the reads were being DENIED. Names cannot
+ * have changed unless the owner set did, so callers re-resolve when this key
+ * changes and skip when it does not.
+ *
+ * Order- and duplicate-insensitive: two entries by the same owner, or the same
+ * owners arriving in a different order, are the same set of names to fetch.
+ */
+export const ownerSetKey = (entries: readonly OwnerNameEntry[]): string =>
+    // A fresh array every call, so sorting it in place is safe.
+    uniqueOwnerUids(entries).sort().join(',');
+
+/** Distinct, truthy owner uids, in first-seen order. */
+const uniqueOwnerUids = (entries: readonly OwnerNameEntry[]): string[] =>
+    [...new Set(entries.map(e => e.ownerUid).filter((uid): uid is string => !!uid))];
+
 /** A non-empty trimmed string, or null. Guards against `userName: ''` / `'   '`. */
 const usableName = (value: string | undefined): string | null => {
     if (typeof value !== 'string') return null;
@@ -66,7 +87,7 @@ export const resolveOwnerNames = async (
     entries: readonly OwnerNameEntry[],
     fetchProfile: PublicProfileFetcher
 ): Promise<Record<string, string>> => {
-    const uniqueUids = [...new Set(entries.map(e => e.ownerUid).filter((uid): uid is string => !!uid))];
+    const uniqueUids = uniqueOwnerUids(entries);
 
     const profiles = await Promise.all(
         uniqueUids.map(async (uid) => {
