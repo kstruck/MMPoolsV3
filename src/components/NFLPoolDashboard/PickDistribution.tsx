@@ -66,15 +66,24 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   // yet". Narrowing that means changing the subscription's error contract, which
   // every other consensus reader shares — out of this PR's bounds. The
   // site-scoped path shares the ambiguity for the same reason.
-  const [consensus, setConsensus] = useState<Record<string, any>>({});
-  const [loaded, setLoaded] = useState(false);
+  //
+  // The `poolId` stamp is the same render-time invalidation the site hook carries
+  // (codex r2 P2): resetting `loaded` only inside the effect leaves one painted
+  // frame where `pool.id` is already the new pool and `loaded` is still the old
+  // one's `true`.
+  const [consensus, setConsensus] = useState<{ poolId: string; byGame: Record<string, any> }>({
+    poolId: pool.id, byGame: {},
+  });
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   useEffect(() => {
-    setLoaded(false);
+    setLoadedFor(null);
     return dbService.subscribeToPoolConsensus(pool.id, (byGame) => {
-      setConsensus(byGame);
-      setLoaded(true);
+      setConsensus({ poolId: pool.id, byGame });
+      setLoadedFor(pool.id);
     });
   }, [pool.id]);
+  const poolByGame = consensus.poolId === pool.id ? consensus.byGame : {};
+  const loaded = loadedFor === pool.id;
 
   // BOTH subscriptions run regardless of scope. Subscribing only to the selected
   // one would make every toggle a fresh round-trip that shows "Loading picks…"
@@ -95,7 +104,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
       // functions/src/consensus.ts writes both), but the site hook has already
       // dropped rows with no picks and narrowed the types, so it is read directly
       // rather than through the same `typeof` guards.
-      const c = isSite ? site.byGame[game.id] : consensus[game.id];
+      const c = isSite ? site.byGame[game.id] : poolByGame[game.id];
       // `undefined` where the aggregate has nothing for this game — NOT 0.
       // The renderer distinguishes "not loaded" from "loaded, nobody picked".
       return {
@@ -105,7 +114,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         awayPct: typeof c?.awayPct === 'number' ? c.awayPct : undefined,
       };
     });
-  }, [consensus, site.byGame, isSite, games, week]);
+  }, [poolByGame, site.byGame, isSite, games, week]);
 
   const tabClass = (active: boolean) =>
     `px-2.5 py-1 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-colors ${

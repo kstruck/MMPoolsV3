@@ -20,6 +20,28 @@ import { poolSeasonType } from '../../../utils/nflPending';
  * 0%. Nobody having picked and the projection not having been written are
  * different facts.
  */
+/** Held subscription state, stamped with the query it answers. */
+export interface KeyedConsensusState {
+  key: string;
+  byGame: Record<string, GameConsensus>;
+  loaded: boolean;
+}
+
+/**
+ * The held state, or an empty un-loaded one when it answers a DIFFERENT query.
+ *
+ * 🛑 Extracted so the render-time invalidation is testable. React's `useEffect`
+ * runs AFTER paint, so resetting `loaded` only inside the effect leaves one
+ * visible frame in which the week (or pool type, or season) has already changed
+ * and `loaded` is still the previous query's `true`. A card reading it then maps
+ * the new week's game ids against the old week's aggregate, finds nothing, and
+ * states "0 picks / No picks yet" — a confident, wrong zero exactly when a member
+ * flips weeks. (codex r2 P2.)
+ */
+export function stateForQuery(held: KeyedConsensusState, queryKey: string): KeyedConsensusState {
+  return held.key === queryKey ? held : { key: queryKey, byGame: {}, loaded: false };
+}
+
 export interface GameConsensus {
   awayPct: number;
   homePct: number;
@@ -46,24 +68,25 @@ export function useSiteConsensusState(
   pool: any,
   week: number,
 ): { byGame: Record<string, GameConsensus>; loaded: boolean } {
-  const [state, setState] = useState<{ byGame: Record<string, GameConsensus>; loaded: boolean }>({
-    byGame: {},
-    loaded: false,
-  });
   const season = String(pool?.season ?? '');
   const seasonType = poolSeasonType(pool);
   const poolType = pool?.type;
+  // Identifies WHICH query the held state answers. The four values are exactly
+  // the subscription's arguments.
+  const queryKey = `${season}|${seasonType}|${week}|${poolType}`;
+
+  const [state, setState] = useState<KeyedConsensusState>({
+    key: queryKey, byGame: {}, loaded: false,
+  });
 
   useEffect(() => {
     // No season or no pool type means there is no projection to subscribe to and
     // none is coming, so this stays un-loaded rather than claiming an empty week.
     if (!season || !poolType) {
-      setState({ byGame: {}, loaded: false });
+      setState({ key: queryKey, byGame: {}, loaded: false });
       return;
     }
-    // A week change must not leave the previous week's splits — or its `loaded` —
-    // on screen while the new week's snapshot is still in flight.
-    setState({ byGame: {}, loaded: false });
+    setState({ key: queryKey, byGame: {}, loaded: false });
     return dbService.subscribeToSiteConsensus(season, seasonType, week, poolType, (raw) => {
       const out: Record<string, GameConsensus> = {};
       for (const [gameId, v] of Object.entries(raw || {})) {
@@ -74,11 +97,12 @@ export function useSiteConsensusState(
         if (typeof d.awayPct !== 'number' || typeof d.homePct !== 'number') continue;
         out[gameId] = { awayPct: d.awayPct, homePct: d.homePct, total: d.total };
       }
-      setState({ byGame: out, loaded: true });
+      setState({ key: queryKey, byGame: out, loaded: true });
     });
-  }, [season, seasonType, week, poolType]);
+  }, [season, seasonType, week, poolType, queryKey]);
 
-  return state;
+  // Invalidated DURING RENDER, not in the effect — see `stateForQuery`.
+  return stateForQuery(state, queryKey);
 }
 
 // The parameter type is BORROWED rather than redeclared. Spelling `pool: any`

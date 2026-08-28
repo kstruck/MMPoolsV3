@@ -66,6 +66,7 @@ vi.mock('../services/dbService', () => ({
 }));
 
 import { PickDistribution } from '../components/NFLPoolDashboard/PickDistribution';
+import { stateForQuery } from '../components/NFLPoolDashboard/pickSheet/useSiteConsensus';
 
 // Only the fields the card and the site hook actually read. Cast at the prop
 // rather than typed `any`, so a future field the card starts depending on shows
@@ -207,5 +208,37 @@ describe('PickDistribution scope toggle', () => {
     render(card());
     expect(screen.getByRole('radio', { name: 'My Pool' }).getAttribute('aria-checked')).toBe('true');
     getItem.mockRestore();
+  });
+});
+
+describe('stateForQuery — the render-time invalidation', () => {
+  const held = {
+    key: '2026|2|1|NFL_PICKEM',
+    byGame: { g1: { awayPct: 75, homePct: 25, total: 4 } },
+    loaded: true,
+  };
+
+  it('returns the held state when it answers this exact query', () => {
+    expect(stateForQuery(held, '2026|2|1|NFL_PICKEM')).toBe(held);
+  });
+
+  it('returns an EMPTY, UN-LOADED state the moment the week changes', () => {
+    // 🛑 THE DEFECT THIS PINS (codex r2 P2). `useEffect` runs after paint, so
+    // resetting `loaded` only inside the effect leaves one visible frame where
+    // week 2's game ids are looked up in week 1's aggregate. Carrying `loaded:
+    // true` into that frame turns "we have not asked yet" into "nobody picked" —
+    // the exact substitute-for-unavailable-data the card exists to avoid.
+    const next = stateForQuery(held, '2026|2|2|NFL_PICKEM');
+    expect(next.loaded).toBe(false);
+    expect(next.byGame).toEqual({});
+    expect(next.key).toBe('2026|2|2|NFL_PICKEM');
+  });
+
+  it('invalidates on a season, seasonType or poolType change too, not only the week', () => {
+    // Preseason week 1 and regular-season week 1 are different slates, and the
+    // pool type selects a different projection entirely.
+    expect(stateForQuery(held, '2026|1|1|NFL_PICKEM').loaded).toBe(false);
+    expect(stateForQuery(held, '2025|2|1|NFL_PICKEM').loaded).toBe(false);
+    expect(stateForQuery(held, '2026|2|1|NFL_SURVIVOR').loaded).toBe(false);
   });
 });
