@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
+import { survivorRebuyJoinCopy } from '../utils/survivorRules';
 import { useParams, useNavigate } from 'react-router';
 import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, UserPlus, Mail, Phone, Check } from 'lucide-react';
 import { dbService } from '../services/dbService';
@@ -302,9 +303,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                   </li>
                   <li className="flex items-center gap-2">
                     <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" />
-                    {castPool?.settings?.maxRebuys > 0
-                      ? `${castPool?.settings.maxRebuys} rebuys permitted up to ${Number(castPool?.settings.rebuyDeadlineWeek) >= 1 ? nflWeekLabel(poolSeasonType(castPool), Number(castPool?.settings.rebuyDeadlineWeek)) : 'season start'}`
-                      : 'No rebuys/buy-backs allowed'}
+                    {survivorRebuyJoinCopy(castPool?.settings, (w) => nflWeekLabel(poolSeasonType(castPool), w))}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" />

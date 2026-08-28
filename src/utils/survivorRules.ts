@@ -38,8 +38,85 @@ export function teamReuseRuleCopy(maxTeamUses: number): string {
   return `You can pick the same team up to ${maxTeamUses} times in a season.`;
 }
 
+/**
+ * Is the auto-survive exemption on for this pool?
+ *
+ * THE READ SITE IS THE SCORER, AND IT DEFAULTS TO ON.
+ * `functions/src/nflScoringEngine.ts:704` reads
+ * `pool.settings.autoSurviveExemptionEnabled ?? true`, and the create wizard
+ * writes `true` (`CreateNFLSurvivorPool.tsx:73`). Every survivor pool created
+ * before the field existed therefore PLAYS with the exemption on. Reading the
+ * absent value as `false` — which `NFLPoolRules.tsx` did — showed those members
+ * the opposite of the rule their pool was actually being scored under.
+ */
+export function autoSurviveExemptionOn(settings: { autoSurviveExemptionEnabled?: unknown } | undefined): boolean {
+  return (settings?.autoSurviveExemptionEnabled as boolean | undefined) ?? true;
+}
+
+/** One line for the rules page: whether the exemption is on, and what it does. */
+export function autoSurviveRuleCopy(settings: { autoSurviveExemptionEnabled?: unknown } | undefined): string {
+  return autoSurviveExemptionOn(settings)
+    ? 'Enabled (Exempt when 0 eligible teams left)'
+    : 'Disabled';
+}
+
+/**
+ * The buy-back window, in the members' words.
+ *
+ * THROUGH, NEVER BEFORE. `executeSurvivorRebuyInternal`
+ * (`functions/src/nflPools.ts:1074`) refuses only
+ * `week > settings.rebuyDeadlineWeek`, so the cutoff week ITSELF still accepts
+ * a buy-back. The pick sheet already says "Available through …"
+ * (`SurvivorPickEntry.tsx:272`); the rules page said "before", which is one
+ * week narrower than the callable, and the join page said "up to season start"
+ * on a cutoff below week 1 — a window that reads open and is not.
+ *
+ * A cutoff below week 1 is past every real week, so no buy-back can ever be
+ * taken however many the pool allows. The create wizard's floor is 0
+ * (`CreateNFLSurvivorPool.tsx:38`) so it is reachable; the manager form clamps
+ * to 1, so it is a create-time value.
+ */
+function rebuyWindowIsOpen(rebuyDeadlineWeek: unknown): boolean {
+  const week = Number(rebuyDeadlineWeek);
+  return Number.isFinite(week) && week >= 1;
+}
+
+type RebuySettings = {
+  maxRebuys?: unknown;
+  rebuyDeadlineWeek?: unknown;
+  rebuyCost?: unknown;
+};
+
+/** The rules-page bullet: how many buy-backs, until when, at what price. */
+export function survivorRebuyRuleCopy(
+  settings: RebuySettings | undefined,
+  labelForWeek: (week: number) => string,
+): string {
+  const maxRebuys = Number(settings?.maxRebuys ?? 0);
+  if (!Number.isFinite(maxRebuys) || maxRebuys <= 0) return 'Disabled in this pool.';
+  const cost = Number(settings?.rebuyCost ?? 0);
+  if (!rebuyWindowIsOpen(settings?.rebuyDeadlineWeek)) {
+    return `Up to ${maxRebuys} allowed on paper, but the cutoff week is set before week 1, so none can actually be taken.`;
+  }
+  const label = labelForWeek(Number(settings?.rebuyDeadlineWeek));
+  return `Allowed up to ${maxRebuys} rebuys through ${label} at a cost of $${cost} per rebuy.`;
+}
+
+/** The join-page bullet: the same window, said shorter. */
+export function survivorRebuyJoinCopy(
+  settings: RebuySettings | undefined,
+  labelForWeek: (week: number) => string,
+): string {
+  const maxRebuys = Number(settings?.maxRebuys ?? 0);
+  if (!Number.isFinite(maxRebuys) || maxRebuys <= 0) return 'No rebuys/buy-backs allowed';
+  if (!rebuyWindowIsOpen(settings?.rebuyDeadlineWeek)) {
+    return `${maxRebuys} rebuys on paper, but the cutoff week is before week 1, so none can be taken`;
+  }
+  return `${maxRebuys} rebuys permitted through ${labelForWeek(Number(settings?.rebuyDeadlineWeek))}`;
+}
+
 /** Convenience for components holding a raw settings blob. */
-export function survivorRuleCopy(settings: { pickLosersMode?: boolean; tieCountsAs?: unknown; maxTeamUses?: unknown } | undefined) {
+export function survivorRuleCopy(settings: { pickLosersMode?: boolean; tieCountsAs?: unknown; maxTeamUses?: unknown; autoSurviveExemptionEnabled?: unknown } | undefined) {
   const pickLosersMode = settings?.pickLosersMode ?? false;
   const tieCountsAs = effectiveTieCountsAs(settings);
   const maxTeamUses = effectiveMaxTeamUses(settings);
@@ -47,5 +124,6 @@ export function survivorRuleCopy(settings: { pickLosersMode?: boolean; tieCounts
     mode: survivorModeRulesCopy(pickLosersMode, tieCountsAs),
     tie: tieOutcomeRuleCopy(pickLosersMode, tieCountsAs),
     reuse: teamReuseRuleCopy(maxTeamUses),
+    autoSurvive: autoSurviveRuleCopy(settings),
   };
 }

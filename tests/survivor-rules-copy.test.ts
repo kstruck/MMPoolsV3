@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   survivorModeRulesCopy,
   tieOutcomeRuleCopy,
   teamReuseRuleCopy,
   survivorRuleCopy,
+  autoSurviveExemptionOn,
+  autoSurviveRuleCopy,
+  survivorRebuyRuleCopy,
+  survivorRebuyJoinCopy,
 } from '../src/utils/survivorRules';
 import { survivorCreateInputSchema } from '@shared/schemas';
 import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES, effectiveTieCountsAs } from '@shared/survivorReuse';
@@ -143,5 +149,121 @@ describe('tieCountsAs — the schema and the type share one value set', () => {
     for (const value of TIE_COUNTS_AS_VALUES) {
       expect(effectiveTieCountsAs({ tieCountsAs: value })).toBe(value);
     }
+  });
+});
+
+/**
+ * THE PANEL AND THE SCORER MUST AGREE ON AN ABSENT `autoSurviveExemptionEnabled`.
+ *
+ * `NFLPoolRules.tsx` rendered the absent value as "Disabled" while
+ * `nflScoringEngine.ts:704` reads `?? true`, so every survivor pool created
+ * before the field existed showed its members the OPPOSITE of the rule the
+ * scorer was applying. The wizard writes `true`
+ * (`CreateNFLSurvivorPool.tsx:73`), which is what makes `?? true` the intended
+ * half and the panel the wrong one.
+ *
+ * These assert the SUBSTANCE — on vs off — not the wording.
+ */
+describe('autoSurviveExemptionOn — absent means ON, same as the scorer', () => {
+  const on = (copy: string) => /^Enabled\b/.test(copy);
+
+  it('an absent value is ON', () => {
+    expect(autoSurviveExemptionOn(undefined)).toBe(true);
+    expect(autoSurviveExemptionOn({})).toBe(true);
+    expect(on(autoSurviveRuleCopy({}))).toBe(true);
+  });
+
+  it('an explicit false is OFF, so the setting still does something', () => {
+    expect(autoSurviveExemptionOn({ autoSurviveExemptionEnabled: false })).toBe(false);
+    expect(autoSurviveRuleCopy({ autoSurviveExemptionEnabled: false })).toBe('Disabled');
+  });
+
+  it('an explicit true is ON', () => {
+    expect(autoSurviveExemptionOn({ autoSurviveExemptionEnabled: true })).toBe(true);
+    expect(on(autoSurviveRuleCopy({ autoSurviveExemptionEnabled: true }))).toBe(true);
+  });
+
+  it('the scorer really does read it as `?? true` — the claim above, measured', () => {
+    // If the scorer's default ever flips, "absent means ON" stops being the
+    // truth this helper is copying and this test is where that surfaces.
+    const engine = readFileSync(
+      resolve(__dirname, '..', 'functions/src/nflScoringEngine.ts'),
+      'utf8',
+    );
+    expect(engine).toContain('pool.settings.autoSurviveExemptionEnabled ?? true');
+  });
+
+  it('survivorRuleCopy carries it, so the panel cannot read the raw field again', () => {
+    expect(on(survivorRuleCopy({}).autoSurvive)).toBe(true);
+    expect(survivorRuleCopy({ autoSurviveExemptionEnabled: false }).autoSurvive).toBe('Disabled');
+  });
+});
+
+/**
+ * THE BUY-BACK WINDOW IS INCLUSIVE OF THE CUTOFF WEEK.
+ *
+ * `executeSurvivorRebuyInternal` (`functions/src/nflPools.ts:1074`) refuses only
+ * `week > settings.rebuyDeadlineWeek`. The rules page said "before <week>",
+ * which refuses one week earlier than the callable does — shipped copy narrower
+ * than the rule members are actually playing.
+ *
+ * The predicate is asserted against the SERVER'S OWN comparison, so the copy
+ * cannot drift away from it without this going red.
+ */
+describe('survivorRebuyRuleCopy / survivorRebuyJoinCopy — "through", never "before"', () => {
+  const label = (w: number) => `Week ${w}`;
+  const settings = (over: Record<string, unknown> = {}) => ({
+    maxRebuys: 2, rebuyDeadlineWeek: 4, rebuyCost: 20, ...over,
+  });
+
+  it('the server admits the cutoff week itself', () => {
+    const rebuy = readFileSync(resolve(__dirname, '..', 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('if (week > settings.rebuyDeadlineWeek) {');
+    const refuses = (week: number, deadline: number) => week > deadline;
+    expect(refuses(4, 4)).toBe(false); // the cutoff week is INSIDE the window
+    expect(refuses(5, 4)).toBe(true);
+  });
+
+  it('the rules-page line says through the cutoff week, and never "before"', () => {
+    const copy = survivorRebuyRuleCopy(settings(), label);
+    expect(copy).toContain('through Week 4');
+    expect(copy).not.toMatch(/\bbefore\b/);
+    expect(copy).toContain('2 rebuys');
+    expect(copy).toContain('$20');
+  });
+
+  it('the join-page line says the same thing', () => {
+    const copy = survivorRebuyJoinCopy(settings(), label);
+    expect(copy).toContain('through Week 4');
+    expect(copy).not.toMatch(/\bbefore\b/);
+    expect(copy).toContain('2 rebuys');
+  });
+
+  it('no buy-backs allowed reads as off on both surfaces', () => {
+    expect(survivorRebuyRuleCopy(settings({ maxRebuys: 0 }), label)).toBe('Disabled in this pool.');
+    expect(survivorRebuyJoinCopy(settings({ maxRebuys: 0 }), label)).toBe('No rebuys/buy-backs allowed');
+  });
+
+  it('a cutoff below week 1 is stated as unusable, not as an open window', () => {
+    // The create wizard's floor is 0 (`CreateNFLSurvivorPool.tsx:38`), and
+    // `week > 0` is true of every real week — so a pool set there offers
+    // buy-backs nobody can take. Both surfaces used to name a moment
+    // ("the season starts" / "season start") that reads like an open window.
+    for (const deadline of [0, -3, undefined, Number.NaN]) {
+      const rules = survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      const join = survivorRebuyJoinCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      expect(rules, String(deadline)).toMatch(/none can actually be taken/);
+      expect(join, String(deadline)).toMatch(/none can be taken/);
+      expect(rules, String(deadline)).not.toMatch(/season starts/);
+      expect(join, String(deadline)).not.toMatch(/season start/);
+      expect(rules, String(deadline)).not.toContain('NaN');
+      expect(join, String(deadline)).not.toContain('NaN');
+    }
+  });
+
+  it('the week label is asked for exactly once, with the cutoff week', () => {
+    const seen: number[] = [];
+    survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: 7 }), (w) => { seen.push(w); return `Week ${w}`; });
+    expect(seen).toEqual([7]);
   });
 });
