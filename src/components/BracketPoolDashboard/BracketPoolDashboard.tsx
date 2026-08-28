@@ -254,10 +254,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const nameCacheRef = React.useRef<OwnerNameCache | null>(null);
     const [nameRetry, setNameRetry] = useState(0);
     useEffect(() => {
-        const cache = ownerNameCacheFor(nameCacheRef.current, pool.id);
-        if (cache !== nameCacheRef.current) {
+        const previousCache = nameCacheRef.current;
+        const cache = ownerNameCacheFor(previousCache, pool.id);
+        if (cache !== previousCache) {
             nameCacheRef.current = cache;
-            setUserNames({}); // a different pool's names are not this pool's names
+            // Only when REPLACING another pool's cache — on first mount the map
+            // is already empty and clearing it would cost a render for nothing.
+            if (previousCache) setUserNames({});
         }
         if (entries.length === 0) return;
         const now = Date.now();
