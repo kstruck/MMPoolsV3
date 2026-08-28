@@ -13,8 +13,8 @@ import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2,
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
+import { resolveOwnerNames } from './ownerNames';
 import { dbService } from '../../services/dbService';
-import { userRepository } from '../../services/userRepository';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
 import { isPoolManager, isSuperAdmin } from '../../utils/auth';
@@ -225,19 +225,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         return () => unsub();
     }, [pool.id]);
 
-    // Build uid -> display name map whenever entries change
+    // Build uid -> display name map whenever entries change.
+    //
+    // Reads `publicProfiles/{uid}` (world-readable), NOT `users/{uid}` — an
+    // ordinary member may only read their OWN user doc, so the old code hit
+    // permission-denied once per other member and reported every one of them to
+    // Sentry + logClientError. See ownerNames.ts for the full note.
     useEffect(() => {
         if (entries.length === 0) return;
-        const uniqueUids = [...new Set(entries.map(e => e.ownerUid))];
-        Promise.all(
-            uniqueUids.map((uid: string) => userRepository.getById(uid))
-        ).then(users => {
-            const map: Record<string, string> = {};
-            users.forEach((u: { name?: string; email?: string } | null, i: number) => {
-                if (u) map[uniqueUids[i]] = u.name || u.email || uniqueUids[i];
-            });
-            setUserNames(map);
-        }).catch(() => { /* silent fallback */ });
+        let cancelled = false;
+        resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid))
+            .then(map => { if (!cancelled) setUserNames(map); })
+            // resolveOwnerNames swallows per-uid failures by contract, so this
+            // only fires on a real bug. Log it rather than dropping it silently;
+            // StandingsTable already renders 'Unknown' for a missing name.
+            .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
+        return () => { cancelled = true; };
     }, [entries]);
 
     // Listen for master bracket print event
