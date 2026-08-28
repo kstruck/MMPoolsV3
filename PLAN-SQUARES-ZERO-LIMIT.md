@@ -155,9 +155,14 @@ Kevin's, both in the morning list.
 
 **Do any live SQUARES pools already have `maxSquaresPerPlayer: 0` stored?**
 
-I have **not** checked, and I will not: reading production Firestore needs
-credentials this session should not use, and the answer does not change the
-recommendation.
+I have **not** checked: reading production Firestore needs a service-account key
+this session should not go looking for, and the answer does not change the
+recommendation. A **read-only** census that answers it in one command ships with
+this plan — `functions/scripts/censusSquaresMaxPerPlayer.mjs`. It never writes.
+It applies the server's own comparison (`0 >= maxSquaresPerPlayer`) to a
+hypothetical first claim, and counts the absent-value pools separately because
+`0 >= undefined` is `false` — those already behave as unlimited and are not
+affected either way.
 
 - Under **Option A**: irrelevant. Those pools become playable on deploy. **No
   production write of any kind.**
