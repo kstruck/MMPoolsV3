@@ -19,7 +19,7 @@ step rather than a paragraph.
 
 ## 0. The short version
 
-Four things change. Three of them are silent.
+Five things change. Four of them are silent.
 
 | # | What | Today (public) | After the flip | Silent? |
 |---|---|---|---|---|
@@ -27,6 +27,14 @@ Four things change. Three of them are silent.
 | 2 | **Actions minutes** | Free and unlimited | Metered. **~24,000–26,000 min/month measured** against a 2,000-min allowance | ✅ Silent until CI stops dead |
 | 3 | **Required-status-check ruleset** | Enforced | **Stops being enforced on GitHub Free.** Needs Pro or higher for private repos | ✅ Silent — PRs just start merging without CI |
 | 4 | **Secret scanning + push protection** | Free | Gone (needs paid GitHub Secret Protection) | ✅ Silent |
+| 5 | **CodeQL code scanning** | Running now, via GitHub's *default setup* | **Stops.** Private repos need Team/Enterprise **plus** Code Security — Pro does not include it | ✅ Silent |
+
+⚠️ **Row 5 was nearly missed, and the reason is worth carrying:** CodeQL runs
+here through GitHub's **default setup**, so there is *no workflow file for it in
+this repository*. It was found only by reading the check runs on a live PR. If you
+audit "what CI do we have" by looking at `.github/workflows/`, you will miss it
+too — and GitHub's own settings page is the only authority on what else may be
+enabled that way.
 
 **Everything else is fine**, including the parts most likely to worry you — see
 §6. In particular: **Coolify never pushes to GitHub.** It only clones. There is
@@ -56,6 +64,11 @@ a red merge. That is the only automated gate on `main`, and it goes quiet.
 **Recommendation: upgrade to GitHub Pro before flipping.** It is a few dollars a
 month and it is the only thing standing between this repo and un-gated merges to
 `main`.
+
+⚠️ **Pro fixes the ruleset and nothing else on this list.** Code scanning
+(§0 row 5) needs **Team or Enterprise plus GitHub Code Security** — on Free *and*
+on Pro, CodeQL runs only on public repositories. Do not expect the upgrade to
+bring CodeQL with it.
 
 ### D2 — Coolify git source: GitHub App, or Deploy Key?
 
@@ -111,6 +124,8 @@ Four claims above come from GitHub's own published docs and pricing pages, check
 
 1. Rulesets and branch protection cover public repos on Free, but private repos
    only on Pro / Team / Enterprise Cloud.
+1b. Code scanning (CodeQL) covers public repos on Free and Pro; private repos
+   require Team or Enterprise **plus** GitHub Code Security.
 2. GitHub Free includes 2,000 Actions minutes/month for private repositories.
 3. GitHub reduced hosted-runner prices effective 2026-01-01; the Linux 2-core rate
    used here is ~$0.006/min.
@@ -396,6 +411,21 @@ So the loss is two-fold: *when* the net sits (push protection fires at `git push
 gitleaks at PR time) and *where* (every branch, versus only main-targeting
 events). If that gap matters, widening `security-scan.yml`'s `pull_request:`
 trigger to match `ci.yml`'s unfiltered one costs ~2 minutes per event.
+
+### CodeQL code scanning stops
+
+`CodeQL` and `Analyze (actions)` are green check runs on PRs today. They come from
+GitHub's **default setup**, not from any file in `.github/workflows/`, which is
+why nothing in this repository mentions them.
+
+On GitHub Free *and* Pro, code scanning runs only on public repositories; private
+repos require **Team or Enterprise with GitHub Code Security**. So after the flip
+these checks stop appearing, silently, and the D1 upgrade does not bring them back.
+
+Neither is a required context in the main ruleset, so nothing starts merging that
+should not. What you lose is the standing CodeQL analysis on every PR. If that
+matters more than the plan difference costs, that is a Team-tier conversation,
+not a Pro one.
 
 ### Dependabot needs its defaults checked
 
