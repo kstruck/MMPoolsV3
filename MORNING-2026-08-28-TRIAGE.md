@@ -11,7 +11,7 @@ re-derived from the code or from a command, not carried forward.
 
 | | |
 |---|---|
-| PRs ready for you to merge | **#616, #618, #629, #630** — all green, all reviewed |
+| PRs ready for you to merge | **#616, #618, #629, #630, #631** — all reviewed, gates in each body |
 | PRs closed with written reasons | **#448** (superseded), **#582** (recommended, left open for you) |
 | PR verified and left alone | **#380** — re-checked against code, still accurate |
 | Tasks that turned out DONE | help-system **T4** and **all four T9 defects** |
@@ -151,6 +151,21 @@ else in it is already live behaviour on `main`, and the triage comment on the PR
 lists each commit and where it shipped. I left it open because closing it is
 your call, not mine.
 
+### ✅ [#631](https://github.com/kstruck/MMPoolsV3/pull/631) — NEW — dependabot never watched `functions/`
+
+The most valuable thing tonight's dependabot task turned up, and it was not one
+of the six bumps. Full write-up in §5. One YAML entry plus a guard that
+DISCOVERS manifests recursively rather than listing them — a hand-kept list is
+the same defect one layer up.
+
+**Codex round 1 holed my first version** (the walker was depth-1, so a future
+`functions/tools/package.json` would slip through) — fixed, and the correction is
+written into the walker's own doc block rather than quietly applied. **Round 2
+clean. Mutation-tested 4/4.**
+
+**Gates:** vitest **2979** (+10), tsc clean, build clean, lint **1881/0 delta
+zero**.
+
 ### ✅ [#630](https://github.com/kstruck/MMPoolsV3/pull/630) — NEW — five toggle switches had no accessible name
 
 Found while scoping the label work. Five components each hand-rolled the same
@@ -241,7 +256,77 @@ all. A switch genuinely needs a `<label>`; the rule cannot be met by deleting it
 
 ## 5. Dependabot — six verdicts, nothing merged
 
-<!-- DEPS-TABLE -->
+Six open, **all major bumps**, exactly as you expected. Each was built and tested
+in an **isolated worktree** (never the shared tree) with `npm ci` → `npm --prefix
+functions ci` → `copy-shared.mjs` → `tsc -b` → `build` → `vitest` → `functions
+test`. **Exit codes were the gate, not "the commands ran". Nothing was merged and
+no auto-merge was proposed** — `mmp-loop-babysit-deps` says a major always needs a
+human, and auto-merge is off regardless.
+
+**A per-PR comment with the full evidence is posted on each PR.**
+
+| PR | Bump | Verdict | What actually breaks |
+|---|---|---|---|
+| [#463](https://github.com/kstruck/MMPoolsV3/pull/463) | lucide-react 0.556 → **1.31** | 🔴 **NEEDS WORK** | 1.x **removed the brand icons**. 7 × `TS2305` — `Twitter`, `Facebook`, `Instagram`, `Linkedin`. Build fails. |
+| [#462](https://github.com/kstruck/MMPoolsV3/pull/462) | framer-motion 12.43 → **13.1.1** | 🟡 **CLOSEST TO SAFE** | tsc, build and `functions test` all green. Only failures were the CRLF artefact below. |
+| [#401](https://github.com/kstruck/MMPoolsV3/pull/401) | vite 7.3 → **8.2.2** | 🔴 **NEEDS WORK** | Vite 8 ships Rollup 5, which **removed the object form of `manualChunks`**. `vite.config.ts:37`, `TS2769`. |
+| [#304](https://github.com/kstruck/MMPoolsV3/pull/304) | firebase-admin 13.10 → **14.3** | 🟡 **CLEAN, BUT ASK WHY FIRST** | Everything green. But it bumps the **root** copy — see the split below. |
+| [#302](https://github.com/kstruck/MMPoolsV3/pull/302) | typescript 6.0 → **7.0.2** | 🔴 **NEEDS WORK** | `TS5102` — `baseUrl` **removed**. The repo predicted this in a comment: *"Revisit before TS 7.0."* |
+| [#300](https://github.com/kstruck/MMPoolsV3/pull/300) | tailwindcss 3.4 → **4.3.3** | 🔴 **NEEDS WORK** | PostCSS plugin moved to `@tailwindcss/postcss`. Three files change. **`tsc -b` passes** — it is a CSS failure, so a green typecheck proves nothing here. |
+
+### The four breakages were each re-verified against CURRENT `main`
+
+These branches are **49–175 commits behind**, so a failure on one could have been
+stale. None is:
+
+- `ShareModal.tsx:5` and `UserProfile.tsx:14` still import the four lucide brand icons.
+- `vite.config.ts:36-44` still uses the `manualChunks` **object** form.
+- `tsconfig.app.json:21` still carries `"ignoreDeprecations": "6.0"` + `baseUrl`.
+- `postcss.config.js` still names `tailwindcss` as the plugin; `src/index.css:1-3` still uses the three `@tailwind` directives.
+
+### 🛑 THE REAL FINDING — and it is not any of the six
+
+**`.github/dependabot.yml` lists `directory: "/"` and nothing else, and
+`directory` is NOT recursive.** Cloud Functions — **the code that actually runs in
+production** — has never been watched.
+
+| | declared | installed |
+|---|---|---|
+| `functions/` firebase-admin | `^12.7.0` | **12.7.0** |
+| root firebase-admin | `^13.6.1` | **13.10.0** |
+| `functions/` typescript | `^5.0.0` | — |
+| root typescript | `~6.0.3` | — |
+
+**#304 bumps the ROOT firebase-admin to 14 — widening that split to two majors
+while production stays on 12.** The root copy is used by ops scripts and four
+test files; it is **not** what `firebase deploy` ships.
+
+CI's `npm audit` was already fixed to run in **both** directories after the #240
+`brace-expansion` incident — so a `functions/` vulnerability is **detected today
+and produces no PR**. The fix has to be found and written by hand.
+
+This is the repo's **third** instance of root-scoped tooling mistaken for
+repo-scoped tooling (CLAUDE.md §2b's audit, §2e's `npx tsc -b`), so it ships as a
+guard over the shape: **[#631](https://github.com/kstruck/MMPoolsV3/pull/631)**.
+Writing that guard found a **third** manifest — `shared/package.json` — which is
+exempt with a written reason and a drift assertion instead.
+
+### ⚠️ Three test failures that were NOT any dependency's fault
+
+`tests/addon-purchase.test.ts` failed identically under **three different** bumps,
+which is the tell. It reads `functions/src/stripe.ts` off disk and asserts on
+multi-line `\n` literals. `.gitattributes` exists to keep that working on Windows,
+but **`git checkout` only renormalises files it rewrites** — so a worktree first
+materialised on a branch predating `.gitattributes` keeps CRLF in every unchanged
+file afterwards. Measured:
+
+```
+functions/src/stripe.ts   dependabot worktree: 1871 CR bytes
+functions/src/stripe.ts   clean worktree:         0 CR bytes
+```
+
+Not a defect in any bump, and not a defect in the repo — a worktree-reuse trap
+worth knowing before it reads as breakage again.
 
 ---
 
@@ -251,7 +336,10 @@ Every one of these is also in my final chat message, so you do not have to open
 this file to answer.
 
 **D1 — Merge order.** Recommended: **#618 → Coolify rebuild → #616 → #629 →
-#630 → #380.** #618 first because it is the block on the dues backfill; the
+#630 → #631 → #380.** They touch disjoint files, so any order works; this one is
+by value.
+
+⚠️ **If #630 merges, the lint baseline becomes 1872, not 1881.** #618 first because it is the block on the dues backfill; the
 rebuild next because it is owed for thirteen merges either way.
 *On "approve as recommended" I do nothing — merging is yours.*
 
@@ -270,8 +358,19 @@ content ticket** that needs your call on where their topics live. *Alternative:
 allowlist them with a T-number and wire the markup now — faster, but it leaves
 `?` buttons that explain nothing.*
 
-**D5 — Dependabot.** See §5. My recommendation per PR is in the table; none is a
-plain "merge it".
+**D5 — Dependabot: merge [#631](https://github.com/kstruck/MMPoolsV3/pull/631)?**
+Recommended: **yes, and expect a batch of PRs on Monday.** It makes the deployed
+surface visible for the first time; `functions/` is behind on several majors, so
+the queue will not be short. The limit there is 5, not the root's 10, on purpose.
+*If you would rather not have the queue right now, hold it — nothing degrades by
+waiting, it just stays invisible.*
+
+**D6 — the six bumps themselves.** Recommended: **fix none of them tonight, and
+take them in this order when you do** — #462 (closest to safe) → #304 (only after
+D5, since it widens a split #631 exists to close) → #401 (one config rewrite) →
+#463 (two files, needs replacement icons) → #302 (config only, but pairs with the
+`functions/` TS 5 gap) → #300 (three files, and the failure mode is a GREEN build
+with no styles). Full evidence is commented on each PR.
 
 ---
 
