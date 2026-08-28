@@ -1,5 +1,5 @@
 import type { NFLGame } from '../../../types';
-import type { PickemResult } from '../../../utils/pickemResult';
+import { hasReportedScores, type PickemResult } from '../../../utils/pickemResult';
 
 /**
  * "Did my pick turn out right?" — the ONE definition the three NFL pick sheets
@@ -83,16 +83,10 @@ export function pickemOutcome(game: NFLGame, result: PickemResult): PickOutcome 
 }
 
 /**
- * Mirror of the engine's `hasReportedScores`. "The feed dropped the field" and
- * "the team scored zero" are different facts, and `?? 0` collapses them.
- */
-function hasReportedScores(game: NFLGame): boolean {
-  return Number.isFinite(game.scores?.home) && Number.isFinite(game.scores?.away);
-}
-
-/**
- * Both `hasReportedScores` and the "is this game gradeable at all" gate, mirrored
- * from the engine.
+ * The "is this game gradeable at all" gate, mirrored from the engine. The
+ * scoreless-FINAL half of it is `hasReportedScores`, imported from
+ * `utils/pickemResult.ts` rather than re-declared here — one client mirror of
+ * the server rule, not two.
  *
  * A FINAL carrying no scores reads 0-0, which is a real tie to every rule below —
  * and a tie is a Survivor strike by default. That is engine defect NFL7-3/NFL7-4,

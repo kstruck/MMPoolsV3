@@ -80,6 +80,51 @@ describe('picksGridCell — the reveal boundary is the SERVER\'s allowlist', () 
         expect(cell('CAR', 'ATS')).toMatchObject({ result: 'L' });
     });
 
+    it('records NO result on a FINAL the feed reported no scores for', () => {
+        // 🛑 REGRESSION GUARD ON THE CELL — this is the surface the defect
+        // actually reached, and the one nothing pinned.
+        //
+        // `gradePick` used to fall straight to `scores?.home ?? 0`, so a
+        // scoreless FINAL read 0-0. Straight-up that is a harmless PUSH, but in
+        // ATS the spread moves the adjusted home score off the tie and the cell
+        // printed a confident W or L — in this pool's colours — for a game
+        // `gradePickemGames` refuses to grade at all (engine defect NFL7-3). The
+        // member's grid then contradicted their own standings.
+        //
+        // The gate is in `gradePick` (#578) and parity with the real scorer is
+        // proved in `tests/pickem-result-parity.test.ts`. Neither exercises
+        // `picksGridCell`, so a future edit that re-derived the result INSIDE
+        // the cell would pass both and still bring the defect back here.
+        //
+        // A FINAL landing before its scores is the ordinary shape of the ESPN
+        // feed, not a corner case.
+        const cell = (scores: unknown) => picksGridCell({
+            game: {
+                ...game({ id: 'g1', status: 'FINAL' }),
+                scores,
+                spread: { value: -6.5, locked: true },
+            } as NFLGame,
+            entry: { picks: { g1: 'ARI' } },
+            isOwnRow: true,
+            revealedGameIds: undefined,
+            pickMode: 'ATS',
+        });
+        // Both fields must be finite. A half-written payload is what a partial
+        // feed update looks like, and it is not a 24-0 game.
+        expect(cell(undefined)).toEqual({ kind: 'PICK', team: 'ARI', result: null });
+        expect(cell({ home: 24 })).toEqual({ kind: 'PICK', team: 'ARI', result: null });
+        expect(cell({ away: 17 })).toEqual({ kind: 'PICK', team: 'ARI', result: null });
+
+        // ⚠️ The pick is still SHOWN. "Not graded yet" is not "no pick" — the
+        // team name stays, only the verdict waits.
+        expect(cell(undefined).kind).toBe('PICK');
+
+        // And a genuine 0-0 FINAL is a different fact, still graded: the check
+        // is finite-ness, not truthiness. ARI is home, laying 6.5, so 0-0 is a
+        // loss against the spread.
+        expect(cell({ home: 0, away: 0 })).toEqual({ kind: 'PICK', team: 'ARI', result: 'L' });
+    });
+
     it('carries the confidence weight only in confidence mode, and keeps a stored 0', () => {
         const args = {
             game: G1,

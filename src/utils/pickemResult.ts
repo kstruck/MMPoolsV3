@@ -37,8 +37,21 @@ export type PickemResult = 'W' | 'L' | 'PUSH' | 'VOID' | null;
  * score for neither competitor — deliberately, so that "ESPN dropped the field"
  * stays distinguishable from "the team scored zero". `?? 0` collapses those two
  * back together, which is engine defect NFL7-3.
+ *
+ * EXPORTED so there is ONE client mirror rather than two. `pickSheet/
+ * pickOutcome.ts` asked the same question of Survivor and Margin games and kept
+ * its own byte-identical copy, which #582 flagged. Two mirrors of one server
+ * rule is two places to fix when the server rule moves — and the failure mode is
+ * silent, because the copy that did not move keeps returning a plausible answer.
+ *
+ * Widened from `NFLGame` to the shape it actually reads. The Survivor and Margin
+ * call sites hand over game-like objects, and a parameter that demands the whole
+ * `NFLGame` would force a cast at each one — a cast being the thing that lets a
+ * caller pass something this function cannot really answer for.
  */
-function hasReportedScores(game: NFLGame): boolean {
+export function hasReportedScores(
+  game: { scores?: { home?: number; away?: number } | null },
+): boolean {
   return Number.isFinite(game.scores?.home) && Number.isFinite(game.scores?.away);
 }
 
