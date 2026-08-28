@@ -24,8 +24,8 @@ Five things change. Four of them are silent.
 | # | What | Today (public) | After the flip | Silent? |
 |---|---|---|---|---|
 | 1 | **Coolify's git clone** | Works — anonymous clone if the source is a *Public Repository* | **Fails** if the source type is *Public Repository*. Fine if it is a GitHub App or Deploy Key | ❌ Loud — the build fails |
-| 2 | **Actions minutes** | Free and unlimited | Metered. **~24,000–26,000 min/month measured** against a 2,000-min allowance | ✅ Silent until CI stops dead |
-| 3 | **Required-status-check ruleset** | Enforced | **Stops being enforced on GitHub Free.** Needs Pro or higher for private repos | ✅ Silent — PRs just start merging without CI |
+| 2 | **Actions minutes** | Free and unlimited | Metered. **~24,000–26,000 min/month measured** against Pro's **3,000**-min allowance | ✅ Silent until CI stops dead |
+| 3 | ~~Required-status-check ruleset~~ | Enforced | ✅ **NO LONGER A RISK — Kevin is already on Pro** (2026-08-28), which covers rulesets on private repos. Kept on the list only so the reason it is safe is recorded | — |
 | 4 | **Secret scanning + push protection** | Free | Gone (needs paid GitHub Secret Protection) | ✅ Silent |
 | 5 | **CodeQL code scanning** | Running now, via GitHub's *default setup* | **Stops.** Private repos need Team/Enterprise **plus** Code Security — Pro does not include it | ✅ Silent |
 
@@ -43,79 +43,77 @@ nothing to push.
 
 ---
 
-## 1. 🛑 DECISIONS — answer these three before touching anything
+## 1. ✅ DECISIONS — SETTLED by Kevin, 2026-08-28
 
-### D1 — GitHub plan: stay on Free, or upgrade to Pro?
+All three are answered. This section records the answers and what each one
+changes; it is no longer a question.
 
-**The problem.** GitHub rulesets and classic branch protection are available on
-**public** repositories on Free, and on **public and private** repositories only
-on Pro, Team, and Enterprise Cloud. `.github/workflows/ci.yml` documents a
-main-scoped ruleset (id `11714546`) requiring four contexts: `build-and-test`,
-`emulator-tests`, `security-audit`, `nginx-validate`.
+### D1 — GitHub plan → **already on Pro. No action.**
 
-On Free, going private stops that ruleset being enforced. Nothing announces it.
-The next PR merges green-or-not.
+Rulesets and branch protection cover **public** repos on Free, and **public and
+private** repos on Pro, Team, and Enterprise Cloud. Kevin is on Pro, so the
+main-scoped ruleset (id `11714546`) requiring `build-and-test`, `emulator-tests`,
+`security-audit` and `nginx-validate` **keeps being enforced through the flip**.
 
-To be precise about what is lost: CLAUDE.md §2e is a list of seven **local**
-commands and was always operator discipline, never machine-enforced. What lapses
-here is the narrower, harder thing — the four CI contexts that mechanically block
-a red merge. That is the only automated gate on `main`, and it goes quiet.
+**This removes the sharpest silent risk on the list.** No upgrade to buy, nothing
+to time around the flip. Step A4 becomes a verification rather than a purchase.
 
-**Recommendation: upgrade to GitHub Pro before flipping.** It is a few dollars a
-month and it is the only thing standing between this repo and un-gated merges to
-`main`.
+⚠️ **Pro does not carry CodeQL with it.** Code scanning (§0 row 5) needs **Team or
+Enterprise plus GitHub Code Security**; on Free *and* Pro it runs only on public
+repositories. That row stands.
 
-⚠️ **Pro fixes the ruleset and nothing else on this list.** Code scanning
-(§0 row 5) needs **Team or Enterprise plus GitHub Code Security** — on Free *and*
-on Pro, CodeQL runs only on public repositories. Do not expect the upgrade to
-bring CodeQL with it.
+### D2 — Coolify git source → **Deploy Key.**
 
-### D2 — Coolify git source: GitHub App, or Deploy Key?
-
-Only relevant if §2 / step A1 finds the source type is *Public Repository*.
-
-| | GitHub App | Deploy Key |
+| | GitHub App | **Deploy Key ← chosen** |
 |---|---|---|
 | Setup | Install Coolify's GitHub App on the `kstruck` account | Coolify generates an SSH key; you add it under repo Settings → Deploy keys |
-| Auto webhooks | Yes (Coolify configures them) | No |
+| Auto webhooks | Yes | No |
 | Preview deploys | Yes | No |
 | Scope | Whichever repos you select | Exactly this one repo, read-only |
 
-**Recommendation: Deploy Key.** The frontend deploy is a **manual trigger by
-design** (CLAUDE.md §3 — "pushing to `main` does **not** auto-deploy the
-frontend"), so the GitHub App's headline features — automatic webhooks and
-preview deploys — buy nothing here, and the App's webhook is a way to
-*accidentally* turn on auto-deploy. A read-only deploy key is the smaller blast
-radius and matches how you actually operate.
+The frontend deploy is a **manual trigger by design** (CLAUDE.md §3 — "pushing to
+`main` does **not** auto-deploy the frontend"), so the App's headline features buy
+nothing here, and its webhook is a way to *accidentally* turn on auto-deploy. A
+read-only deploy key is the smaller blast radius and matches how you operate.
 
-### D3 — Actions spend: pay the overage, self-host runners, or stay public?
+Step A3 is written for this path.
+
+### D3 — Actions spend → **self-hosted runner**, per the recommendation.
 
 **Measured, not estimated** (full working in §8): **19–21 billable minutes per push
 or PR event**, at **~42 events/day** → **~800–880 min/day ≈ 24,000–26,000
 min/month**.
 
-- GitHub Free includes **2,000** Actions minutes/month for private repos. At the
-  current rate that is exhausted in **~2.3 days**.
-- 🛑 **The default spending limit on Free is $0.** So CI does not bill you — it
-  **stops running**, about 55 hours into every month, and stays stopped. That is
-  the failure mode to plan for, not a surprise invoice.
-- If you raise the limit: the overage is roughly **22,000–24,000 min × ~$0.006/min
-  ≈ $130–145/month**. Confirm the current Linux 2-core rate on your own billing
-  page before treating that as the number.
+- GitHub Pro includes **3,000** Actions minutes/month for private repos. At the
+  current rate that is exhausted in **~3.5 days**.
+- 🛑 **The default spending limit is $0.** So CI does not bill you — it **stops
+  running**, roughly three and a half days into every month, and stays stopped.
+  That is the failure mode to plan for, not a surprise invoice.
+- Left on hosted runners, the overage would be about **21,000–23,000 min ×
+  ~$0.006/min ≈ $125–140/month**.
 
-**No realistic CI trim fits this into 2,000 minutes.** Dropping the `push:`
-trigger saves 33% of runs; gating `e2e-playwright` (11 of `ci.yml`'s 19 minutes —
-**~55% of the bill**) saves about half again. Both together still land near 8,000
-min/month. The activity level, not the workflow design, is what does not fit.
+**No realistic CI trim closes that gap.** Dropping the `push:` trigger saves 33% of
+runs; gating `e2e-playwright` (11 of `ci.yml`'s 19 minutes — **~55% of the bill**)
+saves about half again. Both together still land near 8,000 min/month. The
+activity level, not the workflow design, is what does not fit.
 
-**Recommendation: register a self-hosted Actions runner on the Coolify host.**
-Self-hosted runner minutes are free for private repositories, GitHub's announced
-per-minute self-hosted platform charge was **postponed** (2025-12-15), and you
-already own and run the hardware. Second choice: raise the spending limit and
-accept ~$145/month. Third: leave the repo public.
+So: **move the work to your own hardware.** Self-hosted runner minutes are free for
+private repositories and GitHub's announced per-minute self-hosted platform charge
+was **postponed** (2025-12-15). Step A6 is the migration.
 
-⚠️ A self-hosted runner on a private repo is safe here (no forks, no outside
-contributors — see §6). Never do it on a public repo.
+#### ⚠️ One refinement to the recommendation, worth deciding before A6
+
+I recommended "a self-hosted runner on the Coolify host", and that phrasing was
+too casual about *which* host. This repo runs **~42 events/day**, each pulling
+Playwright, Firebase emulators and a Docker build. Putting that on the box that
+serves production www means CI competes with the live site for CPU and RAM, and
+a wedged job degrades prod rather than just a build.
+
+**Prefer a separate machine** — a small VM is a few dollars a month, well under
+the $125–140 it replaces. If it does go on the Coolify host, cap it: **one runner,
+concurrency 1**, and add a `concurrency` group with `cancel-in-progress` to the
+workflow so superseded pushes stop consuming the box. That last change is worth
+making regardless of where the runner lives.
 
 ### Sourcing note for D1 and D3
 
@@ -126,15 +124,17 @@ Four claims above come from GitHub's own published docs and pricing pages, check
    only on Pro / Team / Enterprise Cloud.
 1b. Code scanning (CodeQL) covers public repos on Free and Pro; private repos
    require Team or Enterprise **plus** GitHub Code Security.
-2. GitHub Free includes 2,000 Actions minutes/month for private repositories.
+2. GitHub Pro includes 3,000 Actions minutes/month for private repositories
+   (Free includes 2,000).
 3. GitHub reduced hosted-runner prices effective 2026-01-01; the Linux 2-core rate
    used here is ~$0.006/min.
 4. The announced per-minute charge for **self-hosted** runners was postponed
    (announced 2025-12-15), so self-hosted minutes are currently free.
 
-Billing terms change. **Re-confirm 1 and 4 before acting on D1 and D3** — they are
-the two the recommendations actually rest on — and read 2 and 3 off your own
-billing page rather than off this page.
+Billing terms change. **Re-confirm 4 before acting on D3** — the self-hosted
+migration rests entirely on it — and read 2 and 3 off your own billing page rather
+than off this page. Claim 1 is now moot in the safe direction: Pro covers the
+ruleset either way.
 
 ---
 
@@ -243,22 +243,72 @@ depend on. Same for a GitHub App token, which is scoped by installation rather
 than by repository visibility. You are testing the real auth path, not a
 public-access shortcut.
 
-### A4 — Settle the GitHub plan (D1)
+### A4 — Verify Pro is active and the ruleset is intact (D1)
 
-If upgrading: <https://github.com/settings/billing> → upgrade to Pro. Do it
-**before** the flip so the ruleset never spends a moment unenforced.
+Not a purchase any more — a check, because the whole no-risk finding for §0 row 3
+rests on it.
+
+1. <https://github.com/settings/billing> — confirm the plan reads **Pro**, and
+   that the next billing date is in the future. A lapsed Pro silently drops you to
+   Free, and on Free the ruleset stops enforcing the moment the repo is private.
+2. <https://github.com/kstruck/MMPoolsV3/settings/rules> — confirm the main-branch
+   ruleset is **Active**, not Evaluate/Disabled.
 
 ### A5 — Set the Actions spending limit deliberately (D3)
 
 <https://github.com/settings/billing> → Actions spending limit / budgets.
 
-Decide and set it on purpose. The default of $0 is a *hard stop*, not a
-safeguard — and a repo whose entire review discipline is built on four required
-checks does not degrade gracefully when the checks stop running. If you are
-going the self-hosted-runner route, still set a small non-zero limit as a
-cushion while you migrate.
+Set it on purpose. The $0 default is a *hard stop*, not a safeguard, and a repo
+whose only automated gate is four required checks does not degrade gracefully when
+those checks stop running. Even going the self-hosted route, leave a small non-zero
+limit as a cushion while jobs are still migrating.
 
-### A6 — Confirm your local git credentials reach a private repo
+### A6 — Migrate CI to a self-hosted runner (D3)
+
+Do this **before** the flip. Runner minutes are free while the repo is public, so
+you get to shake the migration out at zero cost and zero risk.
+
+**Order matters — start with `e2e-playwright`, and here is why.** It is the single
+most expensive job (11 minutes, ~55% of the bill) *and* it is deliberately excluded
+from the required-checks ruleset. So if the migration misbehaves, it cannot block a
+merge. You halve the bill with no merge risk before touching anything load-bearing.
+
+1. **Provision the host.** A separate small VM is preferred (see the D3 refinement).
+   It needs Docker (the `nginx-validate` job runs `docker run`), plus enough RAM for
+   the Firebase emulators and Chromium. `actions/setup-node` and `actions/setup-java`
+   install their own toolchains, so Node 20/22 and Java 21 do not need pre-installing
+   — but Docker does.
+2. **Register the runner.** <https://github.com/kstruck/MMPoolsV3/settings/actions/runners>
+   → *New self-hosted runner*, and follow the generated commands. Install it as a
+   service so it survives a reboot.
+3. **Repoint one job.** In `.github/workflows/ci.yml`, change only the
+   `e2e-playwright` job:
+
+   ```yaml
+   runs-on: [self-hosted, linux, x64]
+   ```
+
+   🛑 **Do not rename any job while doing this.** The ruleset's required contexts
+   are matched by **job name** — `build-and-test`, `emulator-tests`,
+   `security-audit`, `nginx-validate`. Rename one and its context never reports,
+   which leaves PRs permanently unmergeable with nothing red to explain it.
+   Changing `runs-on` alone preserves every name.
+
+4. **Watch a few PRs**, then repoint `emulator-tests` (3 min), then the rest.
+5. **Add run-cancellation while you are in the file** — this saves minutes wherever
+   the runner lives, by killing superseded runs on the same branch:
+
+   ```yaml
+   concurrency:
+     group: ${{ github.workflow }}-${{ github.ref }}
+     cancel-in-progress: true
+   ```
+
+⚠️ A self-hosted runner is safe on this repo because it is private with no forks
+and no outside contributors (§6). **Never** attach one to a public repository — any
+stranger's PR would execute code on your box.
+
+### A7 — Confirm your local git credentials reach a private repo
 
 On the Windows box, in `D:\march-melee-pools`:
 
@@ -279,11 +329,11 @@ Same check for any local MCP GitHub server or `gh` CLI token you use from the
 Windows machine. This is the most likely cause of a "it worked yesterday"
 failure the morning after the flip.
 
-### A7 — Write down the ruleset before you can lose it
+### A8 — Screenshot the ruleset, and fix a stale comment
 
 Open <https://github.com/kstruck/MMPoolsV3/settings/rules> and screenshot the
-main-branch ruleset. If you end up on a plan where it stops being enforced, or
-you ever recreate it, this is the record.
+main-branch ruleset. Pro keeps it enforced, so this is now a record for the day you
+recreate it rather than insurance against losing it.
 
 ⚠️ **While you are there, resolve a live contradiction in the repo's own
 comments.** `.github/workflows/ci.yml` states the ruleset lists exactly four
@@ -326,12 +376,13 @@ protect production.
    that data loads — a `200` is not "the frontend is fine"
    (`RUNBOOK-SITE-DOWN.md` step 1).
 3. **Actions.** Push a trivial commit on a branch and open a PR. Confirm both
-   workflows run to completion, and that they are **billing the way you decided
-   in D3** (check the billing page, or that the job ran on your self-hosted
-   runner).
+   workflows run to completion, and that the jobs you migrated in A6 report
+   **`self-hosted`** as their runner rather than `ubuntu-latest` — that is the
+   proof the minutes are free, not the billing page a month later.
 4. **Required checks.** On that same PR, confirm the four required contexts are
-   still listed as required and still block the merge button. **If they are not,
-   D1 was answered wrong** — the ruleset is silently unenforced.
+   still listed as required and still block the merge button. Pro should keep them
+   enforced; if they are *not* listed, check A4 first — a lapsed Pro subscription
+   is the one thing that would silently drop them.
 5. **Claude Code on the web.** Start a fresh session against the repo and confirm
    it clones and that GitHub tooling works. If it cannot see the repo, reconnect
    GitHub under claude.ai → **Settings → Connectors**, re-authorising so the
