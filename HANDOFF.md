@@ -1,5 +1,96 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-08-28 (overnight triage) — **`origin/main` IS `f161b51d`. NO FUNCTIONS DEPLOY AND NO RULES DEPLOY ARE OWED. ONE COOLIFY REBUILD COVERS THIRTEEN MERGES.**
+>
+> This box is a **truth pass**: every claim below was re-derived from
+> `origin/main` tonight rather than carried forward. The box under it was
+> written on 2026-08-27 and listed **#611/#612/#613 as open** — all three are
+> merged. Read this box first; the ones below it are history.
+>
+> ### The functions deploy state did not move, and that is a MEASUREMENT
+>
+> The tagged claim in the box below (`291e949a`) is **still correct**, and the
+> reason is not that nobody deployed — it is that **nothing deployable changed**:
+>
+> ```
+> git diff --stat 291e949a..origin/main -- functions/ firestore.rules shared/
+> ```
+>
+> is **empty** across all eleven merges since. So `291e949a` remains the live
+> functions source, `firestore.rules` is still untouched (last change #579), and
+> **neither `npx firebase deploy` nor a rules deploy is owed.** That is why this
+> box carries no second `main @ sha` claim — one live claim per doc is the
+> `tests/docs-state-invariants.test.ts` contract, and the one below it is right.
+>
+> ### 🔴 OWED: ONE Coolify rebuild, now covering #614 → #628
+>
+> Thirteen merges have changed `src/` since the last frontend deploy and **none
+> of them is live on www**. In merge order:
+>
+> | PR | What the user would see |
+> |---|---|
+> | #614 | Header regrouped into three bands (13 top-level controls → 6) |
+> | #615 | Partial payment reaches the aggregate money surfaces |
+> | #617 | `/create-pool` leads with NFL season-long; Squares moves last |
+> | #619–#625 | Help-system copy: T10, T12, T13, T11, T3, T5+T6, T14 |
+> | #626 | Bracket standings read `publicProfiles` (Sentry `c810a001`) |
+> | #627 | Site-wide scope toggle on Pick Distribution + save-bar draft line |
+> | #628 | Survivor auto-survive rule text and the rebuy window |
+>
+> **#626 is a live Sentry fix and #628 is wrong rules copy shown to members.**
+> Those two are the reason this rebuild is not cosmetic.
+>
+> ### 🔴 STILL OWED: the partial-dues backfill — and it is BLOCKED on a merge
+>
+> #615 shipped the readers and all three writers, so **new** payments carry
+> `paidEntryCount`. **Existing** Member Records do not. The backfill is
+> `reconcilePaymentTruth`, dry-run by default, and the number that decides is
+> **`countsStamped`**.
+>
+> 🛑 **Kevin ran that dry run on 2026-08-27 and `countsStamped` was not in the
+> report.** [#618](https://github.com/kstruck/MMPoolsV3/pull/618) is the reason:
+> the admin Run Log summed a **hand-kept list** of field names and silently
+> dropped three server counters. So the backfill cannot be judged until #618
+> merges **and** the Coolify rebuild above ships it to the operator. Order is
+> merge #618 → rebuild → re-run the dry run → read `countsStamped`.
+>
+> ### `nflDeepSweep` — `{enabled: TRUE, dryRun: TRUE}`, THREE observed days of ZERO
+>
+> Read from `functions:log` on 2026-08-28 (read-only; **arming is Kevin's**):
+>
+> ```
+> [nflDeepScoreSweepJob] 7d sweep: 1 slate(s), 0 correction(s), 0 game(s) written.   2026-08-26 15:30Z
+> [nflDeepScoreSweepJob] 7d sweep: 1 slate(s), 0 correction(s), 0 game(s) written.   2026-08-27 15:30Z
+> ```
+>
+> plus the 2026-08-25 run already recorded below. **Three consecutive days,
+> `0 correction(s)` each.** That is the low-risk signal for stage 2 — but the
+> argument against arming *now* is unchanged and is not caution: `dryRun:false`
+> writes **all 20 games of the slate every day** (the live path writes every
+> `freshGame`, not just changed ones), while `reportStatCorrections` already
+> **pages in dry run**, so a real correction reaches Kevin without any write.
+> Arming buys nothing today. **Decision is Kevin's.**
+>
+> ### Open PRs as of `f161b51d`
+>
+> | PR | State | Verdict |
+> |---|---|---|
+> | #618 Run Log counters | green, `BEHIND` only | **ready to merge** |
+> | #616 this doc | — | supersedes itself with this box |
+> | #582 picks result feedback | `CONFLICTING` | needs a rebase, then re-gate |
+> | #521 / #518 | DRAFT | plans blocked on Kevin's sign-off — no code |
+> | #448 co-comm HANDOFF | `CONFLICTING` | **closed** — superseded (see below) |
+> | #380 README July wave | `MERGEABLE` | re-verified accurate; ready to merge |
+> | #463 #462 #401 #304 #302 #300 | dependabot | all **major** bumps; per-PR verdicts owed |
+>
+> ### #448 is closed, and one line of it was salvaged
+>
+> Its HANDOFF box announced co-commissioners live on 2026-08-16 — already
+> recorded by a later box in this file — and its `PLAN-MULTI-ENTRY.md` edit
+> would have **regressed** that plan's §7 header, which now reads "SHIPPED AND
+> LIVE 2026-08-25". Only its `PLAN-CO-COMMISSIONERS.md` §7 status was still
+> unrecorded anywhere, so that line is carried here instead.
+
 > ## 🟢 2026-08-27 (latest) — **PARTIAL DUES SHIPPED AND DEPLOYED (#615). A COOLIFY REBUILD IS OWED FOR #614 + #615.**
 >
 > **Functions are deployed from <!-- deploy-state:current --> `main` @ `291e949a`.**
