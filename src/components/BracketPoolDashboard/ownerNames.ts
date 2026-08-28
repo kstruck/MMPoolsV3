@@ -50,6 +50,45 @@ export const OWNER_NAME_FALLBACK = 'Unknown';
 export const ownerUidsOf = (entries: readonly OwnerNameEntry[]): string[] =>
     [...new Set(entries.map(e => e.ownerUid).filter((uid): uid is string => !!uid))];
 
+/**
+ * How many times ONE owner's profile may be read per mount before the fallback
+ * name is accepted as the answer.
+ *
+ * There has to be a cap. A pool holding entries written before
+ * `recomputeUserProfile` shipped has owners whose profile will never exist, and
+ * retrying those forever would recreate the per-page-load read storm this whole
+ * change removes — just with successful reads instead of denied ones.
+ *
+ * Four, not one, because the first read can lose a race it will win seconds
+ * later: `recomputeUserProfile` is triggered BY the entry write, so the entries
+ * snapshot reaches the client before the profile it causes (codex r1/r2 P2). In
+ * development React's StrictMode double-invokes the effect and burns one
+ * attempt on mount, which is the other reason this is not two.
+ */
+export const MAX_PROFILE_ATTEMPTS = 4;
+
+/**
+ * How long to wait before re-reading a profile that was not there yet. Long
+ * enough that a Cloud Function trigger has time to write it, short enough that
+ * a member watching the standings sees the real name rather than a reload.
+ */
+export const PROFILE_RETRY_MS = 10_000;
+
+/**
+ * The owners still worth a profile read: no FINAL name yet, and not already
+ * asked about `maxAttempts` times.
+ *
+ * Pure so the retry policy is testable without a rendered dashboard — the
+ * component keeps `resolved`/`attempts` in refs and does nothing else.
+ */
+export const pendingOwnerUids = (
+    entries: readonly OwnerNameEntry[],
+    resolved: ReadonlySet<string>,
+    attempts: Readonly<Record<string, number>>,
+    maxAttempts: number = MAX_PROFILE_ATTEMPTS
+): string[] =>
+    ownerUidsOf(entries).filter(uid => !resolved.has(uid) && (attempts[uid] ?? 0) < maxAttempts);
+
 /** A non-empty trimmed string, or null. Guards against `userName: ''` / `'   '`. */
 const usableName = (value: string | undefined): string | null => {
     if (typeof value !== 'string') return null;

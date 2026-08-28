@@ -44,7 +44,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     };
 });
 
-import { resolveOwnerNames, ownerUidsOf, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
+import { resolveOwnerNames, ownerUidsOf, pendingOwnerUids, MAX_PROFILE_ATTEMPTS, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { StandingsTable } from './StandingsTable';
 import type { BracketEntry, BracketPool, Tournament } from '../../types';
@@ -200,6 +200,51 @@ describe('ownerUidsOf', () => {
 
     it('drops an entry with no owner uid rather than keying on an empty string', () => {
         expect(ownerUidsOf([entry('e1', '', 'Orphan'), entry('e2', UID_A, 'Ada')])).toEqual([UID_A]);
+    });
+});
+
+describe('pendingOwnerUids', () => {
+    const rows = [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')];
+
+    it('skips an owner whose name is already final', () => {
+        expect(pendingOwnerUids(rows, new Set([UID_A]), {})).toEqual([UID_B]);
+    });
+
+    it('keeps asking about an owner who only has a fallback', () => {
+        // 🛑 codex r1/r2 P2. recomputeUserProfile is triggered BY the entry
+        // write, so the first read can miss a profile that exists a second
+        // later. Treating that first answer as settled left the member showing
+        // their bracket's name until the page was reloaded.
+        expect(pendingOwnerUids(rows, new Set(), { [UID_A]: 1 })).toEqual([UID_A, UID_B]);
+    });
+
+    it('gives up after MAX_PROFILE_ATTEMPTS', () => {
+        // The cap is the whole reason this is not a loop: a pool whose entries
+        // predate recomputeUserProfile has owners with no profile to find, and
+        // retrying those forever rebuilds the read storm this change removed.
+        expect(pendingOwnerUids(rows, new Set(), { [UID_A]: MAX_PROFILE_ATTEMPTS, [UID_B]: 1 })).toEqual([UID_B]);
+        expect(pendingOwnerUids(rows, new Set(), {
+            [UID_A]: MAX_PROFILE_ATTEMPTS,
+            [UID_B]: MAX_PROFILE_ATTEMPTS,
+        })).toEqual([]);
+    });
+
+    it('reads a profile at most MAX_PROFILE_ATTEMPTS times per owner', () => {
+        // Walk the loop the component runs: ask, count, ask again.
+        const attempts: Record<string, number> = {};
+        let reads = 0;
+        for (let i = 0; i < 20; i++) {
+            const pending = pendingOwnerUids(rows, new Set(), attempts);
+            if (pending.length === 0) break;
+            pending.forEach(uid => { attempts[uid] = (attempts[uid] ?? 0) + 1; reads++; });
+        }
+        expect(reads).toBe(2 * MAX_PROFILE_ATTEMPTS);
+    });
+
+    it('retries a new owner even after older ones gave up', () => {
+        // A member who joins later must not inherit an exhausted budget.
+        const attempts = { [UID_A]: MAX_PROFILE_ATTEMPTS };
+        expect(pendingOwnerUids(rows, new Set(), attempts)).toEqual([UID_B]);
     });
 });
 
