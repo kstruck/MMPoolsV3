@@ -129,17 +129,21 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
           <BarChart2 size={15} className="text-navy-700 dark:text-gold-400" /> Pick Distribution
         </h3>
-        {/* The toggle is a radio group, not two independent buttons: exactly one
-            scope is showing at a time, and a screen reader must be told which. */}
+        {/* TOGGLE BUTTONS (`aria-pressed`), deliberately NOT `role="radiogroup"`
+            with `role="radio"`. A radio group carries a keyboard contract — arrow
+            keys move between options and only one option is in the tab order —
+            and announcing that contract without implementing it is worse for a
+            screen-reader user than not claiming it: they press Right, nothing
+            happens, and the control appears broken. Two pressed-state buttons
+            state which scope is showing and behave exactly as they look. */}
         <div
-          role="radiogroup"
+          role="group"
           aria-label="Pick distribution scope"
           className="flex items-center gap-1 bg-page border border-line rounded-lg p-0.5"
         >
           <button
             type="button"
-            role="radio"
-            aria-checked={!isSite}
+            aria-pressed={!isSite}
             onClick={() => selectScope('pool')}
             className={tabClass(!isSite)}
           >
@@ -147,8 +151,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
           </button>
           <button
             type="button"
-            role="radio"
-            aria-checked={isSite}
+            aria-pressed={isSite}
             onClick={() => selectScope('site')}
             className={tabClass(isSite)}
           >

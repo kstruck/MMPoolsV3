@@ -113,7 +113,7 @@ describe('PickDistribution scope toggle', () => {
     deliverPool(projection(3, 1));
     deliverSite(projection(1, 3));   // deliberately the mirror image
 
-    expect(screen.getByRole('radio', { name: 'My Pool' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'My Pool' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByText('4 picks')).toBeTruthy();
     expect(screen.getByText('NE 75%')).toBeTruthy();
   });
@@ -123,13 +123,13 @@ describe('PickDistribution scope toggle', () => {
     deliverPool(projection(3, 1));
     deliverSite(projection(1, 3));
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
 
     // 🛑 THE DEFECT THIS PINS. Reading the pool map under the site scope would
     // still render "NE 75%" here and look entirely correct.
     expect(screen.getByText('NE 25%')).toBeTruthy();
     expect(screen.queryByText('NE 75%')).toBeNull();
-    expect(screen.getByRole('radio', { name: 'Site' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Site' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('subscribes site-wide with the pool type, season and seasonType — never a bare week', () => {
@@ -143,7 +143,7 @@ describe('PickDistribution scope toggle', () => {
     render(card());
     deliverPool(projection(3, 1));   // pool loaded, site NOT
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
 
     // 🛑 THE DEFECT THIS PINS. Before `useSiteConsensusState` carried `loaded`,
     // an un-delivered site snapshot was `{}` — indistinguishable from a week
@@ -157,7 +157,7 @@ describe('PickDistribution scope toggle', () => {
 
   it('says "No picks yet" once the site snapshot arrives empty', () => {
     render(card());
-    fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
     deliverSite({});
 
     expect(screen.getByText('No picks yet')).toBeTruthy();
@@ -166,7 +166,7 @@ describe('PickDistribution scope toggle', () => {
 
   it('drops a site row with no picks rather than rendering it as 0%', () => {
     render(card());
-    fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
     // The recompute writes a row with `awayPct: null` when a game has no picks.
     deliverSite({ g1: { gameId: 'g1', away: 0, home: 0, total: 0, awayPct: null, homePct: null } });
 
@@ -179,8 +179,8 @@ describe('PickDistribution scope toggle', () => {
     deliverPool(projection(3, 1));
     deliverSite(projection(1, 3));
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'My Pool' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'My Pool' }));
 
     // One subscription each, and neither torn down: a toggle is a render, not a
     // round-trip. If the effects were scope-dependent this would be 2+ and the
@@ -193,11 +193,11 @@ describe('PickDistribution scope toggle', () => {
 
   it('remembers the scope across a remount, and tolerates unreadable storage', () => {
     const { unmount } = render(card());
-    fireEvent.click(screen.getByRole('radio', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
     unmount();
 
     render(card());
-    expect(screen.getByRole('radio', { name: 'Site' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Site' }).getAttribute('aria-pressed')).toBe('true');
     cleanup();
 
     // Private mode / blocked storage throws on read. The default is not a failure
@@ -206,7 +206,7 @@ describe('PickDistribution scope toggle', () => {
       throw new Error('storage disabled');
     });
     render(card());
-    expect(screen.getByRole('radio', { name: 'My Pool' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'My Pool' }).getAttribute('aria-pressed')).toBe('true');
     getItem.mockRestore();
   });
 });
