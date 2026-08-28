@@ -395,13 +395,19 @@ worth knowing before it reads as breakage again.
 Every one of these is also in my final chat message, so you do not have to open
 this file to answer.
 
-**D1 — Merge order.** Recommended: **#618 → Coolify rebuild → #616 → #629 →
-#630 → #631 → #380.** They touch disjoint files, so any order works; this one is
-by value.
+**D1 — Merge order.** Recommended:
 
-⚠️ **If #630 merges, the lint baseline becomes 1872, not 1881.** #618 first because it is the block on the dues backfill; the
-rebuild next because it is owed for thirteen merges either way.
-*On "approve as recommended" I do nothing — merging is yours.*
+> **#618 → Coolify rebuild → #616 → #629 → #630 → #631 → #380 → #632 → #633**
+
+They touch disjoint files, so any order works; this one is by value. **#618
+first** because it is the block on the dues backfill, and **the rebuild next**
+because it is owed for thirteen merges either way. #632 and #633 last because
+they *describe* the others, so merging them last keeps the description accurate
+for longest.
+
+⚠️ **If #630 merges, the lint baseline for the next PR becomes 1872, not 1881.**
+
+*On "approve as recommended" I do nothing — every merge is yours.*
 
 **D2 — Close #582?** Recommended: **yes.** ~95% of it shipped as #568 and #578;
 the residual is #629 and the triage comment on #582 shows commit-by-commit where
