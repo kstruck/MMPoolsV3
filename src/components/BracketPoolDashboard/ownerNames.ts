@@ -142,6 +142,33 @@ export const nextRetryDelay = (
     return waits.length > 0 ? Math.min(...waits) : null;
 };
 
+/**
+ * Everything the dashboard remembers about owner names, scoped to ONE pool.
+ *
+ * 🛑 The scope is the point. `PoolRoute` renders the dashboard without a `key`,
+ * so navigating from `/pool/a` straight to `/pool/b` REUSES the component
+ * instance and every ref in it. An owner with no profile in the first pool
+ * would arrive at the second with their budget spent and their first pool's
+ * entry name still on screen — shown under the wrong bracket's label, with no
+ * read left to correct it (codex r4 P2).
+ */
+export interface OwnerNameCache {
+    poolId: string;
+    /** Owners whose name came from a profile, and is therefore final. */
+    resolved: Set<string>;
+    attempts: Record<string, OwnerProfileAttempt>;
+}
+
+/**
+ * The cache to use for `poolId`: the existing one if it belongs to that pool,
+ * otherwise an empty one. Identity is the signal — a caller that gets back a
+ * different object knows the pool changed and the name map must be dropped too.
+ */
+export const ownerNameCacheFor = (cache: OwnerNameCache | null, poolId: string): OwnerNameCache =>
+    cache && cache.poolId === poolId
+        ? cache
+        : { poolId, resolved: new Set<string>(), attempts: {} };
+
 /** A non-empty trimmed string, or null. Guards against `userName: ''` / `'   '`. */
 const usableName = (value: string | undefined): string | null => {
     if (typeof value !== 'string') return null;

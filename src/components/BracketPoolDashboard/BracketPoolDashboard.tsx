@@ -13,7 +13,7 @@ import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2,
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
-import { resolveOwnerNames, pendingOwnerUids, nextRetryDelay, type OwnerProfileAttempt } from './ownerNames';
+import { resolveOwnerNames, pendingOwnerUids, nextRetryDelay, ownerNameCacheFor, type OwnerNameCache } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
@@ -240,25 +240,34 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // triggered BY the entry write, so a snapshot can arrive before the profile
     // it causes, and the fallback name would then be frozen in for the life of
     // the mount (codex r1 P2). A name from a profile is final; anything else is
-    // retried on the next snapshot.
+    // retried.
+    //
     // A retry cannot wait for the next entries snapshot: the profile write does
     // not touch the entry, and an idle pool produces no further snapshot at all
     // (codex r2 P2). So an unresolved owner is re-read on a timer instead,
     // MAX_PROFILE_ATTEMPTS times — enough to win the race, bounded so that a
     // pool whose owners have no profile at all cannot loop.
-    const profileResolvedRef = React.useRef<Set<string>>(new Set());
-    const profileAttemptsRef = React.useRef<Record<string, OwnerProfileAttempt>>({});
+    //
+    // The cache is scoped to pool.id: PoolRoute renders this dashboard without a
+    // `key`, so /pool/a -> /pool/b reuses the instance and every ref in it
+    // (codex r4 P2).
+    const nameCacheRef = React.useRef<OwnerNameCache | null>(null);
     const [nameRetry, setNameRetry] = useState(0);
     useEffect(() => {
+        const cache = ownerNameCacheFor(nameCacheRef.current, pool.id);
+        if (cache !== nameCacheRef.current) {
+            nameCacheRef.current = cache;
+            setUserNames({}); // a different pool's names are not this pool's names
+        }
         if (entries.length === 0) return;
         const now = Date.now();
-        const pending = pendingOwnerUids(entries, profileResolvedRef.current, profileAttemptsRef.current, now);
+        const pending = pendingOwnerUids(entries, cache.resolved, cache.attempts, now);
 
         if (pending.length === 0) {
             // Either everyone has a final name, or someone is only waiting out
             // the interval — in which case wake up when it elapses. Nothing else
             // will: the profile write does not touch the entry.
-            const wait = nextRetryDelay(entries, profileResolvedRef.current, profileAttemptsRef.current, now);
+            const wait = nextRetryDelay(entries, cache.resolved, cache.attempts, now);
             if (wait === null) return;
             const waitTimer = setTimeout(() => setNameRetry(n => n + 1), wait);
             return () => clearTimeout(waitTimer);
@@ -268,14 +277,16 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         // read, and the cap has to bound READS. The interval above is what keeps
         // a burst of snapshots from spending the whole budget at once.
         pending.forEach(uid => {
-            profileAttemptsRef.current[uid] = { count: (profileAttemptsRef.current[uid]?.count ?? 0) + 1, lastAt: now };
+            cache.attempts[uid] = { count: (cache.attempts[uid]?.count ?? 0) + 1, lastAt: now };
         });
 
         let cancelled = false;
         resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid), pending)
             .then(({ names, resolvedFromProfile }) => {
-                if (cancelled) return;
-                resolvedFromProfile.forEach(uid => profileResolvedRef.current.add(uid));
+                // Not `nameCacheRef.current`: if the pool changed mid-flight this
+                // is the OLD pool's cache, and the new one must not inherit it.
+                if (cancelled || nameCacheRef.current !== cache) return;
+                resolvedFromProfile.forEach(uid => cache.resolved.add(uid));
                 // Merge: names resolved by an earlier snapshot are not re-read,
                 // so they are not in `names` and must not be dropped.
                 setUserNames(prev => ({ ...prev, ...names }));
@@ -289,7 +300,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             // StandingsTable already renders 'Unknown' for a missing name.
             .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
         return () => { cancelled = true; };
-    }, [entries, nameRetry]);
+    }, [entries, nameRetry, pool.id]);
 
     // Listen for master bracket print event
     useEffect(() => {

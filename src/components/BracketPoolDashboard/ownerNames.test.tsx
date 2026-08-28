@@ -49,6 +49,7 @@ import {
     ownerUidsOf,
     pendingOwnerUids,
     nextRetryDelay,
+    ownerNameCacheFor,
     MAX_PROFILE_ATTEMPTS,
     PROFILE_RETRY_MS,
     OWNER_NAME_FALLBACK,
@@ -306,6 +307,49 @@ describe('pendingOwnerUids / nextRetryDelay', () => {
         const attempts = { [UID_A]: { count: MAX_PROFILE_ATTEMPTS, lastAt: T0 } };
 
         expect(pendingOwnerUids(rows, new Set(), attempts, T0)).toEqual([UID_B]);
+    });
+});
+
+describe('ownerNameCacheFor', () => {
+    it('keeps the same cache while the pool is the same', () => {
+        const cache = ownerNameCacheFor(null, 'pool-1');
+        cache.resolved.add(UID_A);
+        cache.attempts[UID_B] = { count: 2, lastAt: 1 };
+
+        const again = ownerNameCacheFor(cache, 'pool-1');
+
+        expect(again).toBe(cache);
+        expect(again.resolved.has(UID_A)).toBe(true);
+        expect(again.attempts[UID_B].count).toBe(2);
+    });
+
+    it('starts empty for a different pool', () => {
+        // 🛑 codex r4 P2. PoolRoute renders the dashboard without a `key`, so
+        // /pool/a -> /pool/b reuses the component and every ref in it. An owner
+        // with no profile in the first pool would arrive at the second with
+        // their budget spent and the FIRST pool's entry name still showing,
+        // with no read left to correct it.
+        const first = ownerNameCacheFor(null, 'pool-1');
+        first.resolved.add(UID_A);
+        first.attempts[UID_A] = { count: MAX_PROFILE_ATTEMPTS, lastAt: 1 };
+
+        const second = ownerNameCacheFor(first, 'pool-2');
+
+        expect(second).not.toBe(first);
+        expect(second.poolId).toBe('pool-2');
+        expect([...second.resolved]).toEqual([]);
+        expect(second.attempts).toEqual({});
+        // ... and the same owner is asked about again, on a full budget.
+        expect(pendingOwnerUids([entry('e1', UID_A, 'Ada')], second.resolved, second.attempts, 0)).toEqual([UID_A]);
+    });
+
+    it('does not mutate the cache it replaces', () => {
+        const first = ownerNameCacheFor(null, 'pool-1');
+        first.resolved.add(UID_A);
+
+        ownerNameCacheFor(first, 'pool-2');
+
+        expect(first.resolved.has(UID_A)).toBe(true);
     });
 });
 
