@@ -3,6 +3,7 @@ import { Globe } from 'lucide-react';
 import type { GameState } from '../../types';
 import { DebouncedInput, DebouncedTextarea } from './DebouncedInputs';
 
+import { FieldLabel } from '../ui/Field';
 import { Switch } from '../ui/Switch';
 interface WizardStepBasicsProps {
     gameState: GameState;
@@ -47,7 +48,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Pool Name</label>
+                        <FieldLabel helpId="name">Pool Name</FieldLabel>
                         <DebouncedInput
                             value={gameState.name}
                             onChange={(val) => updateConfig({ name: val })}
@@ -57,7 +58,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
                     </div>
 
                     <div>
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">URL Slug</label>
+                        <FieldLabel helpId="urlSlug">URL Slug</FieldLabel>
                         <div className="relative">
                             <span className="absolute left-3.5 top-3 text-faint font-mono text-sm num">/</span>
                             <DebouncedInput
@@ -79,7 +80,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
                     </div>
 
                     <div className="md:col-span-1">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Pool Manager Name</label>
+                        <FieldLabel helpId="managerName">Pool Manager Name</FieldLabel>
                         <DebouncedInput
                             value={gameState.managerName || ''}
                             onChange={(val) => updateConfig({ managerName: val })}
@@ -88,7 +89,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
                         />
                     </div>
                     <div className="md:col-span-1">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Contact Email</label>
+                        <FieldLabel helpId="contactEmail">Contact Email</FieldLabel>
                         <DebouncedInput
                             value={gameState.contactEmail}
                             onChange={(val) => updateConfig({ contactEmail: val })}
@@ -97,7 +98,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
                         />
                     </div>
                     <div className="md:col-span-1">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Venmo Handle (@username)</label>
+                        <FieldLabel helpId="paymentHandles">Venmo Handle (@username)</FieldLabel>
                         <DebouncedInput
                             value={gameState.paymentHandles?.venmo || ''}
                             onChange={(val) => updateConfig({ paymentHandles: { ...gameState.paymentHandles, venmo: val } })}
@@ -106,7 +107,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
                         />
                     </div>
                     <div className="md:col-span-1">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Zelle (@username/phone)</label>
+                        <FieldLabel helpId="paymentHandles">Zelle (@username/phone)</FieldLabel>
                         <DebouncedInput
                             value={gameState.paymentHandles?.zelle || ''}
                             onChange={(val) => updateConfig({ paymentHandles: { ...gameState.paymentHandles, zelle: val } })}
@@ -115,7 +116,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
                         />
                     </div>
                     <div className="md:col-span-2">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Payment Instructions</label>
+                        <FieldLabel helpId="paymentInstructions">Payment Instructions</FieldLabel>
                         <DebouncedTextarea
                             value={gameState.paymentInstructions}
                             onChange={(val) => updateConfig({ paymentInstructions: val })}

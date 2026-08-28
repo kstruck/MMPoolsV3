@@ -23,9 +23,21 @@
 // schema paths, and everything in this list is STILL OUTSTANDING:
 //
 //   T5  `AdminPanel.tsx` and the rest of `admin/WizardStep*.tsx` converted to
-//       `FieldLabel` (K12); `WizardStepReminders.tsx`; DELETE the two dead
-//       legacy steps `WizardStepDetails.tsx` / `WizardStepSquaresDetails.tsx`,
-//       which K12 records as having no importers.
+//       `FieldLabel` (K12); `WizardStepReminders.tsx`.
+//       ✅ 2026-08-28: `admin/WizardStepBasics.tsx` is DONE — 7 labels wired,
+//          6 of them to topics that already existed, and it is in the T4 label
+//          guard's `MANAGER_SURFACES` list. `urlSlug` below is the one topic
+//          that had to be written.
+//       ✅ The two dead legacy steps `WizardStepDetails.tsx` /
+//          `WizardStepSquaresDetails.tsx` are already GONE — `find src -name`
+//          returns neither (checked 2026-08-28). K12 recorded them as having no
+//          importers; the deletion has since happened.
+//       ⚠️ STILL OUTSTANDING, and the blocker is CONTENT not markup:
+//          `WizardStepPayouts.tsx` and `WizardStepReminders.tsx` are Squares
+//          rule-variation, charity and reminder-timing fields with NO topics at
+//          all. Unlike the basics fields — where 13 of 14 ids already resolved
+//          for a SQUARES commissioner — those need copy written first, and
+//          where their topics live is a decision for the plan's author.
 //   T6  `BracketRulesPanel`'s `SCORING_SYSTEM_LABELS` moved into the registry;
 //       the rest of the bracket manager tab; `PropsWizard.tsx` and its other
 //       two child steps (`WizardStepGame`, `WizardStepReminders`);
@@ -33,10 +45,10 @@
 //       (`PlayoffSettingsModal`, `RankingForm`, `PlayoffResultsManager`); and
 //       the `PayoutGallery.tsx` delete-or-exempt decision.
 //
-// Neither ticket's "coverage green" bar is met by this file, and the T4 label
-// guard's `MANAGER_FILES` list — which its own comment says "T5–T7 add theirs
-// to this list as they land" — is still `NFLManagerView.tsx` alone. Anything
-// here reading "CLOSED BY T5/T6" is about an ALLOWLIST ROW, never the ticket.
+// Neither ticket's "coverage green" bar is met by this file. The T4 label guard
+// now lists TWO surfaces (`NFLManagerView.tsx` and `admin/WizardStepBasics.tsx`)
+// rather than one, which is T5's first file and not T5. Anything here reading
+// "CLOSED BY T5/T6" is about an ALLOWLIST ROW or ONE FILE, never the ticket.
 //
 // Written against `docs/help-voice.md` (K8). Every claim below was read out of
 // the source it describes:
@@ -165,6 +177,17 @@ const BONUS_TYPES: readonly PoolType[] = [
   'NFL_MARGIN',
 ];
 
+/**
+ * The pool types whose manager surface actually renders a slug control.
+ *
+ * SQUARES only. `AdminPanel.tsx` is the squares commissioner panel, and its
+ * Settings tab is the one place `gameState.urlSlug` is editable. `PropsWizard`
+ * has a slug input too, but it is a CREATE surface reached from the props
+ * dashboard rather than a manager field, and T6 owns it — a placement here
+ * would put a `?` on a page this topic is not written for.
+ */
+const SLUG_TYPES: readonly PoolType[] = ['SQUARES'];
+
 /** Branding is a control only a host ever meets. */
 const HOST_ONLY = ['commissioner'] as const;
 /** A prize split members read on the rules page too. */
@@ -185,6 +208,23 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     poolTypes: COLOURED_TYPES,
     audience: HOST_ONLY,
     related: ['branding.primaryColor', 'branding.secondaryColor', 'branding.logoUrl'],
+  },
+
+  // ---- T5: the legacy basics step's URL slug ------------------------------
+  {
+    id: 'urlSlug',
+    title: 'Pool web address',
+    short:
+      'The readable part of your pool’s link — /pool/your-slug. The Share button hands out this address, so changing it breaks the links you have already sent.',
+    long: [
+      'Lowercase letters, numbers and dashes only. Anything else you type is dropped as you go rather than rejected, so a space or a capital never appears in the field at all.',
+      '⚠️ Changing it breaks every link already shared with the old one. Nothing redirects the old address to the new one, and the Share button builds its link from this field whenever it is filled in — so the addresses you have handed out are exactly the ones that stop working. Set it once, before you invite anyone.',
+      'The "already taken" warning only checks the pools this app has loaded for you — the ones you own or manage. It is not a check against every pool on the site, so a name it accepts can still collide with somebody else’s.',
+      'Leave it blank and the pool is reached by its own id instead. That link is longer and not memorable, but it never changes.',
+    ].join('\n\n'),
+    poolTypes: SLUG_TYPES,
+    audience: HOST_ONLY,
+    related: ['name'],
   },
 
   // ---- T6: the bonus rows on the payouts editor ---------------------------
@@ -224,6 +264,7 @@ export const MANAGER_FIELD_PLACEMENTS: readonly HelpPlacement[] = [
   // NOT the create-wizard branding steps: the unified wizard offers only the
   // primary and secondary colours, and a `?` there would explain a control the
   // reader cannot see.
+  { topic: 'urlSlug', page: 'admin.squares.settings', section: 'basics', order: 0 },
   { topic: 'branding.backgroundColor', page: 'admin.squares.settings', section: 'branding', order: 0 },
   { topic: 'branding.backgroundColor', page: 'pool.props.admin', section: 'branding', order: 0 },
 

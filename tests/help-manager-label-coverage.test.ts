@@ -27,8 +27,49 @@ import { stripComments } from './help-ui-coverage.test';
 
 const root = resolve(__dirname, '..');
 
-/** The files T4 owns. T5–T7 add theirs to this list as they land. */
-const MANAGER_FILES = ['src/components/NFLPoolDashboard/NFLManagerView.tsx'];
+/**
+ * The manager surfaces this guard covers, WITH THE SCOPE EACH ONE IS READ IN.
+ *
+ * It was a bare string list while T4 owned the only file. T5's first file broke
+ * two assumptions that list had baked in, so it is a descriptor now:
+ *
+ *   `poolTypes` — the helpId-resolution test used to hardcode the three NFL
+ *   types. `WizardStepBasics` is the SQUARES commissioner panel, and a topic
+ *   like `costPerSquare` resolves for SQUARES and not for NFL — so a single
+ *   hardcoded scope would have let a real typo through on one file while
+ *   failing a correct id on the other.
+ *
+ *   `minLabels` — the "the grep is live" floor was a flat 20, which is right
+ *   for a 33-label form and would fail a 7-label wizard step for no reason.
+ *   Per-file, it still catches the failure it exists for: deleting every label
+ *   in a file would otherwise pass the zero-raw-label assertion.
+ *
+ * T6–T7 add theirs the same way.
+ */
+interface ManagerSurface {
+  file: string;
+  /** Pool types a commissioner could be in when this file renders. */
+  poolTypes: readonly string[];
+  /** Floor for the live-grep check — a little under the real count. */
+  minLabels: number;
+}
+
+const MANAGER_SURFACES: readonly ManagerSurface[] = [
+  {
+    file: 'src/components/NFLPoolDashboard/NFLManagerView.tsx',
+    poolTypes: ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'],
+    minLabels: 20,
+  },
+  {
+    // T5, first slice: the legacy squares admin wizard's Basics step, reached
+    // from AdminPanel's Settings tab (`activeTab === 'settings'`, wizard step 1).
+    file: 'src/components/admin/WizardStepBasics.tsx',
+    poolTypes: ['SQUARES'],
+    minLabels: 6,
+  },
+];
+
+const MANAGER_FILES = MANAGER_SURFACES.map((s) => s.file);
 
 const codeOf = (file: string) => stripComments(readFileSync(resolve(root, file), 'utf8'));
 
@@ -57,10 +98,13 @@ describe('T4 — the NFL manager form has no un-helped label', () => {
     expect(codeOf(file).match(/<label\b/g) ?? []).toEqual([]);
   });
 
-  it.each(MANAGER_FILES)('%s renders at least one FieldLabel — the grep is live', file => {
-    // Without this, deleting every label in the file would pass the test above.
-    expect(fieldLabels(codeOf(file)).length).toBeGreaterThan(20);
-  });
+  it.each(MANAGER_SURFACES.map((s) => [s.file, s.minLabels] as const))(
+    '%s renders at least %d FieldLabels — the grep is live',
+    (file, minLabels) => {
+      // Without this, deleting every label in the file would pass the test above.
+      expect(fieldLabels(codeOf(file)).length).toBeGreaterThanOrEqual(minLabels);
+    },
+  );
 
   it.each(MANAGER_FILES)('every FieldLabel in %s has a topic or a written reason', file => {
     const unaccounted = fieldLabels(codeOf(file))
@@ -70,24 +114,37 @@ describe('T4 — the NFL manager form has no un-helped label', () => {
     expect(unaccounted).toEqual([]);
   });
 
-  it('every helpId on a manager label resolves to a real topic', () => {
+  it('every helpId on a manager label resolves to a real topic IN ITS OWN SCOPE', () => {
     // `HelpTip` returns null on an unknown id rather than throwing — so content
     // can land ticket by ticket — which is exactly why a typo would otherwise
     // be invisible. `resolveTopic` filters by pool type and audience, so an id
-    // is "real" here if it resolves for SOME NFL commissioner scope.
-    const NFL: readonly string[] = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
-    const missing = MANAGER_FILES.flatMap((file) =>
-      fieldLabels(codeOf(file))
+    // is "real" here only if it resolves for a commissioner of a pool type THIS
+    // FILE actually renders for. Checking against a single hardcoded scope would
+    // pass a squares id on the NFL form and vice versa.
+    const missing = MANAGER_SURFACES.flatMap((surface) =>
+      fieldLabels(codeOf(surface.file))
         .map((l) => l.helpId)
         .filter((id): id is string => !!id)
         .filter(
           (id) =>
-            !POOL_TYPES.filter((t) => NFL.includes(t)).some((poolType) =>
+            !POOL_TYPES.filter((t) => surface.poolTypes.includes(t)).some((poolType) =>
               helpRegistry.resolveTopic({ poolType, audience: 'commissioner' }, id),
             ),
-        ),
+        )
+        .map((id) => `${surface.file}: ${id}`),
     );
     expect([...new Set(missing)]).toEqual([]);
+  });
+
+  it('every surface names pool types that exist', () => {
+    // A typo in `poolTypes` would silently empty the filter above, and an empty
+    // `.some()` is false for every id — so the resolution test would fail with a
+    // confusing message, or worse, a future `.every()` rewrite would pass
+    // vacuously. Pin the descriptor itself.
+    for (const surface of MANAGER_SURFACES) {
+      const unknown = surface.poolTypes.filter((t) => !POOL_TYPES.includes(t as never));
+      expect(unknown, `${surface.file} names pool types that do not exist`).toEqual([]);
+    }
   });
 
   it('no allowlist row is stale', () => {
