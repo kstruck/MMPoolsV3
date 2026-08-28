@@ -44,7 +44,16 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     };
 });
 
-import { resolveOwnerNames, ownerUidsOf, pendingOwnerUids, MAX_PROFILE_ATTEMPTS, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
+import {
+    resolveOwnerNames,
+    ownerUidsOf,
+    pendingOwnerUids,
+    nextRetryDelay,
+    MAX_PROFILE_ATTEMPTS,
+    PROFILE_RETRY_MS,
+    OWNER_NAME_FALLBACK,
+    type OwnerNameProfile,
+} from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { StandingsTable } from './StandingsTable';
 import type { BracketEntry, BracketPool, Tournament } from '../../types';
@@ -203,48 +212,100 @@ describe('ownerUidsOf', () => {
     });
 });
 
-describe('pendingOwnerUids', () => {
+describe('pendingOwnerUids / nextRetryDelay', () => {
     const rows = [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')];
+    const T0 = 1_700_000_000_000;
+    const RETRY = PROFILE_RETRY_MS;
 
     it('skips an owner whose name is already final', () => {
-        expect(pendingOwnerUids(rows, new Set([UID_A]), {})).toEqual([UID_B]);
+        expect(pendingOwnerUids(rows, new Set([UID_A]), {}, T0)).toEqual([UID_B]);
     });
 
-    it('keeps asking about an owner who only has a fallback', () => {
+    it('asks about an owner nobody has read yet, immediately', () => {
+        expect(pendingOwnerUids(rows, new Set(), {}, T0)).toEqual([UID_A, UID_B]);
+        expect(nextRetryDelay(rows, new Set(), {}, T0)).toBe(0);
+    });
+
+    it('keeps asking about an owner who only has a fallback, once the interval passes', () => {
         // 🛑 codex r1/r2 P2. recomputeUserProfile is triggered BY the entry
         // write, so the first read can miss a profile that exists a second
         // later. Treating that first answer as settled left the member showing
         // their bracket's name until the page was reloaded.
-        expect(pendingOwnerUids(rows, new Set(), { [UID_A]: 1 })).toEqual([UID_A, UID_B]);
+        const attempts = { [UID_A]: { count: 1, lastAt: T0 } };
+
+        expect(pendingOwnerUids(rows, new Set([UID_B]), attempts, T0 + RETRY)).toEqual([UID_A]);
     });
 
-    it('gives up after MAX_PROFILE_ATTEMPTS', () => {
-        // The cap is the whole reason this is not a loop: a pool whose entries
-        // predate recomputeUserProfile has owners with no profile to find, and
-        // retrying those forever rebuilds the read storm this change removed.
-        expect(pendingOwnerUids(rows, new Set(), { [UID_A]: MAX_PROFILE_ATTEMPTS, [UID_B]: 1 })).toEqual([UID_B]);
-        expect(pendingOwnerUids(rows, new Set(), {
-            [UID_A]: MAX_PROFILE_ATTEMPTS,
-            [UID_B]: MAX_PROFILE_ATTEMPTS,
-        })).toEqual([]);
+    it('will not re-read the same profile inside the interval', () => {
+        // 🛑 codex r3 P2. Without this, four entries snapshots in the same
+        // second — ordinary during live scoring — spend the whole budget before
+        // the Cloud Function has written anything.
+        const attempts = { [UID_A]: { count: 1, lastAt: T0 } };
+
+        expect(pendingOwnerUids(rows, new Set([UID_B]), attempts, T0 + 1)).toEqual([]);
+        expect(nextRetryDelay(rows, new Set([UID_B]), attempts, T0 + 1)).toBe(RETRY - 1);
     });
 
-    it('reads a profile at most MAX_PROFILE_ATTEMPTS times per owner', () => {
-        // Walk the loop the component runs: ask, count, ask again.
-        const attempts: Record<string, number> = {};
+    it('a burst of snapshots costs ONE read, not the whole budget', () => {
+        // The exact scenario codex r3 described, walked through the loop the
+        // component runs: 12 snapshots inside one second.
+        const attempts: Record<string, { count: number; lastAt: number }> = {};
         let reads = 0;
-        for (let i = 0; i < 20; i++) {
-            const pending = pendingOwnerUids(rows, new Set(), attempts);
-            if (pending.length === 0) break;
-            pending.forEach(uid => { attempts[uid] = (attempts[uid] ?? 0) + 1; reads++; });
+        for (let i = 0; i < 12; i++) {
+            const now = T0 + i * 50;
+            pendingOwnerUids(rows, new Set(), attempts, now).forEach(uid => {
+                attempts[uid] = { count: (attempts[uid]?.count ?? 0) + 1, lastAt: now };
+                reads++;
+            });
         }
-        expect(reads).toBe(2 * MAX_PROFILE_ATTEMPTS);
+
+        expect(reads).toBe(2); // one per owner
+        expect(attempts[UID_A].count).toBe(1);
+        // And the budget is intact for the retries that actually matter.
+        expect(pendingOwnerUids(rows, new Set(), attempts, T0 + RETRY)).toEqual([UID_A, UID_B]);
     });
 
-    it('retries a new owner even after older ones gave up', () => {
-        // A member who joins later must not inherit an exhausted budget.
-        const attempts = { [UID_A]: MAX_PROFILE_ATTEMPTS };
-        expect(pendingOwnerUids(rows, new Set(), attempts)).toEqual([UID_B]);
+    it('gives up after MAX_PROFILE_ATTEMPTS, however long it waits', () => {
+        // The cap is the whole reason this is not a loop: a pool whose entries
+        // predate recomputeUserProfile has owners with no profile to find.
+        const attempts = {
+            [UID_A]: { count: MAX_PROFILE_ATTEMPTS, lastAt: T0 },
+            [UID_B]: { count: 1, lastAt: T0 },
+        };
+
+        expect(pendingOwnerUids(rows, new Set(), attempts, T0 + RETRY * 100)).toEqual([UID_B]);
+        expect(nextRetryDelay(rows, new Set(), { ...attempts, [UID_B]: { count: MAX_PROFILE_ATTEMPTS, lastAt: T0 } }, T0)).toBeNull();
+    });
+
+    it('reads a profile at most MAX_PROFILE_ATTEMPTS times, then stops waking up', () => {
+        // Walk the real loop with a clock: ask, count, sleep the delay it asks
+        // for, repeat. It must terminate.
+        const attempts: Record<string, { count: number; lastAt: number }> = {};
+        let now = T0;
+        let reads = 0;
+        for (let i = 0; i < 50; i++) {
+            pendingOwnerUids(rows, new Set(), attempts, now).forEach(uid => {
+                attempts[uid] = { count: (attempts[uid]?.count ?? 0) + 1, lastAt: now };
+                reads++;
+            });
+            const wait = nextRetryDelay(rows, new Set(), attempts, now);
+            if (wait === null) break;
+            now += wait;
+        }
+
+        expect(reads).toBe(2 * MAX_PROFILE_ATTEMPTS);
+        expect(nextRetryDelay(rows, new Set(), attempts, now)).toBeNull();
+    });
+
+    it('stops waking up entirely once every name is final', () => {
+        expect(nextRetryDelay(rows, new Set([UID_A, UID_B]), {}, T0)).toBeNull();
+    });
+
+    it('gives a newly joined owner their own budget', () => {
+        // A member who joins later must not inherit an exhausted one.
+        const attempts = { [UID_A]: { count: MAX_PROFILE_ATTEMPTS, lastAt: T0 } };
+
+        expect(pendingOwnerUids(rows, new Set(), attempts, T0)).toEqual([UID_B]);
     });
 });
 

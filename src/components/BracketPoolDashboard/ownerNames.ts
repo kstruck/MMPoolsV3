@@ -68,26 +68,79 @@ export const ownerUidsOf = (entries: readonly OwnerNameEntry[]): string[] =>
 export const MAX_PROFILE_ATTEMPTS = 4;
 
 /**
- * How long to wait before re-reading a profile that was not there yet. Long
- * enough that a Cloud Function trigger has time to write it, short enough that
- * a member watching the standings sees the real name rather than a reload.
+ * The minimum gap between two reads of the SAME profile — and so also how long
+ * the dashboard waits before trying again. Long enough that a Cloud Function
+ * trigger has time to write the doc, short enough that a member watching the
+ * standings sees the real name without reloading.
  */
 export const PROFILE_RETRY_MS = 10_000;
 
+/** What one owner's profile reads have cost so far, in this mount. */
+export interface OwnerProfileAttempt {
+    count: number;
+    /** `Date.now()` of the most recent read. */
+    lastAt: number;
+}
+
+export type OwnerProfileAttempts = Readonly<Record<string, OwnerProfileAttempt>>;
+
+interface RetryPolicy {
+    maxAttempts?: number;
+    /** Minimum gap between two reads of the SAME profile. */
+    minIntervalMs?: number;
+}
+
 /**
- * The owners still worth a profile read: no FINAL name yet, and not already
- * asked about `maxAttempts` times.
+ * The owners worth a profile read RIGHT NOW: no final name yet, budget left,
+ * and not read again inside `minIntervalMs`.
  *
- * Pure so the retry policy is testable without a rendered dashboard — the
- * component keeps `resolved`/`attempts` in refs and does nothing else.
+ * 🛑 The interval is what makes the budget a budget. Without it, four entries
+ * snapshots in the same second — ordinary during live scoring — spend all four
+ * attempts before the Cloud Function has written anything, and the fallback
+ * name then stands until a reload (codex r3 P2). Attempts are meant to be
+ * spread across the window, not raced through it.
+ *
+ * Pure so the policy is testable without a rendered dashboard: the component
+ * keeps `resolved`/`attempts` in refs and does nothing else.
  */
 export const pendingOwnerUids = (
     entries: readonly OwnerNameEntry[],
     resolved: ReadonlySet<string>,
-    attempts: Readonly<Record<string, number>>,
-    maxAttempts: number = MAX_PROFILE_ATTEMPTS
+    attempts: OwnerProfileAttempts,
+    now: number,
+    { maxAttempts = MAX_PROFILE_ATTEMPTS, minIntervalMs = PROFILE_RETRY_MS }: RetryPolicy = {}
 ): string[] =>
-    ownerUidsOf(entries).filter(uid => !resolved.has(uid) && (attempts[uid] ?? 0) < maxAttempts);
+    ownerUidsOf(entries).filter(uid => {
+        if (resolved.has(uid)) return false;
+        const attempt = attempts[uid];
+        if (!attempt) return true;
+        if (attempt.count >= maxAttempts) return false;
+        return now - attempt.lastAt >= minIntervalMs;
+    });
+
+/**
+ * How long until some owner becomes eligible again, or null if none ever will
+ * (everyone is final, or every budget is spent).
+ *
+ * The caller needs this because nothing else will wake it: the profile write
+ * does not touch the entry, so it produces no entries snapshot, and an idle
+ * pool produces none either (codex r2 P2).
+ */
+export const nextRetryDelay = (
+    entries: readonly OwnerNameEntry[],
+    resolved: ReadonlySet<string>,
+    attempts: OwnerProfileAttempts,
+    now: number,
+    { maxAttempts = MAX_PROFILE_ATTEMPTS, minIntervalMs = PROFILE_RETRY_MS }: RetryPolicy = {}
+): number | null => {
+    const waits = ownerUidsOf(entries)
+        .filter(uid => !resolved.has(uid) && (attempts[uid]?.count ?? 0) < maxAttempts)
+        .map(uid => {
+            const attempt = attempts[uid];
+            return attempt ? Math.max(0, attempt.lastAt + minIntervalMs - now) : 0;
+        });
+    return waits.length > 0 ? Math.min(...waits) : null;
+};
 
 /** A non-empty trimmed string, or null. Guards against `userName: ''` / `'   '`. */
 const usableName = (value: string | undefined): string | null => {

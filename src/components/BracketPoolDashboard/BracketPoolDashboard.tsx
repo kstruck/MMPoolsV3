@@ -13,7 +13,7 @@ import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2,
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
-import { resolveOwnerNames, pendingOwnerUids, PROFILE_RETRY_MS } from './ownerNames';
+import { resolveOwnerNames, pendingOwnerUids, nextRetryDelay, type OwnerProfileAttempt } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
@@ -247,18 +247,31 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // MAX_PROFILE_ATTEMPTS times — enough to win the race, bounded so that a
     // pool whose owners have no profile at all cannot loop.
     const profileResolvedRef = React.useRef<Set<string>>(new Set());
-    const profileAttemptsRef = React.useRef<Record<string, number>>({});
+    const profileAttemptsRef = React.useRef<Record<string, OwnerProfileAttempt>>({});
     const [nameRetry, setNameRetry] = useState(0);
     useEffect(() => {
         if (entries.length === 0) return;
-        const pending = pendingOwnerUids(entries, profileResolvedRef.current, profileAttemptsRef.current);
-        if (pending.length === 0) return;
-        // Counted before the read, not after: an attempt that is abandoned still
-        // cost a read, and the cap has to bound reads rather than resolutions.
-        pending.forEach(uid => { profileAttemptsRef.current[uid] = (profileAttemptsRef.current[uid] ?? 0) + 1; });
+        const now = Date.now();
+        const pending = pendingOwnerUids(entries, profileResolvedRef.current, profileAttemptsRef.current, now);
+
+        if (pending.length === 0) {
+            // Either everyone has a final name, or someone is only waiting out
+            // the interval — in which case wake up when it elapses. Nothing else
+            // will: the profile write does not touch the entry.
+            const wait = nextRetryDelay(entries, profileResolvedRef.current, profileAttemptsRef.current, now);
+            if (wait === null) return;
+            const waitTimer = setTimeout(() => setNameRetry(n => n + 1), wait);
+            return () => clearTimeout(waitTimer);
+        }
+
+        // Counted before the read, not after: an abandoned attempt still cost a
+        // read, and the cap has to bound READS. The interval above is what keeps
+        // a burst of snapshots from spending the whole budget at once.
+        pending.forEach(uid => {
+            profileAttemptsRef.current[uid] = { count: (profileAttemptsRef.current[uid]?.count ?? 0) + 1, lastAt: now };
+        });
 
         let cancelled = false;
-        let retryTimer: ReturnType<typeof setTimeout> | undefined;
         resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid), pending)
             .then(({ names, resolvedFromProfile }) => {
                 if (cancelled) return;
@@ -266,18 +279,16 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 // Merge: names resolved by an earlier snapshot are not re-read,
                 // so they are not in `names` and must not be dropped.
                 setUserNames(prev => ({ ...prev, ...names }));
-                if (resolvedFromProfile.length < pending.length) {
-                    retryTimer = setTimeout(() => setNameRetry(n => n + 1), PROFILE_RETRY_MS);
-                }
+                // Someone is still on a fallback. Re-enter so the branch above
+                // schedules the wait; this terminates because every re-entry
+                // spends one of that owner's attempts.
+                if (resolvedFromProfile.length < pending.length) setNameRetry(n => n + 1);
             })
             // resolveOwnerNames swallows per-uid failures by contract, so this
             // only fires on a real bug. Log it rather than dropping it silently;
             // StandingsTable already renders 'Unknown' for a missing name.
             .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
-        return () => {
-            cancelled = true;
-            if (retryTimer) clearTimeout(retryTimer);
-        };
+        return () => { cancelled = true; };
     }, [entries, nameRetry]);
 
     // Listen for master bracket print event
