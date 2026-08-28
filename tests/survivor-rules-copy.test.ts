@@ -10,6 +10,8 @@ import {
   autoSurviveRuleCopy,
   survivorRebuyRuleCopy,
   survivorRebuyJoinCopy,
+  rebuyDeadlinePassed,
+  rebuyAvailabilityCopy,
 } from '../src/utils/survivorRules';
 import { survivorCreateInputSchema } from '@shared/schemas';
 import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES, effectiveTieCountsAs } from '@shared/survivorReuse';
@@ -328,5 +330,65 @@ describe('survivorRebuyRuleCopy / survivorRebuyJoinCopy — "through", never "be
     const seen: number[] = [];
     survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: 7 }), (w) => { seen.push(w); return `Week ${w}`; });
     expect(seen).toEqual([7]);
+  });
+});
+
+/**
+ * THE PICK SHEET'S GATE IS THE SERVER'S GATE (codex round 2).
+ *
+ * `SurvivorPickEntry` read the cutoff as `settings.rebuyDeadlineWeek ?? 4` — a
+ * FOURTH meaning for the absent value, on top of the three the copy already
+ * had to reconcile. On a pool with buy-backs allowed and nothing stored, the
+ * callable accepts a rebuy in any week while that default hid the button from
+ * week 5 on. Copy saying "all season" beside a button that is gone is the same
+ * class of defect this PR exists to fix.
+ *
+ * The predicate is asserted to agree with the server's comparison cell by cell.
+ */
+describe('rebuyDeadlinePassed — the pick sheet cannot be narrower than the callable', () => {
+  /** `functions/src/nflPools.ts:1074`, verbatim. */
+  const serverRefuses = (week: number, rebuyDeadlineWeek: unknown) =>
+    week > (rebuyDeadlineWeek as number);
+
+  it('the server comparison being mirrored is still the one in the source', () => {
+    const rebuy = readFileSync(resolve(__dirname, '..', 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('if (week > settings.rebuyDeadlineWeek) {');
+  });
+
+  it('agrees with the server on every cutoff shape, in every week', () => {
+    const deadlines = [undefined, null, 0, 1, 4, 18, -2, Number.NaN, '4', 'junk', ''];
+    for (const rebuyDeadlineWeek of deadlines) {
+      for (const week of [1, 2, 4, 5, 18]) {
+        expect(
+          rebuyDeadlinePassed(week, { rebuyDeadlineWeek }),
+          `week ${week} vs ${String(rebuyDeadlineWeek)}`,
+        ).toBe(serverRefuses(week, rebuyDeadlineWeek));
+      }
+    }
+  });
+
+  it('an absent cutoff refuses nothing — the case the old `?? 4` got wrong', () => {
+    expect(rebuyDeadlinePassed(5, {})).toBe(false);
+    expect(rebuyDeadlinePassed(18, undefined)).toBe(false);
+    // ...and a stored 4 still does close at week 5, so the gate is not inert.
+    expect(rebuyDeadlinePassed(5, { rebuyDeadlineWeek: 4 })).toBe(true);
+    expect(rebuyDeadlinePassed(4, { rebuyDeadlineWeek: 4 })).toBe(false);
+  });
+
+  it('the pick sheet no longer carries its own default', () => {
+    const src = readFileSync(
+      resolve(__dirname, '..', 'src/components/NFLPoolDashboard/SurvivorPickEntry.tsx'),
+      'utf8',
+    );
+    expect(src).not.toMatch(/rebuyDeadlineWeek\s*\?\?\s*\d/);
+    expect(src).toContain('rebuyDeadlinePassed(week, { rebuyDeadlineWeek })');
+  });
+
+  it('and its availability line says the same thing the gate does', () => {
+    const label = (w: number) => `Week ${w}`;
+    expect(rebuyAvailabilityCopy({}, label)).toContain('all season');
+    expect(rebuyAvailabilityCopy({ rebuyDeadlineWeek: 4 }, label)).toBe('Available through Week 4.');
+    expect(rebuyAvailabilityCopy({ rebuyDeadlineWeek: 0 }, label)).toMatch(/none can be taken/);
+    expect(rebuyAvailabilityCopy({ rebuyDeadlineWeek: 0 }, label)).not.toMatch(/season start/);
   });
 });

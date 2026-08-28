@@ -102,6 +102,33 @@ function rebuyWindow(rebuyDeadlineWeek: unknown): RebuyWindow {
   return { kind: 'THROUGH', week };
 }
 
+/**
+ * The callable's own refusal, mirrored — `functions/src/nflPools.ts:1074`.
+ *
+ * `SurvivorPickEntry` used to read the cutoff as `settings.rebuyDeadlineWeek ?? 4`,
+ * a FOURTH meaning for the absent value: it hid the buy-back button from week 5
+ * on a pool the server would have accepted all season (codex r2). The gate is
+ * the server's; this is the same comparison, and `Number()` reproduces the
+ * ToNumber the relational operator applies on both sides.
+ */
+export function rebuyDeadlinePassed(
+  week: number,
+  settings: { rebuyDeadlineWeek?: unknown } | undefined,
+): boolean {
+  return week > Number(settings?.rebuyDeadlineWeek);
+}
+
+/** The pick-sheet line: how long buy-backs stay available. */
+export function rebuyAvailabilityCopy(
+  settings: { rebuyDeadlineWeek?: unknown } | undefined,
+  labelForWeek: (week: number) => string,
+): string {
+  const window = rebuyWindow(settings?.rebuyDeadlineWeek);
+  if (window.kind === 'NO_CUTOFF') return 'Available all season — no cutoff week is set.';
+  if (window.kind === 'CLOSED') return 'The cutoff week is set before week 1, so none can be taken.';
+  return `Available through ${labelForWeek(window.week)}.`;
+}
+
 type RebuySettings = {
   maxRebuys?: unknown;
   rebuyDeadlineWeek?: unknown;

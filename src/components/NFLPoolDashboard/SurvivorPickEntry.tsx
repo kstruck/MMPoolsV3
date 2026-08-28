@@ -17,7 +17,7 @@ import { TeamPickButton } from './pickSheet/TeamPickButton';
 import { survivorOutcome, pickOutcomeCardClass, pickOutcomeLabel } from './pickSheet/pickOutcome';
 import { StickySaveBar } from './pickSheet/StickySaveBar';
 import { useSiteConsensus } from './pickSheet/useSiteConsensus';
-import { survivorModeRulesCopy } from '../../utils/survivorRules';
+import { survivorModeRulesCopy, rebuyDeadlinePassed, rebuyAvailabilityCopy } from '../../utils/survivorRules';
 import {
   blockedTeamsFor,
   countTeamUses,
@@ -76,7 +76,9 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const settings = (pool as any).settings || {};
   const maxStrikes = settings.maxStrikes ?? 0;
   const maxRebuys = settings.maxRebuys ?? 0;
-  const rebuyDeadlineWeek = settings.rebuyDeadlineWeek ?? 4;
+  // RAW, no client default — `rebuyDeadlinePassed` mirrors the callable's own
+  // comparison, and a `?? 4` here was a fourth meaning for the absent value.
+  const rebuyDeadlineWeek: unknown = settings.rebuyDeadlineWeek;
   const rebuyCost = settings.rebuyCost ?? settings.entryFee ?? 0;
   const pickLosersMode = settings.pickLosersMode ?? false;
   const maxTeamUses = effectiveMaxTeamUses(settings);
@@ -193,7 +195,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
   const canRebuy = useMemo(() => {
     if (!entry) return false;
     if (entry.status !== 'ELIMINATED') return false;
-    if (week > rebuyDeadlineWeek) return false;
+    // The SERVER's comparison, not a client default: `?? 4` here hid the
+    // button from week 5 on a pool `executeSurvivorRebuyInternal` would have
+    // accepted all season (codex r2 on this PR).
+    if (rebuyDeadlinePassed(week, { rebuyDeadlineWeek })) return false;
     return (entry.rebuysUsed ?? 0) < maxRebuys;
   }, [entry, week, rebuyDeadlineWeek, maxRebuys]);
 
@@ -269,7 +274,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
       message: (
         <>
           <p>This restores your ALIVE status and adds <strong>${rebuyCost}</strong> to what you owe the commissioner.</p>
-          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. Available through {rebuyDeadlineWeek >= 1 ? nflWeekLabel(poolSeasonType(pool), rebuyDeadlineWeek) : 'season start'}.</p>
+          <p className="mt-2 text-muted num">Rebuys used: {(entry?.rebuysUsed ?? 0)} of {maxRebuys}. {rebuyAvailabilityCopy({ rebuyDeadlineWeek }, (w) => nflWeekLabel(poolSeasonType(pool), w))}</p>
         </>
       ),
       confirmLabel: `Rebuy — $${rebuyCost}`,
