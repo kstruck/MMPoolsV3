@@ -18,10 +18,11 @@
  * `@testing-library/jest-dom` is not installed in this repo (see
  * overlayRoot.test.tsx), so classes and attributes are read directly.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { StickySaveBar } from '../components/NFLPoolDashboard/pickSheet/StickySaveBar';
 import { pickemDraftHint, PICKEM_DRAFT_HINT } from '../components/NFLPoolDashboard/pickSheet/draftHint';
+import { saveDraft, loadDraft, clearDraft, flushDrafts, isDraftStorageAvailable, __resetDraftStorageProbe } from '../utils/draftStore';
 
 const base = {
   dirty: true,
@@ -95,8 +96,16 @@ describe('pickemDraftHint — the caller-side conditions', () => {
   // The SHIPPED helper (`pickSheet/draftHint`), the one `PickemPickEntry` calls.
   // It was extracted from the sheet's JSX precisely so these two conditions are
   // executable rather than only asserted in a comment.
-  it('is present on an open week', () => {
-    expect(pickemDraftHint(false)).toBe(HINT);
+  it('is present on an open week when storage works', () => {
+    expect(pickemDraftHint(false, true)).toBe(HINT);
+  });
+
+  it('is absent when the browser will not keep the draft', () => {
+    // 🛑 THE DEFECT THIS PINS (codex r1 P2). `saveDraft` catches its own write
+    // failure, so private mode and blocked site data produce no error and no
+    // draft — and the member most likely to be reassured by this sentence is
+    // exactly the one whose picks are not being kept.
+    expect(pickemDraftHint(false, false)).toBeUndefined();
   });
 
   it('says the draft is browser-local, never that it is saved to the pool', () => {
@@ -112,6 +121,84 @@ describe('pickemDraftHint — the caller-side conditions', () => {
     // 🛑 THE DEFECT THIS PINS. `saveDraft` is guarded by `if (!dirtyRef.current
     // || isWeekLocked) return;` in PickemPickEntry, so after lock nothing is
     // being kept and the sentence would be a false promise.
-    expect(pickemDraftHint(true)).toBeUndefined();
+    expect(pickemDraftHint(true, true)).toBeUndefined();
+  });
+});
+
+describe('draftStore — the persistence the hint promises', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetDraftStorageProbe();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    __resetDraftStorageProbe();
+  });
+
+  it('reports storage unavailable when a WRITE throws, not merely when the object is missing', () => {
+    // 🛑 THE DEFECT THIS PINS. Safari private mode exposes a `localStorage`
+    // object that exists and throws on `setItem`, so a presence check passes
+    // there and the probe must be a real write.
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    expect(isDraftStorageAvailable()).toBe(false);
+    setItem.mockRestore();
+    __resetDraftStorageProbe();
+    expect(isDraftStorageAvailable()).toBe(true);
+  });
+
+  it('leaves no probe key behind', () => {
+    expect(isDraftStorageAvailable()).toBe(true);
+    expect(localStorage.getItem('draft:__probe__')).toBeNull();
+  });
+
+  it('flushes a debounced draft on the way out — the 500ms window loses nothing', () => {
+    vi.useFakeTimers();
+    try {
+      saveDraft('k', { picks: { g1: 'NE' } });
+      // Not yet written: this is the window a member closing the tab fell into.
+      expect(loadDraft('k')).toBeNull();
+      flushDrafts();
+      expect(loadDraft<{ picks: Record<string, string> }>('k')).toEqual({ picks: { g1: 'NE' } });
+      // 🛑 And the cancelled timer must not fire a second write afterwards.
+      vi.advanceTimersByTime(1000);
+      expect(loadDraft<{ picks: Record<string, string> }>('k')).toEqual({ picks: { g1: 'NE' } });
+    } finally {
+      vi.useRealTimers();
+      clearDraft('k');
+    }
+  });
+
+  it('flushes when the page is hidden — the app-switch case on phones', () => {
+    vi.useFakeTimers();
+    try {
+      saveDraft('k2', { picks: { g2: 'SEA' } });
+      expect(loadDraft('k2')).toBeNull();
+      // `pagehide` covers tab close and the iOS back-swipe; `visibilitychange`
+      // covers switching apps, which is how most members leave a pick sheet.
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(loadDraft<{ picks: Record<string, string> }>('k2')).toEqual({ picks: { g2: 'SEA' } });
+    } finally {
+      vi.useRealTimers();
+      clearDraft('k2');
+    }
+  });
+
+  it('clearDraft drops a pending write, so a submitted sheet is not re-drafted by a flush', () => {
+    vi.useFakeTimers();
+    try {
+      saveDraft('k3', { picks: { g3: 'KC' } });
+      clearDraft('k3');
+      flushDrafts();
+      // 🛑 THE DEFECT THIS PINS. `handleSubmit` calls `clearDraft` after a
+      // successful save; if the pending value survived, the next flush would
+      // resurrect the draft and the sheet would offer to "restore" picks the
+      // member had already submitted.
+      expect(loadDraft('k3')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

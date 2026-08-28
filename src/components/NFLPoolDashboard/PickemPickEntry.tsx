@@ -8,7 +8,7 @@ import { now as serverNow } from '../../utils/serverClock';
 import { formatTimeWithZone } from '../../utils/formatTime';
 import { poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
-import { loadDraft, saveDraft, clearDraft } from '../../utils/draftStore';
+import { loadDraft, saveDraft, clearDraft, isDraftStorageAvailable } from '../../utils/draftStore';
 import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { nflLockMode, weekLockOverrideFor, gameLockAt, dropStaleLockedPicks } from '@shared/nflLockMode';
@@ -912,7 +912,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
           // `pickSheet/draftHint` — the wording is narrow on purpose (the draft
           // is localStorage, not the server) and it disappears on a locked week,
           // where the draft effect above has stopped writing.
-          hint={pickemDraftHint(isWeekLocked)}
+          hint={pickemDraftHint(isWeekLocked, isDraftStorageAvailable())}
           onSave={handleSubmit}
         />
       )}
