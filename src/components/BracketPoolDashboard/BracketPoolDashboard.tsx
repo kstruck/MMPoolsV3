@@ -261,10 +261,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             });
         return () => {
             cancelled = true;
-            // The key is claimed BEFORE the read so a second snapshot cannot start
-            // a duplicate one. If this run never applied its result — unmount, a
-            // StrictMode double-invoke, or a re-entry mid-flight — release it, or
-            // an identical owner set would never be resolved again.
+            // Release a key whose result never landed — unmount, a StrictMode
+            // double-invoke, or a snapshot arriving mid-flight. Holding it would
+            // leave an identical owner set never resolved at all, which is a
+            // worse failure than the cost of releasing it: a snapshot that lands
+            // while the read is in flight restarts that read. Steady state after
+            // the first resolve is one read per owner-set change, which is the
+            // property this ref exists for.
             if (!applied) resolvedOwnersRef.current = null;
         };
     }, [entries]);
