@@ -44,7 +44,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     };
 });
 
-import { resolveOwnerNames, ownerSetKey, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
+import { resolveOwnerNames, ownerUidsOf, OWNER_NAME_FALLBACK, type OwnerNameProfile } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { StandingsTable } from './StandingsTable';
 import type { BracketEntry, BracketPool, Tournament } from '../../types';
@@ -88,7 +88,7 @@ describe('resolveOwnerNames', () => {
             [UID_B]: { userName: 'Grace Hopper' },
         });
 
-        const map = await resolveOwnerNames(
+        const { names: map } = await resolveOwnerNames(
             [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')],
             fetch
         );
@@ -118,7 +118,7 @@ describe('resolveOwnerNames', () => {
         // trigger shipped have no profile doc at all.
         const { fetch } = fetcherOver({ [UID_A]: null });
 
-        const map = await resolveOwnerNames([entry('e1', UID_A, 'Ada Bracket')], fetch);
+        const { names: map } = await resolveOwnerNames([entry('e1', UID_A, 'Ada Bracket')], fetch);
 
         expect(map[UID_A]).toBe('Ada Bracket');
     });
@@ -128,7 +128,7 @@ describe('resolveOwnerNames', () => {
         // would pass the empty string straight through to the standings row.
         const { fetch } = fetcherOver({ [UID_A]: { userName: '   ' }, [UID_B]: { userName: '' } });
 
-        const map = await resolveOwnerNames(
+        const { names: map } = await resolveOwnerNames(
             [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')],
             fetch
         );
@@ -139,7 +139,7 @@ describe('resolveOwnerNames', () => {
     it("falls back to 'Unknown' when neither profile nor entry name is usable", async () => {
         const { fetch } = fetcherOver({ [UID_A]: null });
 
-        const map = await resolveOwnerNames([entry('e1', UID_A, '  ')], fetch);
+        const { names: map } = await resolveOwnerNames([entry('e1', UID_A, '  ')], fetch);
 
         expect(map[UID_A]).toBe(OWNER_NAME_FALLBACK);
         expect(map[UID_A]).toBe('Unknown');
@@ -151,7 +151,7 @@ describe('resolveOwnerNames', () => {
         // 28-character Firebase id.
         const { fetch } = fetcherOver({ [UID_A]: null, [UID_B]: { userName: '' } });
 
-        const map = await resolveOwnerNames(
+        const { names: map } = await resolveOwnerNames(
             [entry('e1', UID_A, ''), entry('e2', UID_B, '   ')],
             fetch
         );
@@ -170,7 +170,7 @@ describe('resolveOwnerNames', () => {
             return { userName: 'Grace Hopper' };
         };
 
-        const map = await resolveOwnerNames(
+        const { names: map } = await resolveOwnerNames(
             [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')],
             fetch
         );
@@ -180,32 +180,87 @@ describe('resolveOwnerNames', () => {
     });
 });
 
-describe('ownerSetKey', () => {
-    it('is unchanged when only scores change', () => {
+describe('ownerUidsOf', () => {
+    it('is the distinct owner set, unchanged when only scores change', () => {
         // The entries subscription hands back a new array on every snapshot, and
-        // during live scoring one lands whenever any score changes. Keying the
-        // re-resolve on `entries` identity would re-read every profile from the
-        // server each time — cost-free before this fix only because the reads
-        // were being denied.
+        // during live scoring one lands whenever any score changes. Re-reading
+        // every profile per snapshot was cost-free before this fix only because
+        // the reads were being denied.
         const before = [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')];
         const after = before.map(e => ({ ...e, score: 42 }));
 
-        expect(ownerSetKey(after)).toBe(ownerSetKey(before));
+        expect(ownerUidsOf(after)).toEqual(ownerUidsOf(before));
     });
 
-    it('ignores owner ORDER and duplicate owners', () => {
-        const a = [entry('e1', UID_A, 'One'), entry('e2', UID_B, 'Two'), entry('e3', UID_A, 'Three')];
-        const b = [entry('e9', UID_B, 'Two'), entry('e8', UID_A, 'One')];
+    it('counts an owner once however many entries they hold', () => {
+        const rows = [entry('e1', UID_A, 'One'), entry('e2', UID_B, 'Two'), entry('e3', UID_A, 'Three')];
 
-        expect(ownerSetKey(a)).toBe(ownerSetKey(b));
+        expect(ownerUidsOf(rows)).toEqual([UID_A, UID_B]);
     });
 
-    it('changes when a new owner joins', () => {
-        // The one case that MUST re-resolve: a name nobody has fetched yet.
-        const before = [entry('e1', UID_A, 'Ada Bracket')];
-        const after = [...before, entry('e2', UID_B, 'Grace Bracket')];
+    it('drops an entry with no owner uid rather than keying on an empty string', () => {
+        expect(ownerUidsOf([entry('e1', '', 'Orphan'), entry('e2', UID_A, 'Ada')])).toEqual([UID_A]);
+    });
+});
 
-        expect(ownerSetKey(after)).not.toBe(ownerSetKey(before));
+describe('resolveOwnerNames — what a caller may cache', () => {
+    it('reports ONLY profile-resolved uids as final', async () => {
+        // 🛑 codex r1 P2. recomputeUserProfile is triggered BY the entry write, so
+        // an entries snapshot can reach the client before the profile it causes.
+        // A caller that cached the whole owner set would freeze that fallback in
+        // for the life of the mount; caching only this list retries the rest.
+        const { fetch } = fetcherOver({ [UID_A]: { userName: 'Ada Lovelace' }, [UID_B]: null });
+
+        const { names, resolvedFromProfile } = await resolveOwnerNames(
+            [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')],
+            fetch
+        );
+
+        expect(resolvedFromProfile).toEqual([UID_A]);
+        expect(names[UID_B]).toBe('Grace Bracket'); // a fallback, so still outstanding
+    });
+
+    it('does not call a fallback final just because a name was produced', async () => {
+        // 'Unknown' is a name in the map too. Caching it as final would leave a
+        // member reading "Unknown" until they reloaded the page.
+        const { fetch } = fetcherOver({ [UID_A]: null });
+
+        const { names, resolvedFromProfile } = await resolveOwnerNames([entry('e1', UID_A, '')], fetch);
+
+        expect(names[UID_A]).toBe(OWNER_NAME_FALLBACK);
+        expect(resolvedFromProfile).toEqual([]);
+    });
+
+    it('picks the real name up on the retry once the profile lands', async () => {
+        // The second snapshot, with the profile now written. The caller passes
+        // only the uid it is still missing.
+        const rows = [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')];
+        const first = fetcherOver({ [UID_A]: { userName: 'Ada Lovelace' }, [UID_B]: null });
+        const before = await resolveOwnerNames(rows, first.fetch);
+        expect(before.names[UID_B]).toBe('Grace Bracket');
+
+        const second = fetcherOver({ [UID_B]: { userName: 'Grace Hopper' } });
+        const pending = ownerUidsOf(rows).filter(uid => !before.resolvedFromProfile.includes(uid));
+        const after = await resolveOwnerNames(rows, second.fetch, pending);
+
+        expect(second.calls).toEqual([UID_B]); // the settled name is not re-read
+        expect({ ...before.names, ...after.names }).toEqual({
+            [UID_A]: 'Ada Lovelace',
+            [UID_B]: 'Grace Hopper',
+        });
+    });
+
+    it('restricts the reads to `only`, while still using every entry for fallbacks', async () => {
+        const { fetch, calls } = fetcherOver({ [UID_A]: null, [UID_B]: null });
+
+        const { names } = await resolveOwnerNames(
+            [entry('e1', UID_A, 'Ada Bracket'), entry('e2', UID_B, 'Grace Bracket')],
+            fetch,
+            [UID_B]
+        );
+
+        expect(calls).toEqual([UID_B]);
+        expect(names).toEqual({ [UID_B]: 'Grace Bracket' });
     });
 });
 
@@ -278,7 +333,7 @@ describe('StandingsTable', () => {
 
     it('shows the resolved name, and never the raw uid', async () => {
         const rows = [entry('e1', UID_A, 'Ada Bracket')];
-        const userNames = await resolveOwnerNames(rows, async () => ({ userName: 'Ada Lovelace' }));
+        const { names: userNames } = await resolveOwnerNames(rows, async () => ({ userName: 'Ada Lovelace' }));
 
         render(<StandingsTable entries={rows} pool={pool} tournament={tournament} userNames={userNames} />);
 
@@ -289,7 +344,7 @@ describe('StandingsTable', () => {
 
     it("shows 'Unknown' rather than a uid when nothing resolves", async () => {
         const rows = [entry('e1', UID_A, '')];
-        const userNames = await resolveOwnerNames(rows, async () => null);
+        const { names: userNames } = await resolveOwnerNames(rows, async () => null);
 
         render(<StandingsTable entries={rows} pool={pool} tournament={tournament} userNames={userNames} />);
 

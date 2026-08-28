@@ -39,24 +39,15 @@ export type PublicProfileFetcher = (uid: string) => Promise<OwnerNameProfile | n
 export const OWNER_NAME_FALLBACK = 'Unknown';
 
 /**
- * A stable key for the SET of owners in a list of entries.
+ * Distinct, truthy owner uids, in first-seen order.
  *
- * The entries subscription hands back a fresh array on every snapshot, and
- * during live scoring a snapshot lands whenever any score changes. Re-running
- * the resolver on each one would re-read every profile from the server — free
- * before this change only because the reads were being DENIED. Names cannot
- * have changed unless the owner set did, so callers re-resolve when this key
- * changes and skip when it does not.
- *
- * Order- and duplicate-insensitive: two entries by the same owner, or the same
- * owners arriving in a different order, are the same set of names to fetch.
+ * Callers use this to work out who still needs a name. The entries subscription
+ * hands back a fresh array on every snapshot, and during live scoring a snapshot
+ * lands whenever any score changes; re-reading every profile each time would be
+ * a real cost now that these reads succeed (before this change they were free
+ * only because they were being DENIED).
  */
-export const ownerSetKey = (entries: readonly OwnerNameEntry[]): string =>
-    // A fresh array every call, so sorting it in place is safe.
-    uniqueOwnerUids(entries).sort().join(',');
-
-/** Distinct, truthy owner uids, in first-seen order. */
-const uniqueOwnerUids = (entries: readonly OwnerNameEntry[]): string[] =>
+export const ownerUidsOf = (entries: readonly OwnerNameEntry[]): string[] =>
     [...new Set(entries.map(e => e.ownerUid).filter((uid): uid is string => !!uid))];
 
 /** A non-empty trimmed string, or null. Guards against `userName: ''` / `'   '`. */
@@ -65,6 +56,24 @@ const usableName = (value: string | undefined): string | null => {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
 };
+
+export interface OwnerNameResolution {
+    /** uid -> display name, for the owners this call was asked about. */
+    names: Record<string, string>;
+    /**
+     * The subset whose name came from a `publicProfiles` doc, and is therefore
+     * FINAL — nothing later in the session can improve it.
+     *
+     * Everything else in `names` is a fallback and may still be waiting on a
+     * profile that does not exist YET: `recomputeUserProfile` is triggered by
+     * the entry write, so an entries snapshot can reach the client before the
+     * profile it causes. A caller that remembers only this list retries the
+     * rest on the next snapshot and picks the real name up when it lands —
+     * remembering the whole owner set instead would freeze the fallback in
+     * place for the life of the mount (codex r1 P2).
+     */
+    resolvedFromProfile: string[];
+}
 
 /**
  * Resolve one display name per distinct entry owner.
@@ -82,15 +91,20 @@ const usableName = (value: string | undefined): string | null => {
  * only, so one unreadable profile cannot blank out the whole map. Callers that
  * used `Promise.all(...).catch()` got the opposite — the first rejection lost
  * every name.
+ *
+ * `only` narrows WHICH owners are fetched (a caller that already holds final
+ * names for the rest passes just the ones still outstanding). The full `entries`
+ * list is still needed, because it carries the `entry.name` fallback.
  */
 export const resolveOwnerNames = async (
     entries: readonly OwnerNameEntry[],
-    fetchProfile: PublicProfileFetcher
-): Promise<Record<string, string>> => {
-    const uniqueUids = uniqueOwnerUids(entries);
+    fetchProfile: PublicProfileFetcher,
+    only?: readonly string[]
+): Promise<OwnerNameResolution> => {
+    const uids = only ? [...new Set(only)] : ownerUidsOf(entries);
 
     const profiles = await Promise.all(
-        uniqueUids.map(async (uid) => {
+        uids.map(async (uid) => {
             try {
                 return await fetchProfile(uid);
             } catch {
@@ -99,11 +113,13 @@ export const resolveOwnerNames = async (
         })
     );
 
-    const map: Record<string, string> = {};
-    uniqueUids.forEach((uid, i) => {
+    const names: Record<string, string> = {};
+    const resolvedFromProfile: string[] = [];
+    uids.forEach((uid, i) => {
         const fromProfile = usableName(profiles[i]?.userName);
+        if (fromProfile) resolvedFromProfile.push(uid);
         const fromEntry = usableName(entries.find(e => e.ownerUid === uid)?.name);
-        map[uid] = fromProfile ?? fromEntry ?? OWNER_NAME_FALLBACK;
+        names[uid] = fromProfile ?? fromEntry ?? OWNER_NAME_FALLBACK;
     });
-    return map;
+    return { names, resolvedFromProfile };
 };

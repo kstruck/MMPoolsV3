@@ -13,7 +13,7 @@ import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2,
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
-import { resolveOwnerNames, ownerSetKey } from './ownerNames';
+import { resolveOwnerNames, ownerUidsOf } from './ownerNames';
 import { dbService } from '../../services/dbService';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
@@ -232,44 +232,35 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     // permission-denied once per other member and reported every one of them to
     // Sentry + logClientError. See ownerNames.ts for the full note.
     //
-    // Re-resolving is keyed on the OWNER SET, not on `entries`: the entries
-    // subscription hands back a new array on every snapshot, and during live
-    // scoring a snapshot lands whenever any score changes. Names cannot have
-    // changed unless the owner set did, and re-reading N profiles per snapshot
-    // is a real cost now that these reads succeed.
-    const resolvedOwnersRef = React.useRef<string | null>(null);
+    // Only owners with no FINAL name yet are re-read. The entries subscription
+    // hands back a new array on every snapshot, and during live scoring one
+    // lands whenever any score changes, so re-reading every profile each time
+    // is a real cost now that these reads succeed. Remembering the whole owner
+    // set instead would be worse than that cost: recomputeUserProfile is
+    // triggered BY the entry write, so a snapshot can arrive before the profile
+    // it causes, and the fallback name would then be frozen in for the life of
+    // the mount (codex r1 P2). A name from a profile is final; anything else is
+    // retried on the next snapshot.
+    const profileResolvedRef = React.useRef<Set<string>>(new Set());
     useEffect(() => {
         if (entries.length === 0) return;
-        const key = ownerSetKey(entries);
-        if (key === resolvedOwnersRef.current) return;
-        resolvedOwnersRef.current = key;
+        const pending = ownerUidsOf(entries).filter(uid => !profileResolvedRef.current.has(uid));
+        if (pending.length === 0) return;
 
         let cancelled = false;
-        let applied = false;
-        resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid))
-            .then(map => {
+        resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid), pending)
+            .then(({ names, resolvedFromProfile }) => {
                 if (cancelled) return;
-                applied = true;
-                setUserNames(map);
+                resolvedFromProfile.forEach(uid => profileResolvedRef.current.add(uid));
+                // Merge: names resolved by an earlier snapshot are not re-read,
+                // so they are not in `names` and must not be dropped.
+                setUserNames(prev => ({ ...prev, ...names }));
             })
             // resolveOwnerNames swallows per-uid failures by contract, so this
             // only fires on a real bug. Log it rather than dropping it silently;
             // StandingsTable already renders 'Unknown' for a missing name.
-            .catch(err => {
-                resolvedOwnersRef.current = null; // let the next snapshot retry
-                logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err);
-            });
-        return () => {
-            cancelled = true;
-            // Release a key whose result never landed — unmount, a StrictMode
-            // double-invoke, or a snapshot arriving mid-flight. Holding it would
-            // leave an identical owner set never resolved at all, which is a
-            // worse failure than the cost of releasing it: a snapshot that lands
-            // while the read is in flight restarts that read. Steady state after
-            // the first resolve is one read per owner-set change, which is the
-            // property this ref exists for.
-            if (!applied) resolvedOwnersRef.current = null;
-        };
+            .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
+        return () => { cancelled = true; };
     }, [entries]);
 
     // Listen for master bracket print event
