@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 /**
@@ -45,23 +45,44 @@ const REPO_ROOT = resolve(__dirname, '..');
 const CONFIG = resolve(REPO_ROOT, '.github/dependabot.yml');
 
 /**
- * Every tracked `package.json`, DISCOVERED rather than listed.
+ * Directories that are not ours: somebody else's tree, or our own build output.
+ * A `package.json` inside any of them is not a manifest this repo maintains.
+ */
+const NOT_OURS = new Set(['node_modules', 'dist', 'lib', 'build', 'coverage', 'playwright-report', 'test-results']);
+
+/**
+ * Every tracked `package.json`, DISCOVERED rather than listed, AT ANY DEPTH.
  *
  * A hand-kept list is the same defect one layer up: it can only name the
- * manifests somebody remembered, which is exactly how `functions/` went unwatched.
+ * manifests somebody remembered, which is exactly how `functions/` went
+ * unwatched.
  *
- * Depth is capped at one level below the root and `node_modules` / dot-dirs are
- * skipped — a manifest inside `node_modules` belongs to a dependency, not to us,
- * and `dist/` is build output.
+ * ⚠️ RECURSIVE, AND THAT WAS A CORRECTION. The first version walked one level
+ * below the root, which is enough for the three manifests that exist today and
+ * is NOT enough for the guard's actual claim. Codex holed it: a future
+ * `functions/tools/package.json` would never be returned, so the coverage
+ * assertion would stay green while dependabot had no entry for it — a guard
+ * that looks like it guards and does not, which is precisely the class this
+ * file exists to stop. It is recorded here rather than quietly fixed, because
+ * "the walker's depth matches the claim" is the thing a reader has to be able
+ * to check.
+ *
+ * Dot-directories are skipped (`.git`, `.github`, `.claude` — the last holds
+ * worktrees of this very repo, so recursing into it would find every manifest
+ * twice over), as is anything in `NOT_OURS`.
  */
 function trackedManifests(): string[] {
     const out: string[] = [];
-    if (existsSync(join(REPO_ROOT, 'package.json'))) out.push('/');
-    for (const e of readdirSync(REPO_ROOT, { withFileTypes: true })) {
-        if (!e.isDirectory()) continue;
-        if (e.name === 'node_modules' || e.name === 'dist' || e.name.startsWith('.')) continue;
-        if (existsSync(join(REPO_ROOT, e.name, 'package.json'))) out.push(`/${e.name}`);
-    }
+    const walk = (rel: string) => {
+        const abs = rel === '/' ? REPO_ROOT : join(REPO_ROOT, rel.slice(1));
+        if (existsSync(join(abs, 'package.json'))) out.push(rel);
+        for (const e of readdirSync(abs, { withFileTypes: true })) {
+            if (!e.isDirectory()) continue;
+            if (e.name.startsWith('.') || NOT_OURS.has(e.name)) continue;
+            walk(rel === '/' ? `/${e.name}` : `${rel}/${e.name}`);
+        }
+    };
+    walk('/');
     return out.sort();
 }
 
@@ -133,6 +154,36 @@ describe('dependabot watches every package.json in the repo', () => {
         const tracked = new Set(trackedManifests());
         const phantom = watchedDirectories().filter((d) => !tracked.has(d));
         expect(phantom, 'these `directory:` entries name no package.json').toEqual([]);
+    });
+
+    it('the walker is RECURSIVE — a nested manifest cannot hide', () => {
+        // The correction codex found. The claim is "every package.json", not
+        // "every package.json one level down", and the difference is invisible
+        // until somebody adds `functions/tools/package.json`.
+        //
+        // Exercised against a temporary real directory rather than a mocked fs:
+        // the walker's whole job is to read the disk, so a fake disk would only
+        // prove the fake.
+        const nested = join(REPO_ROOT, 'functions', '__scope_probe__');
+        try {
+            mkdirSync(nested, { recursive: true });
+            writeFileSync(join(nested, 'package.json'), '{"name":"probe","private":true}');
+            expect(trackedManifests()).toContain('/functions/__scope_probe__');
+        } finally {
+            rmSync(nested, { recursive: true, force: true });
+        }
+        // And it is gone again, so the probe cannot leak into another assertion.
+        expect(trackedManifests()).not.toContain('/functions/__scope_probe__');
+    });
+
+    it('the walker skips trees that are not ours', () => {
+        // `node_modules` holds thousands of manifests belonging to dependencies,
+        // and `.claude` holds worktrees OF THIS REPO — recursing into either
+        // would drown the real answer.
+        const found = trackedManifests();
+        expect(found.some((d) => d.includes('node_modules'))).toBe(false);
+        expect(found.some((d) => d.includes('/.'))).toBe(false);
+        expect(found.some((d) => d.includes('/dist'))).toBe(false);
     });
 
     it('the parser discriminates — it reads keys, not prose', () => {
