@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   survivorModeRulesCopy,
   tieOutcomeRuleCopy,
   teamReuseRuleCopy,
   survivorRuleCopy,
+  autoSurviveExemptionOn,
+  autoSurviveRuleCopy,
+  survivorRebuyRuleCopy,
+  survivorRebuyJoinCopy,
+  rebuyDeadlinePassed,
+  rebuyAvailabilityCopy,
 } from '../src/utils/survivorRules';
 import { survivorCreateInputSchema } from '@shared/schemas';
 import { MAX_TEAM_USES, TIE_COUNTS_AS_VALUES, effectiveTieCountsAs } from '@shared/survivorReuse';
@@ -143,5 +151,244 @@ describe('tieCountsAs — the schema and the type share one value set', () => {
     for (const value of TIE_COUNTS_AS_VALUES) {
       expect(effectiveTieCountsAs({ tieCountsAs: value })).toBe(value);
     }
+  });
+});
+
+/**
+ * THE PANEL AND THE SCORER MUST AGREE ON AN ABSENT `autoSurviveExemptionEnabled`.
+ *
+ * `NFLPoolRules.tsx` rendered the absent value as "Disabled" while
+ * `nflScoringEngine.ts:704` reads `?? true`, so every survivor pool created
+ * before the field existed showed its members the OPPOSITE of the rule the
+ * scorer was applying. The wizard writes `true`
+ * (`CreateNFLSurvivorPool.tsx:73`), which is what makes `?? true` the intended
+ * half and the panel the wrong one.
+ *
+ * These assert the SUBSTANCE — on vs off — not the wording.
+ */
+describe('autoSurviveExemptionOn — absent means ON, same as the scorer', () => {
+  const on = (copy: string) => /^Enabled\b/.test(copy);
+
+  it('an absent value is ON', () => {
+    expect(autoSurviveExemptionOn(undefined)).toBe(true);
+    expect(autoSurviveExemptionOn({})).toBe(true);
+    expect(on(autoSurviveRuleCopy({}))).toBe(true);
+  });
+
+  it('an explicit false is OFF, so the setting still does something', () => {
+    expect(autoSurviveExemptionOn({ autoSurviveExemptionEnabled: false })).toBe(false);
+    expect(autoSurviveRuleCopy({ autoSurviveExemptionEnabled: false })).toBe('Disabled');
+  });
+
+  it('an explicit true is ON', () => {
+    expect(autoSurviveExemptionOn({ autoSurviveExemptionEnabled: true })).toBe(true);
+    expect(on(autoSurviveRuleCopy({ autoSurviveExemptionEnabled: true }))).toBe(true);
+  });
+
+  it('the scorer really does read it as `?? true` — the claim above, measured', () => {
+    // If the scorer's default ever flips, "absent means ON" stops being the
+    // truth this helper is copying and this test is where that surfaces.
+    const engine = readFileSync(
+      resolve(__dirname, '..', 'functions/src/nflScoringEngine.ts'),
+      'utf8',
+    );
+    expect(engine).toContain('pool.settings.autoSurviveExemptionEnabled ?? true');
+  });
+
+  it('survivorRuleCopy carries it, so the panel cannot read the raw field again', () => {
+    expect(on(survivorRuleCopy({}).autoSurvive)).toBe(true);
+    expect(survivorRuleCopy({ autoSurviveExemptionEnabled: false }).autoSurvive).toBe('Disabled');
+  });
+});
+
+/**
+ * THE BUY-BACK WINDOW IS INCLUSIVE OF THE CUTOFF WEEK.
+ *
+ * `executeSurvivorRebuyInternal` (`functions/src/nflPools.ts:1074`) refuses only
+ * `week > settings.rebuyDeadlineWeek`. The rules page said "before <week>",
+ * which refuses one week earlier than the callable does — shipped copy narrower
+ * than the rule members are actually playing.
+ *
+ * The predicate is asserted against the SERVER'S OWN comparison, so the copy
+ * cannot drift away from it without this going red.
+ */
+describe('survivorRebuyRuleCopy / survivorRebuyJoinCopy — "through", never "before"', () => {
+  const label = (w: number) => `Week ${w}`;
+  const settings = (over: Record<string, unknown> = {}) => ({
+    maxRebuys: 2, rebuyDeadlineWeek: 4, rebuyCost: 20, ...over,
+  });
+
+  it('the server admits the cutoff week itself', () => {
+    const rebuy = readFileSync(resolve(__dirname, '..', 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('if (week > settings.rebuyDeadlineWeek) {');
+    const refuses = (week: number, deadline: number) => week > deadline;
+    expect(refuses(4, 4)).toBe(false); // the cutoff week is INSIDE the window
+    expect(refuses(5, 4)).toBe(true);
+  });
+
+  it('the rules-page line says through the cutoff week, and never "before"', () => {
+    const copy = survivorRebuyRuleCopy(settings(), label);
+    expect(copy).toContain('through Week 4');
+    expect(copy).not.toMatch(/\bbefore\b/);
+    expect(copy).toContain('2 rebuys');
+    expect(copy).toContain('$20');
+  });
+
+  it('the join-page line says the same thing', () => {
+    const copy = survivorRebuyJoinCopy(settings(), label);
+    expect(copy).toContain('through Week 4');
+    expect(copy).not.toMatch(/\bbefore\b/);
+    expect(copy).toContain('2 rebuys');
+  });
+
+  it('no buy-backs allowed reads as off on both surfaces', () => {
+    expect(survivorRebuyRuleCopy(settings({ maxRebuys: 0 }), label)).toBe('Disabled in this pool.');
+    expect(survivorRebuyJoinCopy(settings({ maxRebuys: 0 }), label)).toBe('No rebuys/buy-backs allowed');
+  });
+
+  it('a cutoff below week 1 is stated as unusable, not as an open window', () => {
+    // The create wizard's floor is 0 (`CreateNFLSurvivorPool.tsx:38`), and
+    // `week > 0` is true of every real week — so a pool set there offers
+    // buy-backs nobody can take. Both surfaces used to name a moment
+    // ("the season starts" / "season start") that reads like an open window.
+    //
+    // `null` and `''` are in the list because the SERVER coerces them to 0 the
+    // same way: `w > null` applies ToNumber to both sides. The helper must land
+    // on the same side of the line the callable does.
+    for (const deadline of [0, -3, null, '']) {
+      const rules = survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      const join = survivorRebuyJoinCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      expect(rules, String(deadline)).toMatch(/none can actually be taken/);
+      expect(join, String(deadline)).toMatch(/none can be taken/);
+      expect(rules, String(deadline)).not.toMatch(/season starts/);
+      expect(join, String(deadline)).not.toMatch(/season start/);
+      expect(rules, String(deadline)).not.toContain('NaN');
+      expect(join, String(deadline)).not.toContain('NaN');
+      // The claim, measured against the server's own comparison: week 1 — the
+      // earliest a buy-back can be asked for — is already past this deadline.
+      expect(1 > (deadline as number), String(deadline)).toBe(true);
+    }
+  });
+
+  /**
+   * AN ABSENT CUTOFF IS THE OPPOSITE OF ZERO (codex round 1, P2).
+   *
+   * `rebuyDeadlineWeek` is `.optional()` in the create schema, and
+   * `week > undefined` is `false` for every week — so a pool with nothing
+   * stored has NO cutoff and buy-backs run all season. Telling those members
+   * "none can be taken" would be the same defect this PR fixes, pointed the
+   * other way.
+   */
+  it('an absent cutoff reads as no cutoff, because the callable never refuses one', () => {
+    for (const deadline of [undefined, Number.NaN, 'not-a-week']) {
+      const rules = survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      const join = survivorRebuyJoinCopy(settings({ rebuyDeadlineWeek: deadline }), label);
+      expect(rules, String(deadline)).toContain('no cutoff week set');
+      expect(join, String(deadline)).toContain('no cutoff week set');
+      expect(rules, String(deadline)).not.toMatch(/none can actually be taken/);
+      expect(join, String(deadline)).not.toMatch(/none can be taken/);
+      expect(rules, String(deadline)).not.toContain('NaN');
+      expect(join, String(deadline)).not.toContain('NaN');
+      // The server really does let every week through against this value.
+      expect([1, 9, 18].some((w) => w > (deadline as number)), String(deadline)).toBe(false);
+    }
+  });
+
+  /**
+   * THE PRICE MUST BE THE PRICE THE CALLABLE CHARGES (codex round 1, P1).
+   *
+   * `rebuyCost` is `.optional()`, and `executeSurvivorRebuyInternal` charges
+   * `settings.rebuyCost ?? settings.entryFee ?? 0`
+   * (`functions/src/nflPools.ts:1079`). Copy reading `rebuyCost` alone would
+   * tell a member with a legacy pool that a charged buy-back is free.
+   */
+  it('the price falls back to the entry fee, exactly as the callable does', () => {
+    const rebuy = readFileSync(resolve(__dirname, '..', 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('settings.rebuyCost ?? settings.entryFee ?? 0');
+
+    // No rebuyCost stored: the entry fee is what gets charged, so it is what
+    // gets shown.
+    expect(survivorRebuyRuleCopy(
+      { maxRebuys: 2, rebuyDeadlineWeek: 4, entryFee: 25 }, label,
+    )).toContain('$25');
+    // An explicit 0 is a free buy-back and must NOT fall through to the fee.
+    expect(survivorRebuyRuleCopy(
+      { maxRebuys: 2, rebuyDeadlineWeek: 4, rebuyCost: 0, entryFee: 25 }, label,
+    )).toContain('$0');
+    // A stored cost wins over the fee.
+    expect(survivorRebuyRuleCopy(
+      { maxRebuys: 2, rebuyDeadlineWeek: 4, rebuyCost: 15, entryFee: 25 }, label,
+    )).toContain('$15');
+    // Neither stored: zero, never "$undefined" or "$NaN".
+    const bare = survivorRebuyRuleCopy({ maxRebuys: 2, rebuyDeadlineWeek: 4 }, label);
+    expect(bare).toContain('$0');
+    expect(bare).not.toContain('undefined');
+    expect(bare).not.toContain('NaN');
+  });
+
+  it('the week label is asked for exactly once, with the cutoff week', () => {
+    const seen: number[] = [];
+    survivorRebuyRuleCopy(settings({ rebuyDeadlineWeek: 7 }), (w) => { seen.push(w); return `Week ${w}`; });
+    expect(seen).toEqual([7]);
+  });
+});
+
+/**
+ * THE PICK SHEET'S GATE IS THE SERVER'S GATE (codex round 2).
+ *
+ * `SurvivorPickEntry` read the cutoff as `settings.rebuyDeadlineWeek ?? 4` — a
+ * FOURTH meaning for the absent value, on top of the three the copy already
+ * had to reconcile. On a pool with buy-backs allowed and nothing stored, the
+ * callable accepts a rebuy in any week while that default hid the button from
+ * week 5 on. Copy saying "all season" beside a button that is gone is the same
+ * class of defect this PR exists to fix.
+ *
+ * The predicate is asserted to agree with the server's comparison cell by cell.
+ */
+describe('rebuyDeadlinePassed — the pick sheet cannot be narrower than the callable', () => {
+  /** `functions/src/nflPools.ts:1074`, verbatim. */
+  const serverRefuses = (week: number, rebuyDeadlineWeek: unknown) =>
+    week > (rebuyDeadlineWeek as number);
+
+  it('the server comparison being mirrored is still the one in the source', () => {
+    const rebuy = readFileSync(resolve(__dirname, '..', 'functions/src/nflPools.ts'), 'utf8');
+    expect(rebuy).toContain('if (week > settings.rebuyDeadlineWeek) {');
+  });
+
+  it('agrees with the server on every cutoff shape, in every week', () => {
+    const deadlines = [undefined, null, 0, 1, 4, 18, -2, Number.NaN, '4', 'junk', ''];
+    for (const rebuyDeadlineWeek of deadlines) {
+      for (const week of [1, 2, 4, 5, 18]) {
+        expect(
+          rebuyDeadlinePassed(week, { rebuyDeadlineWeek }),
+          `week ${week} vs ${String(rebuyDeadlineWeek)}`,
+        ).toBe(serverRefuses(week, rebuyDeadlineWeek));
+      }
+    }
+  });
+
+  it('an absent cutoff refuses nothing — the case the old `?? 4` got wrong', () => {
+    expect(rebuyDeadlinePassed(5, {})).toBe(false);
+    expect(rebuyDeadlinePassed(18, undefined)).toBe(false);
+    // ...and a stored 4 still does close at week 5, so the gate is not inert.
+    expect(rebuyDeadlinePassed(5, { rebuyDeadlineWeek: 4 })).toBe(true);
+    expect(rebuyDeadlinePassed(4, { rebuyDeadlineWeek: 4 })).toBe(false);
+  });
+
+  it('the pick sheet no longer carries its own default', () => {
+    const src = readFileSync(
+      resolve(__dirname, '..', 'src/components/NFLPoolDashboard/SurvivorPickEntry.tsx'),
+      'utf8',
+    );
+    expect(src).not.toMatch(/rebuyDeadlineWeek\s*\?\?\s*\d/);
+    expect(src).toContain('rebuyDeadlinePassed(week, { rebuyDeadlineWeek })');
+  });
+
+  it('and its availability line says the same thing the gate does', () => {
+    const label = (w: number) => `Week ${w}`;
+    expect(rebuyAvailabilityCopy({}, label)).toContain('all season');
+    expect(rebuyAvailabilityCopy({ rebuyDeadlineWeek: 4 }, label)).toBe('Available through Week 4.');
+    expect(rebuyAvailabilityCopy({ rebuyDeadlineWeek: 0 }, label)).toMatch(/none can be taken/);
+    expect(rebuyAvailabilityCopy({ rebuyDeadlineWeek: 0 }, label)).not.toMatch(/season start/);
   });
 });

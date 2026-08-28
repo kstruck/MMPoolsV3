@@ -234,9 +234,11 @@ export const NFL_SURVIVOR_TOPICS: readonly HelpTopic[] = [
     // ITSELF still accepts a buy-back. The client agrees
     // (`SurvivorPickEntry.tsx:196` — `if (week > rebuyDeadlineWeek) return false`).
     //
-    // ⚠️ `NFLPoolRules.tsx:268` renders this as "before <week label>", which is
-    // one week narrower than the code. The code wins (see the PR body); this
-    // copy says "during that week, and not after it".
+    // The rules page USED to render this as "before <week label>", one week
+    // narrower than the code. Fixed: both member surfaces now build the
+    // sentence from `survivorRebuyRuleCopy` / `survivorRebuyJoinCopy`
+    // (`src/utils/survivorRules.ts`), which say "through <week label>" and
+    // agree with this copy's "during that week, and not after it".
     //
     // Default 4: `CreateNFLSurvivorPool.tsx:72`.
     id: 'settings.rebuyDeadlineWeek',
