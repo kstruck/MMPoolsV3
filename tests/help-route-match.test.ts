@@ -216,6 +216,32 @@ describe('canOpenPage — reachable from where the reader is standing (codex R12
     expect(canOpenPage(step, inWizard, HOST)).toBe(true);
   });
 
+  /**
+   * …but "in place" means the step the reader is ON (codex R2 on T14).
+   *
+   * The same two decisions that produced the super-admin case produce this one:
+   * an unlinkable page (K13) plus a route shared by several screens. `/create/*`
+   * is one route for six steps, so without this an admin on Basics could select
+   * "Payouts" from "All pages" and read the Payouts summary over the Basics
+   * form. The rule lives in `canOpenPage`, so it holds for the wizard steps and
+   * the admin tabs alike rather than being written into either content file.
+   */
+  it('an unlinkable step page is NOT openable from a different published step', () => {
+    const rules = helpRegistry.getPage('wizard.pickem.rules')!;
+    expect(canOpenPage(rules, { ...inWizard, tab: 'basics' }, HOST)).toBe(false);
+    // Discriminating: on its own step it opens, and the tab-less route page
+    // opens from every step — refusing everything would pass the line above.
+    expect(canOpenPage(rules, { ...inWizard, tab: 'rules' }, HOST)).toBe(true);
+    expect(canOpenPage(helpRegistry.getPage('wizard.pickem')!, { ...inWizard, tab: 'basics' }, HOST)).toBe(true);
+  });
+
+  it('a LINKABLE page is still openable from another tab — the link goes there', () => {
+    // The strictness above is only for pages that can never be navigated to.
+    // `pool.nfl.picks` builds `?tab=picks`, so selecting it from the Standings
+    // tab moves the reader to the screen the panel then describes.
+    expect(canOpenPage(picks(), { ...inPool, tab: 'standings' }, MEMBER)).toBe(true);
+  });
+
   it('refuses a page for another pool type, and one whose tab is not offered', () => {
     const bracket = helpRegistry.getPage('pool.bracket.standings')!;
     expect(canOpenPage(bracket, inPool, MEMBER)).toBe(false);

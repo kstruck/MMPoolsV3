@@ -466,11 +466,13 @@ describe('T10 — every default the copy names is the default the code has', () 
   });
 
   /**
-   * `autoSurviveExemptionEnabled` is the one whose default is contradicted on
-   * screen: the wizard writes `true`, the scorer reads `?? true`, and
-   * `NFLPoolRules.tsx` renders an ABSENT value as "Disabled". The code wins, so
-   * the copy says on by default — and the read site is pinned here so a change
-   * in either direction has to come past this test.
+   * `autoSurviveExemptionEnabled` USED to be contradicted on screen: the wizard
+   * writes `true`, the scorer reads `?? true`, and `NFLPoolRules.tsx` rendered
+   * an ABSENT value as "Disabled". The panel now reads it through
+   * `autoSurviveExemptionOn` (`src/utils/survivorRules.ts`), which carries the
+   * same `?? true`; `tests/survivor-rules-copy.test.ts` pins that. The read site
+   * is still pinned here so a change in either direction has to come past this
+   * test.
    */
   it('the exemption is ON by default, in the wizard AND at the read site', () => {
     expect(wizardDefault('autoSurviveExemptionEnabled')).toBe('true');

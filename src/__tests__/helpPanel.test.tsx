@@ -337,10 +337,113 @@ describe('a pool page listed from the create wizard (codex R12)', () => {
     expect(screen.getByText(picks.title)).toBeTruthy();
     // …and not linked, because `/create/pickem?tab=picks` is not a pool.
     expect(screen.queryByRole('button', { name: picks.title })).toBeNull();
-    // Discriminating: a page on THIS route is a button.
+    // Discriminating: the page for the step this harness IS on is a button.
     expect(
-      screen.getByRole('button', { name: helpRegistry.getPage('wizard.pickem.fee')!.title }),
+      screen.getByRole('button', { name: helpRegistry.getPage('wizard.pickem.rules')!.title }),
     ).toBeTruthy();
+  });
+
+  /**
+   * The same rule one level down (codex R2 on T14), at the UI.
+   *
+   * The harness publishes `tab="rules"`, so the Fee step's page is on this
+   * route but is NOT the screen the reader is looking at — and its `href` is
+   * `null`, so a click could only force its summary over the rules form.
+   * Listed, and rendered as text.
+   */
+  it('a DIFFERENT wizard step on the same route is text too', async () => {
+    const fee = helpRegistry.getPage('wizard.pickem.fee')!;
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    expect(screen.getByText(fee.title)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: fee.title })).toBeNull();
+  });
+
+  /**
+   * …and SEARCH obeys the same predicate, so it cannot offer what the panel
+   * would then refuse.
+   *
+   * "finishing places" matches the Payouts step PAGE. From the rules step that
+   * page is unreachable: no URL puts the reader on a wizard step, so the click
+   * could only force the Payouts summary over the rules form, or (once
+   * `canOpenPage` refuses that) clear the search and do nothing. Both are the
+   * defect codex R9 fixed for glossary hits.
+   *
+   * ⚠️ THE ASSERTION IS "THAT ROW IS ABSENT", NOT "THE PANEL IS EMPTY".
+   * It was the empty state until T5/T6 (#624) landed, on the reasoning that the
+   * query matched exactly one thing in the registry so the row either appeared
+   * or the empty state did. That reasoning had a shelf life: `Bonus prize share`
+   * says "the finishing places beside it" and now matches the same query, so the
+   * empty state stopped being reachable and this test failed on content that had
+   * nothing to do with it.
+   *
+   * The empty state was only ever a PROXY, and a bad one in both directions — an
+   * `acceptHit` that dropped every hit would have satisfied it just as well. What
+   * the panel owes the reader is that THIS row is not offered while the rest of
+   * the search still works, so that is what is asserted, in three parts:
+   *
+   *   1. unfiltered, the registry really does return the Payouts page for this
+   *      query — so there is something to drop, and content drift makes this
+   *      FAIL rather than pass vacuously;
+   *   2. the panel does not render it;
+   *   3. and the panel is not empty either, which is the half a blanket filter
+   *      would fail.
+   *
+   * Nothing here names the content that made (3) true, so the next topic to use
+   * the phrase costs this test nothing.
+   */
+  const findingPlaces = () => {
+    fireEvent.keyDown(document, { key: '?' });
+    return waitFor(() => expect(isOpen()).toBe(true)).then(() => {
+      fireEvent.change(screen.getByPlaceholderText('Search help'), {
+        target: { value: 'finishing places' },
+      });
+    });
+  };
+
+  it('does not offer a search hit for a step the reader cannot reach', async () => {
+    const payouts = helpRegistry.getPage('wizard.pickem.payouts')!;
+    // (1) There is a hit to drop.
+    expect(
+      helpRegistry
+        .search('finishing places', { poolType: 'NFL_PICKEM', audience: 'commissioner' })
+        .some((r) => r.kind === 'page' && r.id === payouts.id),
+    ).toBe(true);
+
+    renderApp(<WizardHarness />);
+    await findingPlaces();
+    // The results section exists, so the query has landed and the assertions
+    // below are about what it produced rather than about an unrendered panel.
+    await waitFor(() => expect(screen.getByText(/^Results$|^First \d+ results$/)).toBeTruthy());
+
+    // (2) …and the panel does not offer it.
+    expect(screen.queryByRole('button', { name: new RegExp(payouts.title) })).toBeNull();
+    // (3) The rest of the search still works.
+    expect(screen.queryByText(/Nothing in Help matches/)).toBeNull();
+  });
+
+  it('offers the very same hit from the step it belongs to', async () => {
+    // The discriminating half: filtering everything would satisfy the check
+    // above. On the Payouts step the page IS the reader's screen, so the hit
+    // comes back and is clickable.
+    render(
+      <MemoryRouter initialEntries={['/create/pickem']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="commissioner">
+            <HelpRoutePublisher tab="payouts" />
+            <HelpHeaderButton />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    await findingPlaces();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: new RegExp(helpRegistry.getPage('wizard.pickem.payouts')!.title) }),
+      ).toBeTruthy(),
+    );
   });
 });
 
@@ -630,5 +733,137 @@ describe('a template renders in the panel from the pool in scope', () => {
     const text = await cardText();
     expect(text).toContain('first Monday game to kick off');
     expect(text).not.toContain('A few older pools');
+  });
+});
+
+/**
+ * The admin chunk, at the surface — codex round 2 on T14.
+ *
+ * Round 2 raised a P1 saying `/tournament-sim` cannot show its help page
+ * because `TournamentSimulator.tsx` mounts no `HelpRoutePublisher`, so the
+ * audience stays `member` and an admin-only page is filtered out. The premise
+ * is wrong: `HelpPanelHost` passes `defaultAudience: isAdmin ? 'admin' :
+ * 'member'` (`useHelpPanel.ts`), and `App.tsx` gates BOTH the route and
+ * `HelpProvider` on the same `isSuperAdmin(user)`. A route that renders at all
+ * is therefore already an admin-audience route.
+ *
+ * Untested, though — the finding named a real single point of failure, so it
+ * is pinned here rather than answered in prose. This also covers the lazy
+ * admin registry end to end, which nothing else did.
+ */
+describe('the admin help chunk on an admin route (codex round 2 on T14)', () => {
+  it('summarises /tournament-sim with no publisher on the page at all', async () => {
+    render(
+      <MemoryRouter initialEntries={['/tournament-sim']}>
+        <HelpProvider isAdmin={true}>
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // The chunk is fetched when the panel opens, so the copy arrives async.
+    // Matched on the SUMMARY, which only the page heading renders — the title
+    // appears twice, as the heading and as the current row in "All pages".
+    await waitFor(() => expect(screen.getByText(/creates a test pool/)).toBeTruthy());
+    // …and it is the current page, not merely listed.
+    expect(
+      screen.getByRole('button', { name: 'Tournament Simulator' }).getAttribute('aria-current'),
+    ).toBe('true');
+  });
+
+  it('shows the same reader NOTHING there when they are not an admin', async () => {
+    // Discriminating: the assertion above must be about the admin audience and
+    // not about a page that is visible to everyone. A non-admin never reaches
+    // this route, but the panel must not describe it either.
+    render(
+      <MemoryRouter initialEntries={['/tournament-sim']}>
+        <HelpProvider isAdmin={false}>
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    expect(screen.queryByText('Tournament Simulator')).toBeNull();
+  });
+});
+
+/**
+ * The search filter is per-kind, and it runs BEFORE the cap — codex R3 on T14.
+ *
+ * Two separate defects, both found on this branch and both about the same
+ * filter, so they are pinned together.
+ */
+describe('search filtering (codex R3 on T14)', () => {
+  it('still finds a TOPIC whose step is not the step the reader is on', async () => {
+    // The regression half. A topic is copy about one setting, not a screen —
+    // holding topic hits to `canOpenPage` (as page hits are held) emptied this
+    // search completely, because `branding.logoUrl` is placed on the branding
+    // step and the harness is on the rules step.
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'logo' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Logo URL/ })).toBeTruthy());
+  });
+
+  it('spends the result cap on hits that survive the filter', async () => {
+    // The cap half. `/super-admin` has sixteen tab pages and the reader can
+    // open only the one they are on, so a broad query used to fill five of the
+    // seven page slots with rows about to be thrown away — and the linkable
+    // Tournament Simulator page fell off the end of a 20-result list.
+    render(
+      <MemoryRouter initialEntries={['/super-admin']}>
+        <HelpProvider isAdmin={true}>
+          <HelpRoutePublisher tab="overview" audience="admin" />
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // Wait for the admin chunk, or the query runs against the base registry.
+    await waitFor(() => expect(screen.getAllByText(/Overview: Dashboard/).length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'the' } });
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Tournament Simulator/ }).length).toBeGreaterThan(0),
+    );
+  });
+});
+
+/**
+ * A topic search hit is ANSWERED, never merely cleared — codex R4 on T14.
+ *
+ * `goToPage` refuses to move to a page the reader cannot open, which is right;
+ * dropping the topic request with it was not. The reader asked to read about a
+ * setting, and `Logo URL` has exactly one placement — the wizard's branding
+ * step — so there is no reachable page to send them to instead. The panel shows
+ * the topic where they are.
+ */
+describe('an off-page topic request (codex R4 on T14)', () => {
+  it('shows the topic without moving the panel off the step the reader is on', async () => {
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // The rules step is the current page before the search…
+    expect(screen.getAllByText(helpRegistry.getPage('wizard.pickem.rules')!.title).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'logo' } });
+    const hit = await waitFor(() => screen.getByRole('button', { name: /Logo URL/ }));
+    fireEvent.click(hit);
+
+    // The topic is rendered…
+    await waitFor(() => expect(screen.getByText('What you searched for')).toBeTruthy());
+    expect(screen.getAllByText('Logo URL').length).toBeGreaterThan(0);
+    // …and the panel still describes the rules step, NOT the branding step
+    // whose page holds that topic. Answering the request must not smuggle the
+    // page move back in.
+    expect(screen.queryByText(helpRegistry.getPage('wizard.pickem.branding')!.summary)).toBeNull();
+    expect(screen.getAllByText(helpRegistry.getPage('wizard.pickem.rules')!.title).length).toBeGreaterThan(0);
   });
 });

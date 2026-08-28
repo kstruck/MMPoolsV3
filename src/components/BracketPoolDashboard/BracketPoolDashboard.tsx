@@ -4,14 +4,17 @@ import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { HelpRoutePublisher } from '../../help/publish';
+// PLAN-HELP-SYSTEM T6. Direct, not through the `ui` barrel — the barrel does
+// not export it (see `ui/Field.tsx`, which imports it the same way).
+import { HelpTip } from '../ui/HelpTip';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail, AlertTriangle } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
+import { resolveOwnerNames, pendingOwnerUids, nextRetryDelay, ownerNameCacheFor, type OwnerNameCache } from './ownerNames';
 import { dbService } from '../../services/dbService';
-import { userRepository } from '../../services/userRepository';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
 import { isPoolManager, isSuperAdmin } from '../../utils/auth';
@@ -222,20 +225,85 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         return () => unsub();
     }, [pool.id]);
 
-    // Build uid -> display name map whenever entries change
+    // Build uid -> display name map whenever entries change.
+    //
+    // Reads `publicProfiles/{uid}` (world-readable), NOT `users/{uid}` — an
+    // ordinary member may only read their OWN user doc, so the old code hit
+    // permission-denied once per other member and reported every one of them to
+    // Sentry + logClientError. See ownerNames.ts for the full note.
+    //
+    // Only owners with no FINAL name yet are re-read. The entries subscription
+    // hands back a new array on every snapshot, and during live scoring one
+    // lands whenever any score changes, so re-reading every profile each time
+    // is a real cost now that these reads succeed. Remembering the whole owner
+    // set instead would be worse than that cost: recomputeUserProfile is
+    // triggered BY the entry write, so a snapshot can arrive before the profile
+    // it causes, and the fallback name would then be frozen in for the life of
+    // the mount (codex r1 P2). A name from a profile is final; anything else is
+    // retried.
+    //
+    // A retry cannot wait for the next entries snapshot: the profile write does
+    // not touch the entry, and an idle pool produces no further snapshot at all
+    // (codex r2 P2). So an unresolved owner is re-read on a timer instead,
+    // MAX_PROFILE_ATTEMPTS times — enough to win the race, bounded so that a
+    // pool whose owners have no profile at all cannot loop.
+    //
+    // The cache is scoped to pool.id: PoolRoute renders this dashboard without a
+    // `key`, so /pool/a -> /pool/b reuses the instance and every ref in it
+    // (codex r4 P2).
+    const nameCacheRef = React.useRef<OwnerNameCache | null>(null);
+    const [nameRetry, setNameRetry] = useState(0);
     useEffect(() => {
+        const previousCache = nameCacheRef.current;
+        const cache = ownerNameCacheFor(previousCache, pool.id);
+        if (cache !== previousCache) {
+            nameCacheRef.current = cache;
+            // Only when REPLACING another pool's cache — on first mount the map
+            // is already empty and clearing it would cost a render for nothing.
+            if (previousCache) setUserNames({});
+        }
         if (entries.length === 0) return;
-        const uniqueUids = [...new Set(entries.map(e => e.ownerUid))];
-        Promise.all(
-            uniqueUids.map((uid: string) => userRepository.getById(uid))
-        ).then(users => {
-            const map: Record<string, string> = {};
-            users.forEach((u: { name?: string; email?: string } | null, i: number) => {
-                if (u) map[uniqueUids[i]] = u.name || u.email || uniqueUids[i];
-            });
-            setUserNames(map);
-        }).catch(() => { /* silent fallback */ });
-    }, [entries]);
+        const now = Date.now();
+        const pending = pendingOwnerUids(entries, cache.resolved, cache.attempts, now);
+
+        if (pending.length === 0) {
+            // Either everyone has a final name, or someone is only waiting out
+            // the interval — in which case wake up when it elapses. Nothing else
+            // will: the profile write does not touch the entry.
+            const wait = nextRetryDelay(entries, cache.resolved, cache.attempts, now);
+            if (wait === null) return;
+            const waitTimer = setTimeout(() => setNameRetry(n => n + 1), wait);
+            return () => clearTimeout(waitTimer);
+        }
+
+        // Counted before the read, not after: an abandoned attempt still cost a
+        // read, and the cap has to bound READS. The interval above is what keeps
+        // a burst of snapshots from spending the whole budget at once.
+        pending.forEach(uid => {
+            cache.attempts[uid] = { count: (cache.attempts[uid]?.count ?? 0) + 1, lastAt: now };
+        });
+
+        let cancelled = false;
+        resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid), pending)
+            .then(({ names, resolvedFromProfile }) => {
+                // Not `nameCacheRef.current`: if the pool changed mid-flight this
+                // is the OLD pool's cache, and the new one must not inherit it.
+                if (cancelled || nameCacheRef.current !== cache) return;
+                resolvedFromProfile.forEach(uid => cache.resolved.add(uid));
+                // Merge: names resolved by an earlier snapshot are not re-read,
+                // so they are not in `names` and must not be dropped.
+                setUserNames(prev => ({ ...prev, ...names }));
+                // Someone is still on a fallback. Re-enter so the branch above
+                // schedules the wait; this terminates because every re-entry
+                // spends one of that owner's attempts.
+                if (resolvedFromProfile.length < pending.length) setNameRetry(n => n + 1);
+            })
+            // resolveOwnerNames swallows per-uid failures by contract, so this
+            // only fires on a real bug. Log it rather than dropping it silently;
+            // StandingsTable already renders 'Unknown' for a missing name.
+            .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
+        return () => { cancelled = true; };
+    }, [entries, nameRetry, pool.id]);
 
     // Listen for master bracket print event
     useEffect(() => {
@@ -1611,9 +1679,31 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {/* Bonuses */}
                                                 <div className="pt-2 border-t border-line">
                                                     <p className="text-xs text-faint mb-2">Bonus Payouts</p>
+                                                    {/* PLAN-HELP-SYSTEM T6: the two `?`s for the bonus rows.
+                                                        ON A COLUMN HEADER, ONCE, rather than on every row — the
+                                                        list repeats and a tip per input would draw two icons per
+                                                        bonus for one explanation each (voice rule 10). The two
+                                                        inputs below carry no label at all today, so this row is
+                                                        also what names them; `aria-label` gives a screen reader
+                                                        the same two words. `text-muted`, NOT the `text-faint` of
+                                                        the title above it: `HelpTip` is `text-current` and
+                                                        `--faint` is 2.81:1 on the light page, which is the exact
+                                                        regression `tests/help-tip-contrast.test.ts` exists for.
+                                                        Rendered even with NO bonus rows yet, deliberately: that
+                                                        is the moment a commissioner most needs to be told what a
+                                                        bonus is, and the `?` is the only thing here that says. */}
+                                                    <div className="flex items-center gap-2 mb-1 text-xs text-muted">
+                                                        <span className="flex-1 flex items-center gap-1.5">Name<HelpTip helpId="settings.payouts.bonuses.*.name" /></span>
+                                                        <span className="w-20 flex items-center gap-1.5">Share<HelpTip helpId="settings.payouts.bonuses.*.percentage" /></span>
+                                                        {/* Keeps the two headings over their columns: the `%`
+                                                            suffix and the remove button sit to the right of the
+                                                            share input on every row below. */}
+                                                        <span className="w-[38px]" aria-hidden="true" />
+                                                    </div>
                                                     {editPayouts.bonuses.map((b, i) => (
                                                         <div key={i} className="flex items-center gap-2 mb-2">
                                                             <input value={b.name}
+                                                                aria-label="Bonus name"
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, name: e.target.value };
@@ -1621,6 +1711,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                                 }}
                                                                 className="flex-1 bg-surface border border-line rounded p-2 text-[color:var(--text)] text-sm" placeholder="Bonus name" />
                                                             <input type="number" value={b.percentage}
+                                                                aria-label="Bonus share, percent"
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, percentage: Number(e.target.value) };

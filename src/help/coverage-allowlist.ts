@@ -57,19 +57,35 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   'props.questions.*.points': 'PERMANENT: accepted but not offered by the props wizard, which scores every question equally.',
   'props.questions.*.type': 'PERMANENT: accepted but not offered by the props wizard.',
 
-  // ---- PENDING: settings with no control in the create wizard -------------
-  // Re-ticketed in T1: measured against the wizard sources, none of these three
+  // ---- settings with no control in the create wizard ----------------------
+  // Re-ticketed in T1: measured against the wizard sources, none of these four
   // has a control there, so T1 could not have written their copy. Each is edited
   // on the manager surface named below, and moves with that surface's ticket.
+  //
   // `contactPhone` CLOSED BY T4. It has no create-wizard control and never
   // will — the unified wizard collects an email and nothing else — so its copy
   // had to wait for the manager form that does edit it. The topic lives in
   // `content/wizard-shared.ts` beside `contactEmail` and is placed on
   // `pool.nfl.manager.settings`, alongside the `contactMethod` topic that says
   // whether either of them is ever shown.
-  'branding.backgroundColor': 'T5: the legacy branding step has a colour picker for it (admin/WizardStepBranding.tsx:97), reached from the squares manager and the props edit wizard. The unified wizard offers only primaryColor and secondaryColor.',
-  'settings.payouts.bonuses.*.name': 'T6: no create-wizard control — StepPayouts edits places only. BracketPoolDashboard.tsx:1556 is the bonus-row editor.',
-  'settings.payouts.bonuses.*.percentage': 'T6: no create-wizard control; same bonus-row editor as the name above.',
+  //
+  // T5 and T6 wrote the other three, in `content/manager-fields.ts`. ⚠️ THAT
+  // CLOSES THESE ROWS, NOT THOSE TICKETS (codex r5): PLAN-HELP-SYSTEM.md:872-873
+  // also asks T5/T6 for the rest of the squares manager, the props wizard and
+  // manager, the playoff manager surfaces, `SCORING_SYSTEM_LABELS`, and two
+  // file deletions — none of which is done. See the header of
+  // `content/manager-fields.ts` for the outstanding list. Each path below
+  // is now explained for the types that actually render it: the squares Setup
+  // Wizard tab and the props Manage tab for the background colour, the bracket
+  // commissioner tab plus the bracket and NFL rules pages for the bonus rows.
+  // The rows below are what is LEFT — the types whose create contract carries
+  // the path with no control and no reader anywhere. They are PERMANENT for the
+  // same reason `theme` and `props.questions.*.points` are, and they read the
+  // way `seasonType` does: a real topic covers part of the field's reach and a
+  // written reason covers the rest.
+  'branding.backgroundColor': 'PERMANENT for NFL_PLAYOFFS / NFL_PICKEM / NFL_SURVIVOR / NFL_MARGIN, CLOSED BY T5 for SQUARES and PROPS. The only two colour pickers in the app are WizardStepBranding (props edit wizard) and admin/WizardStepBrandingAdmin (squares manager); the unified wizard\'s StepBranding writes logoUrl, primaryColor and secondaryColor and nothing else. The only two readers are PoolRoute.tsx:507 (squares) and PropsPoolDashboard.tsx:90 (props) — the playoff dashboard reads the legacy branding.bgColor and the NFL dashboards go through brandingStyles(), which has no backgroundColor branch. So on those four types the field is written by nothing and read by nothing, and there is no control for copy to explain.',
+  'settings.payouts.bonuses.*.name': 'PERMANENT for NFL_PLAYOFFS, CLOSED BY T6 for BRACKET and the three NFL season formats. A playoff pool has no bonus editor — StepPayouts edits places only, and no playoff surface edits payouts at all — and no bonus reader: PlayoffPayoutCard.tsx:36 lists finishing places only, where the bracket and NFL rules pages render the list through PayoutsPanel. Its bonus list is therefore always empty and never shown. If a playoff surface ever renders one, this row goes and NFL_PLAYOFFS joins BONUS_TYPES in content/manager-fields.ts.',
+  'settings.payouts.bonuses.*.percentage': 'PERMANENT for NFL_PLAYOFFS, CLOSED BY T6 elsewhere; same editor and same readers as the bonus name above.',
 
   // ---- PENDING: NFL Pick'em (T9) -----------------------------------------
   // SETTLED BY T13, and settled as PERMANENT rather than closed with copy.
@@ -159,7 +175,7 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   '/dev/dashboards': 'PERMANENT: developer preview, not reachable by a reader.',
   '/dev/profile-demo': 'PERMANENT: developer preview, not reachable by a reader.',
 
-  // PENDING — T14 (the two admin surfaces). T3 CLOSED the twenty-one site and
+  // CLOSED — T3 and T14. T3 CLOSED the twenty-one site and
   // account rows: every one of them now has a page in
   // `content/site-pages.ts`, and two of the reasons written here were wrong
   // about the code, which is why they are gone rather than edited:
@@ -174,8 +190,13 @@ export const ROUTE_ALLOWLIST: Readonly<Record<string, string>> = Object.freeze({
   //   - `/join/:poolId` is not a "join and pay" screen. It takes no payment at
   //     all — it shows the fee, the format and the prize split, and joining is
   //     a single button. The fee is settled between the player and the host.
-  '/super-admin': 'T14: seventeen admin tabs get page-level summaries only (K4 scope ii).',
-  '/tournament-sim': 'T14: admin simulation surface.',
+  //
+  // PENDING — T2 (pool surfaces + wizards) and T3 (site + account).
+  // T14 CLOSED BOTH ADMIN ROWS. `/super-admin` and `/tournament-sim` are
+  // covered by `src/help/content/super-admin.ts` — page-level summaries only
+  // (K4 scope ii), in the lazily loaded admin chunk rather than in `PAGES`.
+  // The row said "seventeen admin tabs"; `SuperAdmin.tsx` `navStructure` has
+  // SIXTEEN, across eight groups.
 });
 
 /**

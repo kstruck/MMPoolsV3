@@ -5,7 +5,7 @@ import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType } from '../../utils/nflPending';
-import { survivorRuleCopy } from '../../utils/survivorRules';
+import { survivorRuleCopy, survivorRebuyRuleCopy } from '../../utils/survivorRules';
 import { effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from '@shared/survivorReuse';
 
 interface NFLPoolRulesProps {
@@ -258,7 +258,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 <div className="flex justify-between border-b border-line pb-2">
                   <span className="font-bold">Auto-Survive Exemption:</span>
                   <span className="font-display font-bold">
-                    {settings.autoSurviveExemptionEnabled ? 'Enabled (Exempt when 0 eligible teams left)' : 'Disabled'}
+                    {survivorRuleCopy(settings).autoSurvive}
                   </span>
                 </div>
               </div>
@@ -270,9 +270,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 <ul className="space-y-2 text-[12px] text-muted leading-relaxed list-disc list-inside">
                   <li>{survivorRuleCopy(settings).reuse}</li>
                   <li>
-                    Rebuys: {settings.maxRebuys > 0
-                      ? `Allowed up to ${settings.maxRebuys} rebuys before ${Number(settings.rebuyDeadlineWeek) >= 1 ? nflWeekLabel(poolSeasonType(castPool), Number(settings.rebuyDeadlineWeek)) : 'the season starts'} at a cost of $${settings.rebuyCost} per rebuy.`
-                      : 'Disabled in this pool.'}
+                    Rebuys: {survivorRebuyRuleCopy(settings, (w) => nflWeekLabel(poolSeasonType(castPool), w))}
                   </li>
                   <li>Failure to submit a pick yields an automatic strike at week-end.</li>
                 </ul>

@@ -97,6 +97,30 @@ export function hrefForPage(page: HelpPage, ctx: HelpRouteContext): string | nul
 }
 
 /**
+ * Is the reader LOOKING AT this page's screen right now?
+ *
+ * Stricter than `onCurrentRoute`, and that difference is the whole point. An
+ * unlinkable page (K13 — the super-admin tabs, the wizard steps) can only ever
+ * be opened in place, so "in place" has to mean THIS screen and not merely this
+ * route. `/super-admin` is one route shared by sixteen tabs and `/create/pickem`
+ * one route shared by six steps; treating route identity as screen identity let
+ * an admin on Overview be shown the Operations summary while the dashboard still
+ * rendered Overview (codex R2 on T14). Same shape in the wizard: the Payouts
+ * step summary on top of the Basics form.
+ *
+ * An ABSENT `tab`/`subTab` on the context is not a mismatch, matching
+ * `isPageOffered` above: a surface that publishes nothing has made no claim, and
+ * a publisher that has not settled yet must not make the page it is about to
+ * confirm unopenable for a frame. Only a published, DIFFERENT value is a no.
+ */
+export function isReaderOnPage(page: HelpPage, ctx: HelpRouteContext): boolean {
+  if (!onCurrentRoute(page, ctx)) return false;
+  if (page.tab !== undefined && ctx.tab !== undefined && page.tab !== ctx.tab) return false;
+  if (page.subTab !== undefined && ctx.subTab !== undefined && page.subTab !== ctx.subTab) return false;
+  return true;
+}
+
+/**
  * Can the reader open this page from where they are standing?
  *
  * ONE predicate, three readers — "All pages" decides whether to render a row as a
@@ -106,14 +130,18 @@ export function hrefForPage(page: HelpPage, ctx: HelpRouteContext): string | nul
  *   - the page is outside the reader's scope (another pool type, another
  *     audience) — codex R7;
  *   - its tab is one this surface is not offering — codex R5;
- *   - it has no usable link AND is not on the route the reader is on, so neither
+ *   - it has no usable link AND the reader is not standing on it, so neither
  *     navigating nor showing it in place would be honest — codex R12. A pool page
  *     listed while the reader is in a create wizard is the live case: the wizard
  *     publishes the pool type, so the page is in scope, but there is no pool id
  *     to build a URL from.
+ *
+ * A page that DOES build a link is judged on the link alone, whatever tab the
+ * reader is on: clicking it navigates, so the reader ends up looking at the
+ * screen the panel describes. Only the unlinkable branch has to be strict.
  */
 export function canOpenPage(page: HelpPage, ctx: HelpRouteContext, audience: Audience): boolean {
   if (!isEntryVisible(page.poolTypes, page.audience, { poolType: ctx.poolType, audience })) return false;
   if (!isPageOffered(page, ctx)) return false;
-  return hrefForPage(page, ctx) !== null || onCurrentRoute(page, ctx);
+  return hrefForPage(page, ctx) !== null || isReaderOnPage(page, ctx);
 }
