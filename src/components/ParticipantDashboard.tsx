@@ -434,6 +434,34 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return { all: myPools.length, open, live, completed, entries };
     }, [myPools, user.id]);
 
+    /**
+     * The tab strip, built ONCE and used twice: rendered below, and published to
+     * the Help panel as `offeredTabs`.
+     *
+     * Commissioner Hub is conditional — it appears only for someone who owns or
+     * co-runs a pool — and Help has a page for it (`account.entries.commissioner`).
+     * Without this list the panel offered that page to everyone, so a reader with
+     * no pools of their own got an "All pages" row that navigates to
+     * `?tab=commissioner`, a tab their own strip does not have. `offeredTabs` is
+     * the mechanism for exactly this (`help/types.ts` `HelpRouteContext`): the
+     * surface publishes the list it just rendered rather than the content
+     * re-deriving the condition. Deriving it from the SAME array is the point —
+     * a second copy of the ownership test could drift from the strip.
+     */
+    const tabStrip = useMemo(() => {
+        const managed = myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p)).length;
+        return [
+            { id: 'insights', label: 'Empire Overview', icon: Activity, count: undefined as number | undefined },
+            { id: 'entries', label: 'My Entries', icon: LayoutGrid, count: counts.entries },
+            ...(managed > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown, count: undefined as number | undefined }] : []),
+            { id: 'live', label: 'Live Pools', icon: undefined, count: counts.live },
+            { id: 'open', label: 'Open', icon: undefined, count: counts.open },
+            { id: 'completed', label: 'Completed', icon: undefined, count: counts.completed },
+            { id: 'all', label: 'All Pools', icon: undefined, count: counts.all },
+        ];
+    }, [myPools, user, counts]);
+    const offeredTabs = useMemo(() => tabStrip.map(t => t.id), [tabStrip]);
+
     const getStatusBadge = (pool: Pool) => {
         const tabStatus = getPoolTabStatus(pool);
 
@@ -445,8 +473,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col selection:bg-gold-500 selection:text-navy-950">
             {/* T2: My Entries' tab is in memory. Published so the Help panel can
-                tell the six lists apart. The page copy is T3. */}
-            <HelpRoutePublisher tab={activeTab} />
+                tell the SEVEN lists apart (the comment said six; the union at
+                :67 has always had seven). `offeredTabs` is the strip actually
+                rendered — see `tabStrip` above. The page copy is T3. */}
+            <HelpRoutePublisher tab={activeTab} offeredTabs={offeredTabs} />
             <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-grow max-w-7xl mx-auto w-full p-4 md:p-8">
@@ -515,15 +545,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                 {/* Tabs */}
                 <div className="flex items-center gap-2 mb-6 border-b border-line overflow-x-auto">
-                    {[
-                        { id: 'insights', label: 'Empire Overview', icon: Activity },
-                        { id: 'entries', label: 'My Entries', icon: LayoutGrid, count: counts.entries },
-                        ...(myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p)).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
-                        { id: 'live', label: 'Live Pools', count: counts.live },
-                        { id: 'open', label: 'Open', count: counts.open },
-                        { id: 'completed', label: 'Completed', count: counts.completed },
-                        { id: 'all', label: 'All Pools', count: counts.all },
-                    ].map(tab => (
+                    {tabStrip.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}

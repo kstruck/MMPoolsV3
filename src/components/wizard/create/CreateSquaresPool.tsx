@@ -20,8 +20,10 @@ function StepSquaresDetails() {
       <h3 className="mb-1 text-lg font-bold text-white">The matchup &amp; grid</h3>
       <p className="mb-5 text-sm text-slate-400">Which teams, and how the grid works.</p>
       <div className="grid grid-cols-2 gap-x-4">
-        <TextField name="homeTeam" label="Home team (rows)" placeholder="Chiefs" />
-        <TextField name="awayTeam" label="Away team (columns)" placeholder="Eagles" />
+        {/* One explanation, two fields (voice rule 10) — both point at the
+            shared `matchup.teams` topic rather than repeating it. */}
+        <TextField name="homeTeam" label="Home team (rows)" placeholder="Chiefs" helpId="matchup.teams" />
+        <TextField name="awayTeam" label="Away team (columns)" placeholder="Eagles" helpId="matchup.teams" />
       </div>
       <div className="grid grid-cols-2 gap-x-4">
         <NumberField name="maxSquaresPerPlayer" label="Max squares per player (0 = no limit)" min={0} />

@@ -8,7 +8,7 @@
 // box, the accordions and the scroll position do not survive a page change —
 // leftover state from the previous screen is worse than none.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { HelpSearchResult } from '../../help/types';
 import { SEARCH_RESULT_LIMIT } from '../../help/registry';
@@ -47,21 +47,45 @@ export function HelpPanelBody({ state, searchInputRef }: {
   const scrolledForTerm = useRef<string | undefined>(undefined);
 
   /**
-   * Search hits, minus anything that lands on a screen this pool has no tab for
+   * Search hits, minus anything that lands on a screen the reader cannot get to
    * (codex R5). A Survivor member searching "Results" would otherwise be handed
    * a row for the NFL Results page, and the click could only show a page they
    * cannot open. `registry.search` cannot do this filtering itself — it knows
    * the reader's audience and pool type, not which tabs the surface rendered.
+   *
+   * A PAGE hit is held to the stricter `canOpenPage` — the same predicate "All
+   * pages" and `goToPage` use, so a result cannot be offered and then refused.
+   * It matters for the pages no URL can reach (K13: the super-admin tabs, the
+   * wizard steps): an admin on Overview searching "operations" used to be handed
+   * a row whose click forced the Operations summary over the Overview screen,
+   * and — once `canOpenPage` refused that — a row whose click did nothing. A
+   * clickable result that does nothing is the exact defect codex R9 fixed for
+   * glossary hits below.
+   *
+   * A TOPIC hit keeps `isPageOffered`, and the difference is deliberate. A topic
+   * is copy about one setting, not a screen: a commissioner on the wizard's
+   * Basics step searching "logo" must still be shown the branding topic, even
+   * though the step page that holds it is not the step they are on. Holding
+   * topic hits to `canOpenPage` emptied that search completely — measured on
+   * this branch before it shipped, and the reason this filter is per-kind.
+   *
+   * PASSED INTO `search`, not applied to its result, so the cap is spent on hits
+   * that survive (codex R3 on T14).
    */
+  const acceptHit = useCallback(
+    (hit: HelpSearchResult) => {
+      const hitPage = hit.pageId ? registry.getPage(hit.pageId) : undefined;
+      if (!hitPage) return true;
+      return hit.kind === 'page'
+        ? canOpenPage(hitPage, routeContext, scope.audience)
+        : isPageOffered(hitPage, routeContext);
+    },
+    [registry, routeContext, scope.audience],
+  );
+
   const results = useMemo<HelpSearchResult[]>(
-    () =>
-      query.trim()
-        ? registry.search(query, scope).filter((hit) => {
-            const hitPage = hit.pageId ? registry.getPage(hit.pageId) : undefined;
-            return !hitPage || isPageOffered(hitPage, routeContext);
-          })
-        : [],
-    [registry, query, scope, routeContext],
+    () => (query.trim() ? registry.search(query, scope, acceptHit) : []),
+    [registry, query, scope, acceptHit],
   );
 
   const sections = useMemo(
@@ -141,6 +165,17 @@ export function HelpPanelBody({ state, searchInputRef }: {
   const activeSection = activeTopic
     ? sections.find((s) => s.topics.includes(activeTopic))?.section
     : undefined;
+  /**
+   * A topic the reader asked for that is NOT on this page (codex R4 on T14).
+   *
+   * `goToPage` refuses to move to a page the reader cannot open — an unlinkable
+   * step or tab that is not the one they are standing on — but the request was
+   * to read about a setting, not to go somewhere. Rendered as a card of its own
+   * above "On this page", because the alternative is the click doing nothing:
+   * a search hit for `Logo URL` from the wizard's rules step has no reachable
+   * placement anywhere, so there is no other page to send the reader to.
+   */
+  const offPageTopic = activeTopic && activeSection === undefined ? activeTopic : undefined;
 
   const relatedOf = (ids: readonly string[] | undefined) =>
     (ids ?? [])
@@ -197,6 +232,23 @@ export function HelpPanelBody({ state, searchInputRef }: {
               There is no guide for this screen yet. Search above, or pick a screen from the list below.
             </p>
           )}
+
+          {offPageTopic ? (
+            <section className="space-y-2">
+              <PanelSectionHeading>What you searched for</PanelSectionHeading>
+              <TopicCard
+                topic={offPageTopic}
+                poolType={scope.poolType}
+                settings={scope.settings}
+                highlighted
+                related={relatedOf(offPageTopic.related)}
+                onOpenRelated={(id) => {
+                  clearActiveTopic();
+                  openTo({ topicId: id });
+                }}
+              />
+            </section>
+          ) : null}
 
           {sections.length > 0 ? (
             <section className="space-y-2">

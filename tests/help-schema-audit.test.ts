@@ -355,8 +355,22 @@ describe('every schema path is explained or allowlisted', () => {
       expect(path in SCHEMA_PATH_ALLOWLIST, `${path} should no longer be allowlisted`).toBe(false);
     }
     expect(Object.keys(SCHEMA_PATH_ALLOWLIST).length).toBeLessThan(allLeaves.size);
-    for (const path of ['settings.maxStrikes', 'settings.scoringSystem', 'numberSets', 'settings.payoutMode']) {
-      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} is T9-T13 content and should still be pending`).toBe(true);
+    // This block used to name paths that were STILL pending, one per open
+    // ticket. T10, T11, T12 and T13 have now closed all four, so that list is
+    // empty and a loop over it would assert nothing — the exact way a guard
+    // rots into a no-op. It is replaced by its contrapositive, which keeps
+    // biting for as long as the paths exist: a path a ticket CLOSED must be
+    // explained for every pool type whose create contract carries it, and must
+    // NOT be back in the allowlist. A silently re-added row, or copy that stops
+    // covering one pool type, fails here.
+    for (const path of [
+      'settings.maxStrikes',
+      'settings.scoringSystem',
+      'numberSets',
+      'settings.payoutMode',
+    ]) {
+      expect(explained.has(path), `${path} is closed and must be explained`).toBe(true);
+      expect(path in SCHEMA_PATH_ALLOWLIST, `${path} is closed and must not be allowlisted`).toBe(false);
     }
   });
 });

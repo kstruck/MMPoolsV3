@@ -61,6 +61,15 @@ export { db };
 import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropCard, PlayoffTeam, Pool, BracketEntry, Tournament, BanterMessage, NFLGame, WeeklyRecap } from "../types";
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
+import type { PublicProfile } from "@shared/profile";
+
+/**
+ * A `publicProfiles/{uid}` document as READ (not as written). Every field of the
+ * current schema is optional because docs written by earlier versions of
+ * recomputeUserProfile are still in the collection; only `uid` is guaranteed,
+ * because getPublicProfile stamps it from the document id it asked for.
+ */
+export type PublicProfileDoc = Partial<PublicProfile> & { uid: string };
 
 /**
  * Set a just-created pool's password — or make sure no unprotected pool is left
@@ -894,6 +903,32 @@ export const dbService = {
     subscribeToPublicProfile: (uid: string, callback: (data: any | null) => void) => {
         const ref = doc(db, 'publicProfiles', uid);
         return onSnapshot(ref, (snap) => callback(snap.exists() ? { uid, ...snap.data() } : null), () => callback(null));
+    },
+
+    // One-shot read of the SAME world-readable projection subscribeToPublicProfile
+    // listens to (`publicProfiles/{uid}`, firestore.rules `allow read: if true`).
+    //
+    // Exists because a dashboard that needs one display name per member must not
+    // open a listener per member — and must not read `users/{uid}`, which an
+    // ordinary member may only read for THEMSELVES (firestore.rules). That read
+    // was throwing permission-denied once per other member on every bracket pool
+    // load, and BaseRepository.getById reports each one to Sentry + logClientError
+    // (Sentry c810a0012edf4755ba408bcb1be0a279).
+    //
+    // Swallow-and-return-null mirrors getSiteAverages on purpose: a missing
+    // profile is a NORMAL outcome here (the doc is written by recomputeUserProfile
+    // and older entries predate it), handled by the caller's fallback chain.
+    //
+    // `Partial<PublicProfile>` rather than `PublicProfile`: this reads whatever is
+    // stored, which for a legacy doc may not carry every field of the current
+    // schema. Callers must treat each field as possibly absent.
+    getPublicProfile: async (uid: string): Promise<PublicProfileDoc | null> => {
+        try {
+            const snap = await getDoc(doc(db, 'publicProfiles', uid));
+            return snap.exists() ? { ...(snap.data() as Partial<PublicProfile>), uid } : null;
+        } catch {
+            return null;
+        }
     },
 
     // Earned achievements (ADR 0005) — world-readable subcollection; engine is future work.
