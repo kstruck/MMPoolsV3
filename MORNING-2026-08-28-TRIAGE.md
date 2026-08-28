@@ -307,11 +307,32 @@ human, and auto-merge is off regardless.
 | PR | Bump | Verdict | What actually breaks |
 |---|---|---|---|
 | [#463](https://github.com/kstruck/MMPoolsV3/pull/463) | lucide-react 0.556 → **1.31** | 🔴 **NEEDS WORK** | 1.x **removed the brand icons**. 7 × `TS2305` — `Twitter`, `Facebook`, `Instagram`, `Linkedin`. Build fails. |
-| [#462](https://github.com/kstruck/MMPoolsV3/pull/462) | framer-motion 12.43 → **13.1.1** | 🟡 **CLOSEST TO SAFE** | tsc, build and `functions test` all green. Only failures were the CRLF artefact below. |
+| [#462](https://github.com/kstruck/MMPoolsV3/pull/462) | framer-motion 12.43 → **13.1.1** | 🟢 **GREEN, confirmed ON CURRENT MAIN** | Every gate clean: tsc 0, build 0, vitest **2969/2969**, functions **2138/2138**, lint delta zero. |
 | [#401](https://github.com/kstruck/MMPoolsV3/pull/401) | vite 7.3 → **8.2.2** | 🔴 **NEEDS WORK** | Vite 8 ships Rollup 5, which **removed the object form of `manualChunks`**. `vite.config.ts:37`, `TS2769`. |
-| [#304](https://github.com/kstruck/MMPoolsV3/pull/304) | firebase-admin 13.10 → **14.3** | 🟡 **CLEAN, BUT ASK WHY FIRST** | Everything green. But it bumps the **root** copy — see the split below. |
+| [#304](https://github.com/kstruck/MMPoolsV3/pull/304) | firebase-admin 13.10 → **14.3** | 🟡 **GREEN, BUT THE GREEN IS EMPTY** | Every gate clean on current main — and **nothing tests it**: `vite.config.ts:22-23` aliases `firebase-admin` to a mock. Also bumps the wrong copy; see below. |
 | [#302](https://github.com/kstruck/MMPoolsV3/pull/302) | typescript 6.0 → **7.0.2** | 🔴 **NEEDS WORK** | `TS5102` — `baseUrl` **removed**. The repo predicted this in a comment: *"Revisit before TS 7.0."* |
 | [#300](https://github.com/kstruck/MMPoolsV3/pull/300) | tailwindcss 3.4 → **4.3.3** | 🔴 **NEEDS WORK** | PostCSS plugin moved to `@tailwindcss/postcss`. Three files change. **`tsc -b` passes** — it is a CSS failure, so a green typecheck proves nothing here. |
+
+### The two greens were RE-RUN on current `main`, not trusted from the branch
+
+Those branches are 49–175 commits behind, so "green on the branch" is not "green
+on what would actually merge". Both were re-tested by applying the bump on top of
+`f161b51d`:
+
+| | tsc | build | root vitest | functions test | lint |
+|---|---|---|---|---|---|
+| framer-motion 13.1.1 | 0 | 0 | **2969/2969** | **2138/2138** | 1881/0, delta zero |
+| firebase-admin 14.3.0 | 0 | 0 | **2969/2969** | **2138/2138** | — |
+
+Both installs were confirmed in place by reading the installed version back out of
+`node_modules`, and the worktree was restored to `origin/main` afterwards.
+
+🛑 **#304's green is close to meaningless, and that is the finding.**
+`vite.config.ts:22-23` aliases **both** `firebase-admin` and
+`firebase-admin/firestore` to `tests/mocks/firebase-admin.ts`, so the four test
+files that import it get the **mock**. The suite would be just as green with the
+package uninstalled. Its real consumers are the `scripts/*.mjs` ops scripts, and
+**no test runs any of them.**
 
 ### The four breakages were each re-verified against CURRENT `main`
 
@@ -405,8 +426,9 @@ the queue will not be short. The limit there is 5, not the root's 10, on purpose
 waiting, it just stays invisible.*
 
 **D6 — the six bumps themselves.** Recommended: **fix none of them tonight, and
-take them in this order when you do** — #462 (closest to safe) → #304 (only after
-D5, since it widens a split #631 exists to close) → #401 (one config rewrite) →
+take them in this order when you do** — #462 (**green on current main, and the
+only one of the six that is**) → #304 (only after D5, since it widens a split
+#631 exists to close, and its green tests nothing) → #401 (one config rewrite) →
 #463 (two files, needs replacement icons) → #302 (config only, but pairs with the
 `functions/` TS 5 gap) → #300 (three files, and the failure mode is a GREEN build
 with no styles). Full evidence is commented on each PR.
