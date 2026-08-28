@@ -11,7 +11,7 @@ re-derived from the code or from a command, not carried forward.
 
 | | |
 |---|---|
-| PRs ready for you to merge | **#616, #618, #629, #630, #631** — all reviewed, gates in each body |
+| PRs ready for you to merge | **#616, #618, #629, #630, #631, #632, #633** — all reviewed, gates in each body |
 | PRs closed with written reasons | **#448** (superseded), **#582** (recommended, left open for you) |
 | PR verified and left alone | **#380** — re-checked against code, still accurate |
 | Tasks that turned out DONE | help-system **T4** and **all four T9 defects** |
@@ -445,6 +445,11 @@ with no styles). Full evidence is commented on each PR.
 
 ## 8. Two things worth knowing for the next session
 
+**Both are now in `.claude/skills/mmp-build-and-env/SKILL.md` as of
+[#633](https://github.com/kstruck/MMPoolsV3/pull/633)** — a skill is read every
+time the symptom appears; a morning doc is read once. They are restated here
+because this file is what you are reading tonight.
+
 1. **A fresh worktree fails 7 test files before you run `copy-shared`.**
    `npx vitest run` reports `Cannot find module '../shared/schemas/…'` because
    `functions/src/shared` is generated, not committed. Run
@@ -452,7 +457,11 @@ with no styles). Full evidence is commented on each PR.
    defect, and it is why "2143 passed, 3 failed" appears in older PR bodies.
 
 2. **A reused worktree can carry CRLF across branch switches, and it looks like a
-   test failure.** `git checkout` only renormalises files it *rewrites*, so a
+   test failure.** ⚠️ **The repair is `git checkout -- .`, NOT `git add
+   --renormalize .`** — measured on `README.md`: 231 CR bytes before, **231
+   after renormalize**, **0 after checkout**. Renormalize only re-cleans into
+   the index and leaves the file the suite actually reads untouched. (`git
+   checkout -- .` discards uncommitted changes.) `git checkout` only renormalises files it *rewrites*, so a
    worktree first materialised on a branch that predates `.gitattributes` keeps
    CRLF in every unchanged file afterwards. Measured tonight:
    `functions/src/stripe.ts` had **1871 CR bytes** in the dependabot worktree and
