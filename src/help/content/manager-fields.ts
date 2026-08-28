@@ -50,6 +50,20 @@
 // rather than one, which is T5's first file and not T5. Anything here reading
 // "CLOSED BY T5/T6" is about an ALLOWLIST ROW or ONE FILE, never the ticket.
 //
+// ⚠️ THE `urlSlug` COPY BELOW WAS WRONG TWICE, BOTH CAUGHT BY CODEX, AND BOTH
+// ONLY FINDABLE BY READING THE IMPLEMENTATION RATHER THAN THE CALL SITE:
+//
+//   1. "a capital never appears in the field at all" — false. `DebouncedInput`
+//      renders its own `localValue` and only hands the parent the sanitised
+//      string 500ms after typing stops, so an invalid character IS shown and
+//      then removed. The sanitiser is on `onChange`, not on the keystroke.
+//   2. "the pools you own or manage" — false, and wrong in the OPPOSITE
+//      direction. `App.tsx:151` calls `subscribeToPools(callback)` with NO
+//      `ownerId`, so it takes the `isPublic == true` branch
+//      (`dbService.ts:1291`) capped at 500. The check therefore cannot see a
+//      PRIVATE pool, including one the commissioner owns — the reverse of
+//      what the first draft promised.
+//
 // Written against `docs/help-voice.md` (K8). Every claim below was read out of
 // the source it describes:
 //
@@ -217,9 +231,9 @@ export const MANAGER_FIELD_TOPICS: readonly HelpTopic[] = [
     short:
       'The readable part of your pool’s link — /pool/your-slug. The Share button hands out this address, so changing it breaks the links you have already sent.',
     long: [
-      'Lowercase letters, numbers and dashes only. Anything else you type is dropped as you go rather than rejected, so a space or a capital never appears in the field at all.',
+      'Lowercase letters, numbers and dashes only. A capital or a space is not rejected — it shows while you are typing and is taken out about half a second after you stop, so the address settles into a tidy one on its own.',
       '⚠️ Changing it breaks every link already shared with the old one. Nothing redirects the old address to the new one, and the Share button builds its link from this field whenever it is filled in — so the addresses you have handed out are exactly the ones that stop working. Set it once, before you invite anyone.',
-      'The "already taken" warning only checks the pools this app has loaded for you — the ones you own or manage. It is not a check against every pool on the site, so a name it accepts can still collide with somebody else’s.',
+      '⚠️ The "already taken" warning is a weak check, so do not lean on it. It compares against the PUBLIC pools this app has loaded, and no further — it cannot see a private pool, including one of your own, and it stops at the first 500 it loads. An address it accepts can still be taken.',
       'Leave it blank and the pool is reached by its own id instead. That link is longer and not memorable, but it never changes.',
     ].join('\n\n'),
     poolTypes: SLUG_TYPES,
