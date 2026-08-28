@@ -22,34 +22,73 @@ re-derived from the code or from a command, not carried forward.
 rebuild. That unblocks the partial-dues backfill, which has been stuck since
 2026-08-27 because the number that decides it could not be displayed.
 
+🛑 **And before ANY deploy decision, read §1.** `HANDOFF.md` on `origin/main`
+currently names the WRONG deploy SHA, and the stale answer and the true answer
+are opposite: it implies a functions deploy is owed, and one is not. #616 fixes
+the doc; §1 has the production measurement that settles it.
+
 ---
 
-## 1. Deploy state — re-derived, and the result is an ABSENCE
+## 1. Deploy state — and `origin/main`'s HANDOFF is WRONG about it right now
 
-**Functions are still deployed from <!-- deploy-state:ignore --> `main` @ `291e949a`, and that
-is correct — not stale.**
+🛑 **READ THIS BEFORE ANY DEPLOY DECISION. The two answers are opposite.**
 
-> The `deploy-state:ignore` tag above is not a hedge. `HANDOFF.md` carries the
-> ONE live claim (`deploy-state:current`) and this file only restates it, so
-> tagging it keeps `tests/docs-state-invariants.test.ts` able to tell the
-> canonical claim from an echo. The guard caught this file the first time it ran
-> — which is the guard working, not a nuisance.
+On `origin/main` today, the tagged `deploy-state:current` claim in **both**
+`HANDOFF.md` and `PICKUP-PRESEASON-PILOT.md` says the functions are deployed
+from `6d92dc61`. **That is stale**, and the gap is not cosmetic — **24 files and
+2,874 insertions** of deployable code sit between `6d92dc61` and `291e949a`:
 
 ```
-git diff --stat 291e949a..origin/main -- functions/ firestore.rules shared/
+git diff --stat 6d92dc61..291e949a -- functions/ shared/ firestore.rules
+```
+
+So the stale claim says *"a functions deploy is owed"* and the true state says
+*"it is not"*. **#616 is the PR that moves the tag**, and until it merges the
+canonical docs disagree with reality.
+
+### Which one is right was MEASURED, not argued
+
+Two new callables were added between those SHAs:
+
+```
+git diff 6d92dc61..291e949a -- functions/src/index.ts | grep "^[+-]export"
++export { deleteNFLEntry } from "./nflEntryDelete";
++export { getPoolDues } from "./nflPoolDues";
+```
+
+That makes the verify-by-name check from CLAUDE.md §3 actually work here — the
+check that "usually proves nothing because the deploy adds no new callable". Both
+are **LIVE in production**:
+
+```
+npx firebase functions:list --project gridiron-gamble-uzuqo
+│ deleteNFLEntry │ v2 │ callable │ us-central1 │ 256 │ nodejs22 │
+│ getPoolDues    │ v2 │ callable │ us-central1 │ 256 │ nodejs22 │
+```
+
+**Therefore the deployed source is at or after `291e949a`, and `6d92dc61` is
+wrong.** #616's original source-timestamp evidence agreed; this is a second,
+independent method, and it is the stronger one.
+
+> This section originally stated the newer SHA and tagged it
+> `deploy-state:ignore`. **Codex holed that as a P1** — tagging it made
+> `docs-state-invariants` pass *instead of detecting the disagreement*, so an
+> operator reading the canonical handoff could still deploy from stale state.
+> That was right, and it is the exact failure the guard exists to catch. The
+> contradiction is now stated rather than suppressed, and settled with evidence.
+
+### What is actually owed
+
+```
+git diff --stat 291e949a..origin/main -- functions/ shared/ firestore.rules
 ```
 
 is **empty** across all eleven merges since (#617, #619–#628). Nothing deployable
 has moved.
 
-- ❌ **No `npx firebase deploy` is owed.**
+- ❌ **No `npx firebase deploy` is owed** — given the measurement above.
 - ❌ **No rules deploy is owed.** `firestore.rules` is unchanged since #579.
 - ✅ **ONE Coolify rebuild is owed, and it now covers thirteen merges** — #614 → #628.
-
-This is a stronger check than the source-timestamp one #616 originally carried.
-Timestamps prove *a* deploy happened; they cannot prove *what* it shipped — which
-is exactly how #618's defect was found. An empty diff over the deployable trees
-proves there is nothing left to ship.
 
 **Two of the thirteen are not cosmetic**, which is why the rebuild is not
 optional:
