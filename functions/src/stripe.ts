@@ -25,6 +25,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
 import { validated } from "./lib/validated";
+import { assertPoolTypePurchasable } from "./lib/systemGuards";
 import { isPoolOwnerOrManager } from "./poolOps";
 import { normalizeRole } from "./lib/roles";
 import { withHeartbeat } from "./lib/heartbeat";
@@ -439,6 +440,9 @@ export const createCheckoutSession = validated(
         throw new HttpsError("not-found", "Pool not found.");
     }
     const poolData = poolDoc.data() as any;
+    // Hard-closed pool types cannot be bought (codex r3). The PERSISTED type,
+    // never the client's `poolType` — the caller picks that one.
+    assertPoolTypePurchasable(poolData?.type);
 
     // --- Ownership gate (K17): owner/manager, or a claim+doc-verified SUPER_ADMIN ---
     const claimRole = request.auth!.token?.role;
