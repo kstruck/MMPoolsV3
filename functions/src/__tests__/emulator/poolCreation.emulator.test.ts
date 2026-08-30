@@ -35,16 +35,41 @@ beforeEach(wipe);
 afterAll(() => test.cleanup());
 
 describe('createPool side-effect bundle (emulator)', () => {
-  it('SQUARES: pool + managedPools + POOL_CREATED activity + free billing + role upgrade; no participations', async () => {
+  /**
+   * 🛑 SQUARES CREATION IS CLOSED (Kevin, 2026-08-28) — see
+   * `HARD_CLOSED_POOL_TYPES` in `lib/featureFlags.ts` and `SQUARES-BACKLOG.md`.
+   *
+   * This test used to prove the side-effect bundle THROUGH a squares pool. The
+   * bundle is type-agnostic (`createPool` writes it for whatever type it
+   * builds), so the coverage moves to PROPS — the other type this same callable
+   * creates — and the squares case becomes the closure's proof at the real
+   * boundary, which is the only boundary that counts: hiding the client entry
+   * points does not stop a callable being invoked from DevTools.
+   */
+  it('SQUARES: the callable REFUSES it, whatever the client shows', async () => {
     await seedUser('u1', 'PARTICIPANT');
-    const res = (await wrappedCreatePool({ data: { name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never)) as { poolId: string };
+    await expect(
+      wrappedCreatePool({ data: { name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never),
+    ).rejects.toThrow(/SQUARES pools are temporarily disabled/);
+
+    // Nothing was written on the way to the refusal.
+    expect((await db.collection('pools').get()).size).toBe(0);
+    expect((await db.collection('users').doc('u1').collection('managedPools').get()).size).toBe(0);
+    const acts = await db.collection('users').doc('u1').collection('activity').where('type', '==', 'POOL_CREATED').get();
+    expect(acts.size).toBe(0);
+    // ...and the refusal did not promote the user to commissioner.
+    expect(((await db.collection('users').doc('u1').get()).data() as Record<string, unknown>).role).toBe('PARTICIPANT');
+  });
+
+  it('PROPS: pool + managedPools + POOL_CREATED activity + free billing + role upgrade; no participations', async () => {
+    await seedUser('u1', 'PARTICIPANT');
+    const res = (await wrappedCreatePool({ data: { type: 'PROPS', name: 'Test Props', props: { cost: 5, maxCards: 1, questions: [] } }, auth: { uid: 'u1', token: {} } } as never)) as { poolId: string };
     expect(res.poolId).toBeTruthy();
 
     const pool = (await db.collection('pools').doc(res.poolId).get()).data() as Record<string, any>;
-    expect(pool.type).toBe('SQUARES');
+    expect(pool.type).toBe('PROPS');
     expect(pool.billing.status).toBe('free');
     expect(pool.status).toBe('DRAFT');
-    expect(Array.isArray(pool.squares)).toBe(true);
     expect(pool.ownerId).toBe('u1');
 
     const mp = await db.collection('users').doc('u1').collection('managedPools').doc(res.poolId).get();
