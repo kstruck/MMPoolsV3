@@ -1,5 +1,5 @@
 import type { User } from '../types';
-import { POOLS_OPEN } from '../config/season';
+import { POOLS_OPEN, SQUARES_CREATION_OPEN } from '../config/season';
 import { normalizeRole, canCreatePools } from './roles';
 
 /**
@@ -88,6 +88,17 @@ export const POOL_CREATION_ENABLED = POOLS_OPEN;
 /** Whether this user may access pool-creation flows given the master switch. */
 export const canAccessPoolCreation = (user: User | null | undefined): boolean => {
     return POOLS_OPEN || isSuperAdmin(user);
+};
+
+/**
+ * Whether SQUARES creation may be reached. Closed for everyone while
+ * `SQUARES_CREATION_OPEN` is false — including super admins, which is the one
+ * way this differs from `canAccessPoolCreation` and is deliberate
+ * (see `config/season.ts`). Takes the user so every call site reads the same
+ * whether or not the switch ever grows a per-user exemption.
+ */
+export const canAccessSquaresCreation = (user: User | null | undefined): boolean => {
+    return SQUARES_CREATION_OPEN && canAccessPoolCreation(user);
 };
 
 /** Check if user can manage entries (owner or super admin, used in bracket/playoff pools) */

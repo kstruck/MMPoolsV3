@@ -6,6 +6,7 @@ import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { formatDeadline } from '../../utils/formatTime';
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
+import { SPREAD_FREEZE_WHEN } from '../../utils/picksAvailability';
 import { now as serverNow } from '../../utils/serverClock';
 import { Button } from '../ui';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
@@ -154,16 +155,24 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
                                 : weekLockCaption(nextDue.lockMode, formatDeadline(nextDue.deadline!), nextDue.hasWeekExtension)}
                         </span>
                     </div>
-                    {!nextDue.spreadsBlocked && (
-                        <Button
-                            size="sm"
-                            onClick={() => onPickNow(nextDue.week)}
-                            className="shrink-0"
-                            style={primaryButtonStyle}
-                        >
-                            Make Picks <ArrowRight size={13} aria-hidden="true" />
-                        </Button>
-                    )}
+                    {/* GREYED OUT, NOT HIDDEN (Kevin, 2026-08-28). A vanished
+                        button reads as a missing feature; a disabled one with a
+                        reason reads as "not yet". It still must not be
+                        CLICKABLE — the sheet behind it refuses every submission
+                        with SPREADS_NOT_LOCKED, so a member who got through
+                        would fill it in and lose the work. */}
+                    <Button
+                        size="sm"
+                        onClick={() => onPickNow(nextDue.week)}
+                        disabled={nextDue.spreadsBlocked}
+                        title={nextDue.spreadsBlocked
+                            ? `This week's spreads are not locked yet — picks open ${SPREAD_FREEZE_WHEN}.`
+                            : undefined}
+                        className="shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={primaryButtonStyle}
+                    >
+                        Make Picks <ArrowRight size={13} aria-hidden="true" />
+                    </Button>
                 </div>
             )}
 

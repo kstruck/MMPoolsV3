@@ -31,13 +31,55 @@ export interface ResumableReport {
  * run's own state and are deliberately left alone.
  */
 export function foldParkedReport<T extends ResumableReport>(target: T, parked: ResumableReport): T {
+  addReportPage(target, parked);
+  if (Array.isArray(parked.failures)) target.failures.push(...parked.failures);
+  return target;
+}
+
+/**
+ * Add ONE PAGE of a migration report into the running aggregate, in place.
+ *
+ * 🛑 THIS EXISTS BECAUSE THE PER-PAGE LOOPS HAND-MAINTAINED A LIST OF COUNTERS
+ * AND THREE OF THEM WENT MISSING IN PRODUCTION.
+ *
+ * `foldParkedReport` above already summed every numeric key, and its own doc
+ * block says why: "a counter added to the report later cannot silently drop out
+ * of a resumed total — that omission would be invisible, since the number would
+ * simply read low rather than error." The RESUME path learned that. The per-page
+ * accumulation in `OperationsPanel`, one function over, did not: it listed the
+ * fields it knew by name, so `entriesPaidNotLiable` (added with the not-liable
+ * guard), `staleSummariesRepaired` (the duplicate-ledger fix) and `countsStamped`
+ * (the partial-dues backfill) were all returned by the server, dropped by the
+ * client, and absent from the Run Log an operator reads before authorising a
+ * LIVE money migration. `poolsSkipped` on the member-record backfill was going
+ * the same way.
+ *
+ * The tell that this was a CLASS and not three slips: the `squaresSkipped` line
+ * carries a comment explaining that without it "the counter never reaches the Run
+ * Log and the narrowing is invisible to the operator". Somebody hit exactly this,
+ * and fixed their one line instead of the shape.
+ *
+ * Sums NUMERIC keys only. Everything else on a report page — `ok`, `dryRun`,
+ * `nextCursor`, the arrays — is either the caller's own state or needs bespoke
+ * handling (`plannedFixes` is capped globally, not concatenated), so it is
+ * deliberately left to the caller.
+ *
+ * ⚠️ This assumes every numeric field on a migration report is a COUNTER. That
+ * holds for all of them today and is asserted by
+ * `tests/ops-panel-report-coverage.test.ts`. A report that ever needs to return a
+ * numeric NON-counter (an echoed limit, a timestamp) must not just add it — the
+ * aggregate would sum it into nonsense.
+ */
+export function addReportPage<T extends ResumableReport>(
+  target: T,
+  page: Record<string, unknown>,
+): T {
   const acc = target as ResumableReport;
-  for (const [key, value] of Object.entries(parked)) {
-    if (typeof value !== 'number') continue;
+  for (const [key, value] of Object.entries(page)) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
     const current = acc[key];
     acc[key] = (typeof current === 'number' ? current : 0) + value;
   }
-  if (Array.isArray(parked.failures)) target.failures.push(...parked.failures);
   return target;
 }
 

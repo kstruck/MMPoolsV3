@@ -174,4 +174,96 @@ describe('a11y source invariants', () => {
     it('eslint carries jsx-a11y', () => {
         expect(read('eslint.config.js')).toContain('eslint-plugin-jsx-a11y');
     });
+
+    /**
+     * 🛑 THE TOGGLE SWITCH HAS EXACTLY ONE HOME, AND IT IS `ui/Switch.tsx`.
+     *
+     * Five copies of it existed, each wrapping a `<label>` around nothing but the
+     * visually-hidden checkbox and the decorative track. The words a sighted
+     * person reads sat in a SIBLING heading, outside the label — so every one of
+     * those controls announced as a bare "checkbox, unchecked" with no way to
+     * tell WHICH setting was being toggled.
+     *
+     * DISCOVERED, NOT LISTED, for the reason the `aria-modal` walker above
+     * gives: a hand-kept array can only pin the copies somebody remembered to
+     * add to it, and a sixth copy pasted next week is exactly the case that
+     * needs catching. The marker is the visually-hidden input (`sr-only peer`)
+     * paired with the track's dimensions — together they are this widget and
+     * nothing else, and neither alone would be.
+     *
+     * `Switch` takes a REQUIRED `label`, so a copy routed through it cannot be
+     * nameless. Its own behaviour is pinned in `src/__tests__/switch.dom.test.tsx`.
+     */
+    const SWITCH_HOME = 'src/components/ui/Switch.tsx';
+
+    /**
+     * One toggle is a different widget and is deliberately NOT migrated: its
+     * `<label>` carries visible text ("Send me SMS reminders"), so it is already
+     * named, and folding it into `Switch` would either duplicate that text into
+     * an `aria-label` or drop it from the page.
+     *
+     * Named here with the reason so the exemption is a decision on the record —
+     * and the assertion below fails if the reason stops being true.
+     */
+    const SWITCH_EXEMPT: Record<string, string> = {
+        'src/components/UserProfile.tsx':
+            'Its label wraps visible text, so the control is already named. Different widget, not a copy of this one.',
+    };
+
+    const rollsOwnSwitch = (() => {
+        const out: string[] = [];
+        const walk = (dir: string) => {
+            for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+                const rel = `${dir}/${e.name}`;
+                if (e.isDirectory()) { walk(rel); continue; }
+                if (!e.name.endsWith('.tsx') || e.name.endsWith('.test.tsx')) continue;
+                const src = stripComments(read(rel));
+                if (src.includes('sr-only peer') && src.includes('w-11 h-6 bg-line')) out.push(rel);
+            }
+        };
+        walk('src/components');
+        return out.sort();
+    })();
+
+    it('no component re-rolls the toggle switch', () => {
+        const offenders = rollsOwnSwitch.filter(
+            (f) => f !== SWITCH_HOME && SWITCH_EXEMPT[f] === undefined,
+        );
+        expect(
+            offenders,
+            'these render their own switch instead of `ui/Switch` — a hand-rolled one has no accessible name',
+        ).toEqual([]);
+    });
+
+    it('the walker actually finds the switch — it is not matching nothing', () => {
+        // A discovery guard that discovers zero files passes for the wrong
+        // reason. `Switch.tsx` itself must always be in the result.
+        expect(rollsOwnSwitch).toContain(SWITCH_HOME);
+    });
+
+    it('no switch exemption is stale', () => {
+        // An exemption for a file that no longer rolls its own is an exemption
+        // nobody reviewed, and it hides the day that file grows one back.
+        const stale = Object.keys(SWITCH_EXEMPT).filter((f) => !rollsOwnSwitch.includes(f));
+        expect(stale).toEqual([]);
+    });
+
+    it('every migrated switch call site passes a label', () => {
+        // `label` is required by the type, so this cannot fail while `tsc` is
+        // green — which is the point: it pins that the four migrated files use
+        // the component at all, so a revert to raw markup fails HERE with a
+        // readable message rather than only in the walker above.
+        for (const f of [
+            'src/components/AdminPanel.tsx',
+            'src/components/admin/WizardStepBasics.tsx',
+            'src/components/admin/WizardStepPayouts.tsx',
+            'src/components/admin/WizardStepSideHustle.tsx',
+        ]) {
+            const src = stripComments(read(f));
+            const uses = src.match(/<Switch\b/g) ?? [];
+            expect(uses.length, `${f} should render at least one <Switch>`).toBeGreaterThan(0);
+            const labelled = src.match(/<Switch\b[\s\S]*?label=/g) ?? [];
+            expect(labelled.length, `${f}: every <Switch> needs a label`).toBe(uses.length);
+        }
+    });
 });

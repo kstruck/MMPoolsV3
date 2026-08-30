@@ -24,6 +24,7 @@ import * as admin from "firebase-admin";
 import { randomUUID } from "crypto";
 import { assertCallerRole } from "./adminClaims";
 import { validated } from "./lib/validated";
+import { assertPoolTypePurchasable } from "./lib/systemGuards";
 import { adminGrantEntitlementSchema, adminRevokeEntitlementSchema } from "./schemas/entitlements";
 import { redeemPoolCreditSchema } from "./schemas/billingCheckout";
 import { writeAdminAudit } from "./lib/adminAudit";
@@ -383,6 +384,8 @@ export async function redeemPoolCreditForPool(args: {
     if (pool.billing?.status === "active") {
       throw new HttpsError("failed-precondition", "This pool is already active.");
     }
+    // Hard-closed pool types cannot be activated with a credit either (codex r3).
+    assertPoolTypePurchasable(pool.type);
     const poolType = (isPoolType(pool.type) ? pool.type : undefined) as PoolType | undefined;
     const poolMaxPlayers =
       pool.billing?.paid?.maxPlayersAllowed ?? pool.settings?.maxPlayers ?? pool.maxPlayers;

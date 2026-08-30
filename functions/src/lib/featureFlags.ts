@@ -37,6 +37,28 @@ export const DEFAULT_POOL_TYPE_FLAGS: Record<PoolType, boolean> = {
   NFL_MARGIN: true,
 };
 
+/**
+ * 🛑 POOL TYPES CLOSED IN CODE, WHICH `system/config.poolTypeFlags` CANNOT REOPEN.
+ *
+ * Kevin, 2026-08-28: *"do not allow any Squares pools from being purchased or
+ * setup for now."* The client switch (`src/config/season.ts`) hides the entry
+ * points; THIS is the boundary that actually holds, because a callable is
+ * reachable from DevTools or any custom client (codex r1 P1 on the closure PR).
+ *
+ * It is checked BEFORE `poolTypeFlags` and ignores it, deliberately. A stored
+ * `poolTypeFlags.SQUARES: true` would otherwise override a `false` default and
+ * silently reopen the very thing this closes — the merge in
+ * `resolvePoolTypeFlags` puts the config on top. "Do not allow any" is not a
+ * default anyone should be able to out-vote from a Firestore doc.
+ *
+ * The fail-open defaults below are untouched, so a missing or corrupt config
+ * still cannot brick creation for every other type.
+ *
+ * Reopening is one line here plus `npx firebase deploy`, alongside the client
+ * flip. Reason and fix list: `SQUARES-BACKLOG.md`.
+ */
+export const HARD_CLOSED_POOL_TYPES: readonly PoolType[] = ['SQUARES'];
+
 export const DEFAULT_MAINTENANCE_MODE = false;
 
 export interface FlagConfig {
@@ -59,6 +81,8 @@ export function resolvePoolTypeFlags(
 
 /** True if the given pool type may be created. Unknown types fail open (allow). */
 export function isPoolTypeEnabled(cfg: FlagConfig | null | undefined, type: string): boolean {
+  // Closed in code beats anything the config says — see HARD_CLOSED_POOL_TYPES.
+  if ((HARD_CLOSED_POOL_TYPES as readonly string[]).includes(type)) return false;
   const flags = resolvePoolTypeFlags(cfg?.poolTypeFlags);
   return (flags as Record<string, boolean>)[type] ?? true;
 }

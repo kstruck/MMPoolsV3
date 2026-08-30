@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Trophy, Zap, Users, Activity, CheckCircle, Shield, Heart, AlertTriangle } from 'lucide-react';
 import type { GameState, PayoutConfig } from '../../types';
 
+import { Switch } from '../ui/Switch';
 interface WizardStepPayoutsProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
@@ -317,15 +318,11 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                         </h3>
                         <p className="text-muted text-sm">Dedicate a portion of the pot to a cause.</p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={gameState.charity?.enabled || false}
-                            onChange={(e) => updateConfig({ charity: { ...(gameState.charity || { name: '', percentage: 0, url: '' }), enabled: e.target.checked } })}
-                            className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-line peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-gold-500 peer-focus-visible:ring-offset-1 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
-                    </label>
+                    <Switch
+                        checked={gameState.charity?.enabled || false}
+                        onChange={(enabled) => updateConfig({ charity: { ...(gameState.charity || { name: '', percentage: 0, url: '' }), enabled } })}
+                        label="Donate a share to charity"
+                    />
                 </div>
 
                 {gameState.charity?.enabled && (

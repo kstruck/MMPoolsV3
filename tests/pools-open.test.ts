@@ -54,11 +54,25 @@ describe('the front door does not contradict the flip', () => {
             'src/components/HowItWorksPage.tsx',
             'src/components/CreatePoolSelection.tsx',
             'src/components/Header.tsx',
-            'src/components/GamedaySquaresLanding.tsx',
         ]) {
             const src = read(file);
             expect(/canCreate|canAccessPoolCreation/.test(src), file).toBe(true);
         }
+    });
+
+    /**
+     * `GamedaySquaresLanding` LEFT THE LIST ABOVE ON PURPOSE (2026-08-28).
+     *
+     * Every CTA on it creates a SQUARES pool, and squares creation is closed on
+     * its own switch while the `maxSquaresPerPlayer: 0` defect is fixed
+     * (`SQUARES-BACKLOG.md`). Gating that page on the master flag would reopen
+     * it the moment POOLS_OPEN is true, which is now — so the assertion is
+     * inverted for this one file rather than dropped.
+     */
+    it('the squares landing follows the SQUARES switch, never the master one', () => {
+        const src = read('src/components/GamedaySquaresLanding.tsx');
+        expect(src).toContain('canAccessSquaresCreation');
+        expect(/canAccessPoolCreation/.test(src)).toBe(false);
     });
 });
 
