@@ -16,6 +16,7 @@ import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState'
 import { CheckboxField, Field, NumberField } from '../fields';
 import { SELLABLE_ADDON_KEYS, stripFreeAddons } from '../../../config/freeAddons';
 import { estimateIsSet, feeWithoutPaymentPathWarning } from './launchReadiness';
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from '@shared/freePlanCap';
 
 // ---------------------------------------------------------------------------
 // LaunchStep — the final wizard step (PLAN-BUYFLOW-OVERHAUL Phase 2 #5).
@@ -241,18 +242,25 @@ export function LaunchStep(props: LaunchStepProps) {
   const freeEligible = buttons.primary === 'free';
 
   /**
-   * The free plan's ceiling, or null when it does not apply / is not known yet.
+   * Show the free plan's participant ceiling, or null when it does not apply.
    *
-   * Server-owned: it comes from the quote, so it cannot drift from the number
-   * `nflPools`, `bracketEntries`, `playoffPools` and `propBets` enforce. Null
-   * while the quote is loading or stale, because a WRONG number here is worse
-   * than none — a commissioner would plan their invite list around it.
+   * ⚠️ THE NUMBER IS `FREE_PLAN_PARTICIPANT_CAP`, NOT `quote.freePlayerThreshold`
+   * (codex r1). Those are two different numbers that both happen to be 10 today:
+   * the quote's threshold is a PRICING input (free vs trial, admin-configurable),
+   * while the cap is what `nflPools` / `bracketEntries` / `playoffPools` /
+   * `propBets` actually enforce on every join. Quoting the pricing number here
+   * would have promised a 25-player free pool the moment an admin raised the
+   * config, while the join gate still turned away the 11th.
+   *
+   * The quote is still what decides WHETHER to show it — `freeTierEligible` is
+   * the server's own answer to "is this pool launching free". Null while that is
+   * loading or stale, because a wrong claim here is worse than none: a
+   * commissioner plans their invite list around it.
    */
   const freeCapNotice = useMemo(() => {
     if (resolvedKey !== quoteInputsKey || quoteLoading || !quote) return null;
     if (!quote.freeTierEligible) return null;              // they are not launching free
-    const cap = Number(quote.freePlayerThreshold);
-    return Number.isFinite(cap) && cap > 0 ? cap : null;
+    return FREE_PLAN_PARTICIPANT_CAP;
   }, [quote, resolvedKey, quoteInputsKey, quoteLoading]);
 
   // --- Shared create guard ---------------------------------------------------
@@ -424,7 +432,7 @@ export function LaunchStep(props: LaunchStepProps) {
             Nothing is lost — they can join the moment you make room.
           </p>
           <p className="mt-1">
-            We email you when your pool reaches {Math.max(1, freeCapNotice - 2)} players and again at {freeCapNotice},
+            We email you when your pool reaches {FREE_PLAN_WARNING_AT} players and again at {freeCapNotice},
             so the wall should never be a surprise. To raise it, open your pool, go to
             <strong> Commissioner &rarr; Settings</strong> and upgrade — or set the number above to your real
             headcount now and launch on the right plan from the start.

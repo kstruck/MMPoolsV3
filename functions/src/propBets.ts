@@ -7,6 +7,7 @@ import { checkBillingAccess } from './billing';
 import { validated } from "./lib/validated";
 import { purchasePropCardSchema } from "./schemas/squaresProps";
 import { gradePropSchema, updatePropCardSchema } from "./schemas/propBets";
+import { FREE_PLAN_PARTICIPANT_CAP } from "./shared/freePlanCap";
 
 // 1. Purchase Prop Card (Supports multiple cards per user)
 // 1. Purchase Prop Card (Supports multiple cards per user)
@@ -73,7 +74,7 @@ export const purchasePropCard = validated(
     const billingStatus = poolData.billing?.status ?? 'free';
     if (billingStatus === 'free') {
         const currentEntriesCount = poolData.entryCount || 0;
-        if (currentEntriesCount >= 10) {
+        if (currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP) {
             throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
         }
     }

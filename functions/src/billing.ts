@@ -250,6 +250,7 @@ export const enforceBillingStatus = functions.scheduler.onSchedule(
 // ./lib/billingAccess so it is importable/testable without Firebase init.
 export { checkBillingAccess, PAID_FEATURE_KEYS } from "./lib/billingAccess";
 import { checkBillingAccess } from "./lib/billingAccess";
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from "./shared/freePlanCap";
 
 export const validateBillingAccess = validated(
     { schema: validateBillingAccessSchema, label: "validateBillingAccess", auth: "public", appCheck: "monitor" },
@@ -390,8 +391,11 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
     const notified10 = after.billing?.notified10 === true;
 
     // Check if we should notify
-    const shouldNotify8 = count >= 8 && !notified8;
-    const shouldNotify10 = count >= 10 && !notified10;
+    // Derived from the SAME constants the wizard promises and the join gate
+    // enforces (shared/freePlanCap.ts), so a nudge cannot be promised that
+    // never arrives (codex r1, 2026-08-30).
+    const shouldNotify8 = count >= FREE_PLAN_WARNING_AT && !notified8;
+    const shouldNotify10 = count >= FREE_PLAN_PARTICIPANT_CAP && !notified10;
 
     if (!shouldNotify8 && !shouldNotify10) return;
 

@@ -70,6 +70,7 @@ import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
+import { FREE_PLAN_PARTICIPANT_CAP } from "./shared/freePlanCap";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -335,7 +336,7 @@ export async function joinNFLPoolInternal(
     }
 
     const billingStatus = poolData.billing?.status ?? 'free';
-    if (billingStatus === 'free' && participantIds.length >= 10) {
+    if (billingStatus === 'free' && participantIds.length >= FREE_PLAN_PARTICIPANT_CAP) {
       // G9 — MEMBER-appropriate copy. This is the message the 11th INVITEE
       // sees, and it used to explain the platform's billing tiers to someone
       // who has no billing relationship with us: "Free Plan", "upgrade to

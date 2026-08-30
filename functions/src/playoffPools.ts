@@ -209,7 +209,7 @@ export const submitPlayoffPicks = validated(
 
             // Enforce 10-player Free Plan participant lock
             const billingStatus = fresh.billing?.status ?? 'free';
-            if (billingStatus === 'free' && Object.keys(fresh.entries || {}).length >= 10) {
+            if (billingStatus === 'free' && Object.keys(fresh.entries || {}).length >= FREE_PLAN_PARTICIPANT_CAP) {
                 throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
             }
             // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot
@@ -483,6 +483,7 @@ export const checkPlayoffScores = onSchedule("every 30 minutes", withHeartbeat('
 }));
 
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { FREE_PLAN_PARTICIPANT_CAP } from "./shared/freePlanCap";
 
 export const onPlayoffConfigUpdate = onDocumentWritten("config/playoffs", async (event) => {
     const after = event.data?.after.data();

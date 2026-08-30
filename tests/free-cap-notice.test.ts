@@ -26,12 +26,50 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 describe('the wizard tells the commissioner what happens at the wall', () => {
   const src = read('src/components/wizard/create/LaunchStep.tsx');
 
-  it('names the number from the quote, never a literal', () => {
-    expect(src).toContain('const cap = Number(quote.freePlayerThreshold);');
-    // A hardcoded ceiling in the copy is the thing this design exists to avoid.
+  it('names the ENFORCED cap, never a literal and never the pricing threshold', () => {
+    // ⚠️ Two different numbers, both 10 today (codex r1). The quote's
+    // `freePlayerThreshold` prices free-vs-trial and is admin-configurable; the
+    // cap is what the join gate enforces. Quoting the pricing one here promised
+    // a 25-player free pool the moment an admin raised the config.
+    expect(src).toContain('return FREE_PLAN_PARTICIPANT_CAP;');
+    expect(src).not.toContain('Number(quote.freePlayerThreshold)');
     expect(src).not.toMatch(/A free pool holds 10 players/);
     expect(src).toContain('A free pool holds {freeCapNotice} players');
     expect(src).toContain('Player {freeCapNotice + 1} cannot join');
+  });
+
+  /**
+   * 🛑 THE PROMISE AND THE ENFORCEMENT ARE THE SAME CONSTANT.
+   *
+   * This is the assertion the first cut was missing. The four join gates and
+   * the warning email hardcoded 10 and read no config, so a served pricing
+   * number could drift away from them silently.
+   */
+  it('every join gate and the warning email read that same constant', () => {
+    // POSITIVE assertions, one per site, naming the exact comparison. A
+    // negative regex was tried first and did NOT fail when the literal was put
+    // back — a guard that looked like a guard and was not, which is the whole
+    // reason this file mutation-tests itself.
+    const GATES: ReadonlyArray<readonly [string, string]> = [
+      ['functions/src/nflPools.ts', 'participantIds.length >= FREE_PLAN_PARTICIPANT_CAP'],
+      ['functions/src/bracketEntries.ts', 'currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP'],
+      ['functions/src/playoffPools.ts', 'entries || {}).length >= FREE_PLAN_PARTICIPANT_CAP'],
+      ['functions/src/propBets.ts', 'currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP'],
+    ];
+    for (const [file, comparison] of GATES) {
+      expect(read(file), file).toContain(comparison);
+    }
+    const billing = read('functions/src/billing.ts');
+    expect(billing).toContain('count >= FREE_PLAN_WARNING_AT');
+    expect(billing).toContain('count >= FREE_PLAN_PARTICIPANT_CAP');
+  });
+
+  it('the two numbers are declared once, together, and documented as distinct', () => {
+    const shared = read('shared/freePlanCap.ts');
+    expect(shared).toContain('export const FREE_PLAN_PARTICIPANT_CAP = 10;');
+    expect(shared).toContain('export const FREE_PLAN_WARNING_AT = 8;');
+    // The distinction that codex r1 turned on, written down where it is read.
+    expect(shared).toContain('THIS IS NOT `billing_config.freePlayerThreshold`');
   });
 
   it('quotes the refusal the 11th player will actually see, verbatim', () => {
@@ -61,10 +99,10 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     expect(src).toContain('{freeCapNotice !== null && (');
   });
 
-  it('the alert threshold it promises is derived, not a second hardcoded number', () => {
-    // "We email you at N-2 and again at N" — billing.ts alerts at 8 and 10 on a
-    // ceiling of 10, so the earlier nudge is two below the cap.
-    expect(src).toContain('Math.max(1, freeCapNotice - 2)');
-    expect(read('functions/src/billing.ts')).toMatch(/hit 8 or 10 entries on the Free Plan/);
+  it('the email thresholds it promises are the ones the job actually uses', () => {
+    // The first cut computed the earlier nudge as `cap - 2`, which is only
+    // right at a cap of 10. It reads the constant now.
+    expect(src).toContain('{FREE_PLAN_WARNING_AT} players and again at {freeCapNotice}');
+    expect(src).not.toContain('Math.max(1, freeCapNotice - 2)');
   });
 });
