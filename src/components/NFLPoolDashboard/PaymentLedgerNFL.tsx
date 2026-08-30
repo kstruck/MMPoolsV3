@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import type { Pool, WeeklyRecap } from '../../types';
 import { weeklyAwardId, type PayoutRecord, type PayoutRecordPrivate } from '@shared/payoutRecords';
 import { buildPoolRoster, duesRates } from '../../utils/poolRoster';
+import { computeLedgerTotals } from './ledgerTotals';
 import { nflWeekChip } from '../../utils/nflWeekLabel';
 import { poolSeasonType } from '../../utils/nflPending';
 
@@ -134,15 +135,23 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   // "$0" before load is a plausible-looking substitute, not a figure (qodo #1 on #460).
   const [recapsLoaded, setRecapsLoaded] = useState(false);
   const [recordsLoaded, setRecordsLoaded] = useState(false);
+  // ...and if EITHER public listener fails, the prize totals are unknown, not
+  // zero. Without this the error path renders "Owed out $0" on a pool that owes
+  // thousands — `subscribeTo*` calls back with `[]` when no `onError` is given,
+  // which flips `loaded` true and makes the placeholder guard above useless in
+  // exactly the case it exists for.
+  const [recapsUnavailable, setRecapsUnavailable] = useState(false);
+  const [recordsUnavailable, setRecordsUnavailable] = useState(false);
 
   useEffect(() => {
     // Pool switch without remount: drop the previous pool's data before the
     // new snapshots arrive — award ids are deterministic and could collide
     // across pools (codex r9).
     setRecaps([]); setRecords([]); setPriv([]); setPrivLoaded(false); setPrivUnavailable(false); setError(null); setRecapsLoaded(false); setRecordsLoaded(false);
+    setRecapsUnavailable(false); setRecordsUnavailable(false);
     setBusy(null); setEditKey(null); setOtherDraft(null); // an in-flight toggle, open editor or award draft belongs to the previous pool (qodo #5 on #460, codex r2 on #466)
-    const u1 = dbService.subscribeToWeeklyRecaps(pool.id, (rows) => { setRecaps(rows); setRecapsLoaded(true); });
-    const u2 = dbService.subscribeToPayoutRecords(pool.id, (rows) => { setRecords(rows as Rec[]); setRecordsLoaded(true); });
+    const u1 = dbService.subscribeToWeeklyRecaps(pool.id, (rows) => { setRecaps(rows); setRecapsUnavailable(false); setRecapsLoaded(true); }, () => setRecapsUnavailable(true));
+    const u2 = dbService.subscribeToPayoutRecords(pool.id, (rows) => { setRecords(rows as Rec[]); setRecordsUnavailable(false); setRecordsLoaded(true); }, () => setRecordsUnavailable(true));
     const u3 = dbService.subscribeToPayoutRecordsPrivate(pool.id, (rows) => { setPriv(rows as never); setPrivUnavailable(false); setPrivLoaded(true); }, undefined, () => setPrivUnavailable(true));
     return () => { u1(); u2(); u3(); };
   }, [pool.id]);
@@ -477,34 +486,18 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
   }, [pool, members, entries, prizeRows, duesByUid, liableByUid, paidMirrorIds]);
 
   const totals = useMemo(() => {
-    let owedIn = 0, paidIn = 0, owedOut = 0, paidOut = 0;
-    // 🛑 TWO LOOPS, AND D10 SAYS SO EXPLICITLY: "Mixing those two in one loop is
-    // exactly how a double-count gets shipped."
-    //
-    // Base dues are PER ENTRY now, so they sum over every row. Rebuys are a
-    // member-level sum (`rebuyOwed` on the Member Record is already the total
-    // across a member's entries — shared/memberRecord), so they keep the
-    // `r.first` gate. Summing rebuys per row would multiply them by the
-    // member's entry count.
-    for (const r of ledgerRows) {
-      if (r.feeOwed === null) continue;          // unknown (a prize row outside the roster)
-      owedIn += r.feeOwed;
-      if (r.paidStatus === 'PAID') paidIn += r.feeOwed;
-    }
-    for (const r of ledgerRows) {
-      if (!r.first) continue;                    // ONCE per member
-      owedIn += r.rebuyOwed;
-      paidIn += Math.min(r.rebuyPaid, r.rebuyOwed);
-    }
-    for (const p of prizeRows) { owedOut += p.owed; if (p.settled) paidOut += p.owed; }
-    // Other awards (BONUS / ADJUSTMENT / legacy free-form PLACE) count in the
-    // out totals too — an adjustment may be negative (T7).
-    for (const r of records) {
-      if (r.supersededBy || (r.kind === 'PLACE' && r.entryId && (typeof r.week === 'number' || r.id.startsWith('season-')))) continue;
-      owedOut += Number(r.amount); if (privById.get(r.id)?.settled === true) paidOut += Number(r.amount);
-    }
-    return { owedIn, paidIn, owedOut, paidOut };
+    // The derivation lives in `./ledgerTotals` so it can be tested against the
+    // cases that matter — including the reconciling `unallocated` figure, which
+    // is the whole reason a commissioner could not make these numbers add up.
+    const others = records
+      .filter(r => !(r.supersededBy || (r.kind === 'PLACE' && r.entryId && (typeof r.week === 'number' || r.id.startsWith('season-')))))
+      .map(r => ({ amount: Number(r.amount), settled: privById.get(r.id)?.settled === true }));
+    return computeLedgerTotals(ledgerRows, prizeRows, others);
   }, [ledgerRows, prizeRows, records, privById]);
+
+  /** Either public listener failing makes the prize totals unknown, not zero. */
+  const prizesUnavailable = recapsUnavailable || recordsUnavailable;
+  const prizesKnown = recapsLoaded && recordsLoaded && !prizesUnavailable;
 
   const toggle = async (r: (typeof prizeRows)[number], checked: boolean) => {
     setBusy(r.key); setError(null);
@@ -792,10 +785,33 @@ export const PaymentLedgerNFL: React.FC<Props> = ({ pool, members, entries, onTo
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] font-body border-t border-line pt-3">
         <span className="text-muted">Owed in <span className="num font-bold text-[color:var(--text)]">{money(totals.owedIn)}</span></span>
         <span className="text-muted">Paid in <span className="num font-bold text-green-700 dark:text-green-400">{money(totals.paidIn)}</span></span>
-        {/* Prize totals: unknown until recaps + records + settlement have loaded (never a placeholder $0). */}
-        <span className="text-muted">Owed out <span className="num font-bold text-[color:var(--text)]">{recapsLoaded && recordsLoaded ? money(totals.owedOut) : <span className="text-faint" title="Loading…">—</span>}</span></span>
-        <span className="text-muted">Paid out <span className="num font-bold text-green-700 dark:text-green-400">{recapsLoaded && recordsLoaded && privLoaded ? money(totals.paidOut) : <span className="text-faint" title={privUnavailable ? 'Settlement state unavailable' : 'Loading…'}>—</span>}</span></span>
+        {/* Prize totals: unknown until recaps + records + settlement have loaded
+            (never a placeholder $0) AND unknown if either listener failed — an
+            errored listener calls back with [], which would otherwise render $0
+            on a pool that owes thousands. */}
+        <span className="text-muted">Owed out <span className="num font-bold text-[color:var(--text)]">{prizesKnown ? money(totals.owedOut) : <span className="text-faint" title={prizesUnavailable ? 'Prize data unavailable — reload the page' : 'Loading…'}>—</span>}</span></span>
+        <span className="text-muted">Paid out <span className="num font-bold text-green-700 dark:text-green-400">{prizesKnown && privLoaded && !privUnavailable ? money(totals.paidOut) : <span className="text-faint" title={privUnavailable ? 'Settlement state unavailable' : prizesUnavailable ? 'Prize data unavailable — reload the page' : 'Loading…'}>—</span>}</span></span>
+        {/* THE FIGURE THAT MAKES THE ROW ADD UP. Without it the commissioner
+            reads "$100 in / $84 out" and cannot tell a correct ledger from a
+            broken one. Shown only when the prize side is actually known. */}
+        {prizesKnown && totals.unallocated !== 0 && (
+          <span className="text-muted">
+            {totals.unallocated > 0 ? 'Unallocated ' : 'Over-committed '}
+            <span
+              className={`num font-bold ${totals.unallocated > 0 ? 'text-[color:var(--text)]' : 'text-brandred-600'}`}
+              title={totals.unallocated > 0
+                ? 'Dues taken in that no published prize claims. Whole-dollar rounding on each week’s places, the weekly pot divided across the season, paid places nobody reached, any charity donation, and dues from entries added after a week’s pot was frozen. Yours to allocate.'
+                : 'Published prizes and other awards exceed the dues owed — usually a bonus or an adjustment. Check the awards below.'}
+            >{money(Math.abs(totals.unallocated))}</span>
+          </span>
+        )}
       </div>
+      {prizesKnown && totals.unallocated > 0 && (
+        <p className="text-[10px] font-body text-faint leading-relaxed">
+          <span className="num">{money(totals.unallocated)}</span> of the <span className="num">{money(totals.owedIn)}</span> owed in is not claimed by any published prize.
+          Weekly pots are whole dollars and are frozen when a week is first published, so rounding, unreached places and later joiners leave a balance. It is yours to allocate — add a bonus below, or keep it. March Melee Pools moves no money.
+        </p>
+      )}
 
       {/* Other awards — the Record Payouts card folded into the ledger (T7): free-form BONUS / ADJUSTMENT after finalization; legacy free-form PLACE records listed for settlement. */}
       {(finalized || otherAwards.length > 0) && (

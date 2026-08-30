@@ -6,6 +6,30 @@
 export const POOLS_OPEN = true;
 
 /**
+ * 🛑 SQUARES POOL CREATION IS CLOSED (Kevin, 2026-08-28).
+ *
+ * *"If there are issues with the Squares pools, make that a priority for
+ * post-launch and do not allow any Squares pools from being purchased or setup
+ * for now. Add a COMING SOON to those."*
+ *
+ * The reason, verified: `CreateSquaresPool.tsx` defaults `maxSquaresPerPlayer`
+ * to `0` and labels it "(0 = no limit)", but `functions/src/squares.ts:93`
+ * refuses a claim whenever `mySquares >= pool.maxSquaresPerPlayer` — so at 0 a
+ * non-owner is refused their FIRST square and the pool is unplayable by anyone
+ * except the commissioner. Selling that is worse than not selling it.
+ *
+ * THIS SWITCH DOES NOT EXEMPT SUPER ADMINS, deliberately. "Do not allow any"
+ * is unconditional, and a bypass is exactly how a broken pool gets created by
+ * the one account that never sees the failure (the owner is the only player the
+ * `!== userId` clause lets through). Flipping it back to `true` is one commit
+ * and one Coolify rebuild.
+ *
+ * EXISTING squares pools are untouched — they still open, score and pay out.
+ * This closes CREATION only. The fix list lives in `SQUARES-BACKLOG.md`.
+ */
+export const SQUARES_CREATION_OPEN = false;
+
+/**
  * 🛑 THE SEASON'S MILESTONE DATES — ONE SOURCE, BECAUSE FIVE COPIES DISAGREED.
  *
  * Kevin, 2026-08-26, on the pool-home footer: *"The dates are incorrect.

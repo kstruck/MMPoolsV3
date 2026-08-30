@@ -197,10 +197,10 @@ describe('grantEntitlementTxn — creation + cap', () => {
     await seedGrant({
       ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'ADMIN_GRANT',
       productSnapshot: SNAP, creditsTotal: 1, bundleId: 'bc',
-      creditConstraints: { poolType: 'SQUARES', maxPlayersPerPool: 25 },
+      creditConstraints: { poolType: 'NFL_PICKEM', maxPlayersPerPool: 25 },
     });
     const credit = new FakeQuery('bundles/bc/credits')._matchingDocs()[0];
-    expect(credit.data.constraints).toEqual({ poolType: 'SQUARES', maxPlayersPerPool: 25 });
+    expect(credit.data.constraints).toEqual({ poolType: 'NFL_PICKEM', maxPlayersPerPool: 25 });
   });
 });
 
@@ -210,7 +210,7 @@ describe('redeemPoolCreditForPool — happy path', () => {
       ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
       productSnapshot: SNAP, creditsTotal: 2, bundleId: 'b1',
     });
-    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial' } });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'NFL_PICKEM', billing: { status: 'trial' } });
 
     const res = await redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' });
     expect(res.bundleId).toBe('b1');
@@ -227,6 +227,35 @@ describe('redeemPoolCreditForPool — happy path', () => {
     expect(used).toHaveLength(1);
     expect(used[0].data.usedByPoolId).toBe('p1');
     expect(store.get('bundles/b1')!.creditsUsed).toBe(1);
+  });
+
+  /**
+   * 🛑 A HARD-CLOSED POOL TYPE CANNOT BE ACTIVATED WITH A CREDIT EITHER
+   * (codex r3, 2026-08-28).
+   *
+   * Closing CREATION left this path open: a commissioner already holding a
+   * draft or trial squares pool could still activate it with a bundle credit.
+   * Kevin's instruction was "purchased OR setup".
+   *
+   * The fixtures above moved off SQUARES for exactly this reason — it can no
+   * longer stand in for "an ordinary pool" — so this is the one test that still
+   * uses it, deliberately.
+   */
+  it('refuses a SQUARES pool outright, before spending the credit', async () => {
+    await seedGrant({
+      ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
+      productSnapshot: SNAP, creditsTotal: 2, bundleId: 'b1',
+    });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial' } });
+
+    await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' }))
+      .rejects.toThrow(/cannot be purchased or upgraded/);
+
+    // Nothing was spent on the way out: a refusal must never cost the owner a
+    // credit, and must not leave the pool half-activated.
+    expect(store.get('pools/p1')!.billing.status).toBe('trial');
+    expect(store.get('bundles/b1')!.creditsUsed ?? 0).toBe(0);
+    expect(new FakeQuery('bundles/b1/credits', [['status', 'used']])._matchingDocs()).toHaveLength(0);
   });
 
   it('flips the bundle to exhausted when the LAST credit is spent (creditsUsed === creditsTotal)', async () => {
@@ -252,7 +281,7 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
     // Mark the sole credit used.
     const c = new FakeQuery('bundles/b1/credits')._matchingDocs()[0];
     applyUpdateExternal(c.ref.path, { status: 'used', usedByPoolId: 'other' });
-    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial' } });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'NFL_PICKEM', billing: { status: 'trial' } });
 
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/No available Pool Credit/);
     expect(store.get('pools/p1')!.billing.status).toBe('trial'); // untouched
@@ -265,7 +294,7 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
     });
     const c = new FakeQuery('bundles/b1/credits')._matchingDocs()[0];
     applyUpdateExternal(c.ref.path, { status: 'revoked' });
-    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial' } });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'NFL_PICKEM', billing: { status: 'trial' } });
 
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/No available Pool Credit/);
   });
@@ -273,10 +302,10 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
   it('rejects a constraint-violating credit (poolType mismatch)', async () => {
     await seedGrant({
       ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
-      productSnapshot: { ...SNAP, poolType: 'SQUARES' }, creditsTotal: 1, bundleId: 'b1',
-      creditConstraints: { poolType: 'SQUARES' },
+      productSnapshot: { ...SNAP, poolType: 'NFL_PICKEM' }, creditsTotal: 1, bundleId: 'b1',
+      creditConstraints: { poolType: 'NFL_PICKEM' },
     });
-    // Pool is BRACKET — credit is SQUARES-only.
+    // Pool is BRACKET — credit is NFL_PICKEM-only.
     store.set('pools/p1', { createdByUid: 'u1', type: 'BRACKET', billing: { status: 'trial' } });
 
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/No available Pool Credit/);
@@ -288,7 +317,7 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
       productSnapshot: SNAP, creditsTotal: 1, bundleId: 'b1',
       creditConstraints: { maxPlayersPerPool: 25 },
     });
-    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial', paid: { maxPlayersAllowed: 50 } } });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'NFL_PICKEM', billing: { status: 'trial', paid: { maxPlayersAllowed: 50 } } });
 
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/No available Pool Credit/);
   });
@@ -300,7 +329,7 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
     });
     // Bundle revoked but a credit somehow still 'available' — must NOT be redeemable.
     applyUpdateExternal('bundles/b1', { status: 'revoked' });
-    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial' } });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'NFL_PICKEM', billing: { status: 'trial' } });
 
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/No available Pool Credit/);
   });
@@ -310,7 +339,7 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
       ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
       productSnapshot: SNAP, creditsTotal: 1, bundleId: 'b1',
     });
-    store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'active' } });
+    store.set('pools/p1', { createdByUid: 'u1', type: 'NFL_PICKEM', billing: { status: 'active' } });
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/already active/);
   });
 
@@ -319,7 +348,7 @@ describe('redeemPoolCreditForPool — rejection paths', () => {
       ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
       productSnapshot: SNAP, creditsTotal: 1, bundleId: 'b1',
     });
-    store.set('pools/p1', { createdByUid: 'someoneElse', type: 'SQUARES', billing: { status: 'trial' } });
+    store.set('pools/p1', { createdByUid: 'someoneElse', type: 'NFL_PICKEM', billing: { status: 'trial' } });
     await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).rejects.toThrow(/do not own/);
   });
 });
