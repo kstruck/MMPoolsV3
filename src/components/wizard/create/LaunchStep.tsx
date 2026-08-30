@@ -240,6 +240,21 @@ export function LaunchStep(props: LaunchStepProps) {
   });
   const freeEligible = buttons.primary === 'free';
 
+  /**
+   * The free plan's ceiling, or null when it does not apply / is not known yet.
+   *
+   * Server-owned: it comes from the quote, so it cannot drift from the number
+   * `nflPools`, `bracketEntries`, `playoffPools` and `propBets` enforce. Null
+   * while the quote is loading or stale, because a WRONG number here is worse
+   * than none — a commissioner would plan their invite list around it.
+   */
+  const freeCapNotice = useMemo(() => {
+    if (resolvedKey !== quoteInputsKey || quoteLoading || !quote) return null;
+    if (!quote.freeTierEligible) return null;              // they are not launching free
+    const cap = Number(quote.freePlayerThreshold);
+    return Number.isFinite(cap) && cap > 0 ? cap : null;
+  }, [quote, resolvedKey, quoteInputsKey, quoteLoading]);
+
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
   // poolId, or null when validation/creation failed (error already surfaced).
@@ -375,10 +390,17 @@ export function LaunchStep(props: LaunchStepProps) {
         min={1}
         placeholder="e.g. 10"
       />
-      {/* G7 — say what the number is FOR, at the moment it is asked. The
-          free-plan limit is deliberately not spelled out as a figure here: it
-          is configurable and already hardcoded in three other places (plan
-          §2 G8), and a fourth copy would be a fourth thing to get wrong. */}
+      {/* G7 — say what the number is FOR, at the moment it is asked.
+          The limit used to be described without being NAMED, because the figure
+          is configurable and already hardcoded at the four sites that ENFORCE
+          it. Kevin, 2026-08-30: *"Make sure this is clear on the wizard to the
+          user so they fully understand and explain how they will know when the
+          11th player tries to join and what they will see, and how they can fix
+          it."* Resolved by SERVING the number from the quote
+          (`freePlayerThreshold`, same precedent as `trialDays`) rather than
+          hardcoding a fifth copy — so the number on screen is the number the
+          server will enforce, not a copy of it. Falls back to the old
+          unnumbered sentence when the quote has not loaded. */}
       <p className="-mt-3 mb-4 text-xs text-slate-400">
         Small pools launch free; above that limit, hosting is priced by size. This is the number we price —
         estimate high rather than low, because growing past it later means upgrading.
@@ -387,6 +409,27 @@ export function LaunchStep(props: LaunchStepProps) {
         <p className="-mt-2 mb-4 text-xs font-semibold text-amber-300">
           Enter how many players you expect before launching.
         </p>
+      )}
+      {/* THE WALL, SPELLED OUT — what happens, who hits it, what they see, and
+          how the commissioner clears it. Shown whenever the pool would launch
+          free, which is exactly when the ceiling applies. */}
+      {freeCapNotice !== null && (
+        <div className="-mt-2 mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">
+          <p className="font-semibold">
+            A free pool holds {freeCapNotice} players. Player {freeCapNotice + 1} cannot join.
+          </p>
+          <p className="mt-1">
+            They are turned away with: <em>&ldquo;This pool is full, so your spot could not be reserved.
+            Ask the commissioner to make room — they can upgrade the pool to raise its limit.&rdquo;</em>{' '}
+            Nothing is lost — they can join the moment you make room.
+          </p>
+          <p className="mt-1">
+            We email you when your pool reaches {Math.max(1, freeCapNotice - 2)} players and again at {freeCapNotice},
+            so the wall should never be a surprise. To raise it, open your pool, go to
+            <strong> Commissioner &rarr; Settings</strong> and upgrade — or set the number above to your real
+            headcount now and launch on the right plan from the start.
+          </p>
+        </div>
       )}
 
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}

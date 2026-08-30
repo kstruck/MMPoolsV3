@@ -225,6 +225,19 @@ export interface PoolQuote {
   freeTierEligible: boolean;
   /** Trial length in days (from billing_config) so the UI needn't guess. */
   trialDays: number;
+  /**
+   * The free plan's participant ceiling (`billing_config.freePlayerThreshold`),
+   * for the SAME reason `trialDays` is here: so the UI needn't guess.
+   *
+   * The launch step used to describe the limit without naming it, deliberately
+   * — the figure is configurable and already hardcoded at the four sites that
+   * ENFORCE it (`nflPools`, `bracketEntries`, `playoffPools`, `propBets`), and a
+   * fifth copy in wizard copy would be a fifth thing to get wrong. Kevin,
+   * 2026-08-30: *"Make sure this is clear on the wizard to the user so they
+   * fully understand."* Serving it from the quote satisfies both — the number
+   * on screen is the number the server will enforce, not a copy of it.
+   */
+  freePlayerThreshold: number;
 }
 
 // --- createCheckoutSession input (hardened) -----------------------------------

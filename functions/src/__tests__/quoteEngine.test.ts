@@ -242,6 +242,46 @@ describe('computeQuote — itemized, coupon-inclusive, free-tier eligibility', (
     expect(q.trialDays).toBe(14);
   });
 
+  /**
+   * 🛑 THE CEILING IS SERVED, NOT COPIED (Kevin, 2026-08-30).
+   *
+   * The launch step must tell a commissioner how many players a free pool
+   * holds, because the alternative is the 11th invitee discovering it. The
+   * figure is configurable and already hardcoded at the four sites that
+   * ENFORCE it (`nflPools`, `bracketEntries`, `playoffPools`, `propBets`), so
+   * the wizard reads it from the quote rather than becoming a fifth copy.
+   */
+  it('surfaces freePlayerThreshold from config, for the wizard to name', () => {
+    const q = computeQuote({ config: CONFIG, poolType: 'SQUARES', estimatedPlayers: 40, addons: NO_ADDONS });
+    expect(q.freePlayerThreshold).toBe(10);
+  });
+
+  it('...and it MOVES with the config, so the wizard cannot show a stale number', () => {
+    const q = computeQuote({
+      config: { ...CONFIG, freePlayerThreshold: 25 },
+      poolType: 'SQUARES', estimatedPlayers: 20, addons: NO_ADDONS,
+    });
+    expect(q.freePlayerThreshold).toBe(25);
+    // The two must agree: 20 <= 25, so this pool really is free-eligible.
+    expect(q.freeTierEligible).toBe(true);
+  });
+
+  it('the boundary the wizard describes is the boundary it prices', () => {
+    // "A free pool holds N players. Player N+1 cannot join."
+    const at = (estimatedPlayers: number) =>
+      computeQuote({ config: CONFIG, poolType: 'SQUARES', estimatedPlayers, addons: NO_ADDONS });
+    expect(at(10).freeTierEligible).toBe(true);
+    expect(at(11).freeTierEligible).toBe(false);
+  });
+
+  it('the add-on quote carries it too, so a mid-season buyer sees the same number', () => {
+    const q = computeAddonUpgradeQuote({
+      config: CONFIG, poolType: 'SQUARES', estimatedPlayers: 40,
+      currentTier: 'standard_tier', addons: { ...NO_ADDONS, aiCommissioner: true }, owned: [],
+    });
+    expect(q.freePlayerThreshold).toBe(10);
+  });
+
   it('throws (propagates) for an unmapped format', () => {
     expect(() =>
       computeQuote({ config: CONFIG, poolType: 'BOGUS', estimatedPlayers: 40, addons: NO_ADDONS })
