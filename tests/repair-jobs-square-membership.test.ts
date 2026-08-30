@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { addReportPage } from '../src/utils/resumableReport';
 
 // Square ownership must never become MEMBERSHIP evidence.
 //
@@ -166,6 +167,26 @@ describe('OperationsPanel surfaces squaresSkipped in the Run Log', () => {
     });
 
     it('accumulates it across paged runs', () => {
-        expect(src).toContain('agg.squaresSkipped += r.squaresSkipped');
+        // WARNING: THIS USED TO ASSERT THE LITERAL LINE
+        // `agg.squaresSkipped += r.squaresSkipped`, which pinned the
+        // IMPLEMENTATION rather than the behaviour — and the implementation it
+        // pinned was the very pattern that lost three other counters before an
+        // operator noticed (2026-08-27, the reconcile dry run; see
+        // `tests/ops-panel-report-coverage.test.ts`). A test that requires a
+        // hand-kept list is a test that resists the fix for the class.
+        //
+        // What matters is that the counter REACHES the aggregate. It does,
+        // because the loop now sums every numeric key the page returns.
+        expect(src).toContain('addReportPage(agg, r);');
+        expect(src).not.toMatch(/agg\.squaresSkipped\s*\+=/);
+    });
+
+    it('and the summing genuinely carries it — not just the call site', () => {
+        // Behaviour, not source text: the helper the loop delegates to must
+        // actually accumulate this counter across pages.
+        const agg = { failures: [] as unknown[], squaresSkipped: 0 };
+        addReportPage(agg, { squaresSkipped: 2 });
+        addReportPage(agg, { squaresSkipped: 3 });
+        expect(agg.squaresSkipped).toBe(5);
     });
 });

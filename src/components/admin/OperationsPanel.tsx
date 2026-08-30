@@ -7,7 +7,7 @@ import { useToast } from '../ui/Toast';
 import { getUserMessage } from '../../utils/errorMessages';
 import { Wrench, RefreshCw, Database, Trophy, Users, CheckCircle2, XCircle, KeyRound, ShieldAlert, ArrowRight } from 'lucide-react';
 import type { MigratePoolPasswordsReport } from '../../services/dbService';
-import { foldParkedReport, snapshotReport, type ResumableReport } from '../../utils/resumableReport';
+import { addReportPage, foldParkedReport, snapshotReport, type ResumableReport } from '../../utils/resumableReport';
 
 /**
  * Consolidated global operations (T7). Every GLOBAL batch/maintenance action
@@ -96,7 +96,7 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   // very different amount of work. 25 is the handler's own default page size and
   // matches backfillProfileData, the other migration that does per-member work.
   const limit = includeFinished ? 25 : 100;
-  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, squaresSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumedFrom: parked?.cursor ?? null, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
+  const agg = { ok: true, dryRun, includeFinished, poolsScanned: 0, poolsSkipped: 0, finishedPoolsSkipped: 0, testPoolsSkipped: 0, membersCreated: 0, membersAlreadyPresent: 0, guestSkipped: 0, squaresSkipped: 0, participantIdsWithoutMember: 0, poolsFlipped: 0, resumedFrom: parked?.cursor ?? null, resumeFrom: null as string | null, error: null as string | null, failures: [] as any[] };
 
   // Carry the earlier pages' counters into this run (codex r5). Parking only the
   // cursor meant a resumed run started from zero and could finish ok:true while
@@ -125,19 +125,12 @@ const runBackfill = async (dryRun: boolean, includeFinished = false) => {
       if (cursor) park(cursor);
       return agg;
     }
-    agg.poolsScanned += r.poolsScanned || 0;
-    agg.membersCreated += r.membersCreated || 0;
-    agg.membersAlreadyPresent += r.membersAlreadyPresent || 0;
-    agg.guestSkipped += r.guestSkipped || 0;
-    // Square-derived candidates the backfill REFUSED to promote to membership.
-    // Without this the counter never reaches the Run Log and the narrowing is
-    // invisible to the operator — which is the silent-truncation failure the
-    // counter exists to prevent. Paged runs aggregate like every other field.
-    agg.squaresSkipped += r.squaresSkipped || 0;
-    agg.participantIdsWithoutMember += r.participantIdsWithoutMember || 0;
-    agg.poolsFlipped += r.poolsFlipped || 0;
-    agg.testPoolsSkipped += r.testPoolsSkipped || 0;
-    agg.finishedPoolsSkipped += r.finishedPoolsSkipped || 0;
+    // EVERY numeric counter. This used to be a hand-kept list, and the
+    // `squaresSkipped` line carried a comment about how a counter that never
+    // reaches the Run Log makes a narrowing "invisible to the operator" — which
+    // was true of `poolsSkipped` the whole time it was written. Summing the shape
+    // instead of a list is the fix for the class (see `addReportPage`).
+    addReportPage(agg, r);
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
     cursor = r.nextCursor || undefined;
     pages++;
@@ -170,9 +163,8 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
   do {
     // Same undefined→null wire trap as runBackfill above.
     const r: any = await call('backfillPublishedWeeks', { dryRun, limit: 200, ...(cursor ? { startAfter: cursor } : {}) });
-    agg.poolsScanned += r.poolsScanned || 0;
-    agg.poolsChanged += r.poolsChanged || 0;
-    agg.weeksMarked += r.weeksMarked || 0;
+    // EVERY numeric counter — the third loop that hand-listed them.
+    addReportPage(agg, r);
     if (Array.isArray(r.plannedWrites)) agg.plannedWrites.push(...r.plannedWrites);
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
     cursor = r.nextCursor || undefined;
@@ -200,8 +192,12 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
   let pages = 0;
   const agg = {
     ok: true, dryRun,
-    poolsScanned: 0, membersPromoted: 0, entriesMirrored: 0, alreadyConsistent: 0,
-    entriesPaidNoMember: 0, ambiguousSkipped: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
+    // Declared so an EMPTY run still renders every counter as 0 rather than
+    // omitting it — an absent key reads as "not applicable", a 0 reads as
+    // "checked, none". `addReportPage` sums whatever the server sends either way.
+    poolsScanned: 0, membersPromoted: 0, staleSummariesRepaired: 0, countsStamped: 0,
+    entriesMirrored: 0, alreadyConsistent: 0, entriesPaidNoMember: 0,
+    ambiguousSkipped: 0, entriesPaidNotLiable: 0, testPoolsSkipped: 0, otherTypeSkipped: 0,
     failures: [] as any[], plannedFixes: [] as any[], plannedFixesTruncated: false,
     resumedFrom: parked?.cursor ?? null,
   };
@@ -214,14 +210,9 @@ const runReconcilePaymentTruth = async (dryRun: boolean) => {
     // null on the wire (the schema also takes null, belt + suspenders, #296).
     const r: any = await call('reconcilePaymentTruth', { dryRun, limit: 25, ...(cursor ? { startAfter: cursor } : {}) }, BACKFILL_TIMEOUT_MS);
     agg.ok = agg.ok && r.ok !== false;
-    agg.poolsScanned += r.poolsScanned || 0;
-    agg.membersPromoted += r.membersPromoted || 0;
-    agg.entriesMirrored += r.entriesMirrored || 0;
-    agg.alreadyConsistent += r.alreadyConsistent || 0;
-    agg.entriesPaidNoMember += r.entriesPaidNoMember || 0;
-    agg.ambiguousSkipped += r.ambiguousSkipped || 0;
-    agg.testPoolsSkipped += r.testPoolsSkipped || 0;
-    agg.otherTypeSkipped += r.otherTypeSkipped || 0;
+    // EVERY numeric counter, not a list maintained by hand. The list dropped
+    // three of them in production — see `addReportPage`.
+    addReportPage(agg, r);
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
     // Enforce the documented 50-item cap GLOBALLY, not per page (codex r5):
     // each page can return up to 25 fixes with its own flag false, so an
