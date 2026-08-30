@@ -9,6 +9,7 @@ import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } fro
 import { nflLockMode, weekLockOverrideFor, gameLockAt } from '@shared/nflLockMode';
 import { now as serverNow } from '../../utils/serverClock';
 import { pickCtaFor } from '../../utils/pickCta';
+import { picksBlockedReason } from '../../utils/picksAvailability';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
@@ -394,6 +395,18 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   );
   const picksCta = pickCtaFor({ locked: weekLocked, complete: weekPicksComplete, hasAnyPick: hasAnyPickThisWeek });
   /**
+   * GREY OUT THE CTA WHILE THE SHEET CANNOT TAKE A PICK (Kevin, 2026-08-28).
+   *
+   * On an ATS week whose lines are not frozen, `submitNFLPicks` refuses every
+   * submission with SPREADS_NOT_LOCKED — so this button led a member into a
+   * sheet that would throw away whatever they entered. Disabled and explained,
+   * not hidden: a vanished button reads as a missing feature.
+   *
+   * Null on every pool that does not score against a spread, so Survivor,
+   * Margin and straight-up pick'em are untouched.
+   */
+  const picksBlocked = picksBlockedReason(castPool, weeklyGames);
+  /**
    * On a multi-entry pool the CTA must say WHICH entry it will open, because
    * "Make Picks" over a card showing entry #2's sheet is ambiguous exactly when
    * it matters. The suffix appears only when the viewer holds more than one
@@ -638,6 +651,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 variant="primary"
                 size="md"
                 onClick={() => onSelectTab('picks')}
+                disabled={!!picksBlocked}
+                title={picksBlocked ?? undefined}
+                className="disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {picksCta.label}{activeEntryLabel ? ` (${activeEntryLabel})` : ''} <ChevronRight size={14} />
               </Button>
@@ -1328,7 +1344,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               variant="primary"
               size="sm"
               onClick={() => onSelectTab('picks')}
-              className="w-full sm:w-auto"
+              disabled={!!picksBlocked}
+              title={picksBlocked ?? undefined}
+              className="w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {picksCta.label}
             </Button>

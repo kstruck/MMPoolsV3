@@ -30,6 +30,7 @@ import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
+import { picksAvailability } from '../../utils/picksAvailability';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { brandingStyles } from '../../utils/brandingStyles';
 import { nflLockMode, weekLockAtFor, nextLockAtFor } from '@shared/nflLockMode';
@@ -1301,6 +1302,28 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                                 </p>
                               </div>
                             </div>
+
+                            {/* WHEN THE SHEET OPENS — above the lock block, because
+                                a member who cannot pick yet is asking "until
+                                when?", and the only answer on this card used to
+                                be "once every line is frozen" with no date
+                                (Kevin, 2026-08-28). Says nothing once the week
+                                has locked: the header above already does. */}
+                            {(() => {
+                              const availability = picksAvailability(castPool, weeklyGames, { weekLocked: isWeekLocked });
+                              if (!availability.notice) return null;
+                              const waiting = availability.kind === 'WAITING_ON_SPREADS';
+                              return (
+                                <div className={`p-3 rounded-lg border text-center ${waiting ? 'bg-gold-400/10 border-gold-500/30' : 'bg-page border-line'}`}>
+                                  <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted block mb-1">
+                                    {waiting ? 'Picks open' : 'Picks open now'}
+                                  </span>
+                                  <span className={`font-body text-[12px] ${waiting ? 'text-gold-700 dark:text-gold-300' : 'text-[color:var(--text)]'}`}>
+                                    {availability.notice}
+                                  </span>
+                                </div>
+                              );
+                            })()}
 
                             {/* COUNTS DOWN TO THE NEXT LOCK, not the week's.
                                 On a PER_GAME pool the week deadline is the LAST
