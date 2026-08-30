@@ -176,6 +176,23 @@ describe('the three surfaces actually render it', () => {
     expect(opens).toBeLessThan(locks);
   });
 
+  /**
+   * ONE DERIVATION FOR THE HEADER AND THE NOTICE (codex r2).
+   *
+   * The header keyed off `spreadsBlocked` alone, so an empty slate rendered
+   * "Picks are Open" directly above "this week's schedule has not been posted
+   * yet" — two contradictory claims on one card. Both now come from the same
+   * `picksAvailability` call.
+   */
+  it('the Lock Status header names all four states from one derivation', () => {
+    const src = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
+    expect(src).toContain("availability.kind === 'NO_GAMES' ? 'No Games Yet'");
+    expect(src).toContain("availability.kind === 'WAITING_ON_SPREADS' ? 'Waiting on Spreads'");
+    // The old second derivation is gone, so the two cannot disagree again.
+    expect(src).not.toContain('const spreadsBlocked = useMemo(');
+    expect((src.match(/picksAvailability\(castPool, weeklyGames/g) ?? [])).toHaveLength(1);
+  });
+
   it('the week checklist GREYS the button out rather than hiding it', () => {
     const src = read('src/components/NFLPoolDashboard/WeekChecklist.tsx');
     expect(src).toContain('disabled={nextDue.spreadsBlocked}');

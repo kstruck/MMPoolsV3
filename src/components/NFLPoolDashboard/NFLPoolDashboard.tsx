@@ -29,7 +29,6 @@ import { useToast } from '../ui/Toast';
 import { Button } from '../ui';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType, currentSlateWeek, poolSeasonWeeks } from '../../utils/nflPending';
-import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
 import { picksAvailability } from '../../utils/picksAvailability';
 import { buildMemberStandings } from '../../utils/memberStandings';
 import { brandingStyles } from '../../utils/brandingStyles';
@@ -703,11 +702,12 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // Lock Status card below has to say so, or the two halves of one screen
   // contradict each other — "Spreads Not Yet Finalized" beside "PICKS ARE OPEN
   // / Make changes before kickoff", which is what preseason week 3 showed on
-  // 2026-08-21. Same predicate the sheet uses, so they cannot drift.
-  const spreadsBlocked = useMemo(
-    () => spreadsBlockWeek(castPool, weeklyGames),
-    [castPool, weeklyGames],
-  );
+  // 2026-08-21.
+  //
+  // The card now derives that from `picksAvailability`, which wraps the SAME
+  // `spreadsBlockWeek` predicate and also distinguishes an empty slate — so the
+  // standalone memo went with it rather than leaving two derivations of one
+  // fact on the page.
 
   // Time remaining to earliest game this week
   const earliestGame = useMemo(() => {
@@ -1279,49 +1279,58 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                           </h3>
 
                           <div className="space-y-4">
-                            <div className="flex items-center gap-3">
-                              {isWeekLocked || spreadsBlocked ? (
-                                <div className="p-2.5 bg-cream rounded-md text-muted border border-line">
-                                  <Lock size={18} />
-                                </div>
-                              ) : (
-                                <div className="p-2.5 bg-[#E5EDF6] rounded-md text-[#142A4C] border border-[#CBDCEC] animate-pulse">
-                                  <Calendar size={18} />
-                                </div>
-                              )}
-                              <div>
-                                <h4 className="font-display font-bold uppercase text-sm text-[color:var(--text)]">
-                                  {isWeekLocked ? 'Selections Locked'
-                                    : spreadsBlocked ? 'Waiting on Spreads'
-                                    : 'Picks are Open'}
-                                </h4>
-                                <p className="font-body text-[11px] text-muted">
-                                  {isWeekLocked ? 'Host is syncing game outcomes.'
-                                    : spreadsBlocked ? 'The sheet opens once every line for this week is frozen.'
-                                    : 'Make changes before kickoff.'}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* WHEN THE SHEET OPENS — above the lock block, because
-                                a member who cannot pick yet is asking "until
-                                when?", and the only answer on this card used to
-                                be "once every line is frozen" with no date
-                                (Kevin, 2026-08-28). Says nothing once the week
-                                has locked: the header above already does. */}
+                            {/* ONE derivation for the header AND the notice below
+                                it (codex r2). Keying the header off
+                                `spreadsBlocked` alone left an empty slate saying
+                                "Picks are Open" directly above "there is nothing
+                                to pick" — two contradictory claims on one card. */}
                             {(() => {
                               const availability = picksAvailability(castPool, weeklyGames, { weekLocked: isWeekLocked });
-                              if (!availability.notice) return null;
-                              const waiting = availability.kind === 'WAITING_ON_SPREADS';
+                              const open = availability.kind === 'OPEN';
+                              const heading = isWeekLocked ? 'Selections Locked'
+                                : availability.kind === 'NO_GAMES' ? 'No Games Yet'
+                                : availability.kind === 'WAITING_ON_SPREADS' ? 'Waiting on Spreads'
+                                : 'Picks are Open';
+                              const sub = isWeekLocked ? 'Host is syncing game outcomes.'
+                                : availability.kind === 'NO_GAMES' ? 'This week’s schedule has not been posted yet.'
+                                : availability.kind === 'WAITING_ON_SPREADS' ? 'The sheet opens once every line for this week is frozen.'
+                                : 'Make changes before kickoff.';
                               return (
-                                <div className={`p-3 rounded-lg border text-center ${waiting ? 'bg-gold-400/10 border-gold-500/30' : 'bg-page border-line'}`}>
-                                  <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted block mb-1">
-                                    {waiting ? 'Picks open' : 'Picks open now'}
-                                  </span>
-                                  <span className={`font-body text-[12px] ${waiting ? 'text-gold-700 dark:text-gold-300' : 'text-[color:var(--text)]'}`}>
-                                    {availability.notice}
-                                  </span>
-                                </div>
+                                <>
+                                  <div className="flex items-center gap-3">
+                                    {open ? (
+                                      <div className="p-2.5 bg-[#E5EDF6] rounded-md text-[#142A4C] border border-[#CBDCEC] animate-pulse">
+                                        <Calendar size={18} />
+                                      </div>
+                                    ) : (
+                                      <div className="p-2.5 bg-cream rounded-md text-muted border border-line">
+                                        <Lock size={18} />
+                                      </div>
+                                    )}
+                                    <div>
+                                      <h4 className="font-display font-bold uppercase text-sm text-[color:var(--text)]">{heading}</h4>
+                                      <p className="font-body text-[11px] text-muted">{sub}</p>
+                                    </div>
+                                  </div>
+
+                                  {/* WHEN THE SHEET OPENS — above the lock block,
+                                      because a member who cannot pick yet is
+                                      asking "until when?", and the only answer on
+                                      this card used to be "once every line is
+                                      frozen" with no date (Kevin, 2026-08-28).
+                                      Silent once the week has locked: the header
+                                      already says it. */}
+                                  {availability.notice && (
+                                    <div className={`p-3 rounded-lg border text-center ${open ? 'bg-page border-line' : 'bg-gold-400/10 border-gold-500/30'}`}>
+                                      <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted block mb-1">
+                                        {open ? 'Picks open now' : 'Picks open'}
+                                      </span>
+                                      <span className={`font-body text-[12px] ${open ? 'text-[color:var(--text)]' : 'text-gold-700 dark:text-gold-300'}`}>
+                                        {availability.notice}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
                               );
                             })()}
 
