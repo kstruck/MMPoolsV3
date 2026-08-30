@@ -5,7 +5,7 @@
  */
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
-import { isPoolTypeEnabled, isMaintenanceMode, type FlagConfig } from "./featureFlags";
+import { isPoolTypeEnabled, isMaintenanceMode, HARD_CLOSED_POOL_TYPES, type FlagConfig } from "./featureFlags";
 import { normalizeRole } from "./roles";
 
 async function loadConfig(): Promise<FlagConfig | null> {
@@ -26,7 +26,7 @@ async function loadConfig(): Promise<FlagConfig | null> {
  * a run id", i.e. a server-verified SUPER_ADMIN with a well-formed sim run id
  * that WILL be persisted on the pool doc - skips ONLY the pool-type-flag
  * check (PLAN-SIM-CREATION-BYPASS). Maintenance mode is checked first and
- * unconditionally — it means "no writes", and a bypass never crosses it.
+ * unconditionally — it means "no writes", and a bypass never crosses it. A HARD-CLOSED type is checked first for the same reason.
  */
 export async function assertPoolCreationAllowed(
   type: string,
@@ -37,6 +37,18 @@ export async function assertPoolCreationAllowed(
     throw new HttpsError(
       "failed-precondition",
       "The platform is in maintenance mode; new pools are temporarily disabled."
+    );
+  }
+  // 🛑 A HARD-CLOSED TYPE IS CLOSED TO THE SIM HARNESS TOO (codex r2 on the
+  // squares closure). The bypass is a SUPER_ADMIN path, and the whole claim of
+  // `HARD_CLOSED_POOL_TYPES` is that nothing creates the type while it is
+  // listed — a carve-out here would make that claim false, and would let the
+  // simulator mint pools that exercise the very defect the closure hides.
+  // Checked BEFORE the bypass, for the same reason maintenance mode is.
+  if ((HARD_CLOSED_POOL_TYPES as readonly string[]).includes(type)) {
+    throw new HttpsError(
+      "failed-precondition",
+      `New ${type} pools are temporarily disabled by the site administrator.`
     );
   }
   if (opts?.simBypass === true) return;

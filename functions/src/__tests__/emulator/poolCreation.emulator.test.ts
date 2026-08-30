@@ -58,7 +58,7 @@ describe('createPool side-effect bundle (emulator)', () => {
     const acts = await db.collection('users').doc('u1').collection('activity').where('type', '==', 'POOL_CREATED').get();
     expect(acts.size).toBe(0);
     // ...and the refusal did not promote the user to commissioner.
-    expect(((await db.collection('users').doc('u1').get()).data() as Record<string, any>).role).toBe('PARTICIPANT');
+    expect(((await db.collection('users').doc('u1').get()).data() as Record<string, unknown>).role).toBe('PARTICIPANT');
   });
 
   it('PROPS: pool + managedPools + POOL_CREATED activity + free billing + role upgrade; no participations', async () => {

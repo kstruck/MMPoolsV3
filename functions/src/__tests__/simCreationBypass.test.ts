@@ -14,6 +14,7 @@ vi.mock('firebase-admin', () => {
     return { default: { firestore, apps: [{}] }, firestore, apps: [{}] };
 });
 import { assertPoolCreationAllowed } from '../lib/systemGuards';
+import { HARD_CLOSED_POOL_TYPES } from '../lib/featureFlags';
 import { simRunIdForCreate } from '../poolOps';
 
 // The bypass is keyed on the STAMPED trust anchor: simBypass is passed as
@@ -49,4 +50,30 @@ describe('assertPoolCreationAllowed ordering (mutation anchor)', () => {
         await expect(assertPoolCreationAllowed('NFL_PICKEM', { simBypass: true })).resolves.toBeUndefined();
         await expect(assertPoolCreationAllowed('NFL_PICKEM')).rejects.toThrow(/temporarily disabled/);
     });
-});
+
+
+    /**
+     * 🛑 THE BYPASS DOES NOT CROSS A HARD-CLOSED TYPE (codex r2, 2026-08-28).
+     *
+     * `HARD_CLOSED_POOL_TYPES` claims that NOTHING creates the type while it is
+     * listed. The sim path is a SUPER_ADMIN path, so a carve-out here would
+     * make that claim false — and would let the simulator mint squares pools
+     * that exercise the very defect the closure exists to hide.
+     */
+    it('a hard-closed type is refused even WITH a stamped sim run id', async () => {
+        for (const type of HARD_CLOSED_POOL_TYPES) {
+            await expect(assertPoolCreationAllowed(type, { simBypass: true }))
+                .rejects.toThrow(/temporarily disabled/);
+            await expect(assertPoolCreationAllowed(type))
+                .rejects.toThrow(/temporarily disabled/);
+        }
+    });
+
+    it('...while the bypass still works for every type that is NOT hard-closed', async () => {
+        // The planted counter-example: if the new check had been written to
+        // catch everything, the whole sim harness would have gone down with it.
+        expect(HARD_CLOSED_POOL_TYPES).not.toContain('NFL_PICKEM');
+        await expect(assertPoolCreationAllowed('NFL_PICKEM', { simBypass: true })).resolves.toBeUndefined();
+        await expect(assertPoolCreationAllowed('NFL_SURVIVOR', { simBypass: true })).resolves.toBeUndefined();
+        await expect(assertPoolCreationAllowed('NFL_MARGIN', { simBypass: true })).resolves.toBeUndefined();
+    });});
