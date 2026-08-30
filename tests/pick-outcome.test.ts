@@ -9,7 +9,7 @@ import {
   pickOutcomeLabel,
   type PickOutcome,
 } from '../src/components/NFLPoolDashboard/pickSheet/pickOutcome';
-import { gradePick } from '../src/utils/pickemResult';
+import { gradePick, hasReportedScores } from '../src/utils/pickemResult';
 import {
   evaluateSurvivorWeek,
   scoreMarginWeek,
@@ -416,5 +416,40 @@ describe('the sheets actually use this — wiring, not logic', () => {
 
   it.each(SHEETS)('%s announces the card highlight as text too', file => {
     expect(read(file)).toMatch(/sr-only[^]*?pickOutcomeLabel\(outcome\)/);
+  });
+});
+
+describe('hasReportedScores is ONE client mirror, not two', () => {
+  /**
+   * 🛑 THE POINT IS THE COUNT, NOT THE BEHAVIOUR.
+   *
+   * The server rule this mirrors lives in `functions/src/nflScoringEngine.ts`,
+   * which the client bundle cannot import. So the client keeps a mirror — and a
+   * mirror that exists TWICE is two places to fix when the server rule moves,
+   * with a silent failure mode: the copy that did not move keeps returning a
+   * plausible answer, and the sheet and the grid quietly disagree about whether
+   * a game is graded at all.
+   *
+   * `pickSheet/pickOutcome.ts` carried a byte-identical private copy until #582
+   * pointed at it. This asserts it does not grow back.
+   */
+  it('pickOutcome.ts IMPORTS it and declares no copy of its own', () => {
+    const src = read('src/components/NFLPoolDashboard/pickSheet/pickOutcome.ts');
+    expect(src).toMatch(/import \{[^}]*hasReportedScores[^}]*\} from '\.\.\/\.\.\/\.\.\/utils\/pickemResult'/);
+    // No second declaration, in any form a re-added copy could take.
+    expect(src).not.toMatch(/(function|const)\s+hasReportedScores/);
+  });
+
+  it('is finite-ness on BOTH fields, not truthiness', () => {
+    // A genuine 0-0 is reported; a dropped field is not. Collapsing those two is
+    // engine defect NFL7-3 itself, so the distinction is pinned on the shared
+    // definition rather than only on its callers.
+    expect(hasReportedScores({ scores: { home: 0, away: 0 } })).toBe(true);
+    expect(hasReportedScores({ scores: undefined })).toBe(false);
+    expect(hasReportedScores({ scores: null })).toBe(false);
+    expect(hasReportedScores({})).toBe(false);
+    // Half-written payloads: a partial feed update is not a 24-0 game.
+    expect(hasReportedScores({ scores: { home: 24 } })).toBe(false);
+    expect(hasReportedScores({ scores: { away: 17 } })).toBe(false);
   });
 });
