@@ -672,14 +672,21 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                     A real <button> wrapper would fight the absolute-positioned
                     badge and the flex layout, so it is role="button" with
                     keyboard support instead. */}
+                {/* ⚠️ THE SAME GATE AS THE CTA ABOVE (codex r1 P2). This panel is
+                    a click target for the picks tab, so leaving it live while
+                    the button beside it is disabled just routes the member
+                    around the gate into a sheet that refuses every submission.
+                    `tabIndex` and `aria-disabled` move with it, or the keyboard
+                    path stays open and a screen reader is told it is actionable. */}
                 <div
                   role="button"
-                  tabIndex={0}
+                  tabIndex={picksBlocked ? -1 : 0}
+                  aria-disabled={picksBlocked ? true : undefined}
                   aria-label="Open the picks tab to make your pick"
-                  title="Make your pick"
-                  onClick={() => onSelectTab('picks')}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectTab('picks'); } }}
-                  className="bg-page border border-line p-5 pt-7 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden cursor-pointer hover:border-gold-500/50 transition-colors duration-150">
+                  title={picksBlocked ?? 'Make your pick'}
+                  onClick={picksBlocked ? undefined : () => onSelectTab('picks')}
+                  onKeyDown={(e) => { if (!picksBlocked && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSelectTab('picks'); } }}
+                  className={`bg-page border border-line p-5 pt-7 rounded-lg mb-5 flex justify-between items-center relative overflow-hidden transition-colors duration-150 ${picksBlocked ? 'cursor-not-allowed' : 'cursor-pointer hover:border-gold-500/50'}`}>
                   <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20">
                     {focusGame.status === 'IN_PROGRESS' ? (
                       <Badge status="live" />

@@ -105,17 +105,37 @@ describe('picksAvailability — who waits on spreads and who does not', () => {
   });
 
   /**
-   * AN EMPTY SLATE IS NOT "OPEN".
+   * AN EMPTY SLATE IS NOT "OPEN", FOR ANY POOL TYPE (codex r1 P2).
    *
-   * `spreadsBlockWeek` delegates to `weekGames.every(...)`, and `[].every()` is
-   * TRUE — so an ATS week whose games have not loaded would otherwise report
-   * the sheet open, and the server would then refuse with `No NFL games found`.
+   * The first cut special-cased this for ATS only — `spreadsBlockWeek`
+   * delegates to `weekGames.every(...)` and `[].every()` is TRUE. The
+   * observation was right and applied too narrowly: `submitNFLPicks` refuses an
+   * empty week with `No NFL games found` regardless of type, and checks it
+   * BEFORE the spreads gate. So does this.
    */
-  it('an ATS week with no games loaded reports waiting, not open', () => {
-    expect(picksAvailability(ATS, [], { weekLocked: false }).kind).toBe('WAITING_ON_SPREADS');
-    // ...while a no-spread pool with no games is still not told to wait for a
-    // line it never reads.
-    expect(picksAvailability(SURVIVOR, [], { weekLocked: false }).kind).toBe('OPEN');
+  it.each([
+    ['ATS pickem', ATS],
+    ['straight-up pickem', STRAIGHT],
+    ['survivor', SURVIVOR],
+    ['margin', MARGIN],
+  ])('%s with no games loaded is NO_GAMES, never open', (_label, pool) => {
+    const a = picksAvailability(pool, [], { weekLocked: false });
+    expect(a.kind).toBe('NO_GAMES');
+    expect(a.notice).toContain('schedule has not been posted');
+    // ...and it must not blame the spreads, which is not why it is shut.
+    expect(a.notice).not.toContain('Tuesday');
+  });
+
+  it('the no-games reason outranks the spreads reason, as it does on the server', () => {
+    // nflPools.ts throws `No NFL games found` before it reaches the
+    // SPREADS_NOT_LOCKED gate, so an ATS pool with nothing loaded is told the
+    // true reason rather than one that would send it to wait for Tuesday.
+    const src = readFileSync(resolve(root, 'functions/src/nflPools.ts'), 'utf8');
+    const noGames = src.indexOf('No NFL games found');
+    const spreads = src.indexOf('SPREADS_NOT_LOCKED: Picks cannot be submitted');
+    expect(noGames).toBeGreaterThan(-1);
+    expect(spreads).toBeGreaterThan(-1);
+    expect(noGames).toBeLessThan(spreads);
   });
 });
 
@@ -134,8 +154,12 @@ describe('picksBlockedReason — what greys the Make Picks button out', () => {
     expect(picksBlockedReason(null, unlocked(4))).toBeNull();
   });
 
-  it('an ATS week with nothing loaded blocks the button', () => {
-    expect(picksBlockedReason(ATS, [])).toContain('spreads are not locked yet');
+  it('an empty slate blocks the button on EVERY pool type, and says why', () => {
+    for (const pool of [ATS, STRAIGHT, SURVIVOR, MARGIN]) {
+      const reason = picksBlockedReason(pool, []);
+      expect(reason).toContain('schedule has not been posted');
+      expect(reason).not.toContain('Tuesday');
+    }
   });
 });
 
@@ -164,5 +188,18 @@ describe('the three surfaces actually render it', () => {
     expect(src).toContain('const picksBlocked = picksBlockedReason(castPool, weeklyGames);');
     expect((src.match(/disabled=\{!!picksBlocked\}/g) ?? [])).toHaveLength(2);
     expect((src.match(/title=\{picksBlocked \?\? undefined\}/g) ?? [])).toHaveLength(2);
+  });
+
+  /**
+   * THE ROUTE AROUND THE GATE (codex r1 P2). The matchup panel under the CTA is
+   * itself a click target for the picks tab, so leaving it live while the
+   * button is disabled just walks the member around the gate.
+   */
+  it('the clickable matchup panel follows the same gate, keyboard path included', () => {
+    const src = read('src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx');
+    expect(src).toContain("onClick={picksBlocked ? undefined : () => onSelectTab('picks')}");
+    expect(src).toContain('tabIndex={picksBlocked ? -1 : 0}');
+    expect(src).toContain('aria-disabled={picksBlocked ? true : undefined}');
+    expect(src).toContain("if (!picksBlocked && (e.key === 'Enter' || e.key === ' '))");
   });
 });

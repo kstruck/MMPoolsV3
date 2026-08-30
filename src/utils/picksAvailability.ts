@@ -15,7 +15,7 @@
 // The platform moves no money and this file states no rule of its own: it reads
 // the schedule the freeze job actually runs on and says it in English.
 
-import { spreadsBlockWeek, poolUsesSpreads } from './poolUsesSpreads';
+import { spreadsBlockWeek } from './poolUsesSpreads';
 
 /**
  * The cron `lockNFLSpreadsJob` is deployed on — mirrored from
@@ -40,6 +40,12 @@ export type PicksAvailability =
   /** The sheet takes picks now. */
   | { kind: 'OPEN'; notice: string }
   /**
+   * No slate for this week yet. `submitNFLPicks` refuses with
+   * `No NFL games found` and it checks that BEFORE the spreads gate, so this
+   * outranks WAITING_ON_SPREADS for every pool type (codex r1 P2).
+   */
+  | { kind: 'NO_GAMES'; notice: string }
+  /**
    * An ATS week whose lines are not all frozen. The server refuses every
    * submission with SPREADS_NOT_LOCKED until they are.
    */
@@ -53,11 +59,13 @@ export type PicksAvailability =
  * `weekGames` is the week's slate as the client already resolved it
  * (`frozen ?? working`), which is what `spreadsBlockWeek` expects.
  *
- * AN EMPTY SLATE IS NOT "OPEN". `spreadsBlockWeek` delegates to
- * `weekGames.every(...)`, and `[].every()` is `true` — so a week whose games
- * have not loaded, or that has none, would otherwise report the sheet open. The
- * server would then refuse the submission with `No NFL games found`. Reported
- * as waiting, which is the honest state on both counts.
+ * AN EMPTY SLATE IS NOT "OPEN", FOR ANY POOL TYPE (codex r1 P2). The first cut
+ * special-cased it for ATS only, on the reasoning that `spreadsBlockWeek`
+ * delegates to `weekGames.every(...)` and `[].every()` is `true`. That was the
+ * right observation applied too narrowly: `submitNFLPicks` refuses an empty
+ * week with `No NFL games found` REGARDLESS of type, and it checks that before
+ * the spreads gate. A future week nobody has imported a schedule for, or a
+ * snapshot that has not arrived, is not a week anybody can pick.
  */
 export function picksAvailability(
   pool: { type?: string; settings?: { pickMode?: string } } | null | undefined,
@@ -66,10 +74,11 @@ export function picksAvailability(
 ): PicksAvailability {
   if (opts.weekLocked) return { kind: 'LOCKED', notice: null };
 
-  if (poolUsesSpreads(pool) && weekGames.length === 0) {
+  // Checked FIRST, mirroring the server's own order.
+  if (weekGames.length === 0) {
     return {
-      kind: 'WAITING_ON_SPREADS',
-      notice: `Picks open once this week's spreads are locked — ${SPREAD_FREEZE_WHEN}.`,
+      kind: 'NO_GAMES',
+      notice: 'This week’s schedule has not been posted yet, so there is nothing to pick.',
     };
   }
 
@@ -95,8 +104,9 @@ export function picksBlockedReason(
   pool: { type?: string; settings?: { pickMode?: string } } | null | undefined,
   weekGames: readonly { spread?: { locked?: boolean } }[],
 ): string | null {
-  if (poolUsesSpreads(pool) && weekGames.length === 0) {
-    return `This week's spreads are not locked yet — picks open ${SPREAD_FREEZE_WHEN}.`;
+  // Same order as the server: no slate outranks an unfrozen one.
+  if (weekGames.length === 0) {
+    return 'This week’s schedule has not been posted yet.';
   }
   return spreadsBlockWeek(pool, weekGames)
     ? `This week's spreads are not locked yet — picks open ${SPREAD_FREEZE_WHEN}.`
