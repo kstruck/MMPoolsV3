@@ -61,7 +61,7 @@ const TournamentSimulator = React.lazy(() => import('./components/TournamentSimu
 import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
-import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
+import { isSuperAdmin, canAccessPoolCreation, canAccessSquaresCreation } from './utils/auth';
 import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent, hasPostAuthIntent } from './utils/postAuthIntent';
 import { logger } from './utils/logger';
 
@@ -350,8 +350,11 @@ const App: React.FC = () => {
               </div>
             ) : <Navigate to="/" replace />
           } />
+          {/* SQUARES CREATION IS CLOSED (config/season.ts). The route bounces
+              rather than 404s, so a bookmarked or emailed wizard link lands
+              somewhere useful instead of nowhere. */}
           <Route path="/create/squares" element={
-            user && canAccessPoolCreation(user) ? (
+            user && canAccessSquaresCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <CreateSquaresPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />

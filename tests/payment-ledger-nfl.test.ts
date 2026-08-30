@@ -260,21 +260,67 @@ describe('PaymentLedgerNFL — per-entry dues (DUES T5b)', () => {
   });
 
   it('🛑 base dues and rebuys are summed in SEPARATE loops (D10 says mixing them ships a double-count)', () => {
-    // ⚠️ The end anchor is searched FROM the start index: `for (const p of
-    // prizeRows)` also appears earlier, inside `ledgerRows`, and a plain
-    // indexOf would return an end BEFORE the start and slice to ''. An empty
-    // slice passes every `not.toMatch` below and asserts nothing.
-    const from = ledger.indexOf('let owedIn = 0, paidIn = 0');
-    const totals = ledger.slice(from, ledger.indexOf('for (const p of prizeRows)', from));
+    // THE DERIVATION MOVED (2026-08-28). It lives in `./ledgerTotals` so the
+    // totals — including the `unallocated` figure that makes the row reconcile
+    // — can be asserted as BEHAVIOUR rather than as source text.
+    // `tests/ledger-totals.test.ts` is the real guard now: it builds a member
+    // with two entries and one rebuy and fails if the rebuy is counted twice,
+    // which this slice could only ever infer. This half stays because a
+    // regression that merges the loops is still worth catching at the source,
+    // and because the component must not grow a second copy.
+    const totalsSrc = code('src/components/NFLPoolDashboard/ledgerTotals.ts');
+    const from = totalsSrc.indexOf('let owedIn = 0, paidIn = 0');
+    // ⚠️ The end anchor is searched FROM the start index: an anchor found
+    // BEFORE the start would slice to '', and an empty slice passes every
+    // `not.toMatch` below while asserting nothing.
+    const totals = totalsSrc.slice(from, totalsSrc.indexOf('for (const p of prizes)', from));
     expect(totals.length).toBeGreaterThan(100);   // the slice must not be empty
     // Base dues: every row, no `first` gate.
-    expect(totals).toContain('for (const r of ledgerRows) {');
+    expect(totals).toContain('for (const r of rows) {');
     expect(totals).toContain('owedIn += r.feeOwed;');
     // Rebuys: ONCE per member, and the gate must still be there.
     expect(totals).toContain('if (!r.first) continue;');
     expect(totals).toContain('owedIn += r.rebuyOwed;');
     // MUST catch the regression: the two must not be added in one pass.
     expect(totals).not.toMatch(/owedIn \+= r\.feeOwed \+ r\.rebuyOwed/);
+    // ...and the component delegates rather than keeping its own copy.
+    expect(ledger).toContain('computeLedgerTotals(ledgerRows, prizeRows, others)');
+    expect(ledger).not.toContain('let owedIn = 0, paidIn = 0');
+  });
+
+  /**
+   * THE FIGURE THAT MAKES THE ROW ADD UP.
+   *
+   * The ledger shipped four totals and no reconciliation between them, so a
+   * commissioner reading "$100 in / $84 out" could not tell a correct ledger
+   * from a broken one. The arithmetic is asserted in
+   * `tests/ledger-totals.test.ts`; this pins that the page actually RENDERS it,
+   * and that it is gated on the prize side being known.
+   */
+  it('the totals row states the gap between money in and money out', () => {
+    expect(ledger).toContain("totals.unallocated > 0 ? 'Unallocated ' : 'Over-committed '");
+    expect(ledger).toContain('prizesKnown && totals.unallocated !== 0');
+    // Never printed against a prize total that has not loaded or failed.
+    expect(ledger).toContain('const prizesUnavailable = recapsUnavailable || recordsUnavailable;');
+    expect(ledger).toContain('const prizesKnown = recapsLoaded && recordsLoaded && !prizesUnavailable;');
+  });
+
+  /**
+   * AN ERRORED LISTENER MUST NOT READ AS "$0 OWED OUT".
+   *
+   * `subscribeToWeeklyRecaps` / `subscribeToPayoutRecords` call back with `[]`
+   * when no `onError` is passed. The ledger passed none, so a permission or
+   * offline failure flipped `loaded` true and rendered a confident $0 on a pool
+   * that owed thousands — defeating the placeholder guard in exactly the case
+   * it exists for.
+   */
+  it('both public prize listeners report failure instead of falling back to an empty list', () => {
+    expect(ledger).toContain('() => setRecapsUnavailable(true)');
+    expect(ledger).toContain('() => setRecordsUnavailable(true)');
+    // Cleared on pool switch, so a previous pool's failure cannot stick.
+    expect(ledger).toContain('setRecapsUnavailable(false); setRecordsUnavailable(false);');
+    // And the callable-side contract that makes the above reachable.
+    expect(db).toContain('if (onError) onError(error); else callback([]);');
   });
 
   it('presence in the dues map IS the paid signal, and an ABSENT map falls back to the member flag', () => {
