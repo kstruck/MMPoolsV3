@@ -26,7 +26,8 @@ async function loadConfig(): Promise<FlagConfig | null> {
  * a run id", i.e. a server-verified SUPER_ADMIN with a well-formed sim run id
  * that WILL be persisted on the pool doc - skips ONLY the pool-type-flag
  * check (PLAN-SIM-CREATION-BYPASS). Maintenance mode is checked first and
- * unconditionally — it means "no writes", and a bypass never crosses it. A HARD-CLOSED type is checked first for the same reason.
+ * unconditionally — it means "no writes", and a bypass never crosses it.
+ * A HARD-CLOSED type is checked first for the same reason.
  */
 export async function assertPoolCreationAllowed(
   type: string,
