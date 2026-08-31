@@ -12,6 +12,7 @@ function quote(over: Partial<PoolQuote> = {}): PoolQuote {
         poolType: 'NFL_PICKEM',
         pricingKey: 'season',
         estimatedPlayers: 100,
+        freePlayerThreshold: 10,
         tier: 'standard_tier',
         basePrice: 99,
         addonLines: [],

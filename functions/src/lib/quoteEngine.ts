@@ -181,6 +181,7 @@ export function computeQuote(args: {
       : "standard_tier";
 
   return {
+    freePlayerThreshold: config.freePlayerThreshold,
     poolType,
     pricingKey,
     estimatedPlayers: players,
@@ -243,6 +244,7 @@ export function computeAddonUpgradeQuote(args: {
   const { pricingKey } = computeBasePrice(config, poolType, estimatedPlayers);
 
   return {
+    freePlayerThreshold: config.freePlayerThreshold,
     poolType,
     pricingKey,
     estimatedPlayers: Number(estimatedPlayers) || 0,
