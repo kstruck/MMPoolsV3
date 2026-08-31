@@ -19,18 +19,18 @@
   "dependencies": {
     "@google/genai": "^1.44.0",
     "@google/generative-ai": "^0.24.1",
-    "@sentry/node": "^10.66.0",
+    "@sentry/node": "^10.71.0",
     "firebase-admin": "^12.7.0",
-    "firebase-functions": "^7.0.5",
-    "stripe": "^22.1.1",
+    "firebase-functions": "^7.3.2",
+    "stripe": "^22.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@jest/types": "^30.3.0",
+    "@jest/types": "^30.5.0",
     "@types/node": "^22.0.0",
     "firebase-functions-test": "^3.1.1",
     "typescript": "^5.0.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@tootallnate/once": ">=3.0.1",
