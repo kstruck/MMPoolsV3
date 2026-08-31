@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-26 — functions at `6d92dc61`, rules unchanged since #579, frontend carries #597 + #598)
+## 2. Live state (re-derived 2026-08-28 at `origin/main` = `f161b51d` — functions still at `291e949a` because nothing under `functions/`, `shared/` or `firestore.rules` changed since; rules unchanged since #579; frontend does NOT yet carry #614 → #628)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,10 +361,25 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `6d92dc61`.**
-⚠️ Updated 2026-08-26 evening — Kevin deployed after #602 (per-entry dues T2)
-merged (was <!-- deploy-state:ignore --> `main` @ `e6882d21`, this file's
-earlier same-day claim).
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `291e949a`.**
+⚠️ Updated 2026-08-27 — Kevin deployed after #615 (partial dues) merged. The two
+superseded same-file claims were <!-- deploy-state:ignore --> `main` @ `6d92dc61`
+(after #602) and <!-- deploy-state:ignore --> `main` @ `e6882d21`.
+
+Verified by SOURCE TIMESTAMP, not by `Deploy complete!`: #615 merged 14:26:43Z
+and the three dues writers uploaded after it (`deleteNFLEntry` 14:34:47Z,
+`setPaidStatus` 14:35:19Z, `reconcilePaymentTruth` 14:36:44Z).
+
+⚠️ **Re-derived 2026-08-28 and STILL CURRENT, by a different method.** The SHA
+above did not need re-verifying against the deploy — `git diff --stat
+291e949a..origin/main -- functions/ firestore.rules shared/` is **empty** across
+the eleven merges since (#617, #619–#628), so no deployable source has moved.
+**No functions deploy and no rules deploy are owed.** One Coolify rebuild is,
+and it now covers thirteen merges (#614 → #628).
+
+**HANDOFF.md is the canonical live-state carrier (CLAUDE.md §1).** This claim is
+kept in step with it; if the two ever disagree, HANDOFF wins and this one is
+stale.
 
 🛑 **THIS DEPLOY ADDED NO NEW CALLABLE, SO VERIFY-BY-NAME PROVES NOTHING HERE.**
 #601/#602 changed `setPaidStatus`, `lib/multiEntry.ts` and `shared/`, and added
