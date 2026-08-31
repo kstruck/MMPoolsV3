@@ -72,14 +72,40 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     expect(shared).toContain('THIS IS NOT `billing_config.freePlayerThreshold`');
   });
 
-  it('quotes the refusal the 11th player will actually see, verbatim', () => {
-    // The exact string `nflPools.ts` throws. If that copy is reworded, this
-    // fails and the wizard's promise has to be reworded with it.
-    const server = read('functions/src/nflPools.ts');
-    const line = 'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.';
-    expect(server).toContain(line);
-    expect(src).toContain('This pool is full, so your spot could not be reserved.');
-    expect(src).toContain('they can upgrade the pool to raise its limit.');
+  /**
+   * IT QUOTES THE MESSAGE, IT DOES NOT RETYPE IT (codex r2).
+   *
+   * The first cut hand-copied the NFL refusal. Bracket, playoff and props threw
+   * DIFFERENT words — the pre-G9 copy that explains our billing tiers to
+   * somebody with no billing relationship with us — so the wizard was telling
+   * three of the five pool types it creates that their members would see text
+   * they would never receive. All four gates now throw the same constant.
+   */
+  it('quotes the ONE refusal every gate throws, from the constant', () => {
+    expect(src).toContain('{FREE_PLAN_FULL_MESSAGE}');
+    for (const f of [
+      'functions/src/nflPools.ts',
+      'functions/src/bracketEntries.ts',
+      'functions/src/playoffPools.ts',
+      'functions/src/propBets.ts',
+    ]) {
+      const server = read(f);
+      expect(server, f).toContain('FREE_PLAN_FULL_MESSAGE');
+      // The pre-G9 wording must not survive anywhere.
+      expect(server, f).not.toContain('must upgrade to premium');
+    }
+  });
+
+  /**
+   * A TRIAL POOL IS NOT SUBJECT TO THE FREE CAP (codex r2).
+   *
+   * `freeTierEligible` means "total is $0", which a 100%-off coupon makes true
+   * with a paid add-on selected — while `computeLaunchMode` forces a TRIAL for
+   * any paid add-on. Showing the cap there would invent a limit the pool does
+   * not have.
+   */
+  it('is suppressed when a paid add-on is selected, coupon or not', () => {
+    expect(src).toContain('if (quote.addonLines.length > 0) return null;');
   });
 
   it('says how the commissioner finds out, and how to fix it', () => {

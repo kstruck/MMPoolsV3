@@ -38,3 +38,19 @@ export const FREE_PLAN_PARTICIPANT_CAP = 10;
  * Derived so the wizard cannot promise a nudge that never arrives.
  */
 export const FREE_PLAN_WARNING_AT = 8;
+
+/**
+ * What the person who cannot get in is told — ONE message, for every pool type.
+ *
+ * G9 rewrote this for NFL pools because the original explained the PLATFORM'S
+ * BILLING to somebody who has no billing relationship with us ("Free Plan",
+ * "upgrade to premium", "the pool manager must"). Nothing in it told them what
+ * to do and it read as though they had done something wrong.
+ *
+ * Bracket, playoff and props kept the old wording, so the same event produced
+ * two different member experiences depending on the pool type — and the create
+ * wizard, which builds all of them, could only quote one of the two (codex r2,
+ * 2026-08-30). Say what happened, whose move it is, and nothing about pricing.
+ */
+export const FREE_PLAN_FULL_MESSAGE =
+  'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.';

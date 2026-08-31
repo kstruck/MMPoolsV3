@@ -70,7 +70,7 @@ import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
-import { FREE_PLAN_PARTICIPANT_CAP } from "./shared/freePlanCap";
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -343,7 +343,7 @@ export async function joinNFLPoolInternal(
       // premium", "pool manager". Nothing in it told them what to do, and it
       // read as though they had done something wrong. Say what happened, whose
       // move it is, and nothing about our pricing.
-      throw new HttpsError('failed-precondition', 'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.');
+      throw new HttpsError('failed-precondition', FREE_PLAN_FULL_MESSAGE);
     }
     // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
     // its purchased participant ceiling. No-op for free/trial pools.

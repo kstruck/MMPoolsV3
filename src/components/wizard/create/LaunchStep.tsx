@@ -16,7 +16,7 @@ import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState'
 import { CheckboxField, Field, NumberField } from '../fields';
 import { SELLABLE_ADDON_KEYS, stripFreeAddons } from '../../../config/freeAddons';
 import { estimateIsSet, feeWithoutPaymentPathWarning } from './launchReadiness';
-import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from '@shared/freePlanCap';
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT, FREE_PLAN_FULL_MESSAGE } from '@shared/freePlanCap';
 
 // ---------------------------------------------------------------------------
 // LaunchStep — the final wizard step (PLAN-BUYFLOW-OVERHAUL Phase 2 #5).
@@ -259,7 +259,14 @@ export function LaunchStep(props: LaunchStepProps) {
    */
   const freeCapNotice = useMemo(() => {
     if (resolvedKey !== quoteInputsKey || quoteLoading || !quote) return null;
-    if (!quote.freeTierEligible) return null;              // they are not launching free
+    if (!quote.freeTierEligible) return null;
+    // ⚠️ `freeTierEligible` is not the launch mode (codex r2). It is true whenever
+    // the TOTAL is $0, and a 100%-off coupon makes that true with a paid add-on
+    // selected — but `computeLaunchMode` forces 'trial' for ANY paid add-on, and
+    // a trial pool is not subject to the free-plan join gate at all. `addonLines`
+    // is the priced-add-on list the coupon discounts but does not empty, so it
+    // mirrors the server's `payloadHasPaidAddon` exactly.
+    if (quote.addonLines.length > 0) return null;
     return FREE_PLAN_PARTICIPANT_CAP;
   }, [quote, resolvedKey, quoteInputsKey, quoteLoading]);
 
@@ -427,8 +434,7 @@ export function LaunchStep(props: LaunchStepProps) {
             A free pool holds {freeCapNotice} players. Player {freeCapNotice + 1} cannot join.
           </p>
           <p className="mt-1">
-            They are turned away with: <em>&ldquo;This pool is full, so your spot could not be reserved.
-            Ask the commissioner to make room — they can upgrade the pool to raise its limit.&rdquo;</em>{' '}
+            They are turned away with: <em>&ldquo;{FREE_PLAN_FULL_MESSAGE}&rdquo;</em>{' '}
             Nothing is lost — they can join the moment you make room.
           </p>
           <p className="mt-1">
