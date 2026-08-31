@@ -203,7 +203,11 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
   it('the email thresholds it promises are the ones the job actually uses', () => {
     // The first cut computed the earlier nudge as `cap - 2`, which is only
     // right at a cap of 10. It reads the constant now.
-    expect(src).toContain('{FREE_PLAN_WARNING_AT} players and again at {freeCapNotice}');
+    // The unit must match the gate here too (codex r8): the alert fires on
+    // the same counter the cap uses, so promising "players" on an
+    // entry-counted type misstates when the email arrives.
+    expect(src).toContain('{FREE_PLAN_WARNING_AT} {capUnit} and again at {freeCapNotice}');
+    expect(src).not.toContain('{FREE_PLAN_WARNING_AT} players');
     expect(src).not.toContain('Math.max(1, freeCapNotice - 2)');
   });
 });

@@ -460,7 +460,7 @@ export function LaunchStep(props: LaunchStepProps) {
             Nothing is lost — they can join the moment you make room.
           </p>
           <p className="mt-1">
-            We email you when your pool reaches {FREE_PLAN_WARNING_AT} players and again at {freeCapNotice},
+            We email you when your pool reaches {FREE_PLAN_WARNING_AT} {capUnit} and again at {freeCapNotice},
             so the wall should never be a surprise. To raise it, open your pool and use the
             <strong> Upgrade</strong> button on the participants banner — it takes you straight to the
             pricing page for that pool. Or set the number above to your real headcount now and launch on
