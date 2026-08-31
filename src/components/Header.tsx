@@ -346,7 +346,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     joined. Explore keeps three destinations, so the
                                     "a disclosure must earn its click" rule still holds. */}
                                 <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
-                                    <Compass size={14} /> Public Pools
+                                    Public Pools
                                 </NavLink>
 
                                 <NavMenu label="Explore" active={isAnyActive('/how-it-works', '/features', '/pricing')}>

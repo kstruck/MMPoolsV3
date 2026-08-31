@@ -37,6 +37,10 @@ describe('Public Pools sits at the top level of the main menu', () => {
     expect(signedInNav).toContain(
       `<NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>`,
     );
+    // Bare label, matching how the signed-OUT nav renders the same link. The
+    // header exists because it once wrapped onto a second row on a laptop, so a
+    // new top-level item takes the narrower of two shapes that both work.
+    expect(signedInNav).not.toContain('<Compass size={14} /> Public Pools');
     // The old shape: an item INSIDE the Explore disclosure.
     expect(signedInNav).not.toContain('to="/browse"\n                                        active=');
   });
@@ -78,6 +82,33 @@ describe('Public Pools sits at the top level of the main menu', () => {
   it('keeps the exact label, so the Help copy that names it stays true', () => {
     expect(signedInNav).toContain('Public Pools');
     expect(signedInNav).not.toMatch(/Browse Pools|Open Pools|Find a Pool/);
+  });
+
+  /**
+   * WIDTH — WHAT IS AND IS NOT ESTABLISHED HERE (codex r1).
+   *
+   * The header redesign exists because thirteen controls wrapped onto a second
+   * row on a laptop, so adding one back at `lg` deserves scrutiny. codex raised
+   * exactly that.
+   *
+   * ⚠️ THIS IS NOT A PIXEL MEASUREMENT. The dev server cannot render without
+   * Firebase credentials, so the layout was not measured at 1024px. What IS
+   * established: the signed-in nav renders FOUR top-level controls, the same
+   * number the signed-OUT nav already ships at the same breakpoint in
+   * production today. The new link is also rendered bare (no icon), matching
+   * the signed-out treatment of the identical destination.
+   *
+   * A source COUNT would over-report signed-in as five: `My Pools` and
+   * `My Entries` are two branches of one ternary and only ever one renders. So
+   * this asserts the DESTINATION SET instead, which does not need that caveat.
+   */
+  it('renders exactly four top-level destinations for a signed-in user', () => {
+    const topLevelRoutes = [...signedInNav.matchAll(/<NavLink\s+to="([^"]+)"/g)].map(m => m[1]);
+    // The ternary pair collapses to one slot at runtime.
+    const slots = new Set(topLevelRoutes.map(r => r.split('?')[0]));
+    expect(slots).toEqual(new Set(['/participant', '/scoreboard', '/browse']));
+    // ...plus the Explore disclosure = four controls.
+    expect((signedInNav.match(/<NavMenu(?!Item)/g) ?? [])).toHaveLength(2); // My Pools + Explore
   });
 
   it('a signed-out visitor still reaches it directly, as they always did', () => {
