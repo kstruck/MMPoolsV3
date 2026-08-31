@@ -278,6 +278,20 @@ export function LaunchStep(props: LaunchStepProps) {
     return FREE_PLAN_PARTICIPANT_CAP;
   }, [quote, resolvedKey, quoteInputsKey, quoteLoading, poolType]);
 
+  /**
+   * WHAT THE CAP COUNTS, WHICH IS NOT THE SAME THING EVERYWHERE (codex r7).
+   *
+   * `nflPools` counts DISTINCT PARTICIPANTS (`participantIds.length`), so on a
+   * Pick'em / Survivor / Margin pool the unit really is players. Bracket,
+   * playoff and props count ENTRIES (`entryCount`, `Object.keys(entries)`,
+   * prop CARDS) — and props explicitly lets one person hold several. Saying
+   * "10 players" there would promise a bigger pool than the gate allows,
+   * because five people with two entries each already fill it.
+   */
+  const capUnit = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(String(poolType).toUpperCase())
+    ? 'players'
+    : 'entries';
+
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
   // poolId, or null when validation/creation failed (error already surfaced).
@@ -439,7 +453,7 @@ export function LaunchStep(props: LaunchStepProps) {
       {freeCapNotice !== null && (
         <div className="-mt-2 mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">
           <p className="font-semibold">
-            A free pool holds {freeCapNotice} players. Player {freeCapNotice + 1} cannot join.
+            A free pool holds {freeCapNotice} {capUnit}. {capUnit === 'players' ? 'Player' : 'Entry'} {freeCapNotice + 1} cannot join.
           </p>
           <p className="mt-1">
             They are turned away with: <em>&ldquo;{FREE_PLAN_FULL_MESSAGE}&rdquo;</em>{' '}

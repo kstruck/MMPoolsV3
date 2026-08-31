@@ -34,8 +34,7 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     expect(src).toContain('return FREE_PLAN_PARTICIPANT_CAP;');
     expect(src).not.toContain('Number(quote.freePlayerThreshold)');
     expect(src).not.toMatch(/A free pool holds 10 players/);
-    expect(src).toContain('A free pool holds {freeCapNotice} players');
-    expect(src).toContain('Player {freeCapNotice + 1} cannot join');
+    expect(src).toContain('A free pool holds {freeCapNotice} {capUnit}');
   });
 
   /**
@@ -110,6 +109,24 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
    * three of the five pool types it creates that their members would see text
    * they would never receive. All four gates now throw the same constant.
    */
+  /**
+   * THE CAP DOES NOT COUNT THE SAME THING EVERYWHERE (codex r7).
+   *
+   * `nflPools` counts distinct participants; bracket, playoff and props count
+   * ENTRIES — and props lets one person hold several cards. "10 players" would
+   * promise a bigger pool than the gate allows on those three.
+   */
+  it('names the unit the gate actually counts, per pool type', () => {
+    expect(src).toContain("const capUnit = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(String(poolType).toUpperCase())");
+    expect(src).toContain("? 'players'");
+    expect(src).toContain("    : 'entries';");
+
+    // The claim behind the split, measured at both kinds of gate.
+    expect(read('functions/src/nflPools.ts')).toContain('participantIds.length >= FREE_PLAN_PARTICIPANT_CAP');
+    expect(read('functions/src/bracketEntries.ts')).toContain('currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP');
+    expect(read('functions/src/propBets.ts')).toContain('currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP');
+  });
+
   it('quotes the ONE refusal every gate throws, from the constant', () => {
     expect(src).toContain('{FREE_PLAN_FULL_MESSAGE}');
     for (const f of [
