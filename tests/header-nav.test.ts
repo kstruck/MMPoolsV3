@@ -111,6 +111,15 @@ describe('Public Pools sits at the top level of the main menu', () => {
     expect((signedInNav.match(/<NavMenu(?!Item)/g) ?? [])).toHaveLength(2); // My Pools + Explore
   });
 
+  /**
+   * The one width property that IS assertable without rendering: a top-level
+   * label must never wrap onto a second row, which is the failure this whole
+   * header was rebuilt to remove.
+   */
+  it('top-level links cannot wrap their labels', () => {
+    expect(src).toContain('whitespace-nowrap shrink-0');
+  });
+
   it('a signed-out visitor still reaches it directly, as they always did', () => {
     const signedOut = src.slice(0, src.indexOf('{canManage ? ('));
     expect(signedOut).toContain(`<NavLink to="/browse"`);

@@ -94,7 +94,13 @@ const NavLink: React.FC<{
             onClick();
         }}
         className={cn(
-            'relative flex items-center gap-1 min-h-[24px] font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
+            // whitespace-nowrap + shrink-0: the failure mode this header was
+            // built to prevent is a label wrapping onto a second row on a
+            // laptop. Without these, a two-word label like "Public Pools" is
+            // the first thing to break when the row is squeezed (codex r1/r2
+            // on the Public Pools promotion). No visual change when there is
+            // room; it fails by scrolling rather than by wrapping.
+            'relative flex items-center gap-1 min-h-[24px] whitespace-nowrap shrink-0 font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
             active ? 'text-white' : 'text-white/70 hover:text-white',
             'after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:rounded-full after:bg-gold-500',
             active ? 'after:opacity-100' : 'after:opacity-0 hover:after:opacity-40',
