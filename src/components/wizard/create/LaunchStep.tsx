@@ -16,6 +16,7 @@ import { launchButtonsState, type LaunchQuoteState } from './launchButtonsState'
 import { CheckboxField, Field, NumberField } from '../fields';
 import { SELLABLE_ADDON_KEYS, stripFreeAddons } from '../../../config/freeAddons';
 import { estimateIsSet, feeWithoutPaymentPathWarning } from './launchReadiness';
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT, FREE_PLAN_FULL_MESSAGE } from '@shared/freePlanCap';
 
 // ---------------------------------------------------------------------------
 // LaunchStep — the final wizard step (PLAN-BUYFLOW-OVERHAUL Phase 2 #5).
@@ -240,6 +241,69 @@ export function LaunchStep(props: LaunchStepProps) {
   });
   const freeEligible = buttons.primary === 'free';
 
+  /**
+   * Show the free plan's participant ceiling, or null when it does not apply.
+   *
+   * ⚠️ THE NUMBER IS `FREE_PLAN_PARTICIPANT_CAP`, NOT `quote.freePlayerThreshold`
+   * (codex r1). Those are two different numbers that both happen to be 10 today:
+   * the quote's threshold is a PRICING input (free vs trial, admin-configurable),
+   * while the cap is what `nflPools` / `bracketEntries` / `playoffPools` /
+   * `propBets` actually enforce on every join. Quoting the pricing number here
+   * would have promised a 25-player free pool the moment an admin raised the
+   * config, while the join gate still turned away the 11th.
+   *
+   * The quote is still what decides WHETHER to show it — `freeTierEligible` is
+   * the server's own answer to "is this pool launching free". Null while that is
+   * loading or stale, because a wrong claim here is worse than none: a
+   * commissioner plans their invite list around it.
+   */
+  const freeCapNotice = useMemo(() => {
+    if (resolvedKey !== quoteInputsKey || quoteLoading || !quote) return null;
+    if (!quote.freeTierEligible) return null;
+    // ⚠️ `freeTierEligible` is not the launch mode (codex r2). It is true whenever
+    // the TOTAL is $0, and a 100%-off coupon makes that true with a paid add-on
+    // selected — but `computeLaunchMode` forces 'trial' for ANY paid add-on, and
+    // a trial pool is not subject to the free-plan join gate at all. `addonLines`
+    // is the priced-add-on list the coupon discounts but does not empty, so it
+    // mirrors the server's `payloadHasPaidAddon` exactly.
+    if (quote.addonLines.length > 0) return null;
+    // ⚠️ SQUARES DOES NOT ENFORCE THIS CAP (codex r5). `reserveSquare` checks
+    // billing access but never the free-plan participant count, unlike the four
+    // gates above — SQUARES-BACKLOG.md S3. Promising "player 11 cannot join" on
+    // a pool where they can is the exact class of false claim this notice was
+    // added to remove. Creation for the type is closed today, so this cannot
+    // render; it is here so reopening creation cannot quietly reintroduce the
+    // lie. Delete it when S3 is fixed, not before.
+    if (String(poolType).toUpperCase() === 'SQUARES') return null;
+    // ⚠️ EVERY SENTENCE IN THIS NOTICE ASSUMES THE TWO NUMBERS AGREE (codex r9).
+    //
+    // `freePlayerThreshold` (config, PRICING) and FREE_PLAN_PARTICIPANT_CAP
+    // (code, ENFORCEMENT) are both 10 today, and the block below leans on that
+    // in more than one place — most sharply in "set your real headcount and
+    // launch on the right plan", which only avoids the wall while a headcount
+    // above the cap actually buys you out of the free tier. Raise the config to
+    // 25 and an estimate of 11 still launches free, and still hits the wall.
+    //
+    // Rather than qualify each sentence, the notice SAYS NOTHING when they
+    // diverge. Silence is honest; a partially-true wall is not.
+    if (Number(quote.freePlayerThreshold) !== FREE_PLAN_PARTICIPANT_CAP) return null;
+    return FREE_PLAN_PARTICIPANT_CAP;
+  }, [quote, resolvedKey, quoteInputsKey, quoteLoading, poolType]);
+
+  /**
+   * WHAT THE CAP COUNTS, WHICH IS NOT THE SAME THING EVERYWHERE (codex r7).
+   *
+   * `nflPools` counts DISTINCT PARTICIPANTS (`participantIds.length`), so on a
+   * Pick'em / Survivor / Margin pool the unit really is players. Bracket,
+   * playoff and props count ENTRIES (`entryCount`, `Object.keys(entries)`,
+   * prop CARDS) — and props explicitly lets one person hold several. Saying
+   * "10 players" there would promise a bigger pool than the gate allows,
+   * because five people with two entries each already fill it.
+   */
+  const capUnit = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'].includes(String(poolType).toUpperCase())
+    ? 'players'
+    : 'entries';
+
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
   // poolId, or null when validation/creation failed (error already surfaced).
@@ -375,10 +439,17 @@ export function LaunchStep(props: LaunchStepProps) {
         min={1}
         placeholder="e.g. 10"
       />
-      {/* G7 — say what the number is FOR, at the moment it is asked. The
-          free-plan limit is deliberately not spelled out as a figure here: it
-          is configurable and already hardcoded in three other places (plan
-          §2 G8), and a fourth copy would be a fourth thing to get wrong. */}
+      {/* G7 — say what the number is FOR, at the moment it is asked.
+          The limit used to be described without being NAMED, because the figure
+          is configurable and already hardcoded at the four sites that ENFORCE
+          it. Kevin, 2026-08-30: *"Make sure this is clear on the wizard to the
+          user so they fully understand and explain how they will know when the
+          11th player tries to join and what they will see, and how they can fix
+          it."* Resolved by SERVING the number from the quote
+          (`freePlayerThreshold`, same precedent as `trialDays`) rather than
+          hardcoding a fifth copy — so the number on screen is the number the
+          server will enforce, not a copy of it. Falls back to the old
+          unnumbered sentence when the quote has not loaded. */}
       <p className="-mt-3 mb-4 text-xs text-slate-400">
         Small pools launch free; above that limit, hosting is priced by size. This is the number we price —
         estimate high rather than low, because growing past it later means upgrading.
@@ -387,6 +458,27 @@ export function LaunchStep(props: LaunchStepProps) {
         <p className="-mt-2 mb-4 text-xs font-semibold text-amber-300">
           Enter how many players you expect before launching.
         </p>
+      )}
+      {/* THE WALL, SPELLED OUT — what happens, who hits it, what they see, and
+          how the commissioner clears it. Shown whenever the pool would launch
+          free, which is exactly when the ceiling applies. */}
+      {freeCapNotice !== null && (
+        <div className="-mt-2 mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">
+          <p className="font-semibold">
+            A free pool holds {freeCapNotice} {capUnit}. {capUnit === 'players' ? 'Player' : 'Entry'} {freeCapNotice + 1} cannot join.
+          </p>
+          <p className="mt-1">
+            They are turned away with: <em>&ldquo;{FREE_PLAN_FULL_MESSAGE}&rdquo;</em>{' '}
+            Nothing is lost — they can join the moment you make room.
+          </p>
+          <p className="mt-1">
+            We email you when your pool reaches {FREE_PLAN_WARNING_AT} {capUnit} and again at {freeCapNotice},
+            so the wall should never be a surprise. To raise it, open your pool and use the
+            <strong> Upgrade</strong> button on the participants banner — it takes you straight to the
+            pricing page for that pool. Or set the number above to your real headcount now and launch on
+            the right plan from the start, which is the cheaper move.
+          </p>
+        </div>
       )}
 
       {/* Premium add-ons — priced server-side; any paid add-on starts a trial. */}

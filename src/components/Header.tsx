@@ -33,7 +33,8 @@ import { cn } from './ui/cn';
  * It is now SIX, in three bands that map to three questions:
  *   1. "where is my stuff"  -> My Pools           (a disclosure once you also run pools)
  *   2. "what is happening"  -> Live Scores        (flat, gold, time-critical)
- *   3. "what else is there" -> Explore            (disclosure: browse / how it works / pricing)
+ *   3. "what else is there" -> Explore            (disclosure: how it works / features / pricing)
+ *   + Public Pools flat, because joining a pool is how the platform grows
  *   + the one primary action (Create a New Pool), Help, and the account menu.
  *
  * Three rules held the redesign together:
@@ -53,7 +54,9 @@ import { cn } from './ui/cn';
  * - A DISCLOSURE MUST EARN ITS CLICK. A menu holding one item is pure cost, so
  *   "My Pools" renders as a FLAT LINK for a member who only plays, and becomes
  *   a disclosure only once they also run pools and it has two real
- *   destinations. Same for the Explore group, which never has fewer than three.
+ *   destinations. Same for the Explore group, which never has fewer than three
+ *   — it still holds exactly three after Public Pools was promoted out of it
+ *   to the top level (Kevin, 2026-08-31).
  *
  * Mobile keeps the single hamburger from the 2026-08-23 pass, but the drawer is
  * now sectioned rather than an undifferentiated pile of buttons. It stays FLAT
@@ -91,7 +94,13 @@ const NavLink: React.FC<{
             onClick();
         }}
         className={cn(
-            'relative flex items-center gap-1 min-h-[24px] font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
+            // whitespace-nowrap + shrink-0: the failure mode this header was
+            // built to prevent is a label wrapping onto a second row on a
+            // laptop. Without these, a two-word label like "Public Pools" is
+            // the first thing to break when the row is squeezed (codex r1/r2
+            // on the Public Pools promotion). No visual change when there is
+            // room; it fails by scrolling rather than by wrapping.
+            'relative flex items-center gap-1 min-h-[24px] whitespace-nowrap shrink-0 font-display font-semibold uppercase text-[14px] tracking-[0.06em] pb-0.5 transition-colors',
             active ? 'text-white' : 'text-white/70 hover:text-white',
             'after:absolute after:left-0 after:right-0 after:-bottom-0.5 after:h-[2px] after:rounded-full after:bg-gold-500',
             active ? 'after:opacity-100' : 'after:opacity-0 hover:after:opacity-40',
@@ -335,16 +344,18 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     <Trophy size={14} /> Live Scores
                                 </NavLink>
 
-                                <NavMenu label="Explore" active={isAnyActive('/browse', '/how-it-works', '/features', '/pricing')}>
-                                    <NavMenuItem
-                                        to="/browse"
-                                        active={isActive('/browse')}
-                                        onClick={() => navigate('/browse')}
-                                        icon={<Compass size={15} />}
-                                        hint="Find an open pool to join"
-                                    >
-                                        Public Pools
-                                    </NavMenuItem>
+                                {/* TOP LEVEL, NOT UNDER Explore (Kevin, 2026-08-31).
+                                    A signed-OUT visitor already got Public Pools as a
+                                    flat link; only the signed-in nav buried it behind a
+                                    disclosure, so the one destination that grows the
+                                    platform got harder to reach the moment somebody
+                                    joined. Explore keeps three destinations, so the
+                                    "a disclosure must earn its click" rule still holds. */}
+                                <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
+                                    Public Pools
+                                </NavLink>
+
+                                <NavMenu label="Explore" active={isAnyActive('/how-it-works', '/features', '/pricing')}>
                                     <NavMenuItem
                                         to="/how-it-works"
                                         active={isActive('/how-it-works')}

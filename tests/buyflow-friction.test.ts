@@ -67,9 +67,25 @@ describe('G9 — the 11th invitee gets member-appropriate copy', () => {
     it('the join limit no longer explains our billing tiers to a member', () => {
         // They have no billing relationship with us; nothing in the old message
         // told them what to do, and it read as though they had erred.
-        expect(nflPools).not.toContain('This pool is on the Free Plan and has reached the limit');
-        expect(nflPools).not.toMatch(/upgrade to premium to allow more participants/i);
-        expect(nflPools).toContain('This pool is full, so your spot could not be reserved.');
+        //
+        // 2026-08-30 (codex r2): the wording moved to
+        // `shared/freePlanCap.ts` as FREE_PLAN_FULL_MESSAGE, because bracket,
+        // playoff and props still threw the pre-G9 copy — same event, two
+        // member experiences, and a create wizard that could only quote one of
+        // them. G9 now covers all four gates, which is what this asserts.
+        const shared = read('shared/freePlanCap.ts');
+        expect(shared).toContain('This pool is full, so your spot could not be reserved.');
+        for (const gate of [
+            'functions/src/nflPools.ts',
+            'functions/src/bracketEntries.ts',
+            'functions/src/playoffPools.ts',
+            'functions/src/propBets.ts',
+        ]) {
+            const src = read(gate);
+            expect(src, gate).toContain('FREE_PLAN_FULL_MESSAGE');
+            expect(src, gate).not.toContain('This pool is on the Free Plan and has reached the limit');
+            expect(src, gate).not.toMatch(/upgrade to premium to allow more participants/i);
+        }
     });
 
     it('the paid-ceiling message too — same audience, same problem', () => {
@@ -81,7 +97,7 @@ describe('G9 — the 11th invitee gets member-appropriate copy', () => {
         // codex r1 [P2]: "raise the limit in settings" does nothing for a free
         // pool at the wall — that branch is unconditional on any setting. The
         // commissioner has to upgrade.
-        expect(nflPools).toContain('they can upgrade the pool to raise its limit');
+        expect(read('shared/freePlanCap.ts')).toContain('they can upgrade the pool to raise its limit');
         expect(poolOps).toContain('they can upgrade the pool to raise its limit');
         expect(nflPools).not.toContain('raise the limit from their pool settings');
     });

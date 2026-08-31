@@ -508,7 +508,8 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             });
 
             await expect(createBracketEntry(req)).rejects.toThrowError(
-                'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.'
+                // One message for every pool type since 2026-08-30 (shared/freePlanCap.ts).
+                'This pool is full, so your spot could not be reserved.'
             );
         });
 

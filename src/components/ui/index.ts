@@ -16,6 +16,7 @@ export {
     type CheckboxProps,
     type RangeSliderProps,
 } from './Field';
+export { Switch, type SwitchProps } from './Switch';
 export { StatTile, type StatTileProps, type StatAccent } from './StatTile';
 export { PoolCard, type PoolCardProps, type PoolCardFigure } from './PoolCard';
 export {

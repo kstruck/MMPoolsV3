@@ -1,5 +1,30 @@
 version: 2
+
+# 🛑 ONE ENTRY PER package.json. `directory` IS NOT RECURSIVE.
+#
+# This file listed `/` alone until 2026-08-28, so the code that actually runs in
+# production — Cloud Functions — was never covered. Measured on that date:
+# `functions/` held `firebase-admin@12.7.0` while the root held `13.10.0`, and
+# `typescript@^5.0.0` against the root's `~6.0.3`. Neither gap had ever produced
+# a PR, because dependabot was never looking.
+#
+# This is the same structural blind spot the repo has hit twice before, and it
+# is worth stating so the third time is caught by shape rather than by luck:
+#
+#   * CLAUDE.md §2b — a vulnerable `brace-expansion` in `functions/` that a
+#     root-only fix missed, and that CI's then root-scoped audit could not see.
+#   * CLAUDE.md §2e — `npx tsc -b` at the root does not typecheck `functions/`,
+#     so a type error there passed every gate and would have failed the deploy.
+#
+# CI's `npm audit` was already fixed to run in BOTH directories
+# (`.github/workflows/security-scan.yml`). That means a `functions/`
+# vulnerability is DETECTED today but produces no PR — the fix has to be found
+# and written by hand. This closes that half.
+#
+# `tests/dependabot-scope.test.ts` fails if a package.json exists with no entry
+# here, so a third manifest cannot be added silently.
 updates:
+  # The frontend, the ops scripts, and the root test suite.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -14,3 +39,24 @@ updates:
     labels:
       - "dependencies"
       - "security"
+
+  # Cloud Functions — THE CODE THAT RUNS IN PRODUCTION.
+  #
+  # A lower PR limit than the root on purpose: this is the deployed surface, and
+  # every bump here is a change to what `npx firebase deploy` ships. Five at a
+  # time keeps the queue reviewable rather than a wall to be skimmed.
+  - package-ecosystem: "npm"
+    directory: "/functions"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "security"
+      - "functions"

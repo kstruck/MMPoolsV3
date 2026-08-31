@@ -250,6 +250,7 @@ export const enforceBillingStatus = functions.scheduler.onSchedule(
 // ./lib/billingAccess so it is importable/testable without Firebase init.
 export { checkBillingAccess, PAID_FEATURE_KEYS } from "./lib/billingAccess";
 import { checkBillingAccess } from "./lib/billingAccess";
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from "./shared/freePlanCap";
 
 export const validateBillingAccess = validated(
     { schema: validateBillingAccessSchema, label: "validateBillingAccess", auth: "public", appCheck: "monitor" },
@@ -390,8 +391,11 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
     const notified10 = after.billing?.notified10 === true;
 
     // Check if we should notify
-    const shouldNotify8 = count >= 8 && !notified8;
-    const shouldNotify10 = count >= 10 && !notified10;
+    // Derived from the SAME constants the wizard promises and the join gate
+    // enforces (shared/freePlanCap.ts), so a nudge cannot be promised that
+    // never arrives (codex r1, 2026-08-30).
+    const shouldNotify8 = count >= FREE_PLAN_WARNING_AT && !notified8;
+    const shouldNotify10 = count >= FREE_PLAN_PARTICIPANT_CAP && !notified10;
 
     if (!shouldNotify8 && !shouldNotify10) return;
 
@@ -417,7 +421,7 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
         const subject = `🚫 Locked: Your pool "${after.name}" has reached the Free Plan limit!`;
         const body = `
             <p>Hi there,</p>
-            <p>Your pool <strong>${after.name}</strong> has reached the maximum limit of <strong>10 participants</strong> allowed on the Free Plan.</p>
+            <p>Your pool <strong>${after.name}</strong> has reached the maximum limit of <strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong> allowed on the Free Plan.</p>
             
             <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin: 20px 0; color: #991b1b; font-family: sans-serif;">
                 <p style="margin: 0; font-weight: bold; font-size: 16px;">Participant Entries Locked 🚫</p>
@@ -432,17 +436,17 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
 
         updates["billing.notified10"] = true;
         updates["billing.notified8"] = true; // Mark 8 as true too
-        console.log(`[onPoolParticipantChange] Limit reached (10/10) email queued for pool ${poolId} to manager ${managerEmail}`);
+        console.log(`[onPoolParticipantChange] Limit reached (${FREE_PLAN_PARTICIPANT_CAP}/${FREE_PLAN_PARTICIPANT_CAP}) email queued for pool ${poolId} to manager ${managerEmail}`);
     } else if (shouldNotify8) {
         // Send 8 players approaching warning email
         const subject = `⚠️ Action Required: Your pool "${after.name}" is approaching the Free Plan limit!`;
         const body = `
             <p>Hi there,</p>
-            <p>Your pool <strong>${after.name}</strong> currently has <strong>${count} participants</strong>, approaching the maximum limit of <strong>10 participants</strong> allowed on the Free Plan.</p>
+            <p>Your pool <strong>${after.name}</strong> currently has <strong>${count} participants</strong>, approaching the maximum limit of <strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong> allowed on the Free Plan.</p>
             
             <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 16px; margin: 20px 0; color: #92400e; font-family: sans-serif;">
-                <p style="margin: 0; font-weight: bold; font-size: 16px;">Approaching Limit: ${count}/10 Players ⚠️</p>
-                <p style="margin: 4px 0 0 0; font-size: 13px;">Once your pool reaches 10 players, any new participants attempting to join will be blocked.</p>
+                <p style="margin: 0; font-weight: bold; font-size: 16px;">Approaching Limit: ${count}/${FREE_PLAN_PARTICIPANT_CAP} Players ⚠️</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px;">Once your pool reaches ${FREE_PLAN_PARTICIPANT_CAP} players, any new participants attempting to join will be blocked.</p>
             </div>
 
             <p>Upgrade to a Premium plan now to ensure your participants have a seamless, uninterrupted onboarding experience!</p>
@@ -452,7 +456,7 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
         await sendEmail(db, managerEmail, subject, html);
 
         updates["billing.notified8"] = true;
-        console.log(`[onPoolParticipantChange] Approaching limit (8/10) email queued for pool ${poolId} to manager ${managerEmail}`);
+        console.log(`[onPoolParticipantChange] Approaching limit (${FREE_PLAN_WARNING_AT}/${FREE_PLAN_PARTICIPANT_CAP}) email queued for pool ${poolId} to manager ${managerEmail}`);
     }
 
     if (Object.keys(updates).length > 0) {
