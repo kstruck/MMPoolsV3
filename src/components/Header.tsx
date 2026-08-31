@@ -33,7 +33,8 @@ import { cn } from './ui/cn';
  * It is now SIX, in three bands that map to three questions:
  *   1. "where is my stuff"  -> My Pools           (a disclosure once you also run pools)
  *   2. "what is happening"  -> Live Scores        (flat, gold, time-critical)
- *   3. "what else is there" -> Explore            (disclosure: browse / how it works / pricing)
+ *   3. "what else is there" -> Explore            (disclosure: how it works / features / pricing)
+ *   + Public Pools flat, because joining a pool is how the platform grows
  *   + the one primary action (Create a New Pool), Help, and the account menu.
  *
  * Three rules held the redesign together:
@@ -53,7 +54,9 @@ import { cn } from './ui/cn';
  * - A DISCLOSURE MUST EARN ITS CLICK. A menu holding one item is pure cost, so
  *   "My Pools" renders as a FLAT LINK for a member who only plays, and becomes
  *   a disclosure only once they also run pools and it has two real
- *   destinations. Same for the Explore group, which never has fewer than three.
+ *   destinations. Same for the Explore group, which never has fewer than three
+ *   — it still holds exactly three after Public Pools was promoted out of it
+ *   to the top level (Kevin, 2026-08-31).
  *
  * Mobile keeps the single hamburger from the 2026-08-23 pass, but the drawer is
  * now sectioned rather than an undifferentiated pile of buttons. It stays FLAT
@@ -335,16 +338,18 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     <Trophy size={14} /> Live Scores
                                 </NavLink>
 
-                                <NavMenu label="Explore" active={isAnyActive('/browse', '/how-it-works', '/features', '/pricing')}>
-                                    <NavMenuItem
-                                        to="/browse"
-                                        active={isActive('/browse')}
-                                        onClick={() => navigate('/browse')}
-                                        icon={<Compass size={15} />}
-                                        hint="Find an open pool to join"
-                                    >
-                                        Public Pools
-                                    </NavMenuItem>
+                                {/* TOP LEVEL, NOT UNDER Explore (Kevin, 2026-08-31).
+                                    A signed-OUT visitor already got Public Pools as a
+                                    flat link; only the signed-in nav buried it behind a
+                                    disclosure, so the one destination that grows the
+                                    platform got harder to reach the moment somebody
+                                    joined. Explore keeps three destinations, so the
+                                    "a disclosure must earn its click" rule still holds. */}
+                                <NavLink to="/browse" active={isActive('/browse')} onClick={() => navigate('/browse')}>
+                                    <Compass size={14} /> Public Pools
+                                </NavLink>
+
+                                <NavMenu label="Explore" active={isAnyActive('/how-it-works', '/features', '/pricing')}>
                                     <NavMenuItem
                                         to="/how-it-works"
                                         active={isActive('/how-it-works')}
