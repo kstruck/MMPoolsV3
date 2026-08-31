@@ -3,6 +3,7 @@ import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2, X }
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PoolBilling, BillingStatus } from '../../types';
 import { isHostingBannerDismissed, dismissHostingBanner } from './hostingBannerDismissal';
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from '@shared/freePlanCap';
 
 interface BillingGateProps {
   pool: { billing?: PoolBilling; [key: string]: any };
@@ -273,8 +274,11 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       count = pool.entryCount || 0;
     }
 
-    const isLocked = count >= 10;
-    const isApproaching = count >= 8 && count < 10;
+    // The SAME constants the join gate enforces and the wizard promises
+    // (shared/freePlanCap.ts) — a banner counting to a different number than
+    // the gate would be the contradiction this centralisation exists to stop.
+    const isLocked = count >= FREE_PLAN_PARTICIPANT_CAP;
+    const isApproaching = count >= FREE_PLAN_WARNING_AT && count < FREE_PLAN_PARTICIPANT_CAP;
 
     let bannerBg = 'linear-gradient(135deg, rgba(30,41,59,0.4) 0%, rgba(15,23,42,0.5) 100%)';
     let bannerBorder = '1px solid rgba(51,65,85,0.3)';
@@ -282,8 +286,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     let badgeBorder = '1px solid rgba(51,65,85,0.25)';
     let textColor = '#cbd5e1';
     let titleColor = '#94a3b8';
-    let titleText = `Participants: ${count}/10 (Free Plan)`;
-    let descText = 'Upgrade to Premium to allow more than 10 participants.';
+    let titleText = `Participants: ${count}/${FREE_PLAN_PARTICIPANT_CAP} (Free Plan)`;
+    let descText = `Upgrade to Premium to allow more than ${FREE_PLAN_PARTICIPANT_CAP} participants.`;
 
     if (isLocked) {
       bannerBg = 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.15) 100%)';
@@ -292,7 +296,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       badgeBorder = '1px solid rgba(239,68,68,0.35)';
       textColor = '#fca5a5';
       titleColor = '#f87171';
-      titleText = 'Participant entries locked! (10/10 reached)';
+      titleText = `Participant entries locked! (${FREE_PLAN_PARTICIPANT_CAP}/${FREE_PLAN_PARTICIPANT_CAP} reached)`;
       descText = 'Upgrade to Premium now to unlock the pool and allow new entries to join.';
     } else if (isApproaching) {
       bannerBg = 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(217,119,6,0.14) 100%)';
@@ -301,8 +305,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       badgeBorder = '1px solid rgba(245,158,11,0.35)';
       textColor = '#fde68a';
       titleColor = '#fbbf24';
-      titleText = `Participants: ${count}/10 (Free Plan Limit Approaching)`;
-      descText = 'Upgrade to Premium to avoid locking entries once the 10-player limit is hit.';
+      titleText = `Participants: ${count}/${FREE_PLAN_PARTICIPANT_CAP} (Free Plan Limit Approaching)`;
+      descText = `Upgrade to Premium to avoid locking entries once the ${FREE_PLAN_PARTICIPANT_CAP}-player limit is hit.`;
     }
 
     return (
