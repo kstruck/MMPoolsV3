@@ -155,6 +155,22 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
    * the quote is loading, stale, or absent, and on a pool that is not launching
    * free in the first place.
    */
+  /**
+   * SQUARES IS THE ONE TYPE THAT DOES NOT ENFORCE THIS (codex r5).
+   *
+   * `reserveSquare` checks billing ACCESS but never the free-plan participant
+   * count — SQUARES-BACKLOG.md S3 — so the promise would be false there.
+   * Creation for the type is closed today, so the notice cannot render anyway;
+   * this keeps reopening it from quietly reintroducing the lie.
+   */
+  it('is suppressed for SQUARES, whose join path does not enforce the cap', () => {
+    expect(src).toContain("if (String(poolType).toUpperCase() === 'SQUARES') return null;");
+    // The claim behind the suppression, measured: no cap in the squares path.
+    const squares = read('functions/src/squares.ts');
+    expect(squares).not.toContain('FREE_PLAN_PARTICIPANT_CAP');
+    expect(squares).not.toMatch(/participantIds\.length >= /);
+  });
+
   it('is suppressed unless the quote is loaded, current, and free-eligible', () => {
     expect(src).toContain('if (resolvedKey !== quoteInputsKey || quoteLoading || !quote) return null;');
     expect(src).toContain('if (!quote.freeTierEligible) return null;');

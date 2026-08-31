@@ -267,8 +267,16 @@ export function LaunchStep(props: LaunchStepProps) {
     // is the priced-add-on list the coupon discounts but does not empty, so it
     // mirrors the server's `payloadHasPaidAddon` exactly.
     if (quote.addonLines.length > 0) return null;
+    // ⚠️ SQUARES DOES NOT ENFORCE THIS CAP (codex r5). `reserveSquare` checks
+    // billing access but never the free-plan participant count, unlike the four
+    // gates above — SQUARES-BACKLOG.md S3. Promising "player 11 cannot join" on
+    // a pool where they can is the exact class of false claim this notice was
+    // added to remove. Creation for the type is closed today, so this cannot
+    // render; it is here so reopening creation cannot quietly reintroduce the
+    // lie. Delete it when S3 is fixed, not before.
+    if (String(poolType).toUpperCase() === 'SQUARES') return null;
     return FREE_PLAN_PARTICIPANT_CAP;
-  }, [quote, resolvedKey, quoteInputsKey, quoteLoading]);
+  }, [quote, resolvedKey, quoteInputsKey, quoteLoading, poolType]);
 
   // --- Shared create guard ---------------------------------------------------
   // Validates the full form and gates on Terms before creating. Returns the new
