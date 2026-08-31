@@ -84,6 +84,12 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
 
     const billing = read('functions/src/billing.ts');
     expect(billing).toContain('<strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong>');
+    // codex r6: the alert CARD inside the same email kept its own literals, so
+    // the first sentence and the box under it would have disagreed.
+    expect(billing).toContain('Approaching Limit: ${count}/${FREE_PLAN_PARTICIPANT_CAP} Players');
+    expect(billing).toContain('Once your pool reaches ${FREE_PLAN_PARTICIPANT_CAP} players');
+    expect(billing).not.toMatch(/\$\{count\}\/10 Players/);
+    expect(billing).not.toMatch(/reaches 10 players/);
     expect(billing).not.toContain('<strong>10 participants</strong>');
   });
 
