@@ -8,6 +8,15 @@ import {
   MarginEntry,
   WeeklyRecap
 } from './nflPoolTypes';
+import {
+  countTeamUsesBefore,
+  effectiveMaxTeamUses,
+  effectiveTieCountsAs,
+  UNLIMITED_TEAM_USES,
+} from './shared/survivorReuse';
+import type { WeeklyTiebreaker } from './shared/nflTiebreaker';
+import { applyFrozenTarget } from './shared/nflTiebreaker';
+import type { WeeklyPlace, WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 
 // ============================================================================
 // Feed-integrity predicates — what the scorer is allowed to treat as played
@@ -25,8 +34,9 @@ import {
  * grades a broken payload as a real 0-0.
  *
  * That is defect NFL7-3/NFL7-4 from the chaos drill. A 0-0 is a PUSH for every
- * Pick'em entry, a TIE for Survivor — and a tie is a strike, so at
- * `maxStrikes: 0` a dropped field ELIMINATES the member who picked correctly.
+ * Pick'em entry, a TIE for Survivor — and a tie is a strike by default
+ * (`settings.tieCountsAs`, absent ⇒ today's rule), so at `maxStrikes: 0` a
+ * dropped field ELIMINATES the member who picked correctly.
  *
  * A **one-sided** drop is deliberately NOT detectable here and is not claimed
  * to be: the importer emits both values when EITHER competitor has a score, so
@@ -299,6 +309,22 @@ export function evaluateSurvivorWeek(
     teamTied = true;
   }
 
+  // Fold the tie into won/lost BEFORE the mode branch, so `pickLosersMode`
+  // composes with the setting instead of needing a 2×2 matrix in each arm:
+  // tie-as-WIN in losers mode means the picked team "won", which is a strike.
+  //
+  // ⚠️ ONLY 'WIN' folds. The plan's snippet also folded the default 'LOSS' into
+  // `teamLost`, and that would have CHANGED today's behaviour on every existing
+  // pick-losers pool with no setting written: a tie there would become a
+  // survive, because "the team I picked to lose lost". Today a tie is a strike
+  // in BOTH modes, and the locked decision is that defaults preserve current
+  // behaviour exactly. So 'LOSS' means "today's rule" — it is the WIN option
+  // that this setting exists to add ("ties count as a win for the picked team").
+  if (teamTied && effectiveTieCountsAs(pool.settings) === 'WIN') {
+    teamWon = true;
+    teamTied = false;
+  }
+
   const pickLosersMode = pool.settings.pickLosersMode;
   let strike = false;
 
@@ -337,12 +363,19 @@ export function updateSurvivorStatus(
 
 /**
  * Checks if a player qualifies for an auto-survive exemption (no eligible teams remaining).
- * Evaluates whether all NFL teams playing this week are either already used or on bye.
+ * Evaluates whether every NFL team playing this week was already used in a week
+ * STRICTLY BEFORE the one being scored — a use that had not happened yet by that
+ * week (a future-week reservation) does not count.
  */
 export function checkAutoSurviveExemption(
-  usedTeams: string[],
   gamesInWeek: NFLGame[],
-  autoSurviveEnabled: boolean
+  autoSurviveEnabled: boolean,
+  // Required, not opt-in: eligibility is picks-derived in EVERY mode
+  // (PLAN-SURVIVOR-EXEMPTION-RESERVATIONS). `usedTeams` is submit-time and
+  // carries no week information, so it cannot answer "had this member run out
+  // of options by the time this week was graded" — a pick pre-submitted for a
+  // LATER week was counting as a use and could excuse a missed pick.
+  ctx: { maxTeamUses: number; picks: Record<number, string>; week: number },
 ): boolean {
   if (!autoSurviveEnabled) return false;
 
@@ -355,8 +388,20 @@ export function checkAutoSurviveExemption(
     }
   }
 
-  // Filter out teams that the player has already picked in past weeks
-  const eligibleTeams = [...teamsPlaying].filter(t => !usedTeams.includes(t));
+  // Filter out teams the player could no longer pick BY THIS WEEK: uses are
+  // counted over weeks strictly before it, one code path for every mode, so a
+  // default pool (limit 1 via effectiveMaxTeamUses at the caller) and a
+  // configured pool cannot diverge.
+  //
+  // `maxTeamUses: 0` (unlimited): every playing team stays eligible, so this
+  // can never grant an exemption — surviving a week nobody could play is
+  // `isVoidWeek`'s job, not this one, and an all-cancelled slate contributes
+  // no teams so `teamsPlaying.size > 0` fails there anyway.
+  const useCounts = countTeamUsesBefore(ctx.picks, ctx.week);
+  const eligibleTeams = [...teamsPlaying].filter(t => {
+    if (ctx.maxTeamUses === UNLIMITED_TEAM_USES) return true;
+    return (useCounts[t] ?? 0) < ctx.maxTeamUses;
+  });
 
   // If there are zero eligible teams playing this week, they get an exemption!
   return eligibleTeams.length === 0 && teamsPlaying.size > 0;
@@ -407,7 +452,8 @@ export function scoreMarginWeek(
  * 2. Lowest Negative Burden (sum of absolute values of negative margins).
  * 3. Most Positive Weeks (score > 0).
  * 4. Highest Single-Week margin.
- * 5. Deterministic tie-break based on userId comparison.
+ * 5. Deterministic tie-break on the ENTRY id (PLAN-MULTI-ENTRY D4) — one
+ *    player's two entries must not compare equal.
  */
 export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
   return [...entries].sort((a, b) => {
@@ -431,8 +477,17 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
       return b.bestWeek - a.bestWeek;
     }
 
-    // 5. Tie-breaker fallback (deterministic UUID sorting)
-    return a.ownerUid.localeCompare(b.ownerUid);
+    // 5. Tie-breaker fallback: the ENTRY id, never the owner's uid
+    //     (PLAN-MULTI-ENTRY D4 / sweeps S6).
+    //
+    // 🛑 `ownerUid` HERE WOULD COMPARE TWO ENTRIES OF ONE PLAYER AS EQUAL, and
+    // `Array.prototype.sort` is only guaranteed stable, not deterministic across
+    // inputs — so their ranks would fall out of whatever order Firestore
+    // happened to return the documents in, and could swap between two scoring
+    // passes over identical data. The entry id is unique per row by
+    // construction (`entryIdFor`), so the cascade always terminates on a
+    // distinct value.
+    return String(a.id ?? a.ownerUid).localeCompare(String(b.id ?? b.ownerUid));
   });
 }
 
@@ -441,19 +496,140 @@ export function sortMarginLeaderboard(entries: MarginEntry[]): MarginEntry[] {
 // ============================================================================
 
 /**
- * MNF tiebreaker target: the COMBINED score of ALL Monday games in the week
- * (docs/NFL_POOLS_README.md), not just the first one found. Returns null until
- * EVERY Monday game is FINAL — a mid-Monday SUPER_ADMIN scoring run must not
- * freeze a partial total into the tiebreak; a rescore recomputes it.
+ * The tiebreaker TARGET: the number a member's prediction is measured against.
+ *
+ * `rule` comes from `settings.weeklyTiebreaker` via `effectiveWeeklyTiebreaker`,
+ * and defaults to `MNF_COMBINED` — the historical behaviour, so a pool that has
+ * never heard of this setting computes exactly what it always did
+ * (PLAN-WEEKLY-TIEBREAKERS §4, no migration).
+ *
+ * WHICH game(s) are summed comes from ONE place — `applyFrozenTarget`
+ * (`shared/nflTiebreaker.ts`), the same function the pick sheet used to tell
+ * the member what they were predicting — OR, when the pool has a FROZEN target
+ * for the week (`pool.frozenTiebreakTargets[week]`, set by the week's first
+ * submission — PLAN-WEEKLY-PRIZES §2b), from that frozen list verbatim. The
+ * frozen list wins: a flex move, a postponement, or a game gaining or losing
+ * `isMonday` after members have submitted must not re-point their prediction.
+ *
+ *  - `MNF_COMBINED`   — every Monday game (legacy); Monday-less → the week's
+ *    final game, the same fallback as the other two since 2026-08-27
+ *    (`PLAN-TIEBREAKER-MONDAYLESS.md`). It returned NO target before that, and
+ *    a week that froze `[]` under the old behaviour keeps `[]`.
+ *  - `MNF_LAST_GAME`  — the LAST Monday game to kick off; Monday-less → the
+ *    week's final game.
+ *  - `MNF_FIRST_GAME` — the FIRST Monday game to kick off; Monday-less → the
+ *    week's final game.
+ *  - `NONE`           — the pool does not use a tiebreaker.
+ *
+ * `null` means "no target", and every caller must already handle it (no game
+ * qualifies, an EMPTY frozen list, or the games are not final yet). A frozen game that is CANCELLED
+ * — or no longer in the schedule at all — also yields `null`: there is no
+ * combined score to compare against, so the tie is shared (D3), the same
+ * outcome as "nobody answered".
+ *
+ * ⚠️ Returns null until the games it reads are FINAL — a mid-Monday scoring run
+ * must not freeze a partial total into the tiebreak; a rescore recomputes it.
+ * `MNF_LAST_GAME` waits only on the ONE game it names, so on a doubleheader it
+ * can resolve while the earlier game is still being corrected. That is the
+ * rule's point, not a hole in it.
  */
-export function computeMNFTiebreakerTotal(games: NFLGame[]): number | null {
-  const mondayGames = games.filter(g => g.isMonday);
-  if (mondayGames.length === 0) return null;
-  if (!mondayGames.every(g => g.status === 'FINAL')) return null;
-  return mondayGames.reduce(
+export function computeMNFTiebreakerTotal(
+  games: NFLGame[],
+  rule: WeeklyTiebreaker = 'MNF_COMBINED',
+  frozenTargetIds?: ReadonlyArray<string>,
+): number | null {
+  if (rule === 'NONE') return null;
+  // A frozen list — INCLUDING an empty one, which means "this week has no
+  // target" — wins over the live schedule; only `undefined` (nothing frozen)
+  // falls through to the rule. That precedence is `applyFrozenTarget`'s, shared
+  // with the pick sheet and the submit path so the three cannot drift.
+  const targetIds = applyFrozenTarget(frozenTargetIds, games, rule);
+  if (targetIds.length === 0) return null;
+  const counted = targetIds.map(id => games.find(g => String(g.id) === id));
+  if (!counted.every((g): g is NFLGame => Boolean(g) && g!.status === 'FINAL')) return null;
+  return counted.reduce(
     (sum, g) => sum + (g.scores?.home ?? 0) + (g.scores?.away ?? 0),
     0,
   );
+}
+
+/** One entry's claim on the week, as the winner computation sees it. */
+export interface WeeklyWinnerCandidate {
+  /** The entry DOCUMENT id (`{uid}` for entry #1, `e{n}:{uid}` for extras) — PLAN-WEEKLY-PRIZES §9 A1. */
+  entryId: string;
+  userId: string;
+  userName: string;
+  /** The entry's own name when named (multi-entry K5); rows display `entryName ?? userName`. */
+  entryName?: string;
+  points: number;
+  /**
+   * `|prediction − target|`, or `undefined` when this member made no
+   * prediction. ⚠️ Undefined is NOT zero and must never be coerced to it — see
+   * `computeWeeklyWinners`.
+   */
+  tiebreakDiff?: number;
+}
+
+export interface WeeklyWinner {
+  /** Entry doc id (PLAN-WEEKLY-PRIZES §9 A1). Absent on recaps written before it. */
+  entryId?: string;
+  userId: string;
+  userName: string;
+  points: number;
+  tiebreakDiff?: number;
+}
+
+/**
+ * Who won the week (PLAN-WEEKLY-TIEBREAKERS §8c).
+ *
+ * The cascade, and every step of it is load-bearing:
+ *
+ *  1. Highest `points`. Nobody below the top score is a candidate for anything.
+ *  2. Tied at the top → lowest `tiebreakDiff`.
+ *  3. Still tied → **shared win**: every remaining member is returned.
+ *
+ * ⚠️ **A SHARED WIN IS THE NORMAL OUTCOME OF AN UNBREAKABLE TIE, NOT AN ERROR.**
+ * This function replaces `sharpUser`'s `if (points > best)`, which handed every
+ * tied week to whichever entry Firestore happened to iterate first — i.e. to a
+ * document id. On a `payoutMode: WEEKLY` pool that named a winner of a tied
+ * week arbitrarily. Returning the whole tied set is the fix; the caller renders
+ * "(shared)".
+ *
+ * ⚠️ **A MISSING PREDICTION IS ABSENCE, NOT ZERO.** Members with no
+ * `tiebreakDiff` are dropped **only when at least one tied leader has one** —
+ * they lose a tiebreak somebody else can win, but two non-answerers tie with
+ * each other and share. The scorer's older `?? 0` read
+ * (`nflPools.ts`, `closestTiebreaker`) must NOT be copied here: a fake diff of
+ * `target − 0` merely usually loses, and on a low-scoring Monday it would let
+ * somebody who never answered WIN the tiebreak. (codex P1, plan round 11.)
+ *
+ * Returns `[]` for no candidates, which the caller writes as "no field" rather
+ * than as "nobody won" — an empty array in the recap would be a claim.
+ */
+export function computeWeeklyWinners(candidates: WeeklyWinnerCandidate[]): WeeklyWinner[] {
+  if (candidates.length === 0) return [];
+
+  const best = Math.max(...candidates.map(c => c.points));
+  const leaders = candidates.filter(c => c.points === best);
+  if (leaders.length === 1) return leaders.map(toWinner);
+
+  const withDiff = leaders.filter(c => typeof c.tiebreakDiff === 'number');
+  // Nobody among the leaders answered: the tie is unbreakable, so they share.
+  // Deliberately NOT the same as "no target" — the caller passes no diffs in
+  // that case either, and both land here for the same honest reason.
+  if (withDiff.length === 0) return leaders.map(toWinner);
+
+  const closest = Math.min(...withDiff.map(c => c.tiebreakDiff as number));
+  return withDiff.filter(c => c.tiebreakDiff === closest).map(toWinner);
+}
+
+function toWinner(c: WeeklyWinnerCandidate): WeeklyWinner {
+  // Rebuilt field by field rather than spread: `tiebreakDiff: undefined` is a
+  // LITERAL undefined to Firestore's `set()`, which throws on it (the same trap
+  // buildWeeklyRecap documents). Omitting the key is not the same as setting it.
+  const w: WeeklyWinner = { entryId: c.entryId, userId: c.userId, userName: c.userName, points: c.points };
+  if (typeof c.tiebreakDiff === 'number') w.tiebreakDiff = c.tiebreakDiff;
+  return w;
 }
 
 /**
@@ -526,7 +702,10 @@ export function computeSurvivorWeekUpdate(
   };
 
   const autoSurviveEnabled = pool.settings.autoSurviveExemptionEnabled ?? true;
-  if (checkAutoSurviveExemption(cleaned.usedTeams, games, autoSurviveEnabled)) {
+  const maxTeamUses = effectiveMaxTeamUses(pool.settings);
+  if (checkAutoSurviveExemption(games, autoSurviveEnabled, {
+    maxTeamUses, picks: cleaned.picks, week,
+  })) {
     return {
       update: {
         status: 'ALIVE',
@@ -722,12 +901,39 @@ export function buildWeeklyRecap(params: {
   poolId: string;
   week: number;
   poolType: string;
-  sharpUser: { uid: string; name: string; val: number } | null;
-  closestTie: { uid: string; name: string; diff: number } | null;
+  /**
+   * PLAN-MULTI-ENTRY D4 — `entryId` is the ROW the callout names and `name` is
+   * already `entryName ?? userName`; `uid` stays the owner. Optional so the sim
+   * harness and older callers keep compiling.
+   */
+  sharpUser: { uid: string; entryId?: string; name: string; val: number } | null;
+  closestTie: { uid: string; entryId?: string; name: string; diff: number } | null;
   aliveCount: number;
+  /**
+   * The tie-broken winner set (PLAN-WEEKLY-TIEBREAKERS §8b). Omitted from the
+   * doc when empty — an empty ARRAY in the recap would assert "nobody won",
+   * where absence honestly says "not computed" (an older recap, a pool type
+   * with no weekly winner, or a week nobody entered).
+   */
+  weeklyWinners?: WeeklyWinner[];
+  /**
+   * The Weekly Winners List (PLAN-WEEKLY-PRIZES §3, §9 A1–A2): EVERY scored
+   * entry, competition-ranked, `prize` on paid ranks of a priced week. Omitted
+   * when not computed (older recap, void week, Survivor).
+   */
+  weeklyPlaces?: WeeklyPlace[];
+  /**
+   * The frozen pot/places/entryCount/weeks the prizes were computed from
+   * (§3b-i), or `null` = published UNPRICED (SEASON / no pot at first
+   * publication) — an explicit sentinel so a later edit cannot retroactively
+   * price an already-published week. Absent = not published by this feature.
+   */
+  weeklyPrize?: WeeklyPrizeSnapshot | null;
+  /** Publication failed CLOSED (§9 A5) — the code, never a crash. */
+  weeklyPlacesError?: string;
   nowMs?: number;
 }): WeeklyRecap {
-  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, nowMs = Date.now() } = params;
+  const { poolId, week, poolType, sharpUser, closestTie, aliveCount, weeklyWinners, weeklyPlaces, weeklyPrize, weeklyPlacesError, nowMs = Date.now() } = params;
   const recap: WeeklyRecap = {
     id: `week_${week}`,
     poolId,
@@ -735,10 +941,32 @@ export function buildWeeklyRecap(params: {
     createdAt: nowMs,
   };
   if (sharpUser) {
-    recap.sharpOfWeek = { userId: sharpUser.uid, userName: sharpUser.name, score: sharpUser.val };
+    recap.sharpOfWeek = {
+      userId: sharpUser.uid,
+      ...(sharpUser.entryId ? { entryId: sharpUser.entryId } : {}),
+      userName: sharpUser.name,
+      score: sharpUser.val,
+    };
   }
   if (closestTie) {
-    recap.closestTiebreaker = { userId: closestTie.uid, userName: closestTie.name, diff: closestTie.diff };
+    recap.closestTiebreaker = {
+      userId: closestTie.uid,
+      ...(closestTie.entryId ? { entryId: closestTie.entryId } : {}),
+      userName: closestTie.name,
+      diff: closestTie.diff,
+    };
+  }
+  if (weeklyWinners && weeklyWinners.length > 0) {
+    recap.weeklyWinners = weeklyWinners;
+  }
+  if (weeklyPlaces && weeklyPlaces.length > 0) {
+    recap.weeklyPlaces = weeklyPlaces;
+  }
+  if (weeklyPrize !== undefined) {
+    recap.weeklyPrize = weeklyPrize;
+  }
+  if (weeklyPlacesError) {
+    recap.weeklyPlacesError = weeklyPlacesError;
   }
   if (poolType === 'NFL_SURVIVOR') {
     recap.attritionCount = aliveCount;

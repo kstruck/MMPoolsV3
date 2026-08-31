@@ -12,6 +12,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
     const [messages, setMessages] = useState<BanterMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [sending, setSending] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -37,14 +38,29 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
         setSending(true);
         try {
             await dbService.sendBanterMessage(poolId, {
+                // ⚠️ `authorUid` is what firestore.rules binds to request.auth.uid.
+                // This writer only ever sent userId/userName, so EVERY send from
+                // this board was permission-denied — a pre-existing break, found
+                // by codex reviewing T9 (the rule required authorUid at
+                // origin/main too). Both shapes are written: the new fields
+                // satisfy the rule, the legacy ones keep this board's own
+                // `isMe` comparison and older rows rendering.
+                authorUid: user.id,
+                authorName: user.name || user.email?.split('@')[0] || 'Anonymous User',
+                kind: 'COMMISSIONER',
                 userId: user.id,
                 userName: user.name || user.email?.split('@')[0] || 'Anonymous User',
                 text: newMessage.trim(),
                 timestamp: Date.now()
             });
             setNewMessage('');
+            setSendError(null);
         } catch (error) {
+            // Surfaced, not just logged: the rules can refuse this write
+            // (non-participant, or an over-long message), and a send that
+            // silently does nothing is the worst version of that.
             console.error("Failed to send message:", error);
+            setSendError('Your message could not be posted. Check you are a member of this pool and try again.');
         } finally {
             setSending(false);
         }
@@ -77,7 +93,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                     </div>
                 ) : (
                     messages.map((msg) => {
-                        const isMe = msg.userId === user?.id;
+                        const isMe = (msg.authorUid ?? msg.userId) === user?.id;
                         return (
                             <div
                                 key={msg.id}
@@ -85,7 +101,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                             >
                                 <div className="flex items-baseline gap-2 px-1">
                                     <span className={`text-xs font-semibold ${isMe ? 'text-gold-600' : 'text-muted'}`}>
-                                        {isMe ? 'You' : msg.userName}
+                                        {isMe ? 'You' : (msg.authorName ?? msg.userName)}
                                     </span>
                                     <span className="text-[10px] text-faint flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
@@ -109,13 +125,24 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
 
             <div className="p-3 border-t border-line bg-surface/50">
                 {user ? (
+                    <>
+                    {sendError && (
+                        <p className="mb-2 font-body text-xs text-brandred-600" role="alert">{sendError}</p>
+                    )}
                     <form onSubmit={handleSendMessage} className="flex items-end gap-2">
                         <div className="flex-1 relative">
+                            {/* `maxLength` matches the 2000-char cap
+                                firestore.rules now enforces on this collection
+                                (T9, codex r4 [P2]). Without it, pasting more
+                                than that failed with permission-denied and the
+                                catch only logged — a send that silently did
+                                nothing. */}
                             <input
                                 type="text"
                                 value={newMessage}
                                 onChange={(e) => setNewMessage(e.target.value)}
                                 placeholder="Talk some trash..."
+                                maxLength={2000}
                                 className="w-full bg-card border border-line rounded-xl py-3 pl-4 pr-12 font-body text-[color:var(--text)] placeholder:text-faint focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors"
                                 disabled={sending}
                             />
@@ -128,6 +155,7 @@ export const BanterBoard: React.FC<BanterBoardProps> = ({ poolId, user }) => {
                             <Send className="w-5 h-5" />
                         </button>
                     </form>
+                    </>
                 ) : (
                     <div className="text-center p-3 text-muted bg-card rounded-lg border border-line">
                         Please sign in to participate in the banter.

@@ -127,6 +127,8 @@ async function runReplay(
                 `Snapshot ${snapshotId} parsed to zero games for ${season}/${seasonType}/wk${week}; refusing to replay an empty slate.`);
         }
 
+        // The week-scoped read is what finds ORPHANS — stored games in this week
+        // that the snapshot no longer contains — so it stays.
         const currentSnap = await db.collection("nfl_games")
             .where("season", "==", season)
             .where("seasonType", "==", seasonType)
@@ -136,7 +138,44 @@ async function runReplay(
             currentSnap.docs.map((d) => [d.id, { id: d.id, ...(d.data() as any) } as NFLGame]),
         );
 
+        // ⚠️ BUT IT IS NO LONGER ENOUGH ON ITS OWN.
+        //
+        // `parseScoreboardResponse` now files each game under ESPN's own
+        // `week.number`, and ESPN's calendar ranges overlap — so a snapshot
+        // fetched for week N can parse to games belonging to week N+1. Those are
+        // stored under N+1 and the query above cannot see them, which makes
+        // `buildReplayPlan` treat each one as ABSENT.
+        //
+        // Absent is the dangerous verdict here: the locked-spread preservation in
+        // buildReplayPlan is conditional on finding a current doc, so a replay
+        // would write the parser's `locked: false` over a line a commissioner had
+        // locked — the #235 bug class, and an ATS pool with an unlocked line
+        // refuses every pick. It would also re-derive `scoresMissing` against
+        // nothing.
+        //
+        // Fetched BY DOCUMENT ID rather than by widening the query: a direct id
+        // lookup needs no composite index and so has no way to die silently,
+        // which is the failure mode that took out A5 and the finalize sweep.
+        // (codex r9 on the week-stamping change.)
+        const unseen = snapshotGames.map((g) => g.id).filter((id) => !currentById.has(id));
+        if (unseen.length > 0) {
+            for (const doc of await db.getAll(...unseen.map((id) => db.collection("nfl_games").doc(id)))) {
+                if (doc.exists) currentById.set(doc.id, { id: doc.id, ...(doc.data() as any) } as NFLGame);
+            }
+        }
+
         const plan = buildReplayPlan(snapshotGames, currentById);
+
+        /**
+         * Every week this replay actually writes to, ascending.
+         *
+         * Not `[week]`. A snapshot fetched for week N can carry week N+1 games now
+         * that games file under ESPN's own week, so the follow-up re-score has to
+         * be derived from what was written rather than from what was requested.
+         */
+        const affectedWeeks = [...new Set(plan.writes.map((g) => Number(g.week)))]
+            .filter((w) => Number.isInteger(w) && w > 0)
+            .sort((a, b) => a - b);
 
         const summary = {
             snapshotId,
@@ -145,6 +184,7 @@ async function runReplay(
             games: plan.writes.length,
             changes: plan.changes.length,
             orphans: plan.orphanGameIds.length,
+            affectedWeeks,
         };
 
         if (dryRun) {
@@ -192,8 +232,14 @@ async function runReplay(
             changes: plan.changes.slice(0, 100),
             orphanGameIds: plan.orphanGameIds,
             // Replay only restores GAME state. Pool scores are derived, so the
-            // operator must re-score the affected week afterwards; finalization
+            // operator must re-score the affected weeks afterwards; finalization
             // is a re-runnable overwrite and will re-derive from there.
-            nextStep: `Re-score week ${week} (scoreNFLWeek) for affected pools, then let the finalize sweep re-derive.`,
+            //
+            // Derived from the games actually WRITTEN, not from the snapshot's own
+            // week. Since games now file under ESPN's week and calendar ranges
+            // overlap, a snapshot fetched for week N can restore week N+1 games
+            // too — and naming only week N would leave that week's standings
+            // stale with the operator told the job was finished. (codex r9.)
+            nextStep: `Re-score ${affectedWeeks.map((w) => `week ${w}`).join(' and ') || `week ${week}`} (scoreNFLWeek) for affected pools, then let the finalize sweep re-derive.`,
         };
 }

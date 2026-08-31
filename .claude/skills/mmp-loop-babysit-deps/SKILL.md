@@ -17,8 +17,20 @@ manually run, until Kevin approves.
 3. **Isolate the checkout — non-negotiable.** Create or reuse a dedicated git worktree
    for this PR's branch (per mmp-change-control worktree-isolation rule and the
    documented clobber incident). Never build/test against the shared main working tree.
-4. In the isolated worktree: `npm --prefix functions install`, then `npm run build`,
-   then `npm test`.
+4. In the isolated worktree, in THIS order: `npm ci` (root), `npm --prefix
+   functions ci`, `node functions/scripts/copy-shared.mjs`, then `npm run
+   build:static`, then `npm test`, then `npm --prefix functions test`.
+
+   ⚠️ **The functions-ci and copy-shared steps are load-bearing for the ROOT
+   suite, not just the functions one** (measured 2026-08-10, three false
+   failure reads in one night): several root test files import `functions/src`
+   code, which resolves `../shared/*` from the `functions/src/shared` MIRROR
+   (created only by `copy-shared.mjs`) and `@sentry/node` from
+   `functions/node_modules`. A fresh worktree has neither, so root vitest
+   reports N test FILES failed-to-load with zero assertion failures — a
+   signature that reads as breakage from the dep bump and is actually the
+   harness. If you see "N failed | M passed" with 0 failing assertions, fix
+   the harness before blaming the bump.
 5. **Verify (real gate):** build exit code + test exit code. This is the actual check —
    not "the commands were run."
 6. Decision:

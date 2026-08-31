@@ -5,7 +5,7 @@
  */
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
-import { isPoolTypeEnabled, isMaintenanceMode, type FlagConfig } from "./featureFlags";
+import { isPoolTypeEnabled, isMaintenanceMode, HARD_CLOSED_POOL_TYPES, type FlagConfig } from "./featureFlags";
 import { normalizeRole } from "./roles";
 
 async function loadConfig(): Promise<FlagConfig | null> {
@@ -27,6 +27,7 @@ async function loadConfig(): Promise<FlagConfig | null> {
  * that WILL be persisted on the pool doc - skips ONLY the pool-type-flag
  * check (PLAN-SIM-CREATION-BYPASS). Maintenance mode is checked first and
  * unconditionally — it means "no writes", and a bypass never crosses it.
+ * A HARD-CLOSED type is checked first for the same reason.
  */
 export async function assertPoolCreationAllowed(
   type: string,
@@ -39,11 +40,48 @@ export async function assertPoolCreationAllowed(
       "The platform is in maintenance mode; new pools are temporarily disabled."
     );
   }
+  // 🛑 A HARD-CLOSED TYPE IS CLOSED TO THE SIM HARNESS TOO (codex r2 on the
+  // squares closure). The bypass is a SUPER_ADMIN path, and the whole claim of
+  // `HARD_CLOSED_POOL_TYPES` is that nothing creates the type while it is
+  // listed — a carve-out here would make that claim false, and would let the
+  // simulator mint pools that exercise the very defect the closure hides.
+  // Checked BEFORE the bypass, for the same reason maintenance mode is.
+  if ((HARD_CLOSED_POOL_TYPES as readonly string[]).includes(type)) {
+    throw new HttpsError(
+      "failed-precondition",
+      `New ${type} pools are temporarily disabled by the site administrator.`
+    );
+  }
   if (opts?.simBypass === true) return;
   if (!isPoolTypeEnabled(cfg, type)) {
     throw new HttpsError(
       "failed-precondition",
       `New ${type} pools are temporarily disabled by the site administrator.`
+    );
+  }
+}
+
+/**
+ * Guard for pool PURCHASE / ACTIVATION paths (codex r3 on the squares closure).
+ *
+ * Closing CREATION does not close BUYING: a commissioner who already holds a
+ * draft or trial pool of a hard-closed type could still take it through
+ * `createCheckoutSession` (Stripe, or the $0 path) or `redeemPoolCreditForPool`
+ * (a bundle credit). Kevin's instruction was "purchased OR setup", so both have
+ * to refuse.
+ *
+ * ⚠️ Pass the PERSISTED `pool.type`, never the client-supplied one — the
+ * caller chooses the latter and would simply send a different string.
+ *
+ * PURE and config-free, so it is safe to call inside a Firestore transaction.
+ * An ALREADY-ACTIVE pool is not affected: both call sites refuse before this
+ * matters, and nothing here revokes an entitlement somebody already paid for.
+ */
+export function assertPoolTypePurchasable(type: string | undefined | null): void {
+  if (typeof type === "string" && (HARD_CLOSED_POOL_TYPES as readonly string[]).includes(type)) {
+    throw new HttpsError(
+      "failed-precondition",
+      `${type} pools cannot be purchased or upgraded right now. Nothing was charged.`
     );
   }
 }

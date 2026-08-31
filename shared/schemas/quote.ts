@@ -12,12 +12,75 @@
 import { z } from 'zod';
 import { POOL_TYPES } from '../poolTypes';
 
+// --- Unsellable add-ons -------------------------------------------------------
+/**
+ * Add-ons that exist in the contract but MUST NOT be sold right now
+ * (PLAN-COST-CONTROLS 0.5.4). ONE definition, read by both places that have to
+ * agree: the schema transform below (so nothing new can be quoted or charged)
+ * and the Stripe webhook's in-flight-session clamp (so a session created before
+ * this shipped cannot stamp the entitlement either). Adding a key here disables
+ * selling it everywhere; removing one re-enables it everywhere.
+ */
+export const UNSELLABLE_ADDON_KEYS = ['smsNotifications'] as const;
+
+/**
+ * Force every unsellable add-on off. Pure. The return type is widened to
+ * booleans rather than echoing `T`: this function can turn a `true` into a
+ * `false`, so preserving a literal type would let the compiler keep believing a
+ * clamped field is still `true`.
+ */
+export function clampUnsellableAddons<T extends Record<string, boolean>>(
+  addons: T,
+): { [K in keyof T]: boolean } {
+  const out = { ...addons } as { [K in keyof T]: boolean };
+  for (const key of UNSELLABLE_ADDON_KEYS) {
+    if (key in out) (out as Record<string, boolean>)[key] = false;
+  }
+  return out;
+}
+
+/**
+ * The whole in-flight-session decision for the Stripe webhook, as one pure
+ * function: what the entitlement map should become, and which unsellable
+ * add-ons were actually paid for (empty ⇒ nothing to alert about).
+ *
+ * Pure and exported so the behaviour is unit-testable. It used to live inline
+ * in `finalizePoolPayment`, where the only thing a test could assert was that
+ * certain strings appeared in the file — a guard that passes whether or not the
+ * code still runs (codex round 3).
+ *
+ * `paidAddons` is the PAID RECORD (`billing.paid.addons`) and is deliberately
+ * returned untouched by the caller: it is evidence of purchase, not a grant.
+ */
+export function unsellableClampOutcome(
+  unlocked: Record<string, boolean>,
+  paidAddons: readonly string[] = [],
+): { unlocked: Record<string, boolean>; soldWhileOff: string[] } {
+  const soldWhileOff = UNSELLABLE_ADDON_KEYS.filter(
+    (k) => unlocked[k] === true || paidAddons.includes(k),
+  );
+  return { unlocked: clampUnsellableAddons(unlocked), soldWhileOff: [...soldWhileOff] };
+}
+
 // --- Add-on selection ---------------------------------------------------------
 // The four premium features that carry an addonPrice in billing_config. Every
 // field is optional+boolean and defaults to false so partial payloads (and the
 // server pricing them) are unambiguous. SMS is a first-class add-on here — the
 // pre-overhaul BillingInvoiceCard omitted it from the subtotal; that bug dies
 // with this contract.
+//
+// ⚠️ SMS IS NOT SELLABLE (PLAN-COST-CONTROLS 0.5.4; Kevin's D-decision #3,
+// 2026-08-22: "SMS is OFF until further notice"). The field stays in the
+// contract so existing payloads still validate, but the transform below forces
+// it false, which is the ONE choke point both buy paths share (getPoolQuote and
+// createCheckoutSession) — so it cannot be priced into a quote (quoteEngine
+// iterates ADDON_KEYS) and cannot be stamped into billing.featuresUnlocked
+// (stripe.ts reads addons.smsNotifications). Coercing rather than rejecting is
+// deliberate: the safe direction is never-charge/never-unlock, and a hard error
+// would break a stale client instead of quietly quoting it the truth.
+// Pools that ALREADY bought SMS keep their flag — this sells none, revokes none.
+// To bring SMS back: delete the transform, and re-add the wizard toggle
+// (BillingInvoiceCard removed it on the 2026-07-07 product decision).
 export const addonSelectionSchema = z
   .object({
     aiCommissioner: z.boolean().optional().default(false),
@@ -32,7 +95,8 @@ export const addonSelectionSchema = z
     smsNotifications: false,
     whatIfSimulator: false,
     customBranding: false,
-  }));
+  }))
+  .transform((a) => clampUnsellableAddons(a));
 export type AddonSelection = z.infer<typeof addonSelectionSchema>;
 /** The four add-on keys, in canonical order. */
 export const ADDON_KEYS = [
@@ -42,6 +106,67 @@ export const ADDON_KEYS = [
   'customBranding',
 ] as const;
 export type AddonKey = (typeof ADDON_KEYS)[number];
+
+/**
+ * Add-ons that are INCLUDED with every pool and must never be priced
+ * (PLAN-WIZARD-BUYFLOW-FIXES T4, Kevin's ruling D1).
+ *
+ * `customBranding` was priced at $29 and stamped into
+ * `billing.featuresUnlocked.customBranding` on activation, but NOTHING gated
+ * it — no server path passed it to `checkBillingAccess`, no render path read
+ * the flag — while the wizard asked every commissioner for a logo and two
+ * colours anyway.
+ *
+ * ⚠️ This lives in `shared/` and is enforced in `computeAddonLines`, on the
+ * SERVER, deliberately. Removing the toggles from the UI is not enough: this
+ * is a single-page app served from a CDN, so a browser holding a stale bundle
+ * would keep sending `customBranding: true` and keep being quoted and CHARGED
+ * for it (codex r1 [P1] on T4). Nor can the guarantee rest on the
+ * `settings/billing_config` `isPremium:false` save — that is a human action on
+ * a document, and a money guarantee should not be one config edit away from
+ * being wrong.
+ *
+ * The key, the schema field and the `featuresUnlocked` plumbing all stay,
+ * dormant, for a future genuinely-premium branding tier. Delete the key from
+ * THIS list to start selling it again.
+ */
+export const INCLUDED_ADDON_KEYS = ['customBranding'] as const;
+
+/**
+ * Add-ons that may be sold ON THEIR OWN, to a pool whose hosting is already
+ * paid for (PLAN-PER-POOL-PREMIUM C2). This is NARROWER than "not included and
+ * not withdrawn", and the difference is the point.
+ *
+ * ⚠️ `whatIfSimulator` is ABSENT, and not because of the pool type. codex
+ * flagged it as bracket-only; measured, it is worse than that:
+ *
+ *   - `WhatIfSimulator.tsx` is rendered ONLY by `BracketPoolDashboard`, so on
+ *     an NFL, Playoff, Props or Squares pool the entitlement buys a feature
+ *     that does not exist anywhere.
+ *   - And on a BRACKET pool it is already FREE: the `whatif` sub-tab is
+ *     unconditional — `whatIfSimulator` appears ZERO times in that dashboard —
+ *     so the flag gates nothing and the buyer gains nothing.
+ *
+ * Filtering the offer to BRACKET, as the review suggested, would therefore
+ * still charge a bracket commissioner for something they already have. Until
+ * the dashboard actually gates that sub-tab on the entitlement, the honest
+ * answer is that it is not for sale.
+ *
+ * The key, the schema field and the `featuresUnlocked` plumbing all stay —
+ * exactly as `customBranding` did — so a pool that bought it in the past keeps
+ * it, and gating the sub-tab later is a one-line change here.
+ */
+export const MIDSEASON_SELLABLE_ADDON_KEYS = ['aiCommissioner'] as const;
+
+/** True when this add-on may be bought separately, mid-season. */
+export function isMidseasonSellableAddon(key: string): boolean {
+  return (MIDSEASON_SELLABLE_ADDON_KEYS as readonly string[]).includes(key);
+}
+
+/** True when this add-on ships with every pool and may never be charged for. */
+export function isIncludedAddon(key: string): boolean {
+  return (INCLUDED_ADDON_KEYS as readonly string[]).includes(key);
+}
 
 // --- getPoolQuote input -------------------------------------------------------
 export const poolQuoteInputSchema = z.object({
@@ -100,6 +225,19 @@ export interface PoolQuote {
   freeTierEligible: boolean;
   /** Trial length in days (from billing_config) so the UI needn't guess. */
   trialDays: number;
+  /**
+   * The free plan's participant ceiling (`billing_config.freePlayerThreshold`),
+   * for the SAME reason `trialDays` is here: so the UI needn't guess.
+   *
+   * The launch step used to describe the limit without naming it, deliberately
+   * — the figure is configurable and already hardcoded at the four sites that
+   * ENFORCE it (`nflPools`, `bracketEntries`, `playoffPools`, `propBets`), and a
+   * fifth copy in wizard copy would be a fifth thing to get wrong. Kevin,
+   * 2026-08-30: *"Make sure this is clear on the wizard to the user so they
+   * fully understand."* Serving it from the quote satisfies both — the number
+   * on screen is the number the server will enforce, not a copy of it.
+   */
+  freePlayerThreshold: number;
 }
 
 // --- createCheckoutSession input (hardened) -----------------------------------
@@ -107,6 +245,26 @@ export interface PoolQuote {
 // from an allowlisted origin + fixed route templates (open-redirect fix). Any
 // client-supplied redirect URL is ignored. Add-on booleans are validated here
 // and PRICED SERVER-SIDE — the client price is never trusted.
+/**
+ * What this checkout is BUYING (PLAN-PER-POOL-PREMIUM C2, Kevin 2026-08-23:
+ * "a pool manager must be able to buy a premium feature anytime during the
+ * season").
+ *
+ *  - `pool`  — hosting for a pool that is not yet active. The original and only
+ *    shape until now, so it is the DEFAULT and every existing client is
+ *    unchanged by this field appearing.
+ *  - `addon` — one or more add-ons for a pool that IS already active. No base
+ *    price, no tier change, no credits and no coupons; the pool keeps
+ *    everything it already owns.
+ *
+ * The distinction is not cosmetic. `finalizePoolPayment` treats ANY session
+ * arriving for an active pool as a double charge — it no-ops the whole
+ * finalization and files a DOUBLE_CHARGE_REVIEW alert — so without a purchase
+ * kind a mid-season add-on payment would take the money and grant nothing.
+ */
+export const PURCHASE_KINDS = ['pool', 'addon'] as const;
+export type PurchaseKind = (typeof PURCHASE_KINDS)[number];
+
 export const checkoutPoolInputSchema = z.object({
   poolId: z.string().min(1),
   poolName: z.string().min(1),
@@ -116,6 +274,7 @@ export const checkoutPoolInputSchema = z.object({
   couponCode: z.string().trim().min(1).optional(),
   usedCredit: z.boolean().optional().default(false),
   customCreditId: z.string().trim().min(1).optional(),
+  purchaseKind: z.enum(PURCHASE_KINDS).optional().default('pool'),
 });
 export type CheckoutPoolInput = z.infer<typeof checkoutPoolInputSchema>;
 

@@ -1,16 +1,39 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { AlertTriangle, ArrowRight, Check, X, Square, Dot, Minus } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
-import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, type WeekStatus } from '../../utils/nflPending';
+import { gamesForPoolWeek, getWeekStatus, poolSeasonType, weekDeadline, weekLockCaption, type WeekStatus } from '../../utils/nflPending';
+import { nflLockMode, weekLockOverrideFor } from '@shared/nflLockMode';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { formatDeadline } from '../../utils/formatTime';
+import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
+import { SPREAD_FREEZE_WHEN } from '../../utils/picksAvailability';
 import { now as serverNow } from '../../utils/serverClock';
 import { Button } from '../ui';
 import { effectiveBufferMinutesForWeek } from '@shared/weeklyHardLock';
 
 interface WeekChecklistProps {
     pool: Pool;
+    /**
+     * Whether a SUCCESSFUL snapshot of this viewer's own entry has landed.
+     *
+     * 🛑 NOT "is `entry` truthy". Every claim this strip makes — the nag, the
+     * green confirmation, and every chip — is read off `entry`, and `entry` is
+     * `null` both when the member has never picked AND when the read never
+     * arrived. `onSnapshot` TERMINATES a listener on error, so a transient
+     * failure on the FIRST snapshot means nothing ever arrives and this strip
+     * would tell a member with a completed sheet that their picks are not in,
+     * for the life of the page. It cannot say anything true until the document
+     * is known, so it says nothing. (codex r2 on #497, P2.)
+     */
+    entryKnown: boolean;
     entry: any;
+    /**
+     * The pool's branded primary-button style (T1), or `{}` when the pool has
+     * chosen no primary colour — in which case the button keeps its theme
+     * appearance exactly. This is the most-looked-at action on the dashboard,
+     * so it is the one place outside this file's own chrome worth theming.
+     */
+    primaryButtonStyle?: React.CSSProperties;
     games: NFLGame[];
     selectedWeek: number;
     onSelectWeek: (week: number) => void;
@@ -41,47 +64,124 @@ const CHIP_MARKS: Record<WeekStatus, React.ReactNode> = {
  * Answers "what do I still need to do?" at a glance — the audit's top
  * repeat-loop gap.
  */
-export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games, selectedWeek, onSelectWeek, onPickNow }) => {
+export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, entry, games, selectedWeek, onSelectWeek, onPickNow, primaryButtonStyle }) => {
     const castPool = pool as any;
     const seasonType = poolSeasonType(castPool);
     const totalWeeks = seasonType === 1 ? 4 : 18;
-    const weeks = useMemo(() => {
-        return Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
-            const weekGames = gamesForPoolWeek(games, castPool, week);
-            // Per week, because a hard-lock pool's deadline is frozen per week — the
-            // checklist must show the deadline the server actually enforces.
-            const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
-            const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes);
-            return { week, status, deadline: weekDeadline(weekGames, lockBufferMinutes) };
-        });
-    }, [games, entry, pool.type, totalWeeks, castPool]);
+    // NOT memoized, deliberately. `getWeekStatus` reads `serverNow()`, so a
+    // useMemo keyed on [games, entry, ...] FREEZES TIME: leave the dashboard
+    // open across a deadline with no data change and the memo never reruns —
+    // the old current week keeps its pre-deadline status (and, worse, its green
+    // "picks are in" confirmation) while the real week has moved on. codex
+    // found this on the first version of the current-week strip. The parent
+    // re-renders on a ~30s tick, and this is 4–18 weeks of array filtering —
+    // recomputing per render is the correct price for a clock-dependent value.
+    const weeks = Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
+        const weekGames = gamesForPoolWeek(games, castPool, week);
+        // Per week, because a hard-lock pool's deadline is frozen per week — the
+        // checklist must show the deadline the server actually enforces.
+        const lockBufferMinutes = effectiveBufferMinutesForWeek(castPool, week, weekGames.map(g => g.startTime));
+        // The pool's own lock rule, not an assumed weekly one: a PER_GAME week is
+        // not missed because its Thursday game started.
+        const lockMode = nflLockMode(castPool.type, castPool.settings);
+        // …and the commissioner's extension for THIS week, or an extended week
+        // reads as missed at its original deadline while the sheet still takes
+        // picks (qodo #9).
+        const overrideMs = weekLockOverrideFor(castPool, week);
+        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs);
+        // `lockMode` rides along because the banners below have to SAY which of
+        // the two things their timestamp is — see `weekLockCaption`.
+        //
+        // …and so does whether this week's sheet is held shut for want of frozen
+        // lines. "Make Picks" on an ATS week with no lines lands the member on
+        // "Spreads Not Yet Finalized" with nothing to do — the same dead-end the
+        // "Pick <next week> →" CTA was removed from `PickemPickEntry` for.
+        return {
+            week,
+            status,
+            lockMode,
+            // The banner has to know an extension EXISTS, not what it is: it
+            // changes which sentence is true about a per-game week.
+            hasWeekExtension: typeof overrideMs === 'number',
+            spreadsBlocked: spreadsBlockWeek(castPool, weekGames),
+            deadline: weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs),
+        };
+    });
 
-    // The nearest upcoming week the user hasn't finished — that's the one to nag about
-    const nextDue = useMemo(() => {
-        const now = serverNow();
-        return weeks.find(w => w.status === 'due' && w.deadline !== null && w.deadline > now) ?? null;
-    }, [weeks]);
+    // The week the pool is IN: the earliest week whose deadline has not passed.
+    // The strip used to nag about the nearest unpicked week ANYWHERE in the
+    // season — with HOF and P1 picked it read "Preseason Week 2 picks not in
+    // yet" while the HOF game hadn't even kicked off, which reads as the site
+    // being on the wrong week (Kevin's live-test report, 2026-08-05). The nag
+    // now speaks only about the current week; future weeks stay visible as
+    // chips below, and the nag moves forward on its own when this week locks.
+    const currentWeek = weeks.find(w => w.deadline !== null && w.deadline > serverNow()) ?? null;
 
-    // Survivor members who are eliminated owe nothing — don't nag them
-    if (pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED') return null;
+    const nextDue = currentWeek && currentWeek.status === 'due' ? currentWeek : null;
+    // Positive confirmation for the same slot: "your picks are in" is exactly
+    // the assurance whose absence made a tester re-submit a saved pick.
+    const currentComplete = currentWeek && currentWeek.status === 'complete' ? currentWeek : null;
+
+    // CLAIMS require a known entry; NAVIGATION does not (2026-08-23).
+    //
+    // The banners and the chip marks below are claims about this viewer's
+    // picks, and `entry` may simply not have been read yet — `onSnapshot`
+    // terminates on error, so an initial failure means nothing ever arrives
+    // and a false "picks not in" would stand for the life of the page (codex
+    // r2 on #497). An eliminated Survivor member owes nothing, so nagging
+    // them is a false claim of a different kind.
+    //
+    // The strip used to return null outright in both cases. It can't any
+    // more: the header week dropdown is gone and these chips are the pool
+    // page's ONLY week selector, so a signed-out visitor or a member whose
+    // entry never loaded would lose week navigation entirely (codex r1 on the
+    // glance strip, P2). Claims are gated; neutral, mark-free chips render
+    // for everyone.
+    const claimsAllowed = entryKnown && !(pool.type === 'NFL_SURVIVOR' && entry?.status === 'ELIMINATED');
+    // `no-games` is a fact about the schedule, not about picks — it stays in
+    // neutral mode so an empty week still reads as empty.
+    const neutralStyle = (status: WeekStatus) =>
+        status === 'no-games' ? CHIP_STYLES['no-games'] : 'bg-page border-line text-muted';
 
     return (
         <div className="space-y-3">
-            {nextDue && (
+            {claimsAllowed && nextDue && (
                 <div role="status" className="bg-gold-400/10 border border-gold-500/40 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex items-center gap-2 flex-1">
                         <AlertTriangle size={16} className="text-gold-600 dark:text-gold-400 shrink-0" aria-hidden="true" />
                         <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-gold-700 dark:text-gold-300">
-                            {nflWeekLabel(poolSeasonType(castPool), nextDue.week)} picks not in yet — locks {formatDeadline(nextDue.deadline!)}
+                            {nflWeekLabel(poolSeasonType(castPool), nextDue.week)} picks not in yet — {nextDue.spreadsBlocked
+                                ? 'the sheet opens once every line for this week is frozen'
+                                : weekLockCaption(nextDue.lockMode, formatDeadline(nextDue.deadline!), nextDue.hasWeekExtension)}
                         </span>
                     </div>
+                    {/* GREYED OUT, NOT HIDDEN (Kevin, 2026-08-28). A vanished
+                        button reads as a missing feature; a disabled one with a
+                        reason reads as "not yet". It still must not be
+                        CLICKABLE — the sheet behind it refuses every submission
+                        with SPREADS_NOT_LOCKED, so a member who got through
+                        would fill it in and lose the work. */}
                     <Button
                         size="sm"
                         onClick={() => onPickNow(nextDue.week)}
-                        className="shrink-0"
+                        disabled={nextDue.spreadsBlocked}
+                        title={nextDue.spreadsBlocked
+                            ? `This week's spreads are not locked yet — picks open ${SPREAD_FREEZE_WHEN}.`
+                            : undefined}
+                        className="shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={primaryButtonStyle}
                     >
-                        Make picks <ArrowRight size={13} aria-hidden="true" />
+                        Make Picks <ArrowRight size={13} aria-hidden="true" />
                     </Button>
+                </div>
+            )}
+
+            {claimsAllowed && currentComplete && (
+                <div role="status" className="bg-[#E4F5EC]/60 dark:bg-emerald-500/10 border border-[#BEE7D0] dark:border-emerald-500/30 rounded-xl px-4 py-3 flex items-center gap-2">
+                    <Check size={16} className="text-[#0F7B4A] dark:text-emerald-400 shrink-0" aria-hidden="true" />
+                    <span className="font-display font-bold uppercase tracking-[0.05em] text-[13px] text-[#0F7B4A] dark:text-emerald-300">
+                        {nflWeekLabel(poolSeasonType(castPool), currentComplete.week)} picks are in — {weekLockCaption(currentComplete.lockMode, formatDeadline(currentComplete.deadline!), currentComplete.hasWeekExtension)}
+                    </span>
                 </div>
             )}
 
@@ -90,11 +190,13 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entry, games
                     <button
                         key={week}
                         onClick={() => onSelectWeek(week)}
-                        aria-label={`${nflWeekLabel(poolSeasonType(castPool), week)}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`}
+                        aria-label={claimsAllowed
+                            ? `${nflWeekLabel(poolSeasonType(castPool), week)}: ${status === 'complete' || status === 'locked-complete' ? 'picks submitted' : status === 'due' ? 'picks needed' : status === 'missed' ? 'missed' : status === 'no-games' ? 'no games' : 'upcoming'}`
+                            : `${nflWeekLabel(poolSeasonType(castPool), week)}${status === 'no-games' ? ': no games' : ''}`}
                         aria-current={week === selectedWeek ? 'true' : undefined}
-                        className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-md border inline-flex items-center justify-center gap-1 font-display font-bold uppercase text-[11px] tracking-[0.05em] num transition-all duration-150 ${CHIP_STYLES[status]} ${week === selectedWeek ? 'ring-2 ring-navy-600 dark:ring-gold-500' : 'hover:-translate-y-px'}`}
+                        className={`shrink-0 min-w-[52px] px-2 py-1.5 rounded-md border inline-flex items-center justify-center gap-1 font-display font-bold uppercase text-[11px] tracking-[0.05em] num transition-all duration-150 ${claimsAllowed ? CHIP_STYLES[status] : neutralStyle(status)} ${week === selectedWeek ? 'ring-2 ring-navy-600 dark:ring-gold-500' : 'hover:-translate-y-px'}`}
                     >
-                        {nflWeekChip(poolSeasonType(castPool), week)} {CHIP_MARKS[status]}
+                        {nflWeekChip(poolSeasonType(castPool), week)} {claimsAllowed ? CHIP_MARKS[status] : status === 'no-games' ? CHIP_MARKS[status] : null}
                     </button>
                 ))}
             </div>

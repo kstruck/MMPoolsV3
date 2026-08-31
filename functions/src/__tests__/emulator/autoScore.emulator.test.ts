@@ -390,6 +390,110 @@ describe('provisional Margin — the -14 is due at the lock, not at the pass', (
   });
 });
 
+// ---------------------------------------------------------------------------
+// The Margin weekly recap. Reported by Kevin 2026-08-07: the recap card renders
+// its header and then nothing at all on a Margin pool.
+//
+// Cause: `sharpUser` was computed ONLY in the Pick'em branch of scoreWeekPass,
+// and `buildWeeklyRecap` adds `attritionCount` only for NFL_SURVIVOR — so a
+// Margin recap document held id/poolId/week/createdAt and no content field, and
+// the client had nothing to render.
+//
+// Emulator rather than unit, for the same reason as everything else in this
+// file: the claim is about what is PERSISTED into `weekly_recaps`, and a test on
+// buildWeeklyRecap's return value passes against a scorer that never calls it
+// with a sharp user.
+// ---------------------------------------------------------------------------
+
+describe('Margin weekly recap — sharp of the week', () => {
+  const poolId = 'p-margin-recap';
+  const NOPICK = 'mr-nopick';
+  const BIG = 'mr-big';
+  const SMALL = 'mr-small';
+
+  const recapDoc = async () =>
+    (await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).data();
+
+  /**
+   * Two finished games, so two pickers can post genuinely different margins.
+   * `laterWeekGame()` keeps the season open — see its comment; without it the
+   * pool finalizes on this pass and later assertions run against a terminal pool.
+   */
+  async function setup(picks: Record<string, string | undefined>) {
+    await wipe();
+    await seedGames([
+      gameDoc('mr-g1', { status: 'FINAL', scores: { home: 30, away: 10 } }),                        // KC by 20
+      gameDoc('mr-g2', { homeTeam: T('SF'), awayTeam: T('DAL'), scores: { home: 24, away: 21 } }), // SF by 3
+      laterWeekGame(),
+    ]);
+    await seedPool(poolId, 'NFL_MARGIN', { lockBufferMinutes: 5 });
+    for (const [uid, pick] of Object.entries(picks)) {
+      await seedEntry(poolId, uid, {
+        picks: pick ? { 1: pick } : {}, usedTeams: pick ? [pick] : [],
+        weeklyScores: {}, seasonTotal: 0, negativeBurden: 0, positiveWeeks: 0, bestWeek: 0,
+      });
+    }
+  }
+
+  /** A COMPLETE pass — a provisional one deliberately writes no recap at all. */
+  const scoreComplete = async () => scoreNFLWeekInternal(db, poolId, 1, {
+    pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR,
+  });
+
+  it('writes a recap with the LARGEST margin as sharp of the week', async () => {
+    await setup({ [BIG]: 'KC', [SMALL]: 'SF' });
+    await scoreComplete();
+
+    expect(await recapDoc()).toMatchObject({
+      sharpOfWeek: { userId: BIG, userName: BIG, score: 20 },
+    });
+  });
+
+  // The regression itself, stated as its own assertion so it fails loudly rather
+  // than as a confusing `toMatchObject` diff if the branch is removed again.
+  it('the recap is no longer content-free', async () => {
+    await setup({ [BIG]: 'KC', [SMALL]: 'SF' });
+    await scoreComplete();
+
+    const recap = await recapDoc()!;
+    expect(Object.keys(recap!).sort()).not.toEqual(['createdAt', 'id', 'poolId', 'week']);
+    expect(recap!.sharpOfWeek).toBeTruthy();
+  });
+
+  // A no-show scores -14, which is a LARGER number than a heavy loss. Crowning
+  // the least-punished absentee "sharp of the week" is the failure mode the
+  // `pick &&` guard exists for, so the picked team here must lose by MORE than
+  // 14 — otherwise the guard could be deleted and this test would still pass on
+  // the arithmetic alone. (Measured: with `-3` it did.)
+  it('never crowns a member who did not submit a pick', async () => {
+    await setup({ [NOPICK]: undefined, [SMALL]: 'BUF' });   // BUF lost by 20 → -20, WORSE than -14
+    await scoreComplete();
+
+    expect(await recapDoc()).toMatchObject({
+      sharpOfWeek: { userId: SMALL, score: -20 },
+    });
+  });
+
+  // The other half of the guard: with EVERY entry a no-show there is no eligible
+  // sharp at all, so the recap must carry no `sharpOfWeek` rather than a -14 one.
+  it('leaves sharpOfWeek unset when nobody submitted', async () => {
+    await setup({ [NOPICK]: undefined, [BIG]: undefined });
+    await scoreComplete();
+
+    const recap = await recapDoc();
+    expect(recap).toBeTruthy();
+    expect(recap!.sharpOfWeek).toBeUndefined();
+  });
+
+  // Pick'em and Survivor recaps render today and must not change shape.
+  it('does not add attritionCount to a Margin recap', async () => {
+    await setup({ [BIG]: 'KC' });
+    await scoreComplete();
+
+    expect((await recapDoc())!.attritionCount).toBeUndefined();
+  });
+});
+
 describe('provisional never finalizes a season', () => {
   const poolId = 'p-final';
 
@@ -1283,4 +1387,120 @@ describe('rescore queue — the tier that catches what the 24h window cannot', (
     await autoScoreOnce(db, Date.now(), { dryRun: true });
     expect(await queueSize()).toBe(0);
   }, 60000);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-WEEKLY-PRIZES §3 / §9 — the Weekly Winners List and the frozen prize
+// ---------------------------------------------------------------------------
+// Emulator rather than unit, again because the claim is about what is
+// PERSISTED into `weekly_recaps`: the full ranking, the prize on paid ranks,
+// the frozen snapshot, and — the load-bearing one — that a rescore after a
+// settings edit re-ranks players against a pot that DID NOT MOVE (§3b-i).
+// ---------------------------------------------------------------------------
+
+describe('Weekly Winners List — weeklyPlaces + frozen weeklyPrize', () => {
+  const poolId = 'p-weekly-places';
+  const A = 'wp-a', B = 'wp-b', C = 'wp-c';
+
+  const recapDoc = async () =>
+    (await db.collection('pools').doc(poolId).collection('weekly_recaps').doc('week_1').get()).data();
+
+  async function setup(places: Array<{ rank: number; percentage: number }>, over: Record<string, unknown> = {}) {
+    await wipe();
+    // Week 1: two finals; week 2: one unplayed → weeksInSeason derives to 2.
+    await seedGames([
+      gameDoc('wp-g1', { scores: { home: 30, away: 10 } }),                                          // KC wins
+      gameDoc('wp-g2', { homeTeam: T('SF'), awayTeam: T('DAL'), scores: { home: 24, away: 21 } }),   // SF wins
+      laterWeekGame(),
+    ]);
+    await seedPool(poolId, 'NFL_PICKEM', {
+      lockBufferMinutes: 5, pickMode: 'STRAIGHT', confidenceMode: false,
+      entryFee: 20, payoutMode: 'WEEKLY', payouts: { places, bonuses: [] },
+    }, { entryCount: 3, ...over });
+    await seedEntry(poolId, A, { picks: { 'wp-g1': 'KC', 'wp-g2': 'SF' }, weeklyPoints: {}, totalScore: 0 });   // 2 correct
+    await seedEntry(poolId, B, { picks: { 'wp-g1': 'KC', 'wp-g2': 'DAL' }, weeklyPoints: {}, totalScore: 0 });  // 1 correct
+    await seedEntry(poolId, C, { picks: { 'wp-g1': 'BUF', 'wp-g2': 'SF' }, weeklyPoints: {}, totalScore: 0 });  // 1 correct
+  }
+
+  const scoreComplete = async () => scoreNFLWeekInternal(db, poolId, 1, {
+    pool: await poolDoc(poolId), games: await loadSlate(), actor: SYSTEM_ACTOR,
+  });
+
+  it('publishes the FULL ranking, prices paid ranks from the per-week pot, splits the tie, and freezes the snapshot', async () => {
+    await setup([{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }]);
+    await scoreComplete();
+    const recap = (await recapDoc())!;
+    // WEEKLY: net pot = 20 × 3 = 60; per week = floor(60 / 2 weeks) = 30.
+    expect(recap.weeklyPrize).toMatchObject({ pot: 30, entryCount: 3, weeksInSeason: 2, payoutMode: 'WEEKLY', places: [{ rank: 1, percentage: 60 }, { rank: 2, percentage: 40 }] });
+    // A alone at 1 → 60% of 30 = 18. B and C tied at 2 consume places 2 and 3 → 40% of 30 = 12, split 2 ways = 6 each.
+    expect(recap.weeklyPlaces).toEqual([
+      { entryId: A, userId: A, userName: A, points: 2, rank: 1, prize: 18 },
+      { entryId: B, userId: B, userName: B, points: 1, rank: 2, prize: 6 },
+      { entryId: C, userId: C, userName: C, points: 1, rank: 2, prize: 6 },
+    ]);
+    expect(recap.weeklyWinners).toEqual([{ entryId: A, userId: A, userName: A, points: 2 }]);
+    expect(recap.weeklyPlacesError).toBeUndefined();
+    // D5: the derived divisor is frozen ON THE POOL in the same write, set-once.
+    expect((await poolDoc(poolId)).weeksInSeason).toBe(2);
+  });
+
+  it('a pool with a stored weeksInSeason uses it (never re-derived); a named extra entry keeps its entryName on its row', async () => {
+    await setup([{ rank: 1, percentage: 100 }], { weeksInSeason: 4 });
+    await db.collection('pools').doc(poolId).collection('entries').doc(`e2:${A}`).set({
+      id: `e2:${A}`, poolId, ownerUid: A, entryIndex: 2, entryName: 'A second', userName: A, submittedAt: 0, paidStatus: 'PAID',
+      picks: { 'wp-g1': 'KC', 'wp-g2': 'SF' }, weeklyPoints: {}, totalScore: 0,
+    });
+    await scoreComplete();
+    const recap = (await recapDoc())!;
+    // WEEKLY net 60 ÷ 4 = 15; A and e2:A tied at 2 correct → 100% of 15 split → 7 each, $1 remainder named.
+    expect(recap.weeklyPrize).toMatchObject({ pot: 15, weeksInSeason: 4 });
+    expect((await poolDoc(poolId)).weeksInSeason).toBe(4);
+    const rows = recap.weeklyPlaces as any[];
+    expect(rows.find(r => r.entryId === `e2:${A}`)).toMatchObject({ userId: A, userName: A, entryName: 'A second', rank: 1, prize: 7 });
+    expect(rows.find(r => r.entryId === A)).toMatchObject({ rank: 1, prize: 7 });
+    expect('entryName' in rows.find(r => r.entryId === A)).toBe(false);
+  });
+
+  it('a rescore after the commissioner edits the fee re-ranks against the FROZEN pot — the published figure never moves (§3b-i)', async () => {
+    await setup([{ rank: 1, percentage: 100 }]);
+    await scoreComplete();
+    expect((await recapDoc())!.weeklyPrize.pot).toBe(30);
+    // Fee doubles, entries double — live maths would say $120 pot.
+    await db.collection('pools').doc(poolId).update({ 'settings.entryFee': 40, entryCount: 6 });
+    // A game correction flips B into a tie for first — the RANKING may move…
+    await db.collection('nfl_games').doc('wp-g2').update({ scores: { home: 21, away: 24 } }); // DAL wins now: A=1, B=2, C=0
+    await scoreComplete();
+    const recap = (await recapDoc())!;
+    // …but the pot is the frozen $30, and 100% of it goes to B who now leads alone.
+    expect(recap.weeklyPrize.pot).toBe(30);
+    expect(recap.weeklyPrize.entryCount).toBe(3);
+    expect(recap.weeklyPlaces.map((p: any) => [p.entryId, p.rank, p.prize ?? 0])).toEqual([[B, 1, 30], [A, 2, 0], [C, 3, 0]]);
+  });
+
+  it('fails CLOSED on a duplicate-rank place list: no weeklyPlaces, an error code, and the week still scores', async () => {
+    await setup([{ rank: 1, percentage: 50 }, { rank: 1, percentage: 30 }]);
+    const result = await scoreComplete();
+    expect(result.success).toBe(true);
+    const recap = (await recapDoc())!;
+    expect(recap.weeklyPlaces).toBeUndefined();
+    expect(recap.weeklyPrize).toBeUndefined();
+    expect(recap.weeklyPlacesError).toBe('PRIZE_SPLIT_DUPLICATE_RANK');
+    expect(recap.weeklyWinners).toBeTruthy();
+    expect((await entryDoc(poolId, A)).weeklyPoints[1]).toBe(2);
+  });
+
+  it('SEASON mode publishes places and scores with NO prize and the UNPRICED sentinel (D7) — and a later switch to WEEKLY does not retroactively price the week', async () => {
+    await setup([{ rank: 1, percentage: 100 }]);
+    await db.collection('pools').doc(poolId).update({ 'settings.payoutMode': 'SEASON' });
+    await scoreComplete();
+    let recap = (await recapDoc())!;
+    expect(recap.weeklyPrize).toBeNull();
+    expect(recap.weeklyPlaces.map((p: any) => [p.entryId, p.rank, 'prize' in p])).toEqual([[A, 1, false], [B, 2, false], [C, 2, false]]);
+    // The commissioner flips to WEEKLY and rescores: the published week stays unpriced (codex r2).
+    await db.collection('pools').doc(poolId).update({ 'settings.payoutMode': 'WEEKLY' });
+    await scoreComplete();
+    recap = (await recapDoc())!;
+    expect(recap.weeklyPrize).toBeNull();
+    expect(recap.weeklyPlaces.every((p: any) => !('prize' in p))).toBe(true);
+  });
 });

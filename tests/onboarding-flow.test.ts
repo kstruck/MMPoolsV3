@@ -370,7 +370,8 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             mockGet.mockResolvedValueOnce({ empty: true }); // resolveCouponForQuote: coupon 'HELLO' not found
 
             // Transaction reads: fresh pool (no pending, not active), then coupon (empty).
-            mockTransactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ billing: {} }) }); // pool in txn
+            // K17: the in-transaction re-read is ownership-checked too, so the fixture carries the owner.
+            mockTransactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ ownerId: 'user-123', billing: {} }) }); // pool in txn
             mockTransactionGet.mockResolvedValueOnce({ empty: true, docs: [] }); // coupon in txn
 
             const result = await createCheckoutSession(req);
@@ -419,7 +420,7 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                 features: { aiCommissioner: { isPremium: true, addonPrice: 19 }, whatIfSimulator: { isPremium: true, addonPrice: 9 }, customBranding: { isPremium: true, addonPrice: 29 } },
             }) }); // billing_config
 
-            mockTransactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ billing: {} }) }); // pool in txn (no coupon this time)
+            mockTransactionGet.mockResolvedValueOnce({ exists: true, data: () => ({ ownerId: 'user-123', billing: {} }) }); // pool in txn (no coupon this time) — K17 owner
 
             await createCheckoutSession(req);
 
@@ -427,6 +428,17 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
                 success_url: 'https://www.marchmeleepools.com/pool/pool-123?payment=success&session_id={CHECKOUT_SESSION_ID}',
                 cancel_url: 'https://www.marchmeleepools.com/pool/pool-123?payment=cancelled'
             }));
+        });
+
+        it('refuses a signed-in user who is not the pool owner/manager (K17 ownership gate) — before any quote or Stripe call', async () => {
+            const req = {
+                auth: { uid: 'stranger-9', token: { email: 's@example.com' } },
+                data: { poolId: 'pool-123', poolName: 'Best Bracket', poolType: 'BRACKET', estimatedPlayers: 20 },
+                rawRequest: { headers: {} }
+            } as any;
+            mockGet.mockResolvedValueOnce({ exists: true, data: () => ({ type: 'BRACKET', ownerId: 'user-123' }) }); // pool
+            await expect(createCheckoutSession(req)).rejects.toMatchObject({ code: 'permission-denied' });
+            expect(mockCreateSession).not.toHaveBeenCalled();
         });
     });
 
@@ -496,7 +508,8 @@ describe('Onboarding Flow: Coupon & Checkout Billing Integration', () => {
             });
 
             await expect(createBracketEntry(req)).rejects.toThrowError(
-                'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.'
+                // One message for every pool type since 2026-08-30 (shared/freePlanCap.ts).
+                'This pool is full, so your spot could not be reserved.'
             );
         });
 

@@ -1,7 +1,7 @@
 {
     "id": "nfl-survivor-autosurvive-off",
     "name": "Survivor Auto-Survive Exemption OFF (edge)",
-    "description": "Same exhausted-teams setup as nfl-survivor-autosurvive, but the exemption is DISABLED: Alice's missing pick is an auto-strike and eliminates her (sudden death). Expectations hand-verified.",
+    "description": "Same prior-weeks-exhausted setup as nfl-survivor-autosurvive, but the exemption is DISABLED: Alice's missing week-3 pick is an auto-strike and eliminates her (sudden death). Expectations hand-verified.",
     "poolType": "NFL_SURVIVOR",
     "poolConfig": {
         "name": "Sim Survivor AutoSurvive OFF",
@@ -19,17 +19,20 @@
     },
     "nflGames": [
         { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
-        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BUF", "away": "MIA", "homeScore": 21, "awayScore": 14 },
+        { "week": 2, "home": "DAL", "away": "NYJ", "homeScore": 28, "awayScore": 7 },
+        { "week": 3, "home": "KC", "away": "BUF", "homeScore": 20, "awayScore": 17 }
     ],
-    "scoreWeeks": [1],
+    "scoreWeeks": [1, 2, 3],
     "testEntries": [
-        { "userName": "Alice", "survivorPicks": {}, "usedTeams": ["KC", "BUF", "SF", "DAL"] },
-        { "userName": "Bob", "survivorPicks": { "1": "SF" }, "usedTeams": ["KC"] }
+        { "userName": "Alice", "survivorPicks": { "1": "KC", "2": "BUF" }, "usedTeams": ["KC", "BUF", "SF", "DAL"] },
+        { "userName": "Bob", "survivorPicks": { "1": "SF", "2": "DAL", "3": "KC" }, "usedTeams": ["KC"] }
     ],
     "assertions": [
-        { "type": "survivorStatus", "userName": "Alice", "expected": "ELIMINATED", "message": "No exemption: missing pick auto-strikes and eliminates" },
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ELIMINATED", "message": "No exemption: the missing week-3 pick auto-strikes and eliminates" },
         { "type": "survivorStrikes", "userName": "Alice", "expected": 1, "message": "Alice strikes = 1" },
-        { "type": "standingsRow", "userName": "Alice", "expected": { "status": "ELIMINATED", "eliminatedWeek": 1, "exemptWeeks": [] }, "message": "Eliminated week 1, no exemption recorded" },
-        { "type": "survivorStatus", "userName": "Bob", "expected": "ALIVE", "message": "Bob survives normally" }
+        { "type": "standingsRow", "userName": "Alice", "expected": { "status": "ELIMINATED", "eliminatedWeek": 3, "exemptWeeks": [] }, "message": "Eliminated week 3, no exemption recorded" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ALIVE", "message": "Bob survives every scored week normally" }
     ]
 }

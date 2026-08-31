@@ -5,9 +5,12 @@ import { writeAuditEvent } from './audit';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
-import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema } from "./schemas/poolOps";
+import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema, clearLegacyCoManagersSchema } from "./schemas/poolOps";
+import { writeAdminAudit } from "./lib/adminAudit";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
+import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
+import { normalizeAddonSelection } from './lib/launchFields';
 import {
     validateCreateInput,
     assertNotBanned,
@@ -15,20 +18,81 @@ import {
     type LaunchBillingMode,
     writePoolCreationSideEffects,
 } from './lib/poolCreation';
-import { loadBillingConfig } from './billing';
+import { loadBillingConfig, resolveCouponForQuote } from './billing';
+import { validLaunchCouponCode } from './lib/launchCoupon';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
+import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
+import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
+import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
+import { normalizePayoutListsPatch, payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
+import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
+import { entryCountWrite } from './lib/multiEntry';
+import { memberLiableEntries } from './shared/memberRecord';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
+import { confirmedAdminClaim } from './lib/confirmedRole';
 
-// Helper to determine if user can manage pool
+/**
+ * Is `uid` the pool's owner or its legacy designated manager?
+ *
+ * `ownerId` is CANONICAL; `createdByUid` is a functions-only fallback used ONLY
+ * when `ownerId` is absent (PLAN-CO-COMMISSIONERS D3 — rules and the client
+ * never read `createdByUid`, so treating it as a coequal principal would keep
+ * a phantom who can call callables but sees no Commissioner tab). `managerUid`
+ * is a SEPARATE principal, or'd in — the old `createdByUid || ownerId ||
+ * managerUid` chain resolved ONE owner and silently dropped a distinct
+ * `managerUid` whenever an owner was present (Table 2 note 1).
+ *
+ * This is the DESTRUCTIVE / owner-only principal set (D4). It never reads
+ * `coManagers` — see isPoolCommissioner for the widened one.
+ */
+export const isPoolOwnerOrManager = (pool: any, uid: string): boolean => {
+    // `||`, not `??`: a legacy empty-string ownerId must still fall back (self-review).
+    const owner = pool?.ownerId || pool?.createdByUid;
+    return uid === owner || uid === pool?.managerUid;
+};
+
+/** The three pool types co-commissioners exist for in v1 (PLAN-CO-COMMISSIONERS C13). */
+export const CO_COMMISSIONER_POOL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const;
+export const isCoCommissionerPoolType = (type: unknown): boolean =>
+    (CO_COMMISSIONER_POOL_TYPES as readonly string[]).includes(String(type));
+
+/**
+ * Is `uid` a commissioner of this pool — owner, legacy manager, OR a named
+ * co-commissioner? ONE definition for the functions layer (D3); firestore.rules
+ * `isPoolManager()` and the client's `isNFLPoolCommissioner` mirror it.
+ *
+ * `coManagers` is read again here as of deploy step 3 of D2: the field is
+ * server-owned (rules lock, #444) and the only writer is setPoolCoCommissioner,
+ * which admits canonical members of NFL pools only. The type guard is NOT
+ * implied — a `coManagers` array on a Squares/Bracket/Props/Playoff pool grants
+ * nothing here, in the rules, or in the client (codex r3 on the plan).
+ */
+export const isPoolCommissioner = (pool: any, uid: string): boolean => {
+    if (isPoolOwnerOrManager(pool, uid)) return true;
+    return isCoCommissionerPoolType(pool?.type)
+        && Array.isArray(pool?.coManagers)
+        && pool.coManagers.includes(uid);
+};
+
+// Helper to determine if user can manage pool — the WIDENED set (co-commissioners in).
 export const assertPoolOwnerOrSuperAdmin = (pool: any, uid: string, userRole?: string) => {
     // If Super Admin, allow
     if (userRole === 'SUPER_ADMIN') return;
-
-    // Use createdByUid if available, fallback to ownerId / managerUid for legacy/migration
-    const owner = pool.createdByUid || pool.ownerId || pool.managerUid;
-    const isCoManager = pool.participantIds && pool.participantIds.includes(uid) && pool.coManagers && pool.coManagers.includes(uid);
-    if (owner !== uid && !isCoManager) {
+    if (!isPoolCommissioner(pool, uid)) {
         throw new HttpsError('permission-denied', 'You do not have permission to manage this pool.');
+    }
+};
+
+/**
+ * The DESTRUCTIVE principal set (PLAN-CO-COMMISSIONERS D4: owner-only by NAME,
+ * not by omission) — cancel / close / delete and the simulation tools. Never
+ * reads `coManagers`. It keeps `managerUid`, which rules `:82` and `closePool`'s
+ * own doc already admit for delete/close (codex r3).
+ */
+export const assertPoolOwnerOrManagerNoCo = (pool: any, uid: string, userRole?: string) => {
+    if (userRole === 'SUPER_ADMIN') return;
+    if (!isPoolOwnerOrManager(pool, uid)) {
+        throw new HttpsError('permission-denied', 'Only the pool owner or manager may do this.');
     }
 };
 
@@ -42,7 +106,7 @@ const PRIVILEGED_POOL_FIELDS = [
     'billing', 'status', 'isLocked', 'lockedAt',
     'participantIds', 'participantCount', 'entryCount', 'entries',
     'winners', 'winnerDetermined', 'isPaid', 'paidOut', 'payouts',
-    'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'role',
+    'createdByUid', 'ownerId', 'managerUid', 'coManagers', 'coManagersRevision', 'role',
     'id', 'createdAt', 'updatedAt', 'poolCredits', 'simRunId',
     // Stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3, codex r1). The create
     // envelopes are PERMISSIVE (ADR-0001) and spread the surviving payload
@@ -51,6 +115,18 @@ const PRIVILEGED_POOL_FIELDS = [
     // in their create call and keep their pool's money out of every published
     // figure. Only the server (console / Admin SDK) sets this field.
     'isTestPool',
+    // Scorer-owned pool-week maps (PLAN-WEEKLY-PRIZES §2b / D5). Set by the
+    // week's first submitNFLPicks and by the scorer; a creator who could seed
+    // them in the create payload would pick which game(s) the server treats as
+    // the tiebreak target, or the weeks divisor of every weekly prize. (qodo #10
+    // on #452.) `hardLockByWeek` rides along for the same reason.
+    'frozenTiebreakTargets', 'weeksInSeason', 'hardLockByWeek',
+    // The wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3). It is READ from the
+    // raw request before this strip and re-stamped under `billing.couponCode`
+    // only after the server validates it. Listed here so the permissive create
+    // envelope cannot write an unvalidated `couponCode` to the pool's top level,
+    // where nothing would ever check it but a reader might trust it.
+    'couponCode',
 ];
 
 // Sim harness trust anchor (PLAN-TEST-SUITE 8f): simRunId is stripped from
@@ -104,12 +180,14 @@ export const stripPrivilegedPoolFields = <T extends Record<string, any>>(data: T
 // The paid add-on flags a create payload can carry. Any one of these set truthy
 // disqualifies a launch from the free plan (the server prices them; the pending
 // snapshot / billing.paid.addons is the authority once paid).
-const PAID_ADDON_KEYS = [
-    'aiCommissioner',
-    'smsNotifications',
-    'whatIfSimulator',
-    'customBranding',
-] as const;
+//
+// ⚠️ DERIVED, not listed (T4/D1, codex r2 [P1]). An INCLUDED add-on costs
+// nothing, so it must not push a launch off the free plan either: a stale
+// wizard bundle still sending `customBranding: true` would otherwise create a
+// ≤10-player pool as a 14-day TRIAL — which eventually locks — while the quote
+// on screen said free. Pricing and launch mode have to agree about what is
+// paid, and `INCLUDED_ADDON_KEYS` is the one place that says so.
+const PAID_ADDON_KEYS = ADDON_KEYS.filter((k) => !isIncludedAddon(k));
 
 /** True if the create payload requests any paid add-on. Add-ons may arrive as a
  *  top-level `addons` object or as sibling flags; we accept both shapes so a
@@ -174,7 +252,9 @@ export function assertPaidParticipantCeiling(
     if (currentParticipantCount >= paid.maxPlayersAllowed) {
         throw new HttpsError(
             'failed-precondition',
-            'This pool has reached its paid participant ceiling. Upgrade to add more.',
+            // G9 — the same audience problem: this reaches a JOINING MEMBER,
+            // for whom "upgrade" is not an action they can take.
+            'This pool is full, so your spot could not be reserved. Ask the commissioner to make room — they can upgrade the pool to raise its limit.',
         );
     }
 }
@@ -290,6 +370,12 @@ export const createPool = validated(
         // free threshold AND no paid add-on; trial otherwise. Config read fails
         // open to defaults inside loadBillingConfig, so this never stalls create.
         const billingConfig = await loadBillingConfig(db);
+        // Remember the wizard's coupon (T3). Read from the RAW request: the
+        // strip above deliberately removes it from the persisted envelope.
+        const launchCouponCode = await validLaunchCouponCode(
+            (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now: now.toMillis() }),
+            (request.data as Record<string, unknown> | undefined)?.couponCode,
+        );
         const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
 
         const newPool: any = {
@@ -304,7 +390,12 @@ export const createPool = validated(
             isLocked: false,
             isPublic: data.isPublic !== undefined ? data.isPublic : true, // Explicitly set for rules
             // free or trial per server-computed launch mode (server-authoritative)
-            billing: billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis()),
+            billing: {
+                // T5/D2 — a trial unlocks the selected add-ons (see billingForLaunch).
+                ...billingForLaunch(launchMode, billingConfig.trialDays, now.toMillis(), normalizeAddonSelection(data)),
+                // Remembered wizard coupon — validated above, never redeemed here (T3).
+                ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+            },
         };
 
         // simRunId computed above the creation guard; stamped here.
@@ -376,7 +467,8 @@ export const createPool = validated(
         // Re-throw HttpsErrors as is
         if (error.code && error.details) throw error;
         // Wrap unknown errors
-        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+        // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
+        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
     }
     },
 );
@@ -405,16 +497,12 @@ export const updatePoolSettings = validated(
     const pool = snap.data();
     const claimRole = request.auth!.token.role as string | undefined;
     assertNotBanned(claimRole, undefined);
-    // `firestore.rules` isPoolManager() allowed `ownerId` OR `managerUid` to write
-    // pool settings directly, and this callable is now the ONLY path for that write
-    // on NFL pools — so it must accept the same principals or a DESIGNATED MANAGER
-    // loses a capability they have today (codex r3). assertPoolOwnerOrSuperAdmin
-    // resolves a single owner (`createdByUid || ownerId || managerUid`) and so
-    // rejects a distinct managerUid whenever an owner is present. Preserving the
-    // rules' principal set, not widening it.
-    if ((pool as { managerUid?: string } | undefined)?.managerUid !== uid) {
-        assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
-    }
+    // `firestore.rules` isPoolManager() allows `ownerId` OR `managerUid` to write
+    // pool settings directly, and this callable is the ONLY path for that write
+    // on NFL pools — so it must accept the same principals. It used to carry a
+    // managerUid bypass because the helper resolved a single owner; the helper
+    // is a disjunction now (PLAN-CO-COMMISSIONERS D3), so the bypass is gone.
+    assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
 
     // Pure gate: validates each key against the editability matrix for the
     // pool's lifecycle phase; throws failed-precondition on any disallowed key.
@@ -446,20 +534,127 @@ export const updatePoolSettings = validated(
     // land, the in-flight pass would still hold a matching `lockRevision`, and it
     // would publish grades — and `publishedWeeks` — computed against the OLD lock
     // while the new one keeps that week's picks open.
-    if (touchesLockSettings(patch)) {
+    // The survivor parity settings serialize for a DIFFERENT reason but need the
+    // same machinery (PLAN-SURVIVOR-PARITY-SCORING decision 4): both regrade
+    // already-scored weeks on the next rescore, so the once-scored refusal has to
+    // be evaluated against a pool read INSIDE the transaction that writes, and a
+    // live scoring lease has to bounce the edit. Without it a manager's save can
+    // land between the manual scorer's post-lease re-read and its publication —
+    // results published under settings they were not computed with.
+    const parityTouched = touchesSurvivorParitySettings(patch);
+    // The weekly tie-breaker rule joins the SAME transaction, for the same
+    // reason and one extra one. Same reason: its refusal has to be evaluated
+    // against a pool read inside the transaction that writes, or a save can
+    // land between a scorer's post-lease re-read and its publication. Extra
+    // reason: unlike the parity settings, this one is refused on evidence that
+    // lives in the ENTRIES (has anybody submitted?), so a non-transactional
+    // check could pass while a member's first submission commits behind it.
+    // (PLAN-WEEKLY-TIEBREAKERS §5.)
+    const tiebreakerTouched = touchesWeeklyTiebreakerSetting(patch);
+    // The hybrid split joins the same transaction: its invariant spans three
+    // fields (split, payoutMode, entryFee) and must be judged against the pool
+    // as it stands at write time, not at the pre-transaction read.
+    //
+    // Trio keys whose value equals the pre-read pool are DELETED from the
+    // patch, not merely used to skip the transaction. The manager UI re-sends
+    // unchanged `entryFee`/`payoutMode` on every save, so presence-keying made
+    // a contact-email edit pay for a transaction plus a scoring-lease check
+    // (qodo #12, post-merge on the split PR) — and the obvious skip is UNSAFE
+    // for sparse patches: a stale `{entryFee: 25}` matching the pre-read can
+    // clobber a concurrent `$30 = $20+$10` commit into an invalid trio (codex
+    // P1 on the first version of this fix). A key never written cannot clobber
+    // anything; presence over the stripped patch IS the change test.
+    for (const k of hybridNoOpKeys(pool as Record<string, unknown>, patch)) {
+        delete patch[k];
+    }
+    const hybridTouched = touchesHybridSplitSettings(patch);
+    // maxEntriesPerUser (PLAN-MULTI-ENTRY D8, K6): raise-only, judged inside
+    // the transaction so two concurrent saves cannot land the smaller value
+    // last. Same no-op stripping as the hybrid trio — the manager UI re-sends
+    // the whole settings map, and a re-sent 1 on a legacy pool is not a change.
+    for (const k of maxEntriesNoOpKeys(pool as Record<string, unknown>, patch)) {
+        delete patch[k];
+    }
+    const maxEntriesTouched = touchesMaxEntriesSetting(patch);
+    // The payout place lists (PLAN-PAYMENT-LEDGER T1): `weeklyPayouts` is only
+    // meaningful on HYBRID and leaving HYBRID deletes it in the same write —
+    // judged in the transaction for the same reason as the split.
+    // Same no-op stripping as the hybrid trio: an unchanged re-sent list is not a change.
+    for (const k of payoutListsNoOpKeys(pool as Record<string, unknown>, patch)) {
+        delete patch[k];
+    }
+    const payoutListsTouched = touchesPayoutLists(patch);
+    if (touchesLockSettings(patch) || parityTouched || tiebreakerTouched || hybridTouched || maxEntriesTouched || payoutListsTouched) {
+        const bumpsLockRevision = touchesLockSettings(patch);
         await retryWhileScoring(() => db.runTransaction(async (tx) => {
             const current = (await tx.get(poolRef)).data() as Record<string, unknown> | undefined;
+            // The reduction invariant needs every entry — but ONLY that check
+            // does, and only when the limit is actually moving down. The manager
+            // UI submits a complete settings object on every save, so reading
+            // them unconditionally would mean hundreds of transactional reads to
+            // confirm that nothing changed. Sequential reads are fine; it is a
+            // read AFTER a write that Firestore forbids.
+            const needsEntries =
+                (parityTouched && parityEditNeedsEntries({ ...current, id: poolId }, patch)) ||
+                (tiebreakerTouched && tiebreakerEditNeedsEntries({ ...current, id: poolId }, patch));
+            const entries = needsEntries
+                ? (await tx.get(poolRef.collection('entries'))).docs.map((d) => d.data() as { picks?: Record<string, unknown>; weeklyTiebreakers?: Record<string, unknown> })
+                : [];
             if (leaseIsLive(readScoringLease(current), Date.now())) {
                 throw new HttpsError(
                     'aborted',
                     'SCORING_IN_PROGRESS: this pool is being scored right now. Try again in a moment.',
                 );
             }
+            if (parityTouched) {
+                const refusal = survivorParitySettingsRefusal({ ...current, id: poolId }, patch, entries);
+                if (refusal) throw new HttpsError('failed-precondition', refusal.message);
+            }
+            if (tiebreakerTouched) {
+                const refusal = weeklyTiebreakerRefusal({ ...current, id: poolId }, patch, entries);
+                if (refusal) throw new HttpsError('failed-precondition', refusal.message);
+            }
+            if (hybridTouched) {
+                const problem = hybridSplitRefusal(current, patch);
+                if (problem) throw new HttpsError('failed-precondition', problem);
+            }
+            if (payoutListsTouched) {
+                const problem = payoutListsRefusal(current, patch);
+                if (problem) throw new HttpsError('failed-precondition', problem);
+                // Store the VALIDATED shape, not the raw input (codex r3 on #470).
+                normalizePayoutListsPatch(patch);
+            }
+            let entryCountInit: Record<string, unknown> = {};
+            if (maxEntriesTouched) {
+                const problem = maxEntriesRefusal(current, patch);
+                if (problem) throw new HttpsError('failed-precondition', problem);
+                // D8 (codex r3 on the plan): the first time multi-entry is enabled
+                // on a pool with no `entryCount`, initialise it from the Member
+                // Records' liabilities in this same transaction — otherwise the
+                // pot is unknown until somebody submits again.
+                if (typeof current?.entryCount !== 'number') {
+                    const members = (await tx.get(poolRef.collection('members'))).docs.map(d => d.data() as Record<string, unknown>);
+                    entryCountInit = entryCountWrite(current, members, 0);
+                }
+            }
             tx.update(poolRef, {
                 ...patch,
+                ...entryCountInit,
+                // Leaving HYBRID deletes the stored split in the SAME write —
+                // the per-key merge would otherwise strand it, and the gate
+                // above would then refuse every later save as "split on a
+                // non-hybrid pool": a validation deadlock. (codex P2, plan r1.)
+                ...(hybridTouched && hybridSplitNeedsClearing(current, patch)
+                    ? { 'settings.hybridSplit': FieldValue.delete() } : {}),
+                // Same for the weekly place list (T1 / D1 mode transitions).
+                ...(payoutListsTouched && weeklyPayoutsNeedsClearing(current, patch)
+                    ? { 'settings.weeklyPayouts': FieldValue.delete() } : {}),
                 // Invalidates any pass that captured the old value — the backstop
                 // for a scorer that acquired its lease between our read and here.
-                'settings.lockRevision': readLockRevision(current) + 1,
+                // Scoped to lock edits: a parity-only save changes no deadline, and
+                // bumping the revision would invalidate an in-flight pass for
+                // nothing.
+                ...(bumpsLockRevision ? { 'settings.lockRevision': readLockRevision(current) + 1 } : {}),
             });
         }));
     } else {
@@ -481,10 +676,12 @@ export const updatePoolSettings = validated(
         let batch = db.batch();
         let ops = 0;
         for (const m of membersSnap.docs) {
-            const rec = m.data() as { role?: string; feeOwed?: number };
+            const rec = m.data() as { role?: string; feeOwed?: number; hasPlayableEntry?: boolean; playableEntryCount?: number };
             const seededOwnerNeverPlayed = rec.role === 'MANAGER' && (rec.feeOwed ?? 0) === 0;
             if (seededOwnerNeverPlayed) continue;
-            batch.update(m.ref, { feeOwed: newFee, feeOwedSource: 'LIVE' });
+            // PLAN-MULTI-ENTRY D2: `newFee × liable entries`, not `newFee` — a
+            // member holding two playable entries owes two fees at the new price.
+            batch.update(m.ref, { feeOwed: newFee * memberLiableEntries(rec), feeOwedSource: 'LIVE' });
             if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
         }
         if (ops > 0) await batch.commit();
@@ -582,8 +779,11 @@ export const toggleWinnerPaid = validated(
     // The helper is defined above: assertPoolOwnerOrSuperAdmin(pool: any, uid: string, userRole?: string)
     // We can fetch user role optionally or assume owner check is enough for most.
 
-    // Fetch user role if we want to support SuperAdmin override properly
-    const userRole = request.auth!.token.role || 'USER';
+    // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): the SuperAdmin override below
+    // used to ride on the JWT claim alone. confirmedAdminClaim strips an
+    // UNCONFIRMED SUPER_ADMIN claim to undefined; any other claim passes through
+    // unchanged, and assertPoolOwnerOrSuperAdmin branches on SUPER_ADMIN alone.
+    const userRole = await confirmedAdminClaim(request);
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);
@@ -677,5 +877,94 @@ export const fixParticipantIds = validated(
     }
 
     return { success: true, processed, updated, dryRun };
+    },
+);
+
+// ============ CLEAR LEGACY coManagers (PLAN-CO-COMMISSIONERS D2, deploy step 2) ============
+/**
+ * One-off, audited, idempotent: delete the `coManagers` field from every pool
+ * that carries one. Run AFTER the rules lock deploys and BEFORE anything reads
+ * the field again (T2b/T3). Expected 0 non-empty arrays — the number goes in
+ * the PR body. A re-run finds no NON-EMPTY array, which is what makes it
+ * resumable: an interrupted run is simply run again. ⚠️ The invariant is
+ * `nonEmpty === 0 && malformed === 0 && withRevision === 0`, NOT `withField === 0`: the S8 removal
+ * helpers' `arrayRemove` legitimately materialises an EMPTY array on a pool
+ * that had none (codex r2), and an empty array grants nothing anywhere.
+ *
+ * `coManagersRevision` was client-writable too, so a legacy value is as
+ * untrusted as a legacy array: any pool carrying one has it DELETED (codex r3).
+ * The T2b setter treats an absent revision as 0, so deletion IS the zero
+ * baseline; stamping `0` onto every pool doc would buy nothing beyond that.
+ */
+// Per-run write cap (qodo #1 on the T1 PR; same convention as autoClosePools /
+// PR #205 / #231). Expected 0 pools carry the field, so this never binds in the
+// intended run — it exists so a surprise cannot become thousands of writes in
+// one callable. `capped: true` in the result means: run it again.
+export const CLEAR_CO_MANAGERS_MAX_WRITES = 200;
+
+export const clearLegacyCoManagers = validated(
+    { schema: clearLegacyCoManagersSchema, label: "clearLegacyCoManagers", role: "SUPER_ADMIN", appCheck: "monitor" },
+    async ({ dryRun }, request) => {
+    const db = admin.firestore();
+    const actor = { actorUid: request.auth!.uid, actorEmail: request.auth!.token.email as string | undefined };
+    let withField = 0;
+    let nonEmpty = 0;
+    let malformed = 0;
+    let cleared = 0;
+    let capped = false;
+    let scanned = 0;
+    // D3 census: pools whose ownerId and createdByUid both exist and DISAGREE.
+    // Expected 0 (creation writes both from one uid). Any hit is listed for
+    // Kevin, not reinterpreted — ownerId is canonical from this deploy on.
+    let withRevision = 0;
+    let ownerMismatch = 0;
+    const mismatchSamples: Array<{ poolId: string; ownerId: string; createdByUid: string }> = [];
+    const samples: Array<{ poolId: string; value: unknown; revision?: unknown }> = [];
+    // `capMetadata` flattens arrays to "[array]", so the audit row carries the
+    // pool ids as ONE string (qodo #5); the full samples go back to the UI.
+    const auditMeta = () => ({
+        dryRun, scanned, withField, withRevision, nonEmpty, malformed, cleared, capped, ownerMismatch,
+        samplePoolIds: samples.map((x) => x.poolId).join(','),
+        mismatchPoolIds: mismatchSamples.map((x) => x.poolId).join(','),
+    });
+
+    try {
+        const poolsSnap = await db.collection('pools').get();
+        scanned = poolsSnap.size;
+        for (const doc of poolsSnap.docs) {
+            const data = doc.data();
+            if (typeof data.ownerId === 'string' && typeof data.createdByUid === 'string' && data.ownerId !== data.createdByUid) {
+                ownerMismatch++;
+                if (mismatchSamples.length < 20) mismatchSamples.push({ poolId: doc.id, ownerId: data.ownerId, createdByUid: data.createdByUid });
+            }
+            const hasRevision = data.coManagersRevision !== undefined;
+            if (hasRevision) withRevision++;
+            const raw = data.coManagers;
+            if (raw === undefined && !hasRevision) continue;
+            if (raw !== undefined) withField++;
+            const isStringArray = raw === undefined || (Array.isArray(raw) && raw.every((v: unknown) => typeof v === 'string'));
+            if (!isStringArray) malformed++;
+            else if (Array.isArray(raw) && raw.length > 0) nonEmpty++;
+            if (samples.length < 20 && (!isStringArray || (Array.isArray(raw) && raw.length > 0) || hasRevision)) {
+                samples.push({ poolId: doc.id, value: raw, revision: data.coManagersRevision });
+            }
+            if (!dryRun) {
+                if (cleared >= CLEAR_CO_MANAGERS_MAX_WRITES) { capped = true; continue; }
+                await doc.ref.update({ coManagers: FieldValue.delete(), coManagersRevision: FieldValue.delete() });
+                cleared++;
+            }
+        }
+    } catch (err) {
+        // A destructive one-off that dies mid-run must still leave a row saying
+        // it was attempted and how far it got (qodo #4). Then rethrow.
+        await writeAdminAudit({
+            ...actor, action: 'CLEAR_LEGACY_CO_MANAGERS', targetType: 'pools',
+            metadata: auditMeta(), status: 'error', error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+    }
+
+    await writeAdminAudit({ ...actor, action: 'CLEAR_LEGACY_CO_MANAGERS', targetType: 'pools', metadata: auditMeta(), status: 'success' });
+    return { success: true, scanned, withField, withRevision, nonEmpty, malformed, cleared, capped, dryRun, samples, ownerMismatch, mismatchSamples };
     },
 );

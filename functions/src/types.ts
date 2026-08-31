@@ -127,6 +127,10 @@ export interface GameState {
     contactEmail: string;
     managerName: string; // Name of the pool manager
     managerUid?: string; // UID of the pool manager
+    // PLAN-CO-COMMISSIONERS: server-owned (rules lock #444); ONLY writer is
+    // setPoolCoCommissioner. Honoured on NFL types only (isPoolCommissioner).
+    coManagers?: string[];
+    coManagersRevision?: number;
     paymentInstructions: string; // Instructions for payment (Venmo, etc.)
     theme: string;
 
@@ -276,7 +280,16 @@ export type AuditEventType =
     | 'DEADLINE_EXTENDED'
     | 'PROXY_PICK_SUBMITTED'
     | 'POOL_CANCELED'
-    | 'POOL_CLOSED';
+    | 'POOL_CLOSED'
+    // PLAN-CO-COMMISSIONERS D2: {op, uid, before, after, revision} — the pool's own
+    // audit trail, not admin_audit (that is the SUPER_ADMIN actor log).
+    | 'CO_COMMISSIONER_CHANGED'
+    // PLAN-MULTI-ENTRY-DUES D12: the delete is HARD, so this row and the ledger
+    // line are the ONLY durable record that the entry ever existed. Payload
+    // carries the entry NAME and INDEX, not just the id — ids are deterministic
+    // and reusable (`e2:uid`), so two deletions of "entry 2" would otherwise be
+    // indistinguishable in the trail.
+    | 'ENTRY_DELETED';
 
 export interface AuditLogEvent {
     id: string;
@@ -327,8 +340,22 @@ export interface AIRequest {
     userId: string;
     poolId: string;
     question: string;
-    category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER';
-    status: 'PENDING' | 'COMPLETED' | 'ERROR';
+    /**
+     * 'BANTER' (PLAN-WIZARD-BUYFLOW-FIXES T9) is the commissioner's trash-talk
+     * request. It is handled by the SAME `onAIRequest` trigger as every other
+     * category — deliberately, so it inherits the entitlement gate and whatever
+     * cost controls that path carries, rather than opening a second door to the
+     * paid provider.
+     */
+    category: 'DISPUTE' | 'CLARIFICATION' | 'OTHER' | 'BANTER';
+    /** BANTER only: the tone the commissioner picked on the card. */
+    mood?: 'savage' | 'professional' | 'analyst';
+    /** 'GENERATING' is the claim onAIRequest takes before calling the provider,
+     *  so an at-least-once redelivery cannot double-charge (T9, codex r3). */
+    status: 'PENDING' | 'GENERATING' | 'COMPLETED' | 'ERROR';
+    /** Machine-readable reason when status is ERROR (e.g. 'AI_NOT_UNLOCKED',
+     *  written by onAIRequest's entitlement gate — PLAN-COST-CONTROLS 0.5.2). */
+    error?: string;
     responseArtifactId?: string;
     createdAt: number;
     updatedAt?: number;

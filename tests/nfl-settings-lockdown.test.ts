@@ -34,6 +34,14 @@ describe('firestore.rules — scorer-owned pool fields are server-only', () => {
     'scoredThroughWeek',
     // Frozen Survivor/Margin weekly deadlines (PR-0).
     'hardLockByWeek',
+    // Frozen weekly tiebreak target game ids (PLAN-WEEKLY-PRIZES §2b): rewriting
+    // the map would re-point predictions members already made.
+    'frozenTiebreakTargets',
+    // The frozen weeks divisor of the weekly prize pot (PLAN-WEEKLY-PRIZES D5).
+    'weeksInSeason',
+    // The published Season Places + frozen season prize (PLAN-WEEKLY-PRIZES step 3):
+    // recordPoolPayouts binds season PLACE awards to this list.
+    'seasonPlaces', 'seasonPrize', 'seasonPlacesError',
     // The stats discriminator (PLAN-STATS-INTEGRITY §8.1 arm 3). Writable by a
     // manager, it hides their own pool's volume; clearable, it pushes a test
     // pool's fake pot into the world-readable stats/global document.
@@ -159,7 +167,7 @@ describe('NFLManagerView — the roster toggle has no legacy payment fallback', 
     // payments ledger, the roster summary and the pot all still said UNPAID —
     // exactly the D13 defect PLAN-PAYMENT-TRUTH P1 existed to close, reachable
     // again through the error path. This pins its absence from the whole file.
-    expect(view).toContain('dbService.setPaidStatus(pool.id, uid, nextPaid)');
+    expect(view).toContain('dbService.setPaidStatus(pool.id, uid, nextPaid, undefined, entryId)');
     expect(view).not.toContain('updateBracketEntryPayment');
   });
 
@@ -169,5 +177,94 @@ describe('NFLManagerView — the roster toggle has no legacy payment fallback', 
     // hides the actual server message (e.g. a genuine authorization refusal).
     expect(view).not.toContain('Deploy functions to enable');
     expect(view).not.toContain('is the payments update deployed?');
+  });
+});
+
+/**
+ * The callable-only settings guard, and WHERE it sits in the expression
+ * (PLAN-WEEKLY-TIEBREAKERS §5; PLAN-SURVIVOR-PARITY-SCORING decision 4).
+ *
+ * ⚠️ POSITION IS THE GUARD. `allow update` is
+ *
+ *     request.auth != null && callableOnlySettingsUnchanged() && (
+ *       (isPoolManager() && ... && nflSettingsWriteBlocked() && ...)
+ *       || isSuperAdmin()
+ *     )
+ *
+ * Every settings protection except this one lives INSIDE the manager branch and
+ * is short-circuited by `isSuperAdmin()`. Hoisting a check outside the
+ * disjunction is the only way to bind a super-admin client.
+ *
+ * This block exists because a plan with ten review rounds behind it asserted
+ * that `nflSettingsWriteBlocked()` denied NFL settings to every client
+ * principal. It denies them to MANAGERS. The claim survived because grepping
+ * the function name finds the right code and answers the wrong question — and
+ * because this repo has no rules test harness, so nothing in CI could fail on
+ * it. (codex, on the weekly-tiebreaker PR.)
+ */
+describe('firestore.rules — callable-only settings bind SUPER_ADMIN too', () => {
+  const rules = read('firestore.rules');
+
+  it.each([
+    // Regrade past weeks on the next rescore (#399).
+    'tieCountsAs',
+    'maxTeamUses',
+    // Changes what a number members ALREADY TYPED means — and under NONE they
+    // were never asked, so the scorer would read them all as having predicted 0.
+    'weeklyTiebreaker',
+    // The money split: an SA direct write could store an invalid split, or move
+    // entryFee/payoutMode around a valid one, making "site-verified" decorative
+    // for exactly the principal most likely to hand-fix money fields.
+    'hybridSplit',
+    // PLAN-PAYMENT-LEDGER T1: the HYBRID weekly place list — validated in the callable only.
+    'weeklyPayouts',
+  ])('callableOnlySettingsUnchanged() lists %s', (field) => {
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    expect(body).toContain(`'${field}'`);
+  });
+
+  it('lists maxEntriesPerUser in the NFL-ONLY clause — Bracket/Playoff carry the same key and save it by direct updateDoc (PLAN-MULTI-ENTRY D8; qodo on #449)', () => {
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    const nflClause = body.slice(body.indexOf('!isNfl ||'));
+    expect(nflClause).toContain("'maxEntriesPerUser'");
+    // and NOT in the unscoped list
+    const unscoped = body.slice(body.indexOf('!changed.hasAny(['), body.indexOf('!isNfl ||'));
+    expect(unscoped).not.toContain('maxEntriesPerUser');
+  });
+  it("lists payouts in the NFL-ONLY clause — validated in updatePoolSettings (unique ranks, ≤100 %); Bracket/Playoff still edit it directly (PLAN-PAYMENT-LEDGER T1; codex r2 on #470)", () => {
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    const nflClause = body.slice(body.indexOf('!isNfl ||'));
+    expect(nflClause).toContain("'payouts'");
+    const unscoped = body.slice(body.indexOf('!changed.hasAny(['), body.indexOf('!isNfl ||'));
+    expect(unscoped).not.toMatch(/'payouts'/);
+  });
+
+  it('diffs the settings MAP, not the root — a root diff would guard nothing', () => {
+    // Root `affectedKeys()` reports only the top-level `settings` key, so a
+    // per-field check against it never fires.
+    const fn = rules.slice(rules.indexOf('function callableOnlySettingsUnchanged()'));
+    const body = fn.slice(0, fn.indexOf('\n      }'));
+    expect(body).toContain("request.resource.data.get('settings', {})");
+    expect(body).toContain(".diff(resource.data.get('settings', {}))");
+  });
+
+  it('is applied OUTSIDE the super-admin disjunction', () => {
+    // The assertion that actually matters. If this call ever moves inside the
+    // `isPoolManager()` branch, every guard above becomes decorative for a
+    // super-admin client and no other test in this repo would notice.
+    const allow = rules.slice(rules.indexOf('allow update: if request.auth != null'));
+    const header = allow.slice(0, allow.indexOf('||'));
+    // Matched loosely on purpose. The original assertion pinned the LITERAL
+    // `callableOnlySettingsUnchanged() && (`, which broke the moment a SECOND
+    // outside-the-disjunction guard was added next to it
+    // (`poolPasswordNotWritten()`, PLAN-AUDIT-AUTH-HARDENING Phase B) — a
+    // failure that says "the rule changed shape", not "the guard moved inside".
+    // What matters is that the call precedes the opening paren of the
+    // disjunction and precedes `isPoolManager()`; both are asserted below.
+    expect(header).toMatch(/callableOnlySettingsUnchanged\(\)(\s*&&\s*\w+\(\))*\s*&&\s*\(/);
+    expect(header.indexOf('callableOnlySettingsUnchanged()')).toBeLessThan(header.indexOf('isPoolManager()'));
   });
 });

@@ -25,7 +25,7 @@ interface BillingInvoiceCardProps {
     estimatedPlayers: number;
     hasAiCommissioner?: boolean;
     hasWhatIfSimulator?: boolean;
-    hasCustomBranding?: boolean; // NEW
+    // hasCustomBranding removed 2026-08-23 (T4/D1) — see src/config/freeAddons.ts. // NEW
     hasSmsNotifications?: boolean;
     isWizard?: boolean;
     pricePaid?: number; // NEW
@@ -93,8 +93,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     poolType,
     estimatedPlayers,
     hasAiCommissioner = false,
-    hasWhatIfSimulator = false,
-    hasCustomBranding = false, // Premium add-on — opt-in only, never auto-charged
+    hasWhatIfSimulator = false, // Premium add-on — opt-in only, never auto-charged
     hasSmsNotifications = false,
     isWizard = false,
     pricePaid = 0, // NEW
@@ -138,7 +137,6 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     // Local addon selection states for the Setup Wizard (Included in trial!)
     const [localAi, setLocalAi] = useState(hasAiCommissioner);
     const [localSim, setLocalSim] = useState(hasWhatIfSimulator);
-    const [localBranding, setLocalBranding] = useState(hasCustomBranding);
     const [localSms, setLocalSms] = useState(hasSmsNotifications);
 
     useEffect(() => {
@@ -150,17 +148,12 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
     }, [hasWhatIfSimulator]);
 
     useEffect(() => {
-        setLocalBranding(hasCustomBranding);
-    }, [hasCustomBranding]);
-
-    useEffect(() => {
         setLocalSms(hasSmsNotifications);
     }, [hasSmsNotifications]);
 
     const handleToggleFeature = (key: 'aiCommissioner' | 'whatIfSimulator' | 'customBranding' | 'smsNotifications', enabled: boolean) => {
         if (key === 'aiCommissioner') setLocalAi(enabled);
         if (key === 'whatIfSimulator') setLocalSim(enabled);
-        if (key === 'customBranding') setLocalBranding(enabled);
         if (key === 'smsNotifications') setLocalSms(enabled);
 
         if (onFeatureToggle) {
@@ -253,7 +246,11 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         aiCommissioner: !!localAi,
         smsNotifications: !!localSms,
         whatIfSimulator: !!localSim,
-        customBranding: !!localBranding,
+        // Never requested: branding is included with every pool (T4/D1). A pool
+        // created before that ruling can still carry `addons.customBranding`,
+        // and this card seeds from exactly that — so without the hard false an
+        // old pool would still be quoted $29 for something no longer on screen.
+        customBranding: false,
     };
 
     // Identity of the inputs a quote prices. A quote is only usable for the
@@ -334,7 +331,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             clearTimeout(t);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [poolType, estimatedPlayers, localAi, localSim, localBranding, localSms, couponInput, quoteRetry]);
+    }, [poolType, estimatedPlayers, localAi, localSim, localSms, couponInput, quoteRetry]);
 
     // --- Derived display values, ALL sourced from the server quote ---
     const basePrice = quote?.basePrice ?? 0;
@@ -342,7 +339,6 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
         quote?.addonLines.find(l => l.key === key)?.amount ?? 0;
     const aiCost = addonAmount('aiCommissioner');
     const simCost = addonAmount('whatIfSimulator');
-    const brandingCost = addonAmount('customBranding');
     const smsCost = addonAmount('smsNotifications');
 
     // Server subtotal already includes every add-on (incl. SMS). Previous
@@ -622,8 +618,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <div className="text-xs space-y-1">
                                 <strong className="text-brandred-600 flex items-center gap-1.5 font-bold">Active Free Pool Limit Reached</strong>
                                 <p className="text-[color:var(--text)] leading-relaxed">
-                                    March Melee Pools allows commissioners **exactly one active free pool** (10 or fewer players) at a time. You already have an active free pool. 
-                                    To activate this pool, you must **upgrade it to a Premium tier** (by sliding estimated players above 10 or adding features), use a Pool Credit, or archive your other free pool in your dashboard.
+                                    {/* G12 — this was markdown inside JSX, so the asterisks rendered
+                                        literally. Emphasis is markup here, not punctuation. */}
+                                    March Melee Pools allows commissioners <strong className="font-bold">exactly one active free pool</strong> (10 or fewer players) at a time. You already have an active free pool. 
+                                    To activate this pool, you must <strong className="font-bold">upgrade it to a Premium tier</strong> (by sliding estimated players above 10 or adding features), use a Pool Credit, or archive your other free pool in your dashboard.
                                 </p>
                             </div>
                         </div>
@@ -646,7 +644,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     { key: 'aiCommissioner' as const, label: 'AI Commissioner', desc: 'Auto trash-talk, weekly reviews, and dispute resolution.', value: localAi },
                                     ...( poolType.toUpperCase() === 'BRACKET' ? [{ key: 'whatIfSimulator' as const, label: 'What-If Simulator', desc: 'Interactively simulate potential game results to view projected standings.', value: localSim }] : [] ),
                                     // SMS Notifications add-on disabled for now (product decision 2026-07-07). Re-add here to bring it back.
-                                    { key: 'customBranding' as const, label: 'Custom Branding', desc: 'Upload headers, customized color schemes, and manager logos.', value: localBranding }
+                                    // Custom Branding removed 2026-08-23 (T4/D1): it is included with
+                                    // every pool. Nothing ever gated it, so selling it charged for a
+                                    // flag with no effect. Re-add here if a genuinely premium branding
+                                    // tier is ever built — see src/config/freeAddons.ts.
                                 ].map(({ key, label, desc, value }) => {
                                     const feat = config.features[key];
                                     // Only display if explicitly turned on (isPremium is true) in the superadmin settings
@@ -668,7 +669,15 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                     </span>
                                                 </div>
                                                 <p className="text-[9px] text-muted leading-normal">{desc}</p>
-                                                <span className="text-[8px] text-[#0F7B4A] font-extrabold uppercase tracking-wide block">FREE IN TRIAL</span>
+                                                {/* G11 — wizard only. On the UPGRADE page the trial is
+                                                    over (or never started), so "free in trial" sat
+                                                    directly beside "+$19" and contradicted the total
+                                                    the commissioner was about to pay. The three line
+                                                    items below were already guarded on `isWizard`;
+                                                    this one was not. */}
+                                                {isWizard && (
+                                                    <span className="text-[8px] text-[#0F7B4A] font-extrabold uppercase tracking-wide block">FREE IN TRIAL</span>
+                                                )}
                                             </div>
                                         </label>
                                     );
@@ -722,14 +731,6 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> What-If Standings Simulator</span>
                                 <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
                                     {money(simCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
-                                </span>
-                            </div>
-                        )}
-                        {localBranding && config.features.customBranding?.isPremium && (
-                            <div className="flex justify-between items-center text-muted text-xs">
-                                <span className="flex items-center gap-1.5"><Sparkles size={11} className="text-gold-500" /> Premium Custom Branding & Covers</span>
-                                <span className="font-mono num text-gold-700 dark:text-gold-400 font-bold">
-                                    {money(brandingCost, { sign: '+' })} {isWizard && <span className="text-[#0F7B4A] font-extrabold text-[9px] ml-1 bg-[#E4F5EC] px-1.5 py-0.5 rounded">(FREE IN TRIAL)</span>}
                                 </span>
                             </div>
                         )}
@@ -877,8 +878,16 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     </>
                                 )}
                             </button>
+                            {/* G4 — this line used to name Stripe's test mode and
+                                promise that no card would actually be charged,
+                                unconditionally, on the LIVE upgrade path. Telling
+                                a paying commissioner their card will not be
+                                billed is the worst sentence that could sit under
+                                a real payment button. Both copies of it were
+                                replaced; `tests/buyflow-blockers.test.ts` counts
+                                them so a third cannot reintroduce the claim. */}
                             <p className="text-[10px] text-muted text-center">
-                                Transactions are processed securely in Stripe Sandbox. No real credit card charges will occur.
+                                Payments are processed securely by Stripe. We never see or store your card details.
                             </p>
                         </div>
                     )}
@@ -1050,9 +1059,15 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                         <p className="text-[11px] text-muted leading-normal">
                                             Host unlimited pools of any format with unlimited participants for a full 365 days. Perfect for corporate leagues and multi-format clubs.
                                         </p>
+                                        {/* ⚠️ NOT "billed annually" — see the twin of this comment in
+                                            `PricingPage.tsx`. One-time commerce: nothing renews, so naming a
+                                            billing cadence here promised a charge the product cannot make.
+                                            The qualifier string is character-for-character the pricing
+                                            page's on purpose — `tests/commerce-copy-honesty.test.ts` fails
+                                            if the two surfaces disagree about what the same product costs. */}
                                         <div className="pt-1 flex items-baseline gap-1">
                                             <span className="text-xl font-display font-bold num text-gold-700 dark:text-gold-400">${(config.packages?.unlimited_1yr ?? 129.00).toFixed(2)}</span>
-                                            <span className="text-[9px] text-muted font-medium num">billed annually</span>
+                                            <span className="text-[9px] text-muted font-medium num">one-time · 365 days</span>
                                         </div>
                                     </div>
                                     <div className="pt-3">
@@ -1103,8 +1118,9 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         </div>
                     )}
 
+                    {/* G4 — the same test-mode claim, second copy (bundle tab). */}
                     <p className="text-[10px] text-muted text-center">
-                        Transactions are processed securely in Stripe Sandbox. No real credit card charges will occur.
+                        Payments are processed securely by Stripe. We never see or store your card details.
                     </p>
                 </div>
             )}

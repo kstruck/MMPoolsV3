@@ -1,7 +1,9 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState } from 'react';
 import { Trophy, Zap, Users, Activity, CheckCircle, Shield, Heart, AlertTriangle } from 'lucide-react';
 import type { GameState, PayoutConfig } from '../../types';
 
+import { Switch } from '../ui/Switch';
 interface WizardStepPayoutsProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
@@ -316,15 +318,11 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                         </h3>
                         <p className="text-muted text-sm">Dedicate a portion of the pot to a cause.</p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={gameState.charity?.enabled || false}
-                            onChange={(e) => updateConfig({ charity: { ...(gameState.charity || { name: '', percentage: 0, url: '' }), enabled: e.target.checked } })}
-                            className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
-                    </label>
+                    <Switch
+                        checked={gameState.charity?.enabled || false}
+                        onChange={(enabled) => updateConfig({ charity: { ...(gameState.charity || { name: '', percentage: 0, url: '' }), enabled } })}
+                        label="Donate a share to charity"
+                    />
                 </div>
 
                 {gameState.charity?.enabled && (
@@ -435,7 +433,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
 
             {/* Random Draw Warning Modal */}
             {showRandomDrawWarning && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-in fade-in">
+                <OverlayRoot id="squares-random-draw-warning" label="Random draw warning" onEscape={() => setShowRandomDrawWarning(false)} className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-in fade-in">
                     <div className="bg-surface border border-gold-500/50 rounded-2xl p-6 max-w-md mx-4 shadow-panel animate-in zoom-in-95">
                         <div className="flex items-start gap-4 mb-4">
                             <div className="p-3 bg-gold-500/20 rounded-xl text-gold-700 dark:text-gold-400">
@@ -467,7 +465,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             </button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div>
     );

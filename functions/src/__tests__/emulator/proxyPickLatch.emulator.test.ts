@@ -185,3 +185,100 @@ describe('an empty proxy payload does not latch play or move dues', () => {
         expect(member.feeOwed).toBe(25);
     }, 30000);
 });
+
+/**
+ * THE PAYLOAD SHAPE CONTRACT — the reason the Pick'em proxy pick never worked.
+ *
+ * `proxyPick` takes one `picks` record and the three NFL types key it two
+ * different ways: Pick'em by GAME ID (the loop above), Survivor and Margin by
+ * WEEK. `NFLManagerView` sent the week-keyed shape for all three, so on a
+ * Pick'em pool every call died with `Game 3 not found in week 3` — a message
+ * that reads like a schedule problem rather than a payload one.
+ *
+ * The client fix is a per-type switch (`src/utils/proxyPickPayload.ts`) and its
+ * unit tests replay this validation loop. This is the same claim against the
+ * REAL callable, so the two cannot drift: if the server ever accepted a
+ * week-keyed Pick'em payload, the client's switch would be unnecessary and this
+ * test would say so.
+ */
+describe('proxyPick — the picks map is keyed by pool type', () => {
+    const POOL3 = 'pool-proxy-shape';
+    const MEMBER = 'shape-member';
+
+    beforeAll(async () => {
+        await db.collection('pools').doc(POOL3).set({
+            name: 'Proxy shape', type: 'NFL_PICKEM', league: 'NFL',
+            season: SEASON, seasonType: 1,
+            ownerId: 'commish-1', participantIds: ['commish-1', MEMBER],
+            status: 'OPEN', billing: { status: 'free' },
+            settings: { entryFee: 0, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: false },
+        });
+        await db.collection('users').doc(MEMBER).set({ name: 'Sam' });
+    }, 30000);
+
+    it('REJECTS the week-keyed payload the manager used to send', async () => {
+        // Reproduced against the live callable, not a replica. Week 1, so the
+        // key is "1" — which is not a game id, and the message says so.
+        await expect(wProxy({
+            data: { poolId: POOL3, targetUid: MEMBER, week: 1, picks: { 1: 'CAR' }, reason: 'The payload as it shipped' },
+            auth: COMMISH,
+        } as never)).rejects.toThrow(/Game 1 not found in week 1/);
+
+        // …and nothing was written, so the failure is total rather than partial.
+        expect((await db.collection('pools').doc(POOL3).collection('entries').doc(MEMBER).get()).exists).toBe(false);
+    }, 30000);
+
+    it('ACCEPTS the game-keyed payload the fix sends', async () => {
+        await wProxy({
+            data: { poolId: POOL3, targetUid: MEMBER, week: 1, picks: { [GAME]: 'CAR' }, reason: 'The payload after the fix' },
+            auth: COMMISH,
+        } as never);
+        const entry = (await db.collection('pools').doc(POOL3).collection('entries').doc(MEMBER).get()).data();
+        expect(entry?.picks?.[GAME]).toBe('CAR');
+    }, 30000);
+
+    it('still refuses a team that is not playing in the game named', async () => {
+        // The second half of the server's shape check, and the reason the client
+        // resolves the team through the week's own slate rather than trusting a
+        // dropdown that may be stale.
+        await expect(wProxy({
+            data: { poolId: POOL3, targetUid: MEMBER, week: 1, picks: { [GAME]: 'GB' }, reason: 'Team not in this game' },
+            auth: COMMISH,
+        } as never)).rejects.toThrow(/GB is not playing in game/);
+    }, 30000);
+});
+
+/**
+ * The other branch, which must NOT move. Survivor reads `picks[weekNum]`, so
+ * "fixing" it to game ids would break the path that has always worked — this is
+ * why the client's switch is per pool type rather than global.
+ */
+describe('proxyPick — Survivor still keys by week', () => {
+    const POOL4 = 'pool-proxy-survivor-shape';
+    const SURV = 'shape-survivor-member';
+
+    beforeAll(async () => {
+        await db.collection('pools').doc(POOL4).set({
+            name: 'Proxy survivor shape', type: 'NFL_SURVIVOR', league: 'NFL',
+            season: SEASON, seasonType: 1,
+            ownerId: 'commish-1', participantIds: ['commish-1', SURV],
+            status: 'OPEN', billing: { status: 'free' },
+            settings: { entryFee: 0, maxStrikes: 1 },
+        });
+        await db.collection('users').doc(SURV).set({ name: 'Robin' });
+    }, 30000);
+
+    it('accepts the week-keyed payload and refuses a game-keyed one', async () => {
+        await wProxy({
+            data: { poolId: POOL4, targetUid: SURV, week: 1, picks: { 1: 'CAR' }, reason: 'Week-keyed, as Survivor requires' },
+            auth: COMMISH,
+        } as never);
+        const entry = (await db.collection('pools').doc(POOL4).collection('entries').doc(SURV).get()).data();
+        expect(entry?.picks?.['1']).toBe('CAR');
+
+        await expect(wProxy({
+            data: { poolId: POOL4, targetUid: SURV, week: 1, picks: { [GAME]: 'ARI' }, reason: 'Game-keyed, which Survivor cannot read' },
+            auth: COMMISH,
+        } as never)).rejects.toThrow(/Missing team selection for week 1/);
+    }, 30000);
+});

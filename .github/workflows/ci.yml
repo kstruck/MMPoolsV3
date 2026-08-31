@@ -97,6 +97,17 @@ jobs:
         run: npm run test:emulator
         working-directory: functions
 
+      # REQUIRED: the eight Firestore RULES tests (functions/scripts/*.rules.test.mjs)
+      # — participantIds lock (#432), simBackdoors, monetization, payoutRecords,
+      # squarePrivate PII, entries/standings, profileAchievements, survivor parity.
+      # Until 2026-08-15 these were hand-run only: `test:emulator` above is vitest
+      # and never touched them, so every authorization guard they carry ran on NO
+      # pull request. Same emulator, one boot, wiped between files; the runner
+      # fails on fewer than 8 files so a broken glob cannot pass as green.
+      - name: Firestore rules tests
+        run: npm run test:rules
+        working-directory: functions
+
   # Validate the nginx config used by the Docker/Coolify production deploy.
   # A syntax error here would fail the container start, so gate it on every PR.
   nginx-validate:
@@ -119,3 +130,113 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # NON-BLOCKING (Kevin, decision D4, 2026-08-24). The Playwright e2e suite —
+  # revived in PR #556 — runs the real app against real Firebase emulators
+  # (auth + functions + firestore) and, until this job existed, ran ONLY on a
+  # developer's machine.
+  #
+  # WHY IT DOES NOT BLOCK, AND HOW IT IS MADE NOT TO BLOCK:
+  #   The repo's required-status-checks ruleset (id 11714546, main-scoped) lists
+  #   exactly four contexts: build-and-test, emulator-tests, security-audit,
+  #   nginx-validate. `e2e-playwright` is deliberately NOT one of them, so a red
+  #   run here cannot block a merge.
+  #
+  #   It deliberately does NOT use `continue-on-error: true` (the mechanism the
+  #   `lint` job above uses). continue-on-error stops a failing job from failing
+  #   the workflow RUN — which would also erase the exact signal this job exists
+  #   to produce. The flip criterion below needs a truthful red/green per PR, so
+  #   non-blocking is achieved by ruleset EXCLUSION, not by masking the result.
+  #
+  # FLIP TO REQUIRED AFTER ~A WEEK OF GREEN: once this job has run green across a
+  # week of PRs with no flakes, add the context `e2e-playwright` to the
+  # "Required Checks" ruleset (GitHub → Settings → Rules), i.e. a fifth context
+  # alongside the four above. Nothing in this file changes on the flip. If it
+  # flakes instead, fix the flake (or delete the job) — do not paper over it with
+  # continue-on-error or retries.
+  # ---------------------------------------------------------------------------
+  e2e-playwright:
+    runs-on: ubuntu-latest
+    # Local wall time is ~2.2 min; CI adds installs + a cold functions-emulator
+    # boot. The cap exists so a wedged emulator fails in half an hour instead of
+    # holding a runner for the 6h default.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # node 22 for the same reason emulator-tests uses it: functions/package.json
+      # declares engines.node "22", and this job boots the FUNCTIONS emulator,
+      # which runs the deployed runtime's code.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          # Both lockfiles — this job installs root AND functions/ (same reason
+          # security-scan.yml keys on both).
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      # The Firestore/Auth emulators are Java processes.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Root install provides @playwright/test AND the firebase-tools binary that
+      # playwright.config.ts's webServer invokes as `npx firebase`.
+      - name: Install root deps
+        run: npm ci
+
+      # playwright.config.ts's first webServer runs `npm --prefix functions run
+      # build` and then boots the functions emulator, so functions/ needs its own
+      # node_modules present before `npx playwright test` starts.
+      - name: Install functions deps
+        run: npm ci
+        working-directory: functions
+
+      # Cache key on the resolved @playwright/test version, not on the lockfile
+      # hash: the browser build is tied to the Playwright version and nothing
+      # else, so an unrelated dependency bump must not evict ~150MB of Chromium.
+      - name: Resolve Playwright version
+        id: playwright
+        run: echo "version=$(node -p 'require("@playwright/test/package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-browsers-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # chromium only — playwright.config.ts declares exactly one project.
+      # On a cache HIT the binaries are already restored, but the apt-level OS
+      # libraries are NOT cached (they live outside ~/.cache), so they are
+      # installed either way; only the browser download is skipped.
+      - name: Install Chromium + OS deps (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium OS deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # playwright.config.ts owns the emulator + vite:5199 startup (its webServer
+      # blocks). GitHub sets CI=true, which flips webServer.reuseExistingServer to
+      # false, so this always boots its own emulator rather than reusing a stray.
+      - name: E2E (Playwright against Firebase emulators)
+        run: npx playwright test
+
+      # trace: 'retain-on-failure' in playwright.config.ts writes traces under
+      # test-results/. if-no-files-found: ignore because a failure BEFORE any test
+      # runs (e.g. the emulator never becoming ready in global-setup) leaves the
+      # directory empty, and a missing-artifact error would bury the real cause.
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

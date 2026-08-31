@@ -2,13 +2,20 @@
 // paidStatus writes (removed in the deferred wiring commit). Commissioner/owner/admin set the
 // authoritative paidStatus; a member may set only their OWN honor-system claim, never paidStatus.
 import * as admin from "firebase-admin";
+import { isPoolCommissioner } from './poolOps';
 import { FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { setPaidStatusSchema } from "./schemas/participantOps";
 import { isProvableMember, membersCol } from "./lib/memberRecord";
-import { isCanonicalMemberRecord } from "./shared/memberRecord";
+import { isCanonicalMemberRecord, derivePaidStatus, liableEntryIds, paidEntryCountOf, type MemberRecord, type PaidEntryMap } from "./shared/memberRecord";
+import { readPoolDues, writePoolDues } from "./lib/poolDues";
+import { entryHasPick } from "./lib/multiEntry";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
+
+/** Every entry doc this member owns (PLAN-MULTI-ENTRY D1: readers never parse ids). */
+const ownedEntriesQuery = (poolRef: admin.firestore.DocumentReference, memberUid: string) =>
+  poolRef.collection('entries').where('ownerUid', '==', memberUid);
 
 export const setPaidStatus = validated(
   // Dual-mode contract preserved: claim present = member self-report; claim
@@ -16,7 +23,7 @@ export const setPaidStatus = validated(
   { schema: setPaidStatusSchema, label: "setPaidStatus", appCheck: "monitor" },
   async (input, request) => {
   const uid = request.auth!.uid;
-  const { poolId, memberUid, isPaid, claim, settleRebuys, paymentMethod, paidAt, paymentNote } = input;
+  const { poolId, memberUid, isPaid, claim, settleRebuys, entryId, paymentMethod, paidAt, paymentNote } = input;
 
   const db = admin.firestore();
   const poolRef = db.collection('pools').doc(poolId);
@@ -100,9 +107,10 @@ export const setPaidStatus = validated(
   }
 
   // --- Authoritative paid mark: commissioner/owner/admin only ---
-  const isOwner =
-    pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
-    request.auth!.token?.role === 'SUPER_ADMIN';
+  // PLAN-CO-COMMISSIONERS C6 (K3 = Yes): a co-commissioner may mark members
+  // paid — one helper, same principal set as every other NFL commissioner
+  // callable, so the ledger and the tab agree on who is a commissioner.
+  const isOwner = isPoolCommissioner(pool, uid) || request.auth!.token?.role === 'SUPER_ADMIN';
   if (!isOwner) throw new HttpsError("permission-denied", "Only the commissioner can set paid status.");
 
   // --- Rebuy settlement (PLAN-PAYMENT-TRUTH P3, Q2 = option B) ---
@@ -117,9 +125,16 @@ export const setPaidStatus = validated(
   // rejected in the plan.
   if (settleRebuys !== undefined) {
     await db.runTransaction(async (tx) => {
-      const entryRef = poolRef.collection('entries').doc(memberUid);
-      const [snap, entrySnap] = await Promise.all([tx.get(mRef), tx.get(entryRef)]);
+      // PLAN-MULTI-ENTRY D3: rebuyOwed is the SUM across every entry the
+      // member owns, so the legacy derivation below reads them all (codex r2
+      // on the plan) — entries/{uid} plus any `e${n}:${uid}` / auto-id doc.
+      const [snap, ownedSnap] = await Promise.all([tx.get(mRef), tx.get(ownedEntriesQuery(poolRef, memberUid))]);
       if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
+      // A legacy entries/{uid} doc may carry no `ownerUid` and so miss the
+      // query — read it too, as the paid mirror below does (qodo #2 on #450).
+      const legacyRebuySnap = ownedSnap.docs.some(d => d.id === memberUid)
+        ? null : await tx.get(poolRef.collection('entries').doc(memberUid));
+      const rebuyDocs = [...ownedSnap.docs, ...(legacyRebuySnap?.exists ? [legacyRebuySnap] : [])];
       const m: any = snap.data();
       // LEGACY FALLBACK (codex r2): survivor pools have existed since
       // 2026-05-25 but the rebuyOwed writer only since 2026-07-08 (1bb7e89),
@@ -150,7 +165,12 @@ export const setPaidStatus = validated(
         if (dueEvents.size > 0) {
           owed = fromLedger;
         } else {
-          const rebuysUsed: number = entrySnap.exists ? ((entrySnap.data() as any).rebuysUsed ?? 0) : 0;
+          // Same guard as the ledger sum above: untyped Firestore data, and
+          // this derived figure is persisted as `rebuyOwed` (qodo re-review on #450).
+          const rebuysUsed: number = rebuyDocs.reduce((n, d) => {
+            const v = (d.data() as any).rebuysUsed;
+            return n + (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+          }, 0);
           const rebuyCost: number = pool.settings?.rebuyCost ?? pool.settings?.entryFee ?? 0;
           owed = rebuysUsed * rebuyCost;
         }
@@ -184,6 +204,7 @@ export const setPaidStatus = validated(
 
   const entryFee: number | undefined = pool.settings?.entryFee;
   let memberName: string | undefined;
+  let memberFeeOwed: number | undefined;
   // Member Record mutation + ledger append + entry-doc mirror in ONE transaction
   // (ADR 0003 item 5; PLAN-PAYMENT-TRUTH P1).
   //
@@ -197,20 +218,133 @@ export const setPaidStatus = validated(
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(mRef);
     if (!snap.exists) throw new HttpsError("not-found", "MEMBER_NOT_ON_ROSTER: Member is not on this pool's roster.");
-    // NFL entry docs are keyed by uid (nflPools), so the member's entry — when
-    // they have one — lives at entries/{memberUid}. Members without an entry
-    // (e.g. the commissioner, or joined-not-yet-picked) simply have no doc to
+    // PLAN-MULTI-ENTRY D2: Paid Status is ONE flag per member, so the mirror
+    // lands on EVERY entry the member owns — entries/{uid} (entry #1, and every
+    // legacy doc) plus any `e${n}:${uid}` / auto-id extra. Members without an
+    // entry (the commissioner, or joined-not-yet-picked) simply have no doc to
     // mirror onto. Read inside the tx (all reads before writes).
-    const entryRef = poolRef.collection('entries').doc(memberUid);
-    const entrySnap = await tx.get(entryRef);
+    const ownedSnap = await tx.get(ownedEntriesQuery(poolRef, memberUid));
+    const legacyRef = poolRef.collection('entries').doc(memberUid);
+    const legacySnap = ownedSnap.docs.some(d => d.id === memberUid) ? null : await tx.get(legacyRef);
+    const entryRefs = [
+      ...ownedSnap.docs.map(d => d.ref),
+      ...(legacySnap?.exists ? [legacyRef] : []),
+    ];
     memberName = snap.data()?.userName;
+    // The ledger amount is what this member OWES — `feeOwed`, the fee × liable
+    // entries figure (D2) — not the per-entry pool fee.
+    memberFeeOwed = typeof snap.data()?.feeOwed === 'number' ? snap.data()!.feeOwed : undefined;
     // paidAt: number = commissioner-chosen date, null = explicit clear-the-date
     // (paid, but no date on record — codex r2), absent = stamp now.
     const stampedPaidAt =
       typeof paidAt === 'number' ? paidAt : (paidAt === null ? undefined : Date.now());
+
+    // --- PLAN-MULTI-ENTRY-DUES P2-T2: per-entry dues -------------------------
+    //
+    // The whole feature in one paragraph: `paidEntries` is the truth (D1),
+    // `paidStatus` is a STORED SUMMARY derived from it (D1/section 0a), and both
+    // are written HERE, in this one transaction, so they cannot disagree.
+    //
+    // The liable set comes from the entry documents this transaction already
+    // read — `entries` on the Member Record carries no pick state, deliberately
+    // (commissioner-blind picks), so it cannot answer WHICH entries are liable.
+    // See `liableEntryIds`.
+    const member = snap.data() as unknown as MemberRecord;
+    // The per-entry map now lives in the CLOSED `private/` subcollection, not on
+    // this participant-readable record (amended D1). Read in the SAME
+    // transaction, which is what replaces single-document atomicity now that
+    // money truth spans two documents.
+    const storedMap = await readPoolDues(tx, poolRef, memberUid);
+    const pickedEntryIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
+    if (legacySnap?.exists && entryHasPick(legacySnap.data())) pickedEntryIds.push(legacyRef.id);
+    const liable = liableEntryIds(member, memberUid, pickedEntryIds);
+    // 🛑 A LEGACY `PAID` RECORD IS MATERIALIZED BEFORE ANYTHING IS DERIVED FROM
+    // IT, AND SKIPPING THIS DOWNGRADES PAYING MEMBERS IN PRODUCTION (codex r1).
+    //
+    // Every record written before this ticket has NO `paidEntries` — including
+    // members who are already `PAID`. Treating that absence as "nothing is paid"
+    // and then deriving would turn the first per-entry edit on such a member
+    // into an UNPAID mark plus a spurious ledger event: money already collected,
+    // reported as owed. Pools are live and members are already PAID, so this is
+    // reachable on real data on day one, not a migration hypothetical.
+    //
+    // R3 in the plan already fixes the rule — `undefined` means "no per-entry
+    // detail recorded" and the reader falls back to the stored `paidStatus`.
+    // This is that rule applied at the moment of the write: a stored `PAID`
+    // means every entry the member is liable for was paid, so seed exactly
+    // those, carrying the member-level detail onto each row so the ledger and
+    // the roster keep the date and method they already displayed.
+    //
+    // Deliberately NOT a backfill (plan section 5, fix-forward): only the record
+    // being written is materialized, and only inside this transaction. After the
+    // D1 amendment the legacy shape is an ABSENT dues DOCUMENT rather than an
+    // absent field, which changes nothing about the rule.
+    // Null-prototype throughout: `map['__proto__'] = row` on an ordinary object
+    // sets the PROTOTYPE instead of creating a key (see `RESERVED_ID` in
+    // shared/memberRecord.ts). `liableEntryIds` already filters such ids out, so
+    // this is the second lock on the same door — the maps here are also built
+    // from stored Firestore data, which this code does not get to choose.
+    const legacySeed: PaidEntryMap = Object.create(null);
+    if (!storedMap && member.paidStatus === 'PAID') {
+      for (const id of liable) {
+        legacySeed[id] = {
+          ...(typeof member.paidAt === 'number' ? { paidAt: member.paidAt } : {}),
+          ...(typeof (member as { paymentMethod?: unknown }).paymentMethod === 'string'
+            ? { method: (member as { paymentMethod?: string }).paymentMethod } : {}),
+        };
+      }
+    }
+    const priorPaidEntries: PaidEntryMap = storedMap
+      ? Object.assign(Object.create(null), storedMap) : legacySeed;
+
+    // ENTRY_NOT_FOUND rather than a ghost key (D7a). Marking PAID is restricted
+    // to rows the ledger actually charges; UN-marking additionally allows any id
+    // already in the map, so a key stranded by a fee change or a delete can
+    // still be cleaned up — that direction only ever REMOVES paid state.
+    if (entryId !== undefined) {
+      const payable = isPaid
+        ? liable.includes(entryId)
+        : liable.includes(entryId) || Object.prototype.hasOwnProperty.call(priorPaidEntries, entryId);
+      if (!payable) {
+        throw new HttpsError("not-found",
+          "ENTRY_NOT_FOUND: That entry is not one of this member's payable entries.");
+      }
+    }
+
+    // The row itself. D1b: PRESENCE is the paid signal — there is no
+    // `paid: boolean`, so an un-mark DELETES the key rather than falsifying it.
+    const paidRow: PaidEntryMap[string] = {
+      ...(stampedPaidAt !== undefined ? { paidAt: stampedPaidAt } : {}),
+      ...(paymentMethod !== undefined ? { method: paymentMethod } : {}),
+      ...(paymentNote !== undefined && paymentNote !== null ? { note: paymentNote.slice(0, 500) } : {}),
+    };
+    // Which keys this mark moves: the named entry, or EVERY liable entry when
+    // no entryId was given (the member-level mark keeps working exactly as it
+    // reads — "this member has paid" means all of their rows).
+    const targetIds = entryId !== undefined ? [entryId] : liable;
+    const nextPaidEntries: PaidEntryMap = Object.assign(Object.create(null), priorPaidEntries);
+    for (const id of targetIds) {
+      if (isPaid) nextPaidEntries[id] = paidRow;
+      else delete nextPaidEntries[id];
+    }
+    // The SUMMARY, recomputed from the map that is being written in this same
+    // transaction — never from the caller's intent.
+    const nextPaidStatus = derivePaidStatus({ ...member, paidEntries: nextPaidEntries }, liable);
+    // THE MIRRORED COUNT, from the SAME map and the SAME liable set the summary
+    // above was derived from, written in the SAME transaction (D1 writer #1,
+    // PLAN-PARTIAL-DUES-AGGREGATES C1). A count that can drift from the map is
+    // worse than no count, and the only way it cannot drift is to compute it
+    // here, from these two values, and write it beside `paidStatus`.
+    const nextPaidEntryCount = paidEntryCountOf(nextPaidEntries, liable);
+    // WHICH rows this call actually moved. Everything the ledger says is
+    // computed from this, never from the verb or the member-level flag — see
+    // the ledger block below for the two ways that goes wrong.
+    const changedIds = targetIds.filter(id => Object.prototype.hasOwnProperty.call(priorPaidEntries, id) !== isPaid);
+
     if (isPaid) {
       tx.set(mRef, {
-        paidStatus: 'PAID',
+        paidStatus: nextPaidStatus,
+        paidEntryCount: nextPaidEntryCount,
         paidAt: stampedPaidAt ?? FieldValue.delete(),
         paidBy: uid,
         ...(paymentMethod !== undefined ? { paymentMethod } : {}),
@@ -221,15 +355,56 @@ export const setPaidStatus = validated(
     } else {
       // UNPAID is a full clear (schema refuses details with it): stale
       // method/date/note on an unpaid member misreads as a payment record.
+      //
+      // ⚠️ THE CLEAR IS NOW CONDITIONAL ON THE DERIVED SUMMARY, not on the verb.
+      // Un-marking an id that is not in the liable set (the D7a cleanup case)
+      // can leave every liable entry still paid, so `nextPaidStatus` stays PAID
+      // — and wiping the member's payment date out from under a PAID summary
+      // would produce exactly the mismatch this clear exists to prevent, in the
+      // other direction.
       tx.set(mRef, {
-        paidStatus: 'UNPAID',
-        paidAt: FieldValue.delete(),
+        paidStatus: nextPaidStatus,
+        // Written on the UNPAID branch too, and that is the branch that matters
+        // most: an un-mark that leaves OTHER liable entries paid is exactly the
+        // partial state this field exists to publish. Omitting it here would
+        // strand a stale count above a shrinking map.
+        paidEntryCount: nextPaidEntryCount,
         paidBy: uid,
-        paymentMethod: FieldValue.delete(),
-        paymentNote: FieldValue.delete(),
+        ...(nextPaidStatus === 'UNPAID' ? {
+          paidAt: FieldValue.delete(),
+          paymentMethod: FieldValue.delete(),
+          paymentNote: FieldValue.delete(),
+        } : {}),
       }, { merge: true });
     }
-    if (entrySnap.exists) {
+
+    // The per-entry map, written WHOLE, to the CLOSED dues document.
+    //
+    // ⚠️ THIS SUPERSEDES D1b's `new FieldPath('paidEntries', entryId)`
+    // INSTRUCTION, for two reasons that both point the same way. First, the
+    // legacy seed above has to PERSIST — a materialization that exists only in
+    // memory derives the right summary and then stores a map with one key in it,
+    // which is a bug test 7i caught before review did. Persisting it is a
+    // whole-map write by definition, so a per-key path would be a SECOND write
+    // shape covering a subset of the cases. Second, `paidEntries` is now the
+    // whole point of its own document rather than one field among many, so
+    // replacing it wholesale is the natural write and the `:`-in-a-dotted-path
+    // ambiguity D1b was avoiding never arises at all — the ids are object keys
+    // here, never path segments.
+    //
+    // Safe because this transaction READ that document (`readPoolDues` above).
+    // Spread back to an ORDINARY object for the write: object spread copies own
+    // keys as data properties (never through a setter), and the Firestore
+    // serializer is not asked to reason about a null prototype.
+    writePoolDues(tx, poolRef, poolId, memberUid, { ...nextPaidEntries }, Date.now());
+    // The mirror lands on the NAMED entry only when one was named — mirroring a
+    // single entry's payment onto all of the member's entries is the
+    // all-or-nothing behaviour this ticket removes. With no entryId the member
+    // -level mark still touches every entry, exactly as before.
+    const mirrorRefs = entryId !== undefined
+      ? entryRefs.filter(r => r.id === entryId)
+      : entryRefs;
+    for (const entryRef of mirrorRefs) {
       // Mirror keeps updateEntryPayment's field conventions (method
       // overwritten-or-cleared, literal-null clears for date/note) so the
       // entry-backed panel displays exactly what it used to — with two
@@ -259,8 +434,25 @@ export const setPaidStatus = validated(
     // metadata-only edit of an already-PAID row is not a payment-state change,
     // and a MARKED_PAID row per note edit reads as money moving again in the
     // member-facing ledger.
-    const priorStatus = snap.data()?.paidStatus;
-    const isTransition = isPaid ? priorStatus !== 'PAID' : priorStatus === 'PAID';
+    //
+    // ⚠️ FOR A PER-ENTRY MARK THE TRANSITION IS THE ENTRY'S, NOT THE MEMBER'S.
+    // Paying entry 2 of 3 leaves the member UNPAID before and after, so the
+    // member-level test reports "no transition" and the payment would appear in
+    // NO ledger — money received with no record, which is the failure the
+    // ledger exists to prevent. Keyed on the map instead: presence changed.
+    // A row moved, or nothing happened. This replaces the member-level
+    // PAID/UNPAID comparison, which was wrong in BOTH directions once a partial
+    // map exists (codex r1/r2):
+    //
+    //   - paying entry 2 of 3 leaves the member UNPAID before and after, so the
+    //     member-level test saw no transition and $25 was received with NO
+    //     ledger row at all;
+    //   - a member-level mark over a partial map moves only the rows that were
+    //     still outstanding, but the member-level test reported the whole
+    //     `feeOwed` — $50 recorded for the $25 that was actually collected —
+    //     and a bulk un-mark from an already-UNPAID partial state recorded
+    //     nothing at all.
+    const isTransition = changedIds.length > 0;
     if (isTransition) {
       // Dispute-prevention detail, when the commissioner recorded it. The
       // shared ledger's reader contract is `note` (PaymentLedgerEvent /
@@ -277,11 +469,47 @@ export const setPaidStatus = validated(
       // crash class), so `amount: undefined` on a pool with no entryFee would
       // abort the WHOLE transaction — the paid mark included (codex r3 on P2,
       // which copied this shape and got caught).
+      // The AMOUNT is what THIS mark settles: one entry's fee for a per-entry
+      // mark, the member's whole `feeOwed` for a member-level one. Billing the
+      // member total against a single entry is the $50-for-one-entry defect
+      // this plan exists to fix, arriving in the ledger instead of the UI.
+      // The AMOUNT is what THIS call settled: the fee for the rows that moved.
+      //
+      // The one case that keeps the member's stored `feeOwed` is a member-level
+      // mark that moved EVERY liable row — today's behaviour, preserved exactly,
+      // because `feeOwed` is the authority on what a member owes and can differ
+      // from `entryFee x liable` on a legacy record whose stamp predates a fee
+      // change. Any partial movement is priced per row instead, which is the
+      // only way the ledger can add up to what was handed over.
+      const movedEverything = entryId === undefined && changedIds.length === liable.length;
+      const ledgerAmount = movedEverything
+        ? (memberFeeOwed ?? entryFee)
+        : (typeof entryFee === 'number' ? entryFee * changedIds.length : undefined);
       tx.set(ledgerRef, {
         type: isPaid ? 'MARKED_PAID' : 'MARKED_UNPAID',
         uid: memberUid,
+        // `entryName` stays the MEMBER's name — it is an existing reader
+        // contract shared with the rebuy and payout writers, and repurposing it
+        // per entry would silently change what every historical row means. It
+        // is also the safe choice: naming the ENTRY here would leak the same bit
+        // the box below refuses to write.
         ...(memberName !== undefined ? { entryName: memberName } : {}),
-        ...(typeof entryFee === 'number' ? { amount: entryFee } : {}),
+        // 🛑 THE ENTRY ID IS DELIBERATELY *NOT* WRITTEN HERE, AND AN EARLIER
+        // VERSION OF THIS PR DID WRITE IT.
+        //
+        // `pools/{id}/payments` is `allow read: if isPoolParticipant()`
+        // (firestore.rules) — every member of the pool reads this trail. A row
+        // saying `entryId: e2:alice` proves Alice's entry 2 has committed a
+        // pick, because only a LIABLE entry can be marked paid. That is the
+        // exact leak the 2026-08-26 amendment moved `paidEntries` off the
+        // Member Record to close, arriving through the other participant-
+        // readable door, and it would have shipped inside the fix for itself.
+        //
+        // Nothing is lost that this trail is for. Its stated job is to settle
+        // "I paid you" disputes, and amount + date + note + actor do that. The
+        // commissioner's per-entry attribution lives in the sealed dues
+        // document, which P2-T5 reads through a callable.
+        ...(typeof ledgerAmount === 'number' ? { amount: ledgerAmount } : {}),
         actorUid: uid,
         at: Date.now(),
         createdAt: FieldValue.serverTimestamp(),

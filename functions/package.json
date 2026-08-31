@@ -5,6 +5,7 @@
     "typecheck": "node scripts/copy-shared.mjs && tsc --noEmit -p tsconfig.test.json",
     "test": "node scripts/copy-shared.mjs && vitest run",
     "test:emulator": "node scripts/copy-shared.mjs && npx firebase emulators:exec --only firestore --project demo-mmp \"vitest run --config vitest.emulator.config.ts\"",
+    "test:rules": "npx firebase emulators:exec --only firestore --project demo-mmp \"node scripts/run-rules-tests.mjs\"",
     "serve": "npm run build && npx firebase emulators:start --only functions",
     "shell": "npm run build && npx firebase functions:shell",
     "start": "npm run shell",

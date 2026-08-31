@@ -39,7 +39,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         </p>
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
                             <button
-                                onClick={canCreate ? (user ? onCreatePool : onOpenAuth) : undefined}
+                                onClick={canCreate ? onCreatePool : undefined}
                                 disabled={!canCreate}
                                 className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                                 title={canCreate ? "Create Your Pool" : "Pool creation is coming soon"}
@@ -159,7 +159,10 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-brandred-600/20 rounded-2xl blur-xl group-hover:bg-brandred-600/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-live-grid.png"
+                                src="/feature-live-grid.webp"
+                                loading="lazy"
+                                width={1024}
+                                height={591}
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -196,7 +199,10 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500/20 rounded-2xl blur-xl group-hover:bg-gold-500/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-scoreboard.png"
+                                src="/feature-scoreboard.webp"
+                                loading="lazy"
+                                width={1024}
+                                height={517}
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -233,7 +239,10 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500/20 rounded-2xl blur-xl group-hover:bg-gold-500/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-scenarios.png"
+                                src="/feature-scenarios.webp"
+                                loading="lazy"
+                                width={1024}
+                                height={541}
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -270,7 +279,10 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500/20 rounded-2xl blur-xl group-hover:bg-gold-500/30 transition-colors duration-500"></div>
                             <img
-                                src="/feature-setup-wizard.png"
+                                src="/feature-setup-wizard.webp"
+                                loading="lazy"
+                                width={996}
+                                height={986}
                                 alt="Easy Pool Setup Wizard for commissioners with customization options"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
                             />
@@ -317,7 +329,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <p className="font-body text-muted text-lg mb-8 relative z-10">Create your pool in seconds. No spreadsheets, no stress.</p>
 
                         <button
-                            onClick={canCreate ? (user ? onCreatePool : onOpenAuth) : undefined}
+                            onClick={canCreate ? onCreatePool : undefined}
                             disabled={!canCreate}
                             className="bg-brandred-600 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px relative z-10 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                             title={canCreate ? "Create Your Pool Free" : "Pool creation is coming soon"}

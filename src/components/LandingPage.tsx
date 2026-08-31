@@ -7,6 +7,7 @@ import { Footer } from './Footer';
 import { Countdown } from './Countdown';
 import { canAccessPoolCreation, POOL_CREATION_ENABLED } from '../utils/auth';
 import { cn } from './ui/cn';
+import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../config/season';
 
 interface LandingPageProps {
   user?: User | null;
@@ -34,7 +35,7 @@ const heroCardCls = 'bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-
 const heroBtn =
   'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
 
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0, isLoggedIn }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   const navigate = useNavigate();
   const canCreate = canAccessPoolCreation(user);
 
@@ -65,7 +66,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-brandred-600/15 border border-brandred-600/35 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <span className="flex h-2 w-2 rounded-full bg-brandred-500 animate-live-pulse"></span>
-            <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-brandred-500">2026 NFL Season Pools Coming Soon</span>
+            {/* G1/D6 — the ONE launch-status line on the front door that was
+                unconditional. With creation open, "coming soon" sits directly
+                above an enabled "Create an NFL Pool" button and next to the
+                invite traffic it is meant to convert. `POOL_CREATION_ENABLED`,
+                not `canCreate`: this is a statement about the product, not
+                about the visitor (a super admin must not read a different
+                launch status from everyone else). */}
+            <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-brandred-500">
+              {POOL_CREATION_ENABLED ? '2026 NFL Season Pools Are Open' : '2026 NFL Season Pools Coming Soon'}
+            </span>
           </div>
 
           <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
@@ -131,9 +141,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <div className={cn(heroCardCls, 'rounded-3xl p-2 shadow-panel')}>
               <div className="rounded-xl overflow-hidden relative group bg-navy-950">
                 <img
-                  src="/nfl-pools-hero.png"
+                  src="/nfl-pools-hero.webp"
                   alt="March Melee Pools NFL Survivor and Weekly Pick'em Dashboard"
                   loading="lazy"
+                  width={1024}
+                  height={1024}
                   className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent opacity-60"></div>
@@ -142,7 +154,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             <div className="absolute -bottom-6 md:-bottom-10 left-1/2 transform -translate-x-1/2 bg-navy-900/90 backdrop-blur-md border border-[rgba(230,206,150,0.16)] rounded-full py-3 px-8 shadow-panel z-30 flex gap-8 whitespace-nowrap overflow-x-auto max-w-[90vw]">
               <div className="flex flex-col items-center">
                 <span className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#9FB0CC]">NFL Kickoff</span>
-                <span className="font-display font-bold text-gold-400 num">Sep 10</span>
+                <span className="font-display font-bold text-gold-400 num">{milestoneLabel(NFL_KICKOFF_MS)}</span>
               </div>
               <div className="w-px h-8 bg-[rgba(230,206,150,0.16)]"></div>
               <div className="flex flex-col items-center">
@@ -151,8 +163,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               </div>
               <div className="w-px h-8 bg-[rgba(230,206,150,0.16)]"></div>
               <div className="flex flex-col items-center">
-                <span className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#9FB0CC]">Super Bowl LX</span>
-                <span className="font-display font-bold text-white num">Feb 8</span>
+                <span className="font-display font-bold uppercase text-xs tracking-[0.08em] text-[#9FB0CC]">{SUPER_BOWL_TITLE}</span>
+                <span className="font-display font-bold text-white num">{milestoneLabel(SUPER_BOWL_MS)}</span>
               </div>
             </div>
           </div>
@@ -292,7 +304,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               <div className="pt-8">
                 <div className="font-display font-extrabold text-3xl text-[color:var(--text)] mb-4 num">$0 <span className="text-xs text-faint font-body font-medium normal-case">/ forever</span></div>
                 <button
-                  onClick={canCreate ? () => navigate('/create-pool') : undefined}
+                  onClick={canCreate ? onCreatePool : undefined}
                   disabled={!canCreate}
                   className="w-full border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-line dark:text-[color:var(--text)] dark:hover:bg-white/10 py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   title={canCreate ? 'Launch a free pool' : 'Pool creation is coming soon'}
@@ -441,7 +453,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 Uncompromising Survivor pool automation. Mulligans, strikes logging, bye week checks, and easy rebuy triggers.
               </p>
               <ul className="space-y-2 text-sm text-[color:var(--text)] font-body">
-                <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Used team lockouts</li>
+                <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Team-reuse limits (one-and-done by default)</li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Automatic strike logging</li>
                 <li className="flex items-center gap-2"><CheckCircle2 size={16} className="text-gold-600 dark:text-gold-400" /> Pre-deadline buybacks</li>
               </ul>
@@ -487,7 +499,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h2 className="font-display font-extrabold uppercase text-3xl md:text-5xl leading-[0.95] text-white mb-8">Ready to Kick Off the Season?</h2>
           <button
-            onClick={canCreate ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
+            onClick={canCreate ? onCreatePool : undefined}
             disabled={!canCreate}
             className="bg-brandred-600 text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl transition-all hover:-translate-y-px hover:bg-brandred-500 shadow-red-cta mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none cursor-pointer"
             title={canCreate ? "Create Your Free Pool Now" : "Pool creation is coming soon"}

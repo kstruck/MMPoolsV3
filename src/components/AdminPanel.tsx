@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
@@ -27,8 +28,19 @@ import Download from 'lucide-react/dist/esm/icons/download';
 import TrendingUp from 'lucide-react/dist/esm/icons/trending-up';
 import Hammer from 'lucide-react/dist/esm/icons/hammer';
 import Dices from 'lucide-react/dist/esm/icons/dices';
+import { HelpRoutePublisher } from '../help/publish';
+import { useUrlTab } from './help/useUrlTab';
 
-import { Badge, Button, StatTile } from './ui';
+/**
+ * The squares manager tabs, as one list. `useUrlTab` needs it to reject a stale
+ * `?tab=`, and `src/help/content/pool-pages.ts` names the same ids.
+ */
+const ADMIN_PANEL_TABS = [
+  'settings', 'reminders', 'players', 'scoring', 'game',
+  'payouts', 'communications', 'stats', 'props', 'grading',
+] as const;
+
+import { Badge, Button, StatTile, Switch } from './ui';
 
 
 
@@ -71,7 +83,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
   // Updated Tab Order and Default
-  const [activeTab, setActiveTab] = useState<'settings' | 'reminders' | 'players' | 'scoring' | 'game' | 'payouts' | 'communications' | 'stats' | 'props' | 'grading'>('settings');
+  // T2 / K13: the tab moved into `?tab=` so help search results can link to it
+  // and Back works. Same list the squares admin help pages name.
+  const [activeTab, setActiveTab] = useUrlTab('tab', ADMIN_PANEL_TABS, 'settings');
 
   const toast = useToast();
 
@@ -551,6 +565,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="min-h-screen bg-page text-[color:var(--text)] pb-20">
+      {/* T2: the squares manager's tab and its player sub-tab, for the Help panel. */}
+      <HelpRoutePublisher tab={activeTab} subTab={activeTab === 'players' ? playerTab : undefined} isManager />
       <div className="bg-surface border-b border-line sticky top-0 z-20 shadow-panel">
         <div className="max-w-5xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -970,10 +986,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <h3 className={`font-display font-bold uppercase tracking-[0.02em] text-lg ${gameState.manualScoreOverride ? 'text-gold-600 dark:text-gold-400' : 'text-[color:var(--text)]'}`}>Manual Score Override</h3>
                   <p className="text-sm font-body text-muted">Disable auto-updates and manually set scores in the database.</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" checked={!!gameState.manualScoreOverride} onChange={(e) => updateConfig({ manualScoreOverride: e.target.checked })} className="sr-only peer" />
-                  <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold-500"></div>
-                </label>
+                <Switch
+                  checked={!!gameState.manualScoreOverride}
+                  onChange={(manualScoreOverride) => updateConfig({ manualScoreOverride })}
+                  label="Manual score override"
+                  tone="gold"
+                />
               </div>
             </div>
 
@@ -989,7 +1007,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-card p-6 rounded-xl border border-line"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
               const isActive = !!gameState.scores[period];
               const label = period === 'q1' ? '1st Quarter' : period === 'half' ? 'Halftime' : period === 'q3' ? '3rd Quarter' : 'Final Score';
-              return (<div key={period} className={`p-5 rounded-xl border transition-all ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><label className="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked={isActive} onChange={() => togglePeriodActive(period)} className="sr-only peer" /><div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold-500"></div></label></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
+              return (<div key={period} className={`p-5 rounded-xl border transition-all ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><Switch checked={isActive} onChange={() => togglePeriodActive(period)} label={`Enable ${label} scoring`} tone="gold" /></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
             })}</div></div>
           </div>
         )}
@@ -1294,7 +1312,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* EDIT PLAYER MODAL */}
             {editingPlayer && (
-              <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <OverlayRoot id="squares-edit-player" label="Edit player details" onEscape={() => setEditingPlayer(null)} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                 <div className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-md w-full">
                   <h3 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Edit Player Details</h3>
                   <div className="space-y-4">
@@ -1331,7 +1349,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
+              </OverlayRoot>
             )}
 
           </div>
@@ -1356,7 +1374,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* RANDOMIZER OVERLAY */}
       {
         isRandomizing && (
-          <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center backdrop-blur-md cursor-wait">
+          <OverlayRoot id="squares-randomizer" dialog={false} className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center backdrop-blur-md cursor-wait">
             <h2 className="text-4xl md:text-6xl font-display font-extrabold uppercase leading-[0.9] text-white mb-8 animate-pulse text-center">PICKING A WINNER</h2>
             <div className="w-64 h-64 bg-navy-900 rounded-3xl border-4 border-gold-500 flex items-center justify-center shadow-[0_0_100px_rgba(201,168,103,0.5)]">
               <span className="text-8xl font-display font-bold text-white tabular-nums">
@@ -1364,7 +1382,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </div>
             <p className="text-gold-400 mt-8 font-display font-bold uppercase animate-bounce tracking-widest">GOOD LUCK...</p>
-          </div>
+          </OverlayRoot>
         )
       }
     </div >

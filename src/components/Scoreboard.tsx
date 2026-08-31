@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import type { User } from '../types';
+import { HelpRoutePublisher } from '../help/publish';
 
 interface Game {
     id: string;
@@ -56,7 +57,9 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
     onLogout,
     onCreatePool
 }) => {
-    const [activeTab, setActiveTab] = useState<'nfl' | 'college' | 'basketball'>('basketball');
+    // ponytail: fixed default, not season-aware. A date-driven default (NFL Aug-Feb,
+    // basketball Mar-Apr) is the better shape; add it when the off-season lands.
+    const [activeTab, setActiveTab] = useState<'nfl' | 'college' | 'basketball'>('nfl');
     const [games, setGames] = useState<Game[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -269,6 +272,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={awayTeam?.team.logo || '/placeholder-team.png'}
                                                 alt={awayTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-9 h-9 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -293,6 +297,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={homeTeam?.team.logo || '/placeholder-team.png'}
                                                 alt={homeTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-9 h-9 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -363,6 +368,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={awayTeam?.team.logo || getTeamLogo(awayTeam?.team.displayName || '') || '/placeholder-team.png'}
                                                 alt={awayTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-8 h-8 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -382,6 +388,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                                             <img
                                                 src={homeTeam?.team.logo || getTeamLogo(homeTeam?.team.displayName || '') || '/placeholder-team.png'}
                                                 alt={homeTeam?.team.abbreviation || 'TBD'}
+                                                loading="lazy"
                                                 className="w-8 h-8 object-contain"
                                                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-team.png'; }}
                                             />
@@ -405,6 +412,9 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
 
     return (
         <div className="min-h-screen bg-navy-950 text-[#EDF1F8] font-body">
+            {/* T2: the sport tab is in memory. Published so the Help panel can
+                tell the three scoreboards apart. The page copy is T3. */}
+            <HelpRoutePublisher tab={activeTab} />
             <Header
                 user={user}
                 isManager={false}

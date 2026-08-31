@@ -1,6 +1,7 @@
 import React from 'react';
 import { DollarSign, Heart, Trophy, Zap } from 'lucide-react';
 import type { Pool, GameState, CharityConfig, PayoutSettings } from '../types';
+import { potBreakdown, weeklyPlacesFor } from '@shared/prizePot';
 
 interface PayoutsPanelProps {
     pool: Pool;
@@ -15,6 +16,15 @@ interface PayoutsPanelProps {
 }
 
 const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
+
+/**
+ * One half of a declared HYBRID split, for the explanation copy. A MISSING half
+ * is named, never printed as `$0` (qodo #1, the rule the repo accepted on #456):
+ * a legacy pool that declared only one side would otherwise read as a real
+ * zero-dollar allocation, which is a money claim nobody made. A genuine numeric
+ * 0 still prints as `$0`.
+ */
+const perEntry = (n: number | undefined) => (typeof n === 'number' && Number.isFinite(n) ? `$${n}` : 'an amount your commissioner has not set');
 
 const ordinal = (n: number) => {
     const s = ['th', 'st', 'nd', 'rd'];
@@ -132,6 +142,7 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
 
     const dollarFor = (pct: number) =>
         netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+
 
     if (compact) {
         return (
@@ -280,6 +291,41 @@ const SquaresPayouts: React.FC<{ gameState: GameState; compact: boolean }> = ({ 
 // Entry-fee pools (bracket, NFL pick'em / survivor / margin, playoffs, props)
 // ---------------------------------------------------------------------------
 
+/**
+ * One paid-place list. Extracted so a HYBRID pool with its own weekly places
+ * (PLAN-PAYMENT-LEDGER T2 / D1) can print TWO of them — the weekly pot and the
+ * season pot no longer share a place list — without the single-list pools
+ * rendering anything different from what they render today.
+ */
+const PlaceList: React.FC<{
+    heading?: string;
+    places: { rank: number; percentage: number }[];
+    potNoun: string;
+    dollars: (pct: number) => string;
+    hiddenCount?: number;
+}> = ({ heading, places, potNoun, dollars, hiddenCount = 0 }) => (
+    <div className="space-y-2">
+        {heading && (
+            <p className="font-display font-bold uppercase text-[10px] tracking-[0.12em] text-muted">{heading}</p>
+        )}
+        <ul className="space-y-2.5 text-xs font-body text-[color:var(--text)]">
+            {places.map((p) => (
+                <li key={p.rank} className="flex justify-between border-b border-line pb-1.5">
+                    <span className="font-bold num">{ordinal(p.rank)} Place</span>
+                    <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
+                        {p.percentage}% of {potNoun}{dollars(p.percentage)}
+                    </span>
+                </li>
+            ))}
+            {hiddenCount > 0 && (
+                <li className="text-[11px] text-faint num">
+                    +{hiddenCount} more paid place{hiddenCount !== 1 ? 's' : ''} — see the pool's Rules tab.
+                </li>
+            )}
+        </ul>
+    </div>
+);
+
 const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: boolean }> = ({ pool, entryCount, compact }) => {
     const anyPool = pool as any;
     const settings = anyPool.settings || {};
@@ -295,20 +341,45 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
     const entryNoun = pool.type === 'BRACKET' ? 'bracket' : 'entry';
 
     // Pot math: only when we actually know the entry count. Never guess.
+    // ONE set of maths for this panel, the weekly prize list and the payment
+    // ledger — `shared/prizePot.ts` (PLAN-WEEKLY-PRIZES §3b, PLAN-PAYMENT-LEDGER
+    // R5). Whole dollars, floor, charity off BEFORE percentages; under HYBRID the
+    // weekly pot floors and the season pot absorbs the remainder (codex r4/r5 on
+    // #423). Amounts are approximations by design; the commissioner settles cents.
     const knownEntries: number | undefined =
         entryCount ?? (typeof anyPool.entryCount === 'number' ? anyPool.entryCount : undefined);
-    const grossPot = entryFee > 0 && knownEntries !== undefined && knownEntries > 0
-        ? entryFee * knownEntries
+    const split = payoutMode === 'HYBRID' ? (settings.hybridSplit as { weeklyPerEntry?: number; seasonPerEntry?: number } | undefined) : undefined;
+    const pots = potBreakdown(settings, knownEntries);
+    const grossPot = pots?.gross;
+    const netPot = pots?.net;
+    // Absent split = pre-existing hybrid pool keeps the honest "ask your
+    // commissioner" copy below.
+    const splitPots = pots && payoutMode === 'HYBRID' && pots.weeklySeasonAllocation !== undefined && pots.seasonPot !== undefined
+        ? { weekly: pots.weeklySeasonAllocation, season: pots.seasonPot }
         : undefined;
-    const charityCut = charity?.enabled && grossPot !== undefined
-        ? Math.floor(grossPot * (charity.percentage / 100))
-        : 0;
-    const netPot = grossPot !== undefined ? grossPot - charityCut : undefined;
 
-    const dollarFor = (pct: number) =>
-        netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+    // Under a declared HYBRID split the percentages apply to EACH pot, so one
+    // combined figure would overstate every place (a 50% place on a $250 pot is
+    // $90 weekly-total + $35 season, never $125). (codex P2 on the split PR.)
+    const dollarFor = (pct: number) => {
+        if (splitPots) {
+            return ` (${money(splitPots.weekly * (pct / 100))} weekly total / ${money(splitPots.season * (pct / 100))} season)`;
+        }
+        return netPot !== undefined && netPot > 0 ? ` (${money(netPot * (pct / 100))})` : '';
+    };
 
-    const hasAnyConfig = entryFee > 0 || places.length > 0 || bonuses.length > 0 || Boolean(modeCopy);
+    // PLAN-PAYMENT-LEDGER T2 / D1: a HYBRID pool may declare its OWN weekly place
+    // list. When it has, the two pots no longer share percentages, so one combined
+    // line cannot describe either — the panel prints a list per pot. Absent
+    // `weeklyPayouts`, everything below is byte-for-byte what shipped with #423.
+    const separateWeekly = payoutMode === 'HYBRID' && Array.isArray(settings.weeklyPayouts?.places);
+    const weeklyPlaces = separateWeekly
+        ? weeklyPlacesFor(settings).filter((p) => p.percentage > 0)
+        : [];
+    const potDollars = (pot: number | undefined, pct: number, suffix = '') =>
+        pot !== undefined && pot > 0 ? ` (${money(pot * (pct / 100))}${suffix})` : '';
+
+    const hasAnyConfig = entryFee > 0 || places.length > 0 || weeklyPlaces.length > 0 || bonuses.length > 0 || Boolean(modeCopy);
     if (!hasAnyConfig) {
         if (compact) return null;
         return (
@@ -323,6 +394,7 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
     }
 
     const topPlaces = compact ? places.slice(0, 3) : places;
+    const topWeeklyPlaces = compact ? weeklyPlaces.slice(0, 3) : weeklyPlaces;
 
     return (
         <div className="space-y-4 text-left">
@@ -347,27 +419,54 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
                         <span className="font-bold text-[color:var(--text)]">Payout Format</span>
                         <span className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-[color:var(--text)]">{modeCopy.label}</span>
                     </div>
-                    <p className="text-[11px] font-body text-muted leading-relaxed">{modeCopy.explanation}</p>
+                    <p className="text-[11px] font-body text-muted leading-relaxed">
+                        {split
+                            ? `The entry fee splits ${perEntry(split.weeklyPerEntry)} into the weekly prize pots and ${perEntry(split.seasonPerEntry)} into the season pot, per entry. ${separateWeekly ? 'Each pot has its own prize places, listed below.' : 'The place percentages below apply to both pots.'} Dollar figures are rounded to whole dollars — your commissioner settles exact amounts.`
+                            : modeCopy.explanation}
+                    </p>
+                    {splitPots && (
+                        <div className="mt-2 flex gap-4 text-[11px] font-body font-bold num">
+                            <span>Weekly pots: {money(splitPots.weekly)} total</span>
+                            <span>Season pot: {money(splitPots.season)} total</span>
+                        </div>
+                    )}
                 </div>
             )}
 
-            {topPlaces.length > 0 && (
-                <ul className="space-y-2.5 text-xs font-body text-[color:var(--text)]">
-                    {topPlaces.map((p) => (
-                        <li key={p.rank} className="flex justify-between border-b border-line pb-1.5">
-                            <span className="font-bold num">{ordinal(p.rank)} Place</span>
-                            <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
-                                {p.percentage}% of the pot{dollarFor(p.percentage)}
-                            </span>
-                        </li>
-                    ))}
-                    {compact && places.length > topPlaces.length && (
-                        <li className="text-[11px] text-faint num">
-                            +{places.length - topPlaces.length} more paid place{places.length - topPlaces.length !== 1 ? 's' : ''} — see the pool's Rules tab.
-                        </li>
+            {separateWeekly ? (
+                <div className="space-y-4">
+                    {topWeeklyPlaces.length > 0 && (
+                        <PlaceList
+                            heading="Weekly prizes"
+                            places={topWeeklyPlaces}
+                            potNoun="the weekly pot"
+                            dollars={(pct) => potDollars(splitPots?.weekly, pct, ' weekly total')}
+                            hiddenCount={weeklyPlaces.length - topWeeklyPlaces.length}
+                        />
                     )}
-                </ul>
-            )}
+                    {topPlaces.length > 0 && (
+                        <PlaceList
+                            heading="Season prizes"
+                            places={topPlaces}
+                            potNoun="the season pot"
+                            dollars={(pct) => potDollars(splitPots?.season, pct)}
+                            hiddenCount={places.length - topPlaces.length}
+                        />
+                    )}
+                    {topWeeklyPlaces.length === 0 && (
+                        <p className="text-[11px] font-body text-muted leading-relaxed">
+                            This pool has no weekly prize places — the whole weekly pot is unassigned. Ask your commissioner.
+                        </p>
+                    )}
+                </div>
+            ) : topPlaces.length > 0 ? (
+                <PlaceList
+                    places={topPlaces}
+                    potNoun="the pot"
+                    dollars={dollarFor}
+                    hiddenCount={places.length - topPlaces.length}
+                />
+            ) : null}
 
             {!compact && bonuses.length > 0 && (
                 <ul className="space-y-2.5 text-xs font-body text-[color:var(--text)]">
@@ -376,15 +475,22 @@ const EntryFeePayouts: React.FC<{ pool: Pool; entryCount?: number; compact: bool
                             <span className="font-bold flex items-center gap-1.5">
                                 <Trophy size={12} className="text-gold-600 dark:text-gold-400" /> {b.name || 'Bonus'}
                             </span>
+                            {/* Bonuses live on `payouts`, which under a separate weekly
+                                list is the SEASON list — pricing them off both pots
+                                would double-count a bonus no weekly pot pays. */}
                             <span className="font-display font-bold text-gold-700 dark:text-gold-400 num">
-                                {b.percentage}% of the pot{dollarFor(b.percentage)}
+                                {b.percentage}% of {separateWeekly ? 'the season pot' : 'the pot'}
+                                {separateWeekly ? potDollars(splitPots?.season, b.percentage) : dollarFor(b.percentage)}
                             </span>
                         </li>
                     ))}
                 </ul>
             )}
 
-            {grossPot === undefined && entryFee > 0 && (places.length > 0 || bonuses.length > 0) && (
+            {/* `weeklyPlaces` counts too (codex r4): a HYBRID pool whose only
+                paid places are weekly would otherwise print percentages with no
+                word about why there are no dollars beside them. */}
+            {grossPot === undefined && entryFee > 0 && (places.length > 0 || weeklyPlaces.length > 0 || bonuses.length > 0) && (
                 <p className="text-[11px] font-body text-faint leading-relaxed">
                     Dollar amounts depend on how many entries join — percentages above are guaranteed by the pool's rules.
                 </p>

@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState, useMemo } from 'react';
 import { BillingGate } from '../billing';
 import type { PlayoffPool, User } from '../../types';
@@ -11,6 +12,11 @@ import { AnnouncementManager } from '../AnnouncementManager'; // [NEW]
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
 import { Badge, Button, RankChip, Tag, YouPill } from '../ui';
+import { HelpRoutePublisher } from '../../help/publish';
+import { useUrlTab } from '../help/useUrlTab';
+
+/** The tab ids, as one list — shared with `src/help/content/pool-pages.ts`. */
+const PLAYOFF_TABS = ['picks', 'leaderboard', 'rules', 'ai', 'commissioner'] as const;
 
 interface PlayoffDashboardProps {
     pool: PlayoffPool;
@@ -20,7 +26,6 @@ interface PlayoffDashboardProps {
 
 export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, onBack }) => {
     const toast = useToast();
-    const [activeTab, setActiveTab] = useState<'picks' | 'leaderboard' | 'rules' | 'commissioner' | 'ai'>('picks'); // [MODIFIED] Added 'commissioner'
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isAddingNew, setIsAddingNew] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<PlayoffEntry | null>(null);
@@ -31,6 +36,22 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
 
     const isManager = isPoolManager(user, pool);
     const canViewPicks = pool.isLocked || (pool.results && Object.values(pool.results).some(r => r && r.length > 0)) || isManager;
+
+    // T2 / K13: the tab moved into `?tab=` so help search results can link to it
+    // and Back works.
+    //
+    // ⚠️ THE VALID SET IS THE OFFERED SET, NOT THE STATIC LIST (codex R4, P1).
+    // The AI tab's button is hidden until the pool unlocks `aiCommissioner`, and
+    // the Commissioner tab's until the reader is a manager — but neither render
+    // branch re-checks, because the tab used to live in memory and a hidden
+    // button was the whole gate. Validating a URL against the full list would
+    // have made `/pool/<id>?tab=ai` render `AICommissioner` in a pool that has
+    // not unlocked it. Declared after `isManager` because it reads it.
+    const aiUnlocked = !!(pool as any).billing?.featuresUnlocked?.aiCommissioner;
+    const offeredTabs = PLAYOFF_TABS.filter((t) =>
+        (t !== 'ai' || aiUnlocked) && (t !== 'commissioner' || isManager)
+    );
+    const [activeTab, setActiveTab] = useUrlTab('tab', offeredTabs, 'picks');
 
     // --- My Entries Logic ---
     const myEntries = useMemo(() => {
@@ -78,6 +99,9 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body pb-20 duration-300" style={{ backgroundColor: pool.branding?.bgColor || undefined }}>
+            {/* T2: the same offered list that gates the URL, so Help lists only
+                what this pool actually renders. One source, two readers. */}
+            <HelpRoutePublisher tab={activeTab} isManager={isManager} offeredTabs={offeredTabs} />
             {/* Main Content */}
             <div className="max-w-6xl mx-auto p-4 md:p-6">
                 {/* Pool Header */}
@@ -553,7 +577,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
             </div>
             {/* View Picks Modal */}
             {viewingEntry && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                <OverlayRoot id="playoff-view-entry" label="Player picks" onEscape={() => setViewingEntry(null)} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
                     <div className="bg-card rounded-xl border border-line shadow-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
                         <div className="p-6 border-b border-line flex justify-between items-center sticky top-0 bg-card z-10">
                             <div>
@@ -612,7 +636,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                             </Button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div >
         </BillingGate>

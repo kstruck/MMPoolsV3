@@ -28,12 +28,13 @@ const OWNER = 'owner1';
 const WINNER = 'winner1';
 const MEMBER = 'member1';
 const OUTSIDER = 'outsider1';
+const COCOMM = 'cocomm1';   // named NFL co-commissioner, NOT a participant (PLAN-PAYMENT-LEDGER T5)
 
 await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
     await setDoc(doc(db, 'pools', 'p1'), {
         type: 'NFL_PICKEM', status: 'COMPLETED',
-        ownerId: OWNER, participantIds: [OWNER, WINNER, MEMBER],
+        ownerId: OWNER, participantIds: [OWNER, WINNER, MEMBER], coManagers: [COCOMM],
     });
     await setDoc(doc(db, 'pools', 'p1', 'payoutRecords', 'a1'), {
         uid: WINNER, amount: 100, kind: 'PLACE', place: 1, recordedAt: 1, schemaVersion: 1,
@@ -47,6 +48,7 @@ const owner = env.authenticatedContext(OWNER).firestore();
 const winner = env.authenticatedContext(WINNER).firestore();
 const member = env.authenticatedContext(MEMBER).firestore();
 const outsider = env.authenticatedContext(OUTSIDER).firestore();
+const cocomm = env.authenticatedContext(COCOMM).firestore();
 const guest = env.unauthenticatedContext().firestore();
 
 // Public award doc: participants read, outsiders/guests do not.
@@ -55,6 +57,9 @@ await assertSucceeds(getDoc(doc(winner, 'pools', 'p1', 'payoutRecords', 'a1')));
 await assertSucceeds(getDoc(doc(owner, 'pools', 'p1', 'payoutRecords', 'a1')));
 await assertFails(getDoc(doc(outsider, 'pools', 'p1', 'payoutRecords', 'a1')));
 await assertFails(getDoc(doc(guest, 'pools', 'p1', 'payoutRecords', 'a1')));
+// A named NFL co-commissioner runs the ledger: reads BOTH surfaces (PLAN-PAYMENT-LEDGER T5, codex r6).
+await assertSucceeds(getDoc(doc(cocomm, 'pools', 'p1', 'payoutRecords', 'a1')));
+await assertSucceeds(getDoc(doc(cocomm, 'pools', 'p1', 'payoutRecordsPrivate', 'a1')));
 
 // Private settlement doc: owner + recipient only — NOT other participants.
 await assertSucceeds(getDoc(doc(owner, 'pools', 'p1', 'payoutRecordsPrivate', 'a1')));

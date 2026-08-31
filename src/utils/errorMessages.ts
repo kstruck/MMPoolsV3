@@ -47,6 +47,22 @@ const DOMAIN_PREFIX_MESSAGES: Record<string, string> = {
     // so the copy must not name one of them. It said "payment status" while the
     // rebuy control routes through it too.
     MEMBER_NOT_ON_ROSTER: "That member is no longer on this pool's roster, so their payment details cannot be changed. Refresh the roster to see the current members.",
+    // PLAN-MULTI-ENTRY T5. Entry names are unique PER OWNER and the rule lives
+    // in the submit transaction (`assertEntryNameFree`) — the only place that
+    // can be right about it. Without these four prefixes every one of them fell
+    // through to "Your picks were NOT saved. Please try again.", which reads as
+    // a transient failure and invites the exact retry the server just refused.
+    ENTRY_NAME_TAKEN: 'You already have an entry with that name. Give this one a different name and save again.',
+    ENTRY_NAME_EMPTY: "An entry name can't be blank. Type a name for this entry and save again.",
+    MAX_ENTRIES_REACHED: "You already hold every entry this pool allows you. Ask the commissioner to raise the limit if you want another.",
+    ENTRY_INDEX_EXCEEDS_MAX: "This pool doesn't allow that many entries per player. Ask the commissioner to raise the limit.",
+    // `renameNFLEntry`. A rename NEVER creates an entry, so a request for one
+    // that does not exist is refused rather than quietly satisfied — which a
+    // client whose entry list is a few seconds stale can produce. Without this
+    // prefix it renders as the generic not-found copy, which reads as "the pool
+    // is gone" about a pool the member is looking at.
+    ENTRY_NOT_FOUND: "That entry doesn't exist yet — an entry is created by its first saved pick. Refresh the page and try again.",
+    NOT_AN_NFL_POOL: 'Entries can only be renamed in NFL pools.',
 };
 
 const AUTH_MESSAGES: Record<string, string> = {

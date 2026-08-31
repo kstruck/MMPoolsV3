@@ -333,7 +333,7 @@ state. Concretely:
 
 ---
 
-## 2. Live state (deploy state verified 2026-08-03)
+## 2. Live state (deploy state verified 2026-08-26 — functions at `6d92dc61`, rules unchanged since #579, frontend carries #597 + #598)
 
 > ⚠️ **HISTORICAL — this block records the 2026-07-28 state.** Its bundle hash is
 > long superseded; for the CURRENT live bundle see the tagged claim below, which
@@ -361,14 +361,87 @@ state. Concretely:
 > is — a green suite is not agreement about the queue. The limit is stated in the
 > test file itself.
 
-**Functions are deployed from <!-- deploy-state:current --> `main` @ `1105392`.**
-Rules remain ≡ `0a705c0` — `firestore.rules` is byte-identical since, so no rules
-deploy is owed. Indexes untouched.
-⚠️ **A Coolify rebuild is OWED** for #358/#359/#348's `src/**` changes and
-#360's root lockfile — the live bundle is still `index-H9HjG31q.js` (the
-2026-08-03 build) until Kevin triggers it. Queues: functions EMPTY (certified),
-rules EMPTY, indexes EMPTY, **Coolify OWED**.
-(Deployed 2026-08-04 for **#360 + #362 + #348 + #363**. The certification is
+**Functions are deployed from <!-- deploy-state:current --> `main` @ `6d92dc61`.**
+⚠️ Updated 2026-08-26 evening — Kevin deployed after #602 (per-entry dues T2)
+merged (was <!-- deploy-state:ignore --> `main` @ `e6882d21`, this file's
+earlier same-day claim).
+
+🛑 **THIS DEPLOY ADDED NO NEW CALLABLE, SO VERIFY-BY-NAME PROVES NOTHING HERE.**
+#601/#602 changed `setPaidStatus`, `lib/multiEntry.ts` and `shared/`, and added
+`lib/poolDues.ts` — a lib, not an export. `functions/src/index.ts` gained no
+line, so `functions:list | Select-String` returns the same rows before and after.
+
+✅ **What settled it instead:** `npx firebase functions:list --json` exposes
+`source.storageSource.generation`, a microsecond timestamp of each function's
+source upload. `setPaidStatus` uploaded 13:52:01Z against a 13:42:45Z merge, and
+**189 of 190 functions re-uploaded after it**. HANDOFF's top box carries the
+table and explains the four expected exceptions.
+
+⚠️ **That proves a deploy RAN, not WHICH COMMIT it carried** — a stale checkout
+produces identical timestamps. The tag rests on those timestamps plus Kevin
+having pulled first. To close the gap, a second no-op deploy reporting every
+function `Skipped (No changes detected)` is the certification; the `hash` label
+firebase compares is what makes that work.
+
+🛑 **RULES ARE NOT AT THE SAME COMMIT.** `firestore.rules` has not changed
+since #579, and Kevin has run that rules deploy — so nothing is owed there
+either. "Functions are at X" is not "everything is at X".
+*(Do not let `#579` fall to the start of a line when reflowing this: a
+line-initial `#` parses as an H1, and `tests/docs-state-invariants.test.ts`
+then reads the wrapped prose as a dated state heading and fails. It caught
+exactly that here.)*
+`HANDOFF.md`'s top box is the fuller statement, including the frontend
+chunk-crawl evidence and the two crawl traps that produced false ABSENTs.
+⚠️ **THE PARAGRAPH BELOW IS THE 2026-08-13 RECORD. ITS BUNDLE HASH AND ITS SHAs
+ARE HISTORY**; it is kept because the chunk-graph evidence is still the best
+statement of how the frontend was verified. (codex, on the docs PR.)
+
+✅ **THE QUEUE IS EMPTY AS OF 2026-08-26.** The three items this note used to
+list as owed are all closed: the Coolify rebuild ran (twice — 2026-08-25 and
+again ~03:20Z on 2026-08-26), #579's rules deploy was run by Kevin on
+2026-08-25, and the pool-password sweep closed the same day at 23 pools scanned
+/ 0 changed. Read the live queue in HANDOFF's top box, not here.
+
+> *(2026-08-13, HISTORY)* **Rules are deployed from that same commit. The
+> FRONTEND has moved on: it is rebuilt from `d6bae3f4` (#417, 2026-08-13),
+> bundle `index-BB2oOzrg.js`** — verified by the 106-asset chunk-graph crawl in
+> HANDOFF's 2026-08-13 box, not by the hash alone. The split was deliberate and
+> owed nothing AT THAT DATE: #416/#418/#417 touched no `functions/`, `shared/`,
+> `firestore.rules` or `firestore.indexes.json` (measured — that diff is empty
+> across all three merges), so functions and rules correctly remained at
+> <!-- deploy-state:ignore --> `main` @ `c37bbd37` while the frontend carried the
+> newer commit.
+⚠️ **An all-`Skipped` certification pass was NOT run for the 2026-08-12 deploy**,
+so byte-identity to `c37bbd37` is not claimed anywhere. What IS proven is that
+`functions:list` returns `getPoolPicks`, the callable #414 adds and which was
+absent before. Any sentence below asserting an all-`Skipped` certification refers
+to an EARLIER deploy, not this one.
+⚠️ **`firestore.rules` is NO LONGER ≡ `0a705c0`.** #399 is the first rules change
+since that commit, so every earlier box below claiming the equivalence is
+historical from 2026-08-09 onward. Indexes untouched — `firestore.indexes.json`
+is unchanged by #399.
+✅ **ALL FOUR QUEUES ARE EMPTY:** functions EMPTY (certified by an all-`Skipped`
+run), rules EMPTY, indexes EMPTY, Coolify EMPTY.
+(Deployed 2026-08-09 for **#399**, the survivor tie-outcome and team-reuse
+settings. Ordered deploy — **functions BEFORE rules**, because the new rules deny
+routes survivor-settings edits through the `updatePoolSettings` callable, so
+rules-first would have locked out the path the callable needs. Then Coolify.
+⚠️ The first functions run ended `Error: There was an error deploying functions`
+naming `simUpdatePool` after an `HTTP 429` quota error; the follow-up run reported
+that function `Skipped (No changes detected)`, so the update HAD landed and the
+CLI had merely lost its operation poll. **Re-run before concluding anything from
+a 429.** On Windows set `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` first.
+Record: HANDOFF's 2026-08-09 DEPLOY STATE box and
+`MORNING-2026-08-09-SURVIVOR-PARITY.md`.)
+
+(HISTORICAL — the deploy before it, 2026-08-08 for **#392 + #384**, the importer
+hardening and the `TEAM_ALREADY_USED` resubmit guard / week-label change. Full
+fleet, then a second run reporting every function `Skipped (No changes detected)`.
+The live bundle then was `index-W6uLtMV7.js`. Record: HANDOFF's 2026-08-08 STOP
+POINT box.)
+
+(HISTORICAL — the deploy before it, 2026-08-04 for **#360 + #362 + #348 + #363**
+from <!-- deploy-state:ignore --> `main` @ `1105392`. The certification is
 the THIRD run: 175 all `Skipped (No changes detected)`, 0 updates,
 `✔ Deploy complete!` — fleet grew 173 → 175 with `onSystemConfigWritten` and
 `getProdWatchdog`. Run 1 ended after 144 updates with no completion line; run

@@ -1,25 +1,42 @@
 ---
 name: mmp-qodo-cycle
 description: >
-  LIVE again as of 2026-07-30 — Kevin's qodo subscription is active and he
-  asked for the check on every PR (CLAUDE.md §2b). **Load this the moment you
-  OPEN a PR or mark one ready for review — not when a report arrives.** The
-  watcher that detects the report lives in here, so waiting for a report
-  before loading the skill is circular and the check never runs. Covers
-  arming the watcher, pulling ALL three comment surfaces (any one can be
-  empty, so a report is not absent until all three are), making a validity
-  call on every finding BEFORE fixing, rerunning the full gate set, and
-  reporting a per-finding verdict table. Runs ALONGSIDE codex (CLAUDE.md
-  §2c), not instead of it.
+  DORMANT as of 2026-08-19 — Kevin: "Turn off the Qodo reviews for now."
+  **DO NOT LOAD THIS ON A PR.** The workspace ran out of credits and qodo now
+  answers every PR with a billing notice, which is a FAILED check rather than
+  a clean one; CLAUDE.md §2b says DORMANT and §2c's stopping rule is a clean
+  codex round plus your own read of the diff, TWO conditions rather than
+  three. Do not arm the watcher and never hold a PR for a qodo report. This
+  is the second pause (the first was 2026-07-25 to 2026-07-30) and the whole
+  procedure is kept intact inside for the day it is restored — arming the
+  watcher, pulling all three comment surfaces, making a validity call on
+  every finding BEFORE fixing, and reporting a per-finding verdict table.
+  Load it ONLY when Kevin says qodo is back on.
 ---
 
 # mmp-qodo-cycle — absorb a qodo.ai PR review autonomously
 
-> ✅ **LIVE as of 2026-07-30.** Kevin's subscription is active again and he asked
-> for the check on every PR. This skill was DORMANT from 2026-07-25 while the
-> trial was lapsed; that pause is over and everything below applies. It runs
-> ALONGSIDE codex, not instead of it — see CLAUDE.md §2b for the joint stopping
-> rule.
+> 🛑 **DORMANT as of 2026-08-19. DO NOT LOAD THIS ON A PR.** Kevin: "Turn off
+> the Qodo reviews for now." The workspace ran out of credits overnight on
+> 2026-08-18 and qodo now answers every PR with a billing notice, which is a
+> FAILED check rather than a clean one — it blocked three finished PRs before
+> the ruling. **Do not arm the watcher and do not wait for a report**;
+> `CLAUDE.md` §2c's stopping rule is codex-clean plus your own read of the diff,
+> two conditions rather than three.
+>
+> This is the second pause, not a deletion: the skill was DORMANT 2026-07-25 →
+> 2026-07-30 for the same reason and came back unchanged. Everything below is
+> the live procedure for the day it is restored. If qodo posts a REAL review
+> anyway, read it — its defect findings were 5 for 5 valid across #480–#482 —
+> but never hold a PR for one.
+>
+> ⚠️ **One defect to fix before the restore.** qodo's billing notice carries no
+> `<h3>` heading, and §1's `summary()` matches `NOISE` against the heading — so
+> an empty heading passes the filter and the notice is counted as a genuine
+> artifact. Measured on #483: the watcher reported `QODO PARTIAL` where it
+> should have reported `TIMEOUT`. PARTIAL is not a pass, so nothing was
+> mis-gated, but the filter should also reject a body containing
+> `<!-- qodo:billing-blocked -->`.
 
 Repo: `D:\march-melee-pools`. qodo.ai reviews PRs on this GitHub repo
 (kstruck/MMPoolsV3). Standing authorization from Kevin (2026-07-11, and the
@@ -164,6 +181,15 @@ reviewbody() { _count $R/pulls/<N>/reviews \
 # eat its own report.
 summary() { _count $R/issues/<N>/comments \
     -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .id"; }
+# THE REVIEW ITSELF. qodo posts TWO substantive issue comments, in this order and
+# far apart: `<h3>PR Summary by Qodo</h3>` first, `<h3>Code Review by Qodo</h3>`
+# later — and the inline findings land in the SAME SECOND as the Code Review
+# comment, never with the summary. MEASURED ON #432, 2026-08-14: summary 19:12:57Z,
+# Code Review 19:29:28Z, first inline finding 19:29:30Z. SIXTEEN AND A HALF
+# MINUTES. So the summary is a precursor, not a review, and phase 2 must not
+# conclude until this comment (or a review-surface report) exists.
+codereview() { _count $R/issues/<N>/comments \
+    -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"Code Review by Qodo\"; \"i\")) | .id"; }
 
 # PHASE 1 — detect any qodo artifact. Deliberately 4 min, NOT 9: the settle phase
 # below needs its 180s floor plus quiet polls, and the background tool is capped
@@ -190,6 +216,12 @@ done
 # wrong: quiet is what the gap between the two posts LOOKS like.
 # The floor now exceeds that observed gap. Raise it again if a longer one is ever
 # measured; do not lower it because a run felt slow.
+# ⚠️ AND THEN #432 (2026-08-14) MEASURED A 16.5-MINUTE GAP, which no floor
+# anchored on the summary survives. So the ANCHOR moved (FIRST, below): the floor
+# is now measured from the `Code Review by Qodo` comment, not from the summary,
+# and phase 2 refuses to conclude before that comment exists. The 480s value is
+# kept as quiet-since-the-review; it is not the thing that saved #432 — the anchor
+# and the third exit condition are.
 FLOOR=480          # seconds; never conclude "0 findings" faster than this
 STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 
@@ -213,14 +245,24 @@ STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 #     a valid result per phase 1 — leaves FIRST empty, every arming falls back to
 #     a fresh process clock, and the watcher returns PARTIAL forever.
 #
-# Earliest across the three, so the floor starts at qodo's first sign of life.
-#   * WITHOUT the NOISE predicate on the issues leg, the "Qodo is busy working"
-#     PLACEHOLDER becomes FIRST. summary() already excludes it precisely because
-#     it is not a report — but as a floor anchor it is worse than useless: if the
-#     placeholder precedes the real summary by more than the floor, elapsed() is
-#     already past 480s when the substantive review begins, and two quiet minutes
-#     end the settle before the inline findings land. Same heading match,
-#     same reason.
+# ⚠️ ANCHORED ON THE `Code Review by Qodo` COMMENT, NOT ON THE FIRST ARTIFACT.
+# (Changed 2026-08-15 after #432.) The previous anchor was "earliest across all
+# three surfaces", which on every PR is the `PR Summary by Qodo` comment. On #432
+# that summary landed 16.5 minutes before the Code Review comment and its inline
+# findings (measured above at codereview()). FLOOR=480 elapsed with the inline
+# count sitting at a stable zero, and the watcher printed
+# `QODO REPORTED — 0 inline finding(s)` TWICE while seven findings were still in
+# flight. Both settle conditions held and both were wrong — the same failure
+# #348 taught, one artifact further down the chain. Anchoring on the review
+# comment makes the floor measure quiet-since-the-REVIEW, which is the only
+# clock that means anything, and phase 2 below additionally refuses to conclude
+# before that comment exists at all.
+#   * The `PR Summary` comment and the `pulls/<N>/comments` leg are DELIBERATELY
+#     absent from this anchor. The summary is a precursor; the inline comments
+#     arrive with the review and never before it, so they add nothing.
+#   * The reviews leg stays: a report that arrives ONLY as a review body is a
+#     valid result per phase 1, and without it FIRST would be empty on that path
+#     and the watcher would return PARTIAL forever.
 #   * ON `updated_at`, NOT `created_at`, FOR COMMENTS. qodo edits its review
 #     comment IN PLACE on the toggle re-review path (§ re-arm, measured on #346),
 #     so created_at does not move. A created_at anchor is empty on exactly that
@@ -230,9 +272,7 @@ STABLE_NEEDED=4    # consecutive unchanged polls at 30s = 2 min of quiet
 #     is correct on BOTH paths (they are equal on a fresh comment), so there is one
 #     expression to keep in sync rather than a first-review and a re-review variant.
 FIRST=$( { gh api --paginate $R/issues/<N>/comments \
-      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | (.updated_at // .created_at)";
-    gh api --paginate $R/pulls/<N>/comments \
-      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | (.updated_at // .created_at)";
+      -q ".[] | select(.user.login == \"$QB\") | select((.updated_at // .created_at) > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"Code Review by Qodo\"; \"i\")) | (.updated_at // .created_at)";
     gh api --paginate $R/pulls/<N>/reviews \
       -q ".[] | select(.user.login == \"$QB\") | select(.body != \"\") | select(.submitted_at > \"$SINCE\") | .submitted_at";
   } | sort | head -1)
@@ -253,16 +293,22 @@ PREV=-1; STABLE=0
 # worst case past the ~10-min background-tool cap, so the tool was killed before
 # it could print the PARTIAL line below and the branch was unreachable. Multiple
 # armings are how the 8-minute floor is reached; that is what `elapsed()` is for.
+# THIRD CONDITION (2026-08-15, #432): the review itself must exist. Until the
+# `Code Review by Qodo` comment (or a review-surface report) is present, a stable
+# inline count of zero is the gap between summary and review, not a verdict.
+# Without this line a fresh arming that starts before the review lands would fall
+# back to the process clock, and — with the summary already posted — could still
+# reach the floor and settle at zero. Belt to the anchor's braces.
 for i in $(seq 1 10); do
-  NOW=$(inline); guard "$NOW" "" ""
+  NOW=$(inline); CR=$(codereview); RB=$(reviewbody); guard "$NOW" "$CR" "$RB"
   if [ "$NOW" = "$PREV" ]; then STABLE=$((STABLE+1)); else STABLE=0; fi
   PREV=$NOW
-  if [ "$STABLE" -ge "$STABLE_NEEDED" ] && [ "$(elapsed)" -ge "$FLOOR" ]; then
+  if [ "$STABLE" -ge "$STABLE_NEEDED" ] && [ "$(elapsed)" -ge "$FLOOR" ] && [ $((CR + RB)) -gt 0 ]; then
     echo "QODO REPORTED — $NOW inline finding(s)"; exit 0
   fi
   sleep 30
 done
-echo "QODO PARTIAL — count still moving after the settle window; DO NOT run the joint gate on this set. Re-arm and settle again before absorbing."
+echo "QODO PARTIAL — count still moving, or the Code Review comment has not landed yet; DO NOT run the joint gate on this set. Re-arm and settle again before absorbing."
 ```
 
 ⚠️ **`QODO PARTIAL` IS NOT A PASS.** The watcher has exactly two success

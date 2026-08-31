@@ -1,7 +1,7 @@
 {
     "id": "nfl-survivor-autosurvive",
     "name": "Survivor Auto-Survive Exemption ON (edge)",
-    "description": "Alice has already used every team playing this week (usedTeams pre-seeded) — with autoSurviveExemptionEnabled she is EXEMPT: no pick, no strike, exemptWeeks records it. Expectations hand-verified.",
+    "description": "Alice picked KC (w1) and BUF (w2) — the only teams playing week 3 — so by week 3 she has genuinely used the whole slate and is EXEMPT: no pick, no strike, exemptWeeks records it. Her seeded usedTeams is deliberately divergent (lists SF/DAL she never picked) to prove the ledger is no longer the eligibility authority. Expectations hand-verified.",
     "poolType": "NFL_SURVIVOR",
     "poolConfig": {
         "name": "Sim Survivor AutoSurvive",
@@ -19,17 +19,20 @@
     },
     "nflGames": [
         { "week": 1, "home": "KC", "away": "BUF", "homeScore": 27, "awayScore": 24 },
-        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 }
+        { "week": 1, "home": "SF", "away": "DAL", "homeScore": 30, "awayScore": 10 },
+        { "week": 2, "home": "BUF", "away": "MIA", "homeScore": 21, "awayScore": 14 },
+        { "week": 2, "home": "DAL", "away": "NYJ", "homeScore": 28, "awayScore": 7 },
+        { "week": 3, "home": "KC", "away": "BUF", "homeScore": 20, "awayScore": 17 }
     ],
-    "scoreWeeks": [1],
+    "scoreWeeks": [1, 2, 3],
     "testEntries": [
-        { "userName": "Alice", "survivorPicks": {}, "usedTeams": ["KC", "BUF", "SF", "DAL"] },
-        { "userName": "Bob", "survivorPicks": { "1": "SF" }, "usedTeams": ["KC"] }
+        { "userName": "Alice", "survivorPicks": { "1": "KC", "2": "BUF" }, "usedTeams": ["KC", "BUF", "SF", "DAL"] },
+        { "userName": "Bob", "survivorPicks": { "1": "SF", "2": "DAL", "3": "KC" }, "usedTeams": ["KC"] }
     ],
     "assertions": [
-        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice exempt — every team this week already used" },
-        { "type": "survivorStrikes", "userName": "Alice", "expected": 0, "message": "Alice strikes = 0 (no auto-strike despite no pick)" },
-        { "type": "standingsRow", "userName": "Alice", "expected": { "status": "ALIVE", "exemptWeeks": [1] }, "message": "Week 1 recorded as an exemption" },
-        { "type": "survivorStatus", "userName": "Bob", "expected": "ALIVE", "message": "Bob (SF won) survives normally" }
+        { "type": "survivorStatus", "userName": "Alice", "expected": "ALIVE", "message": "Alice exempt week 3 — every team on that slate used in a PRIOR week" },
+        { "type": "survivorStrikes", "userName": "Alice", "expected": 0, "message": "Alice strikes = 0 (no auto-strike despite no week-3 pick)" },
+        { "type": "standingsRow", "userName": "Alice", "expected": { "status": "ALIVE", "exemptWeeks": [3] }, "message": "Week 3 recorded as an exemption" },
+        { "type": "survivorStatus", "userName": "Bob", "expected": "ALIVE", "message": "Bob (SF, DAL, KC all won) survives every scored week normally" }
     ]
 }

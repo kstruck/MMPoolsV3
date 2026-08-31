@@ -5,10 +5,14 @@ import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
-import { loadBillingConfig } from "./billing";
+import { loadBillingConfig, resolveCouponForQuote } from "./billing";
+import { validLaunchCouponCode } from "./lib/launchCoupon";
+import { normalizeAddonSelection } from "./lib/launchFields";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
+import { nflWeekLabel } from "./shared/nflWeekLabel";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
+import { assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
 import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
 import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
@@ -18,6 +22,7 @@ import {
   billingForLaunch,
   writePoolCreationSideEffects,
 } from "./lib/poolCreation";
+import { normalizeCreatePayoutLists } from './lib/weeklyPayoutsGate';
 import {
   NFLGame,
   NFLPickemPool,
@@ -40,8 +45,12 @@ import {
   gradeMarginWeekGame,
   buildStandingsRows,
   poolUsesSpreads,
-  isVoidWeek
+  isVoidWeek,
+  computeWeeklyWinners,
+  type WeeklyWinnerCandidate
 } from './nflScoringEngine';
+import { applyFrozenTarget, effectiveWeeklyTiebreaker, frozenTiebreakTargetFor, resolveTiebreakTargetIds, sameTargetIds, tiebreakerAsksForPrediction } from './shared/nflTiebreaker';
+import { computeWeeklyPrizeSnapshot, priceWeeklyPlaces, rankWeeklyPlaces, type WeeklyPrizeSnapshot } from './shared/weeklyPrizes';
 import { maybeFinalizeNFLPool } from './nflFinalize';
 import {
   acquireScoringLease,
@@ -52,12 +61,34 @@ import {
   type ScoringFence,
 } from './lib/scoringLease';
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
+import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
+import { resolveGameSpreads } from './lib/frozenSpreads';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/poolCore";
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
+
+/**
+ * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
+ *
+ * Every client surface has rendered these since `nflWeekLabel` was introduced,
+ * but this file's result strings, errors and audit-log messages interpolated the
+ * RAW importer week. So scoring the Hall of Fame game reported
+ * "Week 1 scored successfully." while the button the commissioner had just
+ * pressed said "Score & Recap HOF Weekend" — and on preseason weeks the two
+ * numberings are genuinely OFFSET, so "Week 1" and "Preseason Week 1" are two
+ * different slates. This is the one place that disagreement is most expensive.
+ *
+ * `seasonType` is OPTIONAL on a pool and omitting it means REGULAR season
+ * (`shared/schemas/nfl.ts`), so it defaults to 2 rather than coercing to NaN —
+ * the direction #319 got wrong. Matches the client's `poolSeasonType`.
+ */
+const weekLabelFor = (p: { seasonType?: unknown } | null | undefined, w: number): string =>
+  nflWeekLabel(Number(p?.seasonType) || 2, w);
 
 /**
  * Creates an NFL pool (Pick'em, Survivor, or Margin).
@@ -94,6 +125,9 @@ export const createNFLPool = validated(
     // Shared validation gate + ban check (poolType already narrowed above).
     const poolType: PoolType = isPoolType(type) ? type : 'NFL_PICKEM';
     validateCreateInput(poolType, data);
+    // The envelope is persisted as given below, so the parsed shape of the two
+    // payout lists is applied here explicitly (PLAN-PAYMENT-LEDGER T1; codex r4 on #470).
+    normalizeCreatePayoutLists(poolType, (data as { settings?: Record<string, unknown> }).settings);
     assertNotBanned(claimRole, undefined);
 
     const poolRef = db.collection('pools').doc();
@@ -104,6 +138,13 @@ export const createNFLPool = validated(
     // player cap, so with no paid add-on this resolves to 'free' (unchanged
     // behavior); a selected paid add-on forces 'trial'. Config read fails open.
     const billingConfig = await loadBillingConfig(db);
+    // Remember the wizard's coupon (PLAN-WIZARD-BUYFLOW-FIXES T3). Read from the
+    // RAW request: stripPrivilegedPoolFields deliberately removes `couponCode`
+    // from the persisted envelope, so only a server-validated code is stamped.
+    const launchCouponCode = await validLaunchCouponCode(
+      (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now }),
+      (request.data as Record<string, unknown> | undefined)?.couponCode,
+    );
     const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
 
     const newPool: any = {
@@ -126,8 +167,18 @@ export const createNFLPool = validated(
       status: 'OPEN',
       isLocked: false,
       participantIds: [uid],
+      // PLAN-MULTI-ENTRY D8: liable-entry count, server-maintained from t=0.
+      // The seeded host owes nothing until they play, so it starts at 0.
+      entryCount: 0,
       // free or trial per server-computed launch mode (server-authoritative)
-      billing: billingForLaunch(launchMode, billingConfig.trialDays, now),
+      billing: {
+        // T5/D2 — a trial unlocks the add-ons the commissioner selected, so the
+        // trial can actually demo what it is selling. `normalizeAddonSelection`
+        // reads only explicit `true`s off the create payload.
+        ...billingForLaunch(launchMode, billingConfig.trialDays, now, normalizeAddonSelection(data)),
+        // Remembered wizard coupon — validated above, never redeemed here (T3).
+        ...(launchCouponCode ? { couponCode: launchCouponCode } : {}),
+      },
     };
 
     // Sim harness trust anchor (stripped from clients; SUPER_ADMIN-only stamp,
@@ -183,7 +234,8 @@ export const createNFLPool = validated(
   } catch (error: any) {
     console.error("createNFLPool Failure:", error);
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`, error);
+    // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
+    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
   }
   },
 );
@@ -203,6 +255,29 @@ export interface MemberActionContext {
   subjectUid: string;
   subjectName?: string;
   requestId?: string;
+  /**
+   * There is NO BROWSER BUNDLE behind this submission — it is server code
+   * calling in (the sim harness, ADR 0006), always running the code that was
+   * just deployed.
+   *
+   * It exists only to exempt such a caller from the tiebreak ROLLOUT guard,
+   * which infers "this client is out of date" from a missing
+   * `displayedTiebreakTargetIds`. The sim harness never sends one and never
+   * will, so without this the guard would freeze an empty tiebreak target on
+   * every simulated Monday-less week forever — permanently withholding the fix
+   * from the population that most needs it (no simulator path writes
+   * `settings.weeklyTiebreaker`, so every sim pool is a legacy MNF_COMBINED
+   * pool). codex r2 P2.
+   *
+   * 🛑 ON THE CONTEXT, NEVER THE PAYLOAD. `ctx` is built only by server code;
+   * the payload is client-supplied and schema-validated, so a field there would
+   * let any browser assert it and walk past the guard.
+   *
+   * It grants NOTHING else — not membership, not a lock bypass, not
+   * SUPER_ADMIN. Those key off `actorRole`, which the sim harness deliberately
+   * leaves undefined.
+   */
+  serverSideCaller?: boolean;
 }
 
 /**
@@ -239,43 +314,45 @@ export async function joinNFLPoolInternal(
     const poolData = poolDoc.data();
     if (!poolData) throw new HttpsError('not-found', 'Pool data not found');
 
+    // PLAN-MULTI-ENTRY D8: `pool.entryCount` counts LIABLE entries and an
+    // ordinary member's join is one — derived from the Member Records when the
+    // field is absent (legacy pool), read here because reads precede writes.
+    const membersForCount = typeof poolData.entryCount === 'number'
+      ? null
+      : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
+
     const participantIds = poolData.participantIds || [];
     if (participantIds.includes(uid)) {
       // Already a participant — still ensure a Member Record exists (backfill-on-touch).
-      ensureMemberRecord(transaction, db, poolId, uid,
+      const stamp = ensureMemberRecord(transaction, db, poolId, uid,
         {
           userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
           entryFee: Number(poolData.settings?.entryFee ?? 0),
         },
         memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
+      const countPatch = entryCountWrite(poolData, membersForCount, stamp.liabilityDelta);
+      if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
       return;
     }
 
     const billingStatus = poolData.billing?.status ?? 'free';
-    if (billingStatus === 'free' && participantIds.length >= 10) {
-      throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+    if (billingStatus === 'free' && participantIds.length >= FREE_PLAN_PARTICIPANT_CAP) {
+      // G9 — MEMBER-appropriate copy. This is the message the 11th INVITEE
+      // sees, and it used to explain the platform's billing tiers to someone
+      // who has no billing relationship with us: "Free Plan", "upgrade to
+      // premium", "pool manager". Nothing in it told them what to do, and it
+      // read as though they had done something wrong. Say what happened, whose
+      // move it is, and nothing about our pricing.
+      throw new HttpsError('failed-precondition', FREE_PLAN_FULL_MESSAGE);
     }
     // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
     // its purchased participant ceiling. No-op for free/trial pools.
     assertPaidParticipantCeiling(poolData.billing, participantIds.length);
 
-    // 1. Add participant to pool collection
-    transaction.update(poolRef, {
-      participantIds: FieldValue.arrayUnion(uid)
-    });
-
-    // 2. Add participation to user profile
-    transaction.set(userRef.collection('participations').doc(poolId), {
-      poolId,
-      joinedAt: Date.now(),
-      name: poolData.name,
-      type: poolData.type,
-      role: 'PARTICIPANT'
-    });
-
-    // 3. Seed the Member Record (roster + payment truth, ADR 0003) — additive.
+    // 3 (moved up so its liability delta can ride the pool write below).
+    // Seed the Member Record (roster + payment truth, ADR 0003) — additive.
     // feeOwed stamped at join: dues are owed from membership, not from playing (ADR 0005).
-    ensureMemberRecord(transaction, db, poolId, uid,
+    const stamp = ensureMemberRecord(transaction, db, poolId, uid,
       {
         userName: joinerName, role: 'PARTICIPANT', poolType: poolData.type, present: true,
         entryFee: Number(poolData.settings?.entryFee ?? 0),
@@ -288,6 +365,21 @@ export async function joinNFLPoolInternal(
         // later non-submit touch. Omitting it preserves the documented UNKNOWN.
       },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
+
+    // 1. Add participant to pool collection (+ the liable-entry count, D8)
+    transaction.update(poolRef, {
+      participantIds: FieldValue.arrayUnion(uid),
+      ...entryCountWrite(poolData, membersForCount, stamp.liabilityDelta),
+    });
+
+    // 2. Add participation to user profile
+    transaction.set(userRef.collection('participations').doc(poolId), {
+      poolId,
+      joinedAt: Date.now(),
+      name: poolData.name,
+      type: poolData.type,
+      role: 'PARTICIPANT'
+    });
   });
 
   await writeAuditEvent({
@@ -341,13 +433,22 @@ export function assertNFLPickMembership(
 export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
-  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number },
+  payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] },
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
   // deep clean input
   const data = JSON.parse(JSON.stringify(payload || {}));
   const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
   const requestId = ctx.requestId;
+  // PLAN-MULTI-ENTRY T2 (D1): which of the caller's entries. Default 1 keeps
+  // every existing client byte-identical — entry #1's id IS the uid.
+  const entryIndex: number = Number.isInteger(data.entryIndex) && data.entryIndex >= 1 ? data.entryIndex : 1;
+  const requestedEntryName: string | undefined = typeof data.entryName === 'string' ? data.entryName : undefined;
+  // PLAN-WEEKLY-PRIZES §9 A6: the target the sheet displayed, if the client
+  // sent one. Never stored — compared against the frozen/canonical list in-tx.
+  const displayedTargetIds: string[] | undefined = Array.isArray(data.displayedTiebreakTargetIds)
+    ? data.displayedTiebreakTargetIds.filter((x: unknown) => typeof x === 'string')
+    : undefined;
 
   if (!poolId || !week || !picks) {
     throw new HttpsError('invalid-argument', 'Missing poolId, week, or picks.');
@@ -368,6 +469,18 @@ export async function submitNFLPicksInternal(
 
   assertNFLPickMembership(pool, uid, ctx.actorRole);
 
+  // Display name for the rows this submission writes. The ID token's `name` is
+  // minted at sign-in and registration sets `displayName` AFTER that (
+  // src/services/authService.ts), so anyone who registers → joins → picks in one
+  // sitting has no token name for the life of that token (~1h) and every row they
+  // touched read "Participant". Same fallback chain joinNFLPoolInternal already
+  // uses; `undefined` when neither source has a name, so the call sites can prefer
+  // a name already stored over overwriting it with the placeholder. Read outside
+  // the transaction — it is not part of any invariant the transaction defends.
+  const subjectName: string | undefined = ctx.subjectName
+    || (await db.collection('users').doc(uid).get()).data()?.name
+    || undefined;
+
   const type = pool.type;
   // MUTABLE, and refreshed at the top of every transaction attempt below. The
   // lease can bounce a submission and `retryWhileScoring` re-runs the transaction
@@ -382,9 +495,13 @@ export async function submitNFLPicksInternal(
     .where('week', '==', week)
     .get();
 
-  const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+  // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). Resolved HERE, at the load,
+  // so the SPREADS_NOT_LOCKED gate below and every per-game check further down
+  // read one number — the frozen one when the slate has been frozen, the working
+  // `nfl_games.spread` when it has not.
+  const games = await resolveGameSpreads(db, gamesSnap.docs.map(doc => doc.data() as NFLGame));
   if (games.length === 0) {
-    throw new HttpsError('not-found', `No NFL games found for week ${week}.`);
+    throw new HttpsError('not-found', `No NFL games found for ${weekLabelFor(pool, week)}.`);
   }
 
   // 1.5 Spread Validation — ONLY for pools whose scoring consumes spreads.
@@ -434,9 +551,6 @@ export async function submitNFLPicksInternal(
   // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
   let weekLocked = now >= effectiveWeekLock;
 
-  // Write variables inside transactions
-  const entryRef = poolRef.collection('entries').doc(uid);
-
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Reads first (Firestore requires it) and the lease read first of all: a
     // submission must not interleave with a scoring pass, and putting the pool
@@ -447,11 +561,35 @@ export async function submitNFLPicksInternal(
     now = Date.now();
     weekLocked = now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
-    const entrySnap = await transaction.get(entryRef);
-    const existingEntry = entrySnap.exists ? entrySnap.data() : null;
+    // The pool doc as of THIS attempt: the max is judged against it (raise-only,
+    // so a concurrent raise can only admit more) and `entryCount` is read off it.
+    const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
+    if (!poolInTx) throw new HttpsError('not-found', 'Pool not found.');
+    // Which doc is "entry n of uid" — deterministic id, owned-entries set, and
+    // the auto-id fallback, all read in this transaction (lib/multiEntry.ts).
+    const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
+    assertEntryAdmitted(poolInTx.settings, target);
+    const entryRef = target.ref;
+    const existingEntry = target.existing;
     // Member Record read (before any writes) for the base-dues stamp below (ADR 0005).
     const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
     const existingMember = memberSnap.exists ? (memberSnap.data() as MemberRecord) : null;
+    // D8: a legacy pool has no `entryCount`; derive it from the Member Records
+    // (read now — Firestore forbids a read after a write) before incrementing.
+    const membersForCount = typeof poolInTx.entryCount === 'number'
+      ? null
+      : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
+    // K5: the entry's display name. Explicit name (unique per owner, checked
+    // against the owned set), else the stored one, else "Name #n" for a NEW
+    // extra entry. Entry #1 has none by default — it shows `userName`.
+    const ownerDisplayName = subjectName || existingMember?.userName || existingEntry?.userName || 'Participant';
+    const entryName: string | undefined = requestedEntryName !== undefined
+      ? assertEntryNameFree(requestedEntryName, target)
+      : (typeof existingEntry?.entryName === 'string' ? existingEntry.entryName
+        : (existingEntry === null ? freeDefaultEntryName(ownerDisplayName, entryIndex, target) : undefined));
+    // The picks map as this write leaves it — `playableEntryCount` is derived
+    // from post-write entry state, never from a stored counter (D2).
+    let writtenPicks: Record<string, unknown> = {};
 
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
@@ -461,9 +599,128 @@ export async function submitNFLPicksInternal(
 
     // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
 
+    // Did this submission actually store a pick FOR THIS WEEK? Only then may the
+    // `pickedWeeks` marker advance (PLAN-COMMISSIONER-BLIND-PICKS T1). Declared
+    // inside the transaction body so a retry resets it.
+    //
+    // Two ways it can be false while the entry write still happens, both
+    // pick'em-only — Survivor and Margin throw on a missing team above:
+    //   1. `picks: {}`. `submitNFLPicksSchema` permits it and this handler does
+    //      not require a selection, so an empty submission would otherwise mark
+    //      the week and render "Hidden" for a pick nobody made (codex r2).
+    //   2. keys that belong to ANOTHER week. The PER_GAME branch rejects an
+    //      unknown gameId, but the weekly/confidence branch has no such loop, so
+    //      a week-4 gameId submitted under week 5 would mark week 5.
+    // Testing against this week's slate answers both at once.
+    const weekGameIds = new Set(games.map(g => g.id));
+    let committedPickForWeek = false;
+    let frozenTargetWrite: Record<string, string[]> | null = null;
+
     if (type === 'NFL_PICKEM') {
       const settings = pool.settings;
       const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';
+
+      // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
+      // the first submission, once per pool-week, and hold every later
+      // submission to it. The canonical list is computed HERE from the schedule
+      // read for this request (`resolveTiebreakTargetIds`, the same function
+      // the sheet used); a client-supplied list is only ever COMPARED, never
+      // stored, so a first submitter cannot freeze a favourable game (codex r10
+      // on the plan). Rejecting on mismatch is the right failure: the
+      // alternative is accepting a prediction about a game the member never
+      // agreed to answer — the client reloads and re-renders the sheet.
+      // `NONE` freezes nothing; `MNF_COMBINED` (legacy) freezes the Monday set
+      // so a later schedule change cannot re-target an in-flight week either.
+      // The freeze is written even when this submission carries no prediction:
+      // it is the WEEK's target, not this member's, and the next member's sheet
+      // reads it.
+      const tiebreakRule = effectiveWeeklyTiebreaker(poolInTx.settings as { weeklyTiebreaker?: unknown } | undefined);
+      if (tiebreakerAsksForPrediction(tiebreakRule)) {
+        // TWO DIFFERENT QUESTIONS, deliberately asked separately. `frozenTarget`
+        // answers "does this week already have a freeze?" — the only input to
+        // the write decision below. `authoritative` answers "what is this week's
+        // target?", and takes the precedence rule from `applyFrozenTarget`,
+        // shared with the pick sheet and the scorer.
+        const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
+        const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
+        const authoritative = applyFrozenTarget(frozenTarget, games, tiebreakRule);
+        // Hoisted: both the rejection below and the freeze guard further down
+        // are scoped to the ONE week whose meaning this release changed.
+        const noMondayGame = games.every(g => g.isMonday !== true);
+        if (displayedTargetIds !== undefined && !sameTargetIds(displayedTargetIds, authoritative)) {
+          throw new HttpsError('failed-precondition',
+            'TIEBREAK_TARGET_STALE: the tiebreaker game shown on your sheet no longer matches the schedule for this week. Reload the page and submit again.');
+        }
+        // 🛑 THE INVERSE ORDERING (codex r3 P1). The freeze guard below covers a
+        // stale client submitting FIRST. This covers the other order: a CURRENT
+        // sheet submitted first and froze the fallback game, and a member on a
+        // stale bundle then submits. Their sheet rendered no tiebreaker card, so
+        // they send no `displayedTiebreakTargetIds` — which skips the staleness
+        // check above, because there is nothing to compare — and the freeze
+        // guard cannot help, because the week is already frozen. Their entry
+        // would be saved with no prediction and lose any tied week to the
+        // members who were asked.
+        //
+        // Refusing is SAFE here in a way it would not be in general: this state
+        // is only reachable AFTER a current client submitted, which proves the
+        // new frontend is live, so "reload and submit again" actually gets them
+        // a sheet that asks the question. Silently accepting is the only option
+        // that costs them the week.
+        //
+        // Scoped exactly as the freeze guard is — legacy `MNF_COMBINED`, no
+        // Monday game, non-empty FROZEN target. A pre-#452 client on any other
+        // week sends no displayed list either and must keep working, and a week
+        // frozen EMPTY has nothing to miss. The sim harness is exempt for the
+        // same reason as below.
+        if (frozenTarget !== undefined && frozenTarget.length > 0
+            && displayedTargetIds === undefined && tiebreakRule === 'MNF_COMBINED'
+            && noMondayGame && ctx.serverSideCaller !== true) {
+          throw new HttpsError('failed-precondition',
+            'TIEBREAK_TARGET_STALE: this week now has a tiebreaker game and your pick sheet is out of date. Reload the page and submit again.');
+        }
+        // Freeze even an EMPTY canonical list: "no target this week" is a
+        // state that must not change under members who already submitted
+        // (qodo #9 on #452).
+        if (frozenTarget === undefined) {
+          // 🛑 THE ROLLOUT WINDOW — a submission that never saw the new target
+          // must not introduce it (codex r1 on PLAN-TIEBREAKER-MONDAYLESS).
+          //
+          // Functions and the www frontend deploy SEPARATELY (CLAUDE.md §3:
+          // Coolify is a manual trigger), so for a while the server knows about
+          // the Monday-less fallback and a member's loaded bundle does not. That
+          // member's legacy MNF_COMBINED sheet renders no tiebreaker card, sends
+          // no prediction and no `displayedTiebreakTargetIds`. If this froze the
+          // fallback game anyway, the next member to reload WOULD see the card,
+          // answer it, and take any tied week outright — `computeWeeklyWinners`
+          // DROPS a leader with no prediction as soon as one leader has one.
+          // That is exactly the harm the freeze exists to prevent, arriving
+          // through a code change instead of a schedule change.
+          //
+          // Deploying the frontend first is not an escape: a new sheet sends the
+          // fallback id, an old server resolves `[]`, and every submission is
+          // refused with TIEBREAK_TARGET_STALE.
+          //
+          // So: on the ONE week whose meaning this release changed — a legacy
+          // MNF_COMBINED pool with no Monday game — a caller that did not take
+          // part in the handshake freezes what the PREVIOUS release would have
+          // frozen, `[]`. Nobody in that week is asked, and a tied week is
+          // shared. Self-expiring: a current sheet always sends the list when it
+          // asks, so once the frontend is deployed this branch stops firing.
+          //
+          // `ctx.serverSideCaller` is exempt: the sim harness has no browser
+          // bundle to be stale and never sends a displayed list, so without the
+          // exemption this would withhold the fallback from every simulated
+          // Monday-less week permanently — and every simulator pool is a legacy
+          // MNF_COMBINED pool, because no simulator path writes
+          // `settings.weeklyTiebreaker` (codex r2 P2).
+          const introducesNewQuestion =
+            tiebreakRule === 'MNF_COMBINED' && noMondayGame
+            && displayedTargetIds === undefined && ctx.serverSideCaller !== true;
+          frozenTargetWrite = {
+            [`frozenTiebreakTargets.${week}`]: introducesNewQuestion ? [] : canonicalTarget,
+          };
+        }
+      }
 
       if (weeklyLockMode) {
         if (weekLocked) {
@@ -499,10 +756,12 @@ export async function submitNFLPicksInternal(
       // found by the first real-path Golden Scenario (PLAN-NFL-SIM-HARNESS Phase 2)
       // — same bug class as the weekly-recap P0 in PR #152.
       const pickemEntry: NFLPickemEntry = {
-        id: uid,
+        id: entryRef.id,
         poolId,
         ownerUid: uid,
-        userName: ctx.subjectName || 'Participant',
+        entryIndex,
+        ...(entryName ? { entryName } : {}),
+        userName: subjectName || existingEntry?.userName || 'Participant',
         picks: { ...(existingEntry?.picks || {}), ...picks },
         ...(settings.confidenceMode && confidence ? { confidence } : {}),
         weeklyTiebreakers: {
@@ -523,12 +782,16 @@ export async function submitNFLPicksInternal(
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
 
+      committedPickForWeek = Object.keys(picks).some(gameId => weekGameIds.has(gameId));
+      writtenPicks = pickemEntry.picks;
+
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
-        id: uid,
+        id: entryRef.id,
         poolId,
         ownerUid: uid,
-        userName: ctx.subjectName || 'Participant',
+        entryIndex,
+        userName: subjectName || 'Participant',
         status: 'ALIVE',
         strikesUsed: 0,
         rebuysUsed: 0,
@@ -548,15 +811,42 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', 'Missing Survivor team selection.');
       }
 
-      // Check single-pick reuse
-      if (survivorEntry.usedTeams.includes(teamPicked)) {
-        throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
+      // Check reuse — against every OTHER week, not this one.
+      //
+      // `usedTeams` is a season-long ledger that already contains this week's
+      // own saved pick, so re-submitting the same team (a member double-checking
+      // their pick, or a client retry) came back TEAM_ALREADY_USED about a pick
+      // that was safely in — reported to them as a FAILED SAVE. The write path
+      // below has always known to exclude it; only the guard did not, so the two
+      // disagreed about what "used" means. One definition now, computed once and
+      // used by both.
+      //
+      // TRI-MODE (PLAN-SURVIVOR-PARITY-SCORING Phase 2). At `maxTeamUses`
+      // absent or 1 this is today's `usedTeams`-authority code, byte-for-byte —
+      // a legacy entry whose seeded ledger diverges from its `picks` must keep
+      // behaving exactly as it does now. Only a pool that actually configured a
+      // different limit counts the `picks` map, because a Set cannot represent
+      // "picked twice".
+      const maxTeamUses = effectiveMaxTeamUses(pool.settings);
+      const usedElsewhere = survivorEntry.usedTeams.filter(t => t !== survivorEntry.picks?.[week]);
+      if (maxTeamUses === 1) {
+        if (usedElsewhere.includes(teamPicked)) {
+          throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
+        }
+      } else if (maxTeamUses !== UNLIMITED_TEAM_USES) {
+        const uses = countTeamUses(survivorEntry.picks, week)[teamPicked] ?? 0;
+        if (uses >= maxTeamUses) {
+          throw new HttpsError(
+            'invalid-argument',
+            `TEAM_ALREADY_USED: You have already picked the ${teamPicked} ${maxTeamUses} time${maxTeamUses === 1 ? '' : 's'} this season.`,
+          );
+        }
       }
 
       // Validate team is playing and not on bye
       const game = games.find(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
       if (!game) {
-        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in ${weekLabelFor(pool, week)}.`);
       }
 
       // HARD weekly lock, derived from the pool TYPE (not settings.lockMode) so a
@@ -572,24 +862,43 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
-      // Update used teams and selections
-      const oldUsed = survivorEntry.usedTeams.filter(t => t !== survivorEntry.picks[week]);
+      // Update used teams and selections. At the default limit `usedElsewhere`
+      // is the same set the reuse guard above tested — deliberately reused
+      // rather than recomputed, because two copies of "every week except this
+      // one" is what let the guard and the write disagree in the first place.
+      //
+      // Under reuse that remove-then-re-add rewrite is WRONG (it assumes one
+      // use per team): KC picked in weeks 1 and 2, then week 1 changed to BUF,
+      // would strip KC from the ledger despite the week-2 pick still standing.
+      // So derive the ledger from the resulting picks map instead — the same
+      // derivation `proxyPick` uses.
       survivorEntry.picks[week] = teamPicked;
-      survivorEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
+      survivorEntry.usedTeams = maxTeamUses === 1
+        ? [...new Set([...usedElsewhere, teamPicked])]
+        : [...new Set(Object.values(survivorEntry.picks))];
+      committedPickForWeek = true;   // the guard above threw on a missing team
       survivorEntry.submittedAt = now;
+      // Heal-on-touch: an entry created while the token carried no name is stuck at
+      // "Participant" forever otherwise — this branch reuses the existing entry and
+      // never revisits the field. Never downgrades a stored name to the placeholder.
+      survivorEntry.userName = subjectName || survivorEntry.userName || 'Participant';
 
+      writtenPicks = survivorEntry.picks;
       transaction.set(entryRef, {
         ...survivorEntry,
+        entryIndex,
+        ...(entryName ? { entryName } : {}),
         ...(requestId ? { lastRequestId: requestId } : {}),
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
 
     } else if (type === 'NFL_MARGIN') {
       const marginEntry = (existingEntry as MarginEntry) || {
-        id: uid,
+        id: entryRef.id,
         poolId,
         ownerUid: uid,
-        userName: ctx.subjectName || 'Participant',
+        entryIndex,
+        userName: subjectName || 'Participant',
         picks: {},
         usedTeams: [],
         weeklyScores: {},
@@ -606,15 +915,17 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('invalid-argument', 'Missing Margin team selection.');
       }
 
-      // Check single-pick reuse
-      if (marginEntry.usedTeams.includes(teamPicked)) {
+      // Check single-pick reuse — against every OTHER week. Twin of the
+      // Survivor guard above; see that comment for the full reasoning.
+      const usedElsewhere = marginEntry.usedTeams.filter(t => t !== marginEntry.picks?.[week]);
+      if (usedElsewhere.includes(teamPicked)) {
         throw new HttpsError('invalid-argument', `TEAM_ALREADY_USED: You have already picked the ${teamPicked} this season.`);
       }
 
       // Validate team playing
       const game = games.find(g => g.homeTeam.abbreviation === teamPicked || g.awayTeam.abbreviation === teamPicked);
       if (!game) {
-        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in week ${week}.`);
+        throw new HttpsError('invalid-argument', `TEAM_NOT_PLAYING: The ${teamPicked} are not playing in ${weekLabelFor(pool, week)}.`);
       }
 
       // HARD weekly lock, derived from the pool TYPE — see the Survivor branch.
@@ -629,13 +940,19 @@ export async function submitNFLPicksInternal(
         throw new HttpsError('failed-precondition', `GAME_LOCKED: The game for ${teamPicked} has already locked.`);
       }
 
-      const oldUsed = marginEntry.usedTeams.filter(t => t !== marginEntry.picks[week]);
+      // Same set the guard tested — reused, not recomputed.
       marginEntry.picks[week] = teamPicked;
-      marginEntry.usedTeams = [...new Set([...oldUsed, teamPicked])];
+      marginEntry.usedTeams = [...new Set([...usedElsewhere, teamPicked])];
+      committedPickForWeek = true;   // the guard above threw on a missing team
       marginEntry.submittedAt = now;
+      // Heal-on-touch — twin of the Survivor line above.
+      marginEntry.userName = subjectName || marginEntry.userName || 'Participant';
 
+      writtenPicks = marginEntry.picks;
       transaction.set(entryRef, {
         ...marginEntry,
+        entryIndex,
+        ...(entryName ? { entryName } : {}),
         ...(requestId ? { lastRequestId: requestId } : {}),
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
@@ -644,14 +961,47 @@ export async function submitNFLPicksInternal(
     // Base-dues stamp (ADR 0005 Phase 4): submitting a playable entry starts fee
     // liability — this is the moment a seeded owner's feeOwed upgrades 0 -> fee,
     // and it heals records that predate the feeOwed field (fill-on-touch).
-    ensureMemberRecord(transaction, db, poolId, uid, {
-      userName: ctx.subjectName || 'Participant',
+    // PLAN-MULTI-ENTRY D2: the owner's post-write state — how many of their
+    // entries hold a pick, and the id → {index, name} roster — counted from the
+    // entry docs in this transaction (the doc just written included).
+    const ownerState = ownerStateAfter(target.owned, {
+      id: entryRef.id, entryIndex, ...(entryName ? { entryName } : {}), hasPick: entryHasPick({ picks: writtenPicks }),
+    });
+    const stamp = ensureMemberRecord(transaction, db, poolId, uid, {
+      userName: subjectName || existingMember?.userName || 'Participant',
       role: existingMember?.role ?? (pool.ownerId === uid ? 'MANAGER' : 'PARTICIPANT'),
       poolType: type,
       present: true,
-      entryFee: Number(pool.settings?.entryFee ?? 0),
-      hasPlayableEntry: true,
+      entryFee: Number(poolInTx.settings?.entryFee ?? 0),
+      playableEntryCount: ownerState.playableEntryCount,
+      entries: ownerState.entries,
+      // Only a submission that actually stored a pick starts fee liability
+      // (PLAN-EMPTY-SUBMISSION-FEE, Q1–Q3). `picks: {}` is schema-legal on a
+      // pick'em pool and reaches here; passing `true` unconditionally upgraded a
+      // seeded MANAGER's feeOwed 0 -> fee for a pick nobody made. Survivor and
+      // Margin throw on a missing team before this line, so for them the
+      // predicate is always true and nothing changes. One predicate, shared
+      // with `pickedWeek` below, so the latch and the marker cannot disagree.
+      hasPlayableEntry: committedPickForWeek,
+      // Pick marker (PLAN-COMMISSIONER-BLIND-PICKS T1). Rides the write that is
+      // already here, in the same transaction as the entry, so the marker can
+      // never disagree with the pick it describes. `undefined` when this
+      // submission stored no pick for this week — see committedPickForWeek.
+      ...(committedPickForWeek ? { pickedWeek: week } : {}),
     }, existingMember, now);
+    // D8: `pool.entryCount` counts LIABLE entries — moved by exactly what this
+    // write changed about the member's liability (0 on an ordinary resubmit).
+    const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
+    if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
+    // Only a submission that actually PLAYED the week freezes its target — an
+    // empty / wrong-week submission (schema-valid, PLAN-EMPTY-SUBMISSION-FEE)
+    // must not pin a target before any real entrant has one (codex r3 on #452).
+    if (frozenTargetWrite && committedPickForWeek) transaction.update(poolRef, frozenTargetWrite);
+    // 🛑 K11's apply step is GONE (PLAN-MULTI-ENTRY-DUES D6). Adding an entry no
+    // longer mirrors UNPAID onto the member's OTHER entries and no longer writes
+    // a `MARKED_UNPAID` line: they paid for those entries, and this one is
+    // simply unpaid. `ensureMemberRecord` still moves the member's stored
+    // SUMMARY to UNPAID in this same transaction — that half had to survive.
   }));
 
   // Fully-open live consensus (2026-07-09): refresh this pool's week immediately so the crowd
@@ -697,10 +1047,12 @@ export const submitNFLPicks = validated(
 export async function executeSurvivorRebuyInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
-  payload: { poolId?: string; week?: number },
+  payload: { poolId?: string; week?: number; entryIndex?: number },
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
   const { poolId, week } = payload || {};
+  // PLAN-MULTI-ENTRY D3: each entry is its own Survivor life — a rebuy names one.
+  const entryIndex = Number.isInteger(payload?.entryIndex) && (payload!.entryIndex as number) >= 1 ? (payload!.entryIndex as number) : 1;
 
   if (!poolId || !week) {
     throw new HttpsError('invalid-argument', 'poolId and week are required.');
@@ -724,23 +1076,26 @@ export async function executeSurvivorRebuyInternal(
     throw new HttpsError('failed-precondition', `PAST_DEADLINE: Rebuys are blocked after week ${settings.rebuyDeadlineWeek}.`);
   }
 
-  const entryRef = poolRef.collection('entries').doc(uid);
   const memberRef = membersCol(db, poolId).doc(uid);
   const rebuyAmt = settings.rebuyCost ?? settings.entryFee ?? 0;
+  let rebuyEntryId = uid;
 
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Same mutex as pick submission: a rebuy flips ELIMINATED → ALIVE and wipes
     // the strike ledger, so interleaving it with a scoring pass that is writing
     // strikes from a pre-rebuy snapshot re-eliminates the player who just paid.
     await assertNoScoringInProgress(transaction, poolRef, Date.now());
-    const entrySnap = await transaction.get(entryRef);
+    // Entry n of uid (lib/multiEntry.ts) — a rebuy never CREATES an entry.
+    const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
+    const entryRef = target.ref;
     // Member Record read (before writes) so rebuy dues land on the roster (ADR 0003).
     const memberSnap = await transaction.get(memberRef);
-    if (!entrySnap.exists) {
+    if (!target.existing) {
       throw new HttpsError('not-found', 'Participant entry not found.');
     }
+    rebuyEntryId = entryRef.id;
 
-    const entry = entrySnap.data() as SurvivorEntry;
+    const entry = target.existing as SurvivorEntry;
     if (entry.status !== 'ELIMINATED') {
       throw new HttpsError('failed-precondition', 'NOT_ELIMINATED: Player is still alive.');
     }
@@ -795,7 +1150,7 @@ export async function executeSurvivorRebuyInternal(
   await writeLedgerEvent(db, poolId, {
     type: 'REBUY_DUE',
     uid,
-    entryId: uid,
+    entryId: rebuyEntryId,
     amount: typeof rebuyAmount === 'number' ? rebuyAmount : undefined,
     note: `Survivor rebuy (week ${week})`,
     actorUid: uid,
@@ -882,6 +1237,98 @@ export interface ScoreWeekOptions {
   now?: number;
 }
 
+// ---------------------------------------------------------------------------
+// PLAN-WEEKLY-PRIZES §3 — the Weekly Winners List and the frozen weekly prize
+// ---------------------------------------------------------------------------
+
+/**
+ * How many weeks this pool's season has — the divisor of the weekly pot (D5).
+ * `pool.weeksInSeason` when present (frozen at creation — a later PR writes it
+ * from the wizard); else derived ONCE from `nfl_games` for the pool's season +
+ * season type and frozen into the recap snapshot with the pot, so a published
+ * week's figure never moves even if the schedule import changes later.
+ * Undefined when the schedule is empty (nothing to price against).
+ */
+async function weeksInSeasonFor(db: admin.firestore.Firestore, pool: any): Promise<number | undefined> {
+  const stored = pool?.weeksInSeason;
+  if (Number.isInteger(stored) && stored >= 1) return stored;
+  const snap = await db.collection('nfl_games')
+    .where('season', '==', pool.season)
+    .where('seasonType', '==', Number(pool.seasonType || 2))
+    .select('week')
+    .get();
+  const weeks = new Set<number>();
+  for (const d of snap.docs) {
+    const w = Number((d.data() as { week?: unknown }).week);
+    if (Number.isInteger(w) && w >= 1) weeks.add(w);
+  }
+  return weeks.size > 0 ? weeks.size : undefined;
+}
+
+/**
+ * What the recap carries for the week's places and prize, computed from the
+ * pool doc AS READ IN THE RECAP'S FENCED TRANSACTION (`freshPool`) — never the
+ * pre-lease snapshot, so a settings edit that committed during the pass is
+ * either frozen in or frozen out, but never half-seen. Never throws.
+ *
+ * `frozen`: the prior recap's `weeklyPrize` — a snapshot, `null` (published
+ * UNPRICED — SEASON mode / no pot at first publication, an explicit sentinel
+ * so a later mode/fee edit cannot retroactively price an already-published
+ * week), or `undefined` (never published by this feature). Anything but
+ * `undefined` is reused verbatim (§3b-i).
+ */
+export function weeklyPlacesPublication(
+  freshPool: any,
+  week: number,
+  candidates: WeeklyWinnerCandidate[],
+  voidWeek: boolean,
+  frozen: WeeklyPrizeSnapshot | null | undefined,
+  entryDocCount: number,
+  derivedWeeksInSeason: number | undefined,
+): {
+  recap: { weeklyPlaces?: ReturnType<typeof rankWeeklyPlaces>; weeklyPrize?: WeeklyPrizeSnapshot | null; weeklyPlacesError?: string };
+  /**
+   * Set when the divisor was DERIVED (the pool has no `weeksInSeason`): frozen
+   * on the pool doc in the same fenced write as the recap (D5), so every later
+   * week of this pool prices against the SAME divisor even if the schedule
+   * import changes (codex r1 on the step-4 PR).
+   */
+  poolPatch?: { weeksInSeason: number };
+} {
+  try {
+    if (voidWeek || candidates.length === 0) return { recap: {} };
+    const ranked = rankWeeklyPlaces(candidates);
+    let snapshot: WeeklyPrizeSnapshot | null | undefined = frozen;
+    let poolPatch: { weeksInSeason: number } | undefined;
+    if (snapshot === undefined) {
+      // First publication: compute from the in-tx pool. A3: `pool.entryCount`
+      // (server-maintained since multi-entry T2), derived by counting entry
+      // docs when a legacy pool lacks the field. D5: `pool.weeksInSeason` when
+      // present, else the schedule-derived count (frozen on the pool below).
+      const entryCount = Number.isInteger(freshPool?.entryCount) && freshPool.entryCount >= 0 ? freshPool.entryCount : entryDocCount;
+      const storedWeeks = Number.isInteger(freshPool?.weeksInSeason) && freshPool.weeksInSeason >= 1 ? freshPool.weeksInSeason as number : undefined;
+      const weeks = storedWeeks ?? derivedWeeksInSeason;
+      const mode = freshPool?.settings?.payoutMode;
+      if ((mode === 'WEEKLY' || mode === 'HYBRID') && weeks === undefined) {
+        // A priced mode with no divisor is NOT "unpriced" — it is "cannot price
+        // yet" (the schedule query was skipped or failed, or the mode changed
+        // during this pass — codex r4). Fail closed WITHOUT the null sentinel so
+        // the next pass prices it.
+        return { recap: { weeklyPlaces: ranked, weeklyPlacesError: 'WEEKS_UNKNOWN' } };
+      }
+      snapshot = computeWeeklyPrizeSnapshot(freshPool?.settings ?? {}, entryCount, weeks, Date.now()) ?? null;
+      if (snapshot && storedWeeks === undefined) poolPatch = { weeksInSeason: snapshot.weeksInSeason };
+    }
+    if (snapshot === null) return { recap: { weeklyPlaces: ranked, weeklyPrize: null } };
+    const priced = priceWeeklyPlaces(ranked, snapshot);
+    return { recap: { weeklyPlaces: priced.rows, weeklyPrize: snapshot }, poolPatch };
+  } catch (e) {
+    const code = e instanceof Error ? (e.message.split(':')[0] || 'WEEKLY_PLACES_ERROR') : 'WEEKLY_PLACES_ERROR';
+    console.warn(`[scoreNFLWeek] weekly places not published for ${freshPool?.id ?? '?'} week ${week}: ${code}`, e);
+    return { recap: { weeklyPlacesError: code } };
+  }
+}
+
 /**
  * Scores one NFL week, extracted verbatim from the scoreNFLWeek callable. Auth,
  * the ACTIVE_GAMES gate and the pool/games reads stay in the wrapper — the pool
@@ -916,6 +1363,15 @@ export interface ScoreWeekOptions {
  * serialize, so no caller can forget to. A pass that finds the lease held returns
  * `leaseBusy: true` having read and written NOTHING.
  */
+/**
+ * The label a recap callout shows for one entry (PLAN-MULTI-ENTRY §0b.4).
+ * `entryName ?? userName` — the same rule every row surface uses, so "Sharp of
+ * the Week" names the entry that earned it rather than a player who holds two.
+ */
+function entryLabel(entry: { userName?: string; entryName?: string }): string {
+  return (typeof entry.entryName === 'string' && entry.entryName) ? entry.entryName : (entry.userName ?? '');
+}
+
 export async function scoreNFLWeekInternal(
   db: admin.firestore.Firestore,
   poolId: string,
@@ -1144,14 +1600,39 @@ async function scoreWeekPass(
   };
 
   // Recaps highlighting metrics
-  let sharpUser: { uid: string; name: string; val: number } | null = null;
+  // PLAN-MULTI-ENTRY D4 — the recap callouts name an ENTRY, not a player.
+  // `uid` stays the owner (it is the payee side of the recap and every reader
+  // treats it as a person), `entryId` identifies the row, and `name` is
+  // `entryName ?? userName` so a two-entry player's two rows are told apart on
+  // the card. Without the name change a recap reading "Kevin" would be true of
+  // both his entries and identify neither.
+  let sharpUser: { uid: string; entryId: string; name: string; val: number } | null = null;
   const biggestUpset: { uid: string; name: string; gameId: string; team: string } | null = null;
-  let closestTie: { uid: string; name: string; diff: number } | null = null;
+  let closestTie: { uid: string; entryId: string; name: string; diff: number } | null = null;
 
-  // MNF tiebreaker target: combined score of ALL Monday games, resolved only
-  // once every Monday game is FINAL (dual-MNF weeks; mid-Monday admin scoring
-  // stays provisional and a rescore recomputes it).
-  const mnfTotalScore = computeMNFTiebreakerTotal(games);
+  // WEEKLY WINNER candidates (PLAN-WEEKLY-TIEBREAKERS §8). One per SCORED entry
+  // for the types that have a weekly score — Pick'em and Margin. Survivor has
+  // no week to win, so it contributes none and the recap gains no field.
+  //
+  // This is the list `sharpUser` above should always have been: `sharpUser`
+  // keeps only the running maximum with a strict `>`, so it silently awards
+  // every TIED week to whichever entry Firestore iterated first. Collecting the
+  // candidates lets `computeWeeklyWinners` apply the pool's chosen tiebreaker
+  // and, when that cannot separate them, say SHARED instead of picking one.
+  const winnerCandidates: WeeklyWinnerCandidate[] = [];
+
+  // The tiebreaker TARGET, under this pool's rule (`settings.weeklyTiebreaker`,
+  // absent ⇒ MNF_COMBINED — the historical behaviour, no migration). Resolved
+  // only once the game(s) it names are FINAL; mid-Monday admin scoring stays
+  // provisional and a rescore recomputes it.
+  const tiebreakerRule = effectiveWeeklyTiebreaker(pool?.settings as { weeklyTiebreaker?: unknown } | undefined);
+  // The FROZEN target wins over the live schedule (PLAN-WEEKLY-PRIZES §2b): set
+  // by the week's first submission, so a flex move or a postponement after
+  // members submitted cannot re-point their prediction. Absent (a week nobody
+  // has submitted for yet, or a pool from before the freeze existed) → the
+  // canonical resolution from the current schedule, exactly as before.
+  const frozenTarget = frozenTiebreakTargetFor(pool as { frozenTiebreakTargets?: Record<string, unknown> } | undefined, week);
+  const mnfTotalScore = computeMNFTiebreakerTotal(games, tiebreakerRule, frozenTarget);
 
   // Survivor tracking
   let aliveCount = 0;
@@ -1198,7 +1679,7 @@ async function scoreWeekPass(
 
       // Sharp calculation
       if (!sharpUser || points > sharpUser.val) {
-        sharpUser = { uid: entry.ownerUid, name: entry.userName, val: points };
+        sharpUser = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), val: points };
       }
 
       // Tiebreaker
@@ -1206,8 +1687,39 @@ async function scoreWeekPass(
         const prediction = entry.weeklyTiebreakers?.[week] ?? 0;
         const diff = Math.abs(prediction - mnfTotalScore);
         if (!closestTie || diff < closestTie.diff) {
-          closestTie = { uid: entry.ownerUid, name: entry.userName, diff };
+          closestTie = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), diff };
         }
+      }
+
+      // Weekly-winner candidate — ONLY for entries that actually played this
+      // week. `picksThisWeek` counts this week's gradable slate, so a member who
+      // never submitted contributes nothing.
+      //
+      // ⚠️ THE GATE IS NOT COSMETIC. Without it every non-submitter enters at 0
+      // points, and on a week where the real players also finish at 0 — or on a
+      // pool with no usable tiebreak target — the "winners" would be everybody
+      // who did not play, listed as a shared win. Margin has always gated its
+      // sharp line for this reason (`if (pick && ...)`, below); Pick'em's
+      // equivalent was missing here. (codex P1, round 1 on the implementation.)
+      //
+      // The diff is deliberately NOT the `?? 0` one above: `closestTiebreaker`
+      // is a trivia callout where coercing a missing guess to 0 merely makes
+      // that member lose, but this diff DECIDES the week. A member who never
+      // answered must be ABSENT, not sitting on an invented prediction of 0
+      // that a low-scoring Monday could turn into a WIN.
+      // (PLAN-WEEKLY-TIEBREAKERS §8c; codex P1, plan round 11.)
+      if (picksThisWeek > 0) {
+        const ownPrediction = entry.weeklyTiebreakers?.[week];
+        winnerCandidates.push({
+          entryId: doc.id,
+          userId: entry.ownerUid,
+          userName: entry.userName,
+          ...(typeof entry.entryName === 'string' && entry.entryName ? { entryName: entry.entryName } : {}),
+          points,
+          ...(mnfTotalScore !== null && typeof ownPrediction === 'number'
+            ? { tiebreakDiff: Math.abs(ownPrediction - mnfTotalScore) }
+            : {}),
+        });
       }
 
     } else if (pool.type === 'NFL_SURVIVOR') {
@@ -1329,6 +1841,37 @@ async function scoreWeekPass(
         resultsVersion: (((entry as any).resultsVersion) || 0) + 1
       });
       marginScored++;
+
+      // Sharp of the week — the largest margin of victory anyone posted.
+      //
+      // ONLY entries that actually submitted a pick are eligible. `weekScore` is
+      // also -14 for a no-show, and a week where everyone forgot would otherwise
+      // crown the least-punished absentee "Sharp of the Week". A member who
+      // picked and lost by 3 is genuinely the sharpest of a bad week; a member
+      // who did not play is not in the running at all.
+      //
+      // Without this the Margin recap doc carried nothing but id/poolId/week/
+      // createdAt — `sharpUser` was computed only in the PICK'EM branch and
+      // `attritionCount` only for NFL_SURVIVOR — so `buildWeeklyRecap` emitted a
+      // recap with no fields and the client rendered an empty card.
+      if (pick && (!sharpUser || weekScore > sharpUser.val)) {
+        sharpUser = { uid: entry.ownerUid, entryId: doc.id, name: entryLabel(entry), val: weekScore };
+      }
+
+      // Weekly-winner candidate, gated on `pick` for the same reason the sharp
+      // line above is: a no-show also scores -14, and a week everybody forgot
+      // would otherwise crown the least-punished absentee.
+      //
+      // NO `tiebreakDiff` EVER on Margin. The Margin sheet asks for no
+      // prediction, so there is nothing to break a tie with and tied leaders
+      // SHARE. Passing the Pick'em diff here would be worse than useless — it
+      // would rank Margin players on a number their sheet never collected.
+      if (pick) {
+        winnerCandidates.push({
+          entryId: doc.id, userId: entry.ownerUid, userName: entry.userName, points: weekScore,
+          ...(typeof entry.entryName === 'string' && entry.entryName ? { entryName: entry.entryName } : {}),
+        });
+      }
     }
   }
 
@@ -1350,7 +1893,12 @@ async function scoreWeekPass(
     // Write standings back
     for (let index = 0; index < ranked.length; index++) {
       const r = ranked[index];
-      const docRef = poolRef.collection('entries').doc(r.ownerUid);
+      // 🛑 `r.id`, NEVER `r.ownerUid` (PLAN-MULTI-ENTRY D4, sweeps S1a).
+      // `entries/{ownerUid}` is entry #1's document, so a player's second entry
+      // would write ITS rank over entry #1's and leave its own doc rankless —
+      // the silent-merge failure R1 names. `readScoredEntries` stamps `id` from
+      // the document id on both the live and dry-run paths.
+      const docRef = poolRef.collection('entries').doc(r.id);
       await stage(docRef, { rank: index + 1 });
     }
   }
@@ -1375,7 +1923,7 @@ async function scoreWeekPass(
     await writeAuditEvent({
       poolId,
       type: 'SURVIVOR_AUTO_STRIKE',
-      message: `Participant ${strike.userName} suffered a strike in week ${week}`,
+      message: `Participant ${strike.userName} suffered a strike in ${weekLabelFor(pool, week)}`,
       severity: 'WARNING',
       actor: { uid: 'system', role: 'SYSTEM', label: 'Scoring Engine' },
       payload: { week }
@@ -1453,16 +2001,85 @@ async function scoreWeekPass(
       // (no ignoreUndefinedProperties here), which crashed every prior call that
       // had no sharp user / no MNF tiebreaker / a non-Survivor pool.
       const recapRef = poolRef.collection('weekly_recaps').doc(`week_${week}`);
-      const recapDoc = buildWeeklyRecap({ poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount });
+      // The weekly winner is computed HERE and nowhere else, and this branch is
+      // `!provisional` — i.e. the week is complete: every game concluded AND
+      // past its own effective lock. That is the whole reveal-safety argument
+      // for publishing a winner (PLAN-WEEKLY-TIEBREAKERS §8b). A mid-Sunday
+      // "leader so far", which members would read as a result, cannot be
+      // written because this code does not run until it would be true.
+      // ⚠️ A VOID WEEK HAS NO WINNER, and this is the one case the cascade
+      // cannot work out for itself. Every game cancelled means every Pick'em
+      // entry scores 0 and no Monday game reaches FINAL, so the candidates are
+      // all tied at 0 with no tiebreak target — a textbook shared win, over a
+      // week nobody played. On a `payoutMode: WEEKLY` pool that publishes "pay
+      // everyone". `isVoidWeek` is all-cancelled only, so a week with one
+      // cancelled game still has a real winner and still gets one.
+      const weeklyWinners = isVoidWeek(games) ? [] : computeWeeklyWinners(winnerCandidates);
+
+      // 4b. The Weekly Winners List + frozen weekly prize (PLAN-WEEKLY-PRIZES
+      // §3, §9 A1–A5). Same reveal-safety argument as `weeklyWinners`: this
+      // branch is `!provisional`. The FULL ranking is published (A2); the pot,
+      // the place list, the entry count and the weeks divisor are FROZEN in the
+      // recap at first publication and re-read verbatim on every later pass
+      // (§3b-i) — a rescore re-ranks players against a pot that does not move,
+      // and a commissioner editing settings afterwards affects future weeks
+      // only. Fails CLOSED (A5): any error here leaves the recap without
+      // `weeklyPlaces`, stamps `weeklyPlacesError`, and the week still scores.
+      const priorRecap = (await recapRef.get()).data() as { weeklyPrize?: WeeklyPrizeSnapshot | null } | undefined;
+      // `undefined` = never published by this feature; `null` = published unpriced.
+      const frozenPrize: WeeklyPrizeSnapshot | null | undefined =
+        priorRecap && Object.prototype.hasOwnProperty.call(priorRecap, 'weeklyPrize') ? (priorRecap.weeklyPrize ?? null) : undefined;
+      // Schedule-derived, so it can be read outside the transaction; only used
+      // when the in-tx pool has no stored `weeksInSeason`, and only needed on a
+      // priced mode. Wrapped so a query failure lands as `weeklyPlacesError`
+      // (fail-closed) instead of failing the scoring run (qodo #7 on #453).
+      // The mode is read from the pre-lease snapshot; if it flips to a priced
+      // mode during the pass, `weeklyPlacesPublication` fails closed with
+      // WEEKS_UNKNOWN (no null sentinel) and the next pass prices the week.
+      const needsWeeks = frozenPrize === undefined
+        && (pool?.settings?.payoutMode === 'WEEKLY' || pool?.settings?.payoutMode === 'HYBRID')
+        && !(Number.isInteger(pool?.weeksInSeason) && pool.weeksInSeason >= 1);
+      let derivedWeeks: number | undefined;
+      let weeksQueryError: string | undefined;
+      if (needsWeeks) {
+        try {
+          derivedWeeks = await weeksInSeasonFor(db, pool);
+        } catch (e) {
+          weeksQueryError = 'WEEKS_QUERY_FAILED';
+          console.warn(`[scoreNFLWeek] weeksInSeason query failed for ${poolId} week ${week}:`, e);
+        }
+      }
+      const voidWeek = isVoidWeek(games);
       // Fenced: creating this doc fires onWeeklyRecapCreated → AI trash-talk, and
       // the later authoritative pass only UPDATEs it, so a recap created from a
       // pass that lost its lease can never be regenerated on correct standings.
-      await fencedWrite(db, poolRef, fence!, (tx) => { tx.set(recapRef, recapDoc); });
+      // The derived weeks divisor (if any) is frozen on the pool in the SAME
+      // fenced write — set once, only when absent (D5). This is the one
+      // production write PLAN-WEEKLY-PRIZES §5 names; it rides the scorer's
+      // existing kill-switch + dryRun (`system/config.nflAutoScore`) and this
+      // `!dryRun && !provisional` branch, like every other pool patch here.
+      await fencedWrite(db, poolRef, fence!, (tx, freshPool) => {
+        // Prices from the pool doc read IN this transaction (codex r2): an edit
+        // to fee / payouts / charity / mode that committed after the pre-lease
+        // read is seen here, so what is frozen is what was saved.
+        const publication = weeksQueryError
+          ? { recap: { weeklyPlacesError: weeksQueryError } }
+          : weeklyPlacesPublication(
+            { ...(freshPool ?? {}), id: poolId }, week, winnerCandidates, voidWeek, frozenPrize, entriesSnap.size, derivedWeeks,
+          );
+        const recapDoc = buildWeeklyRecap({
+          poolId, week, poolType: pool.type, sharpUser, closestTie, aliveCount,
+          weeklyWinners,
+          ...publication.recap,
+        });
+        tx.set(recapRef, recapDoc);
+        return publication.poolPatch;
+      });
 
       await writeAuditEvent({
         poolId,
         type: 'SCORE_FINALIZED',
-        message: `NFL Pool Scoring concluded for Week ${week}`,
+        message: `NFL Pool Scoring concluded for ${weekLabelFor(pool, week)}`,
         severity: 'INFO',
         actor: actor,
         payload: { week }
@@ -1473,10 +2090,10 @@ async function scoreWeekPass(
   return {
     success: true,
     message: dryRun
-      ? `Week ${week} dry run — nothing written.`
+      ? `${weekLabelFor(pool, week)} dry run — nothing written.`
       : provisional
-        ? `Week ${week} scored provisionally — live standings updated.`
-        : `Week ${week} scored successfully.`,
+        ? `${weekLabelFor(pool, week)} scored provisionally — live standings updated.`
+        : `${weekLabelFor(pool, week)} scored successfully.`,
     dryRun,
     provisional,
     pickemScored,
@@ -1512,8 +2129,14 @@ export const scoreNFLWeek = validated(
 
     const pool = poolSnap.data() as any;
 
-    // RBAC checks
-    const userRole = request.auth!.token.role || 'USER';
+    // RBAC checks. CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d):
+    // assertPoolOwnerOrSuperAdmin short-circuits on `userRole === 'SUPER_ADMIN'`,
+    // so feeding it the raw claim let a demoted admin score any pool's week.
+    // confirmedAdminClaim strips an UNCONFIRMED SUPER_ADMIN claim to undefined
+    // and passes every other value through untouched — the helper branches on
+    // SUPER_ADMIN and nothing else, so 'USER' vs undefined is not a distinction
+    // it can see.
+    const userRole = await confirmedAdminClaim(request);
     try {
       assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
     } catch {
@@ -1527,12 +2150,23 @@ export const scoreNFLWeek = validated(
       .where('week', '==', week)
       .get();
 
-    const games = gamesSnap.docs.map(doc => doc.data() as NFLGame);
+    // `frozen ?? working` before anything grades against it — an ATS pool is
+    // scored on `spread.value`, and the whole point of the freeze is that the
+    // number scored is the number members picked against.
+    const games = await resolveGameSpreads(db, gamesSnap.docs.map(doc => doc.data() as NFLGame));
     if (games.length === 0) {
-      throw new HttpsError('failed-precondition', `No games found to score for week ${week}.`);
+      throw new HttpsError('failed-precondition', `No games found to score for ${weekLabelFor(pool, week)}.`);
     }
 
-    // Confirm all games are final
+    // Confirm all games are final.
+    //
+    // ⚠️ SECOND CONSUMER of `userRole`, and it is a SCORING bypass, not just an
+    // authorization one — exempting SUPER_ADMIN here lets the button score
+    // mid-week, applying Survivor strikes and Margin -14s while pick windows are
+    // still open (see the `provisional` note below). 17d's claim+doc resolution
+    // therefore reaches this gate too, which is the intended direction: a
+    // SUPER_ADMIN claim the users doc does not back no longer gets the bypass.
+    // Strictly more restrictive; no principal gains anything.
     const activeGamesCount = games.filter(g => g.status !== 'FINAL' && g.status !== 'CANCELLED').length;
     if (activeGamesCount > 0 && userRole !== 'SUPER_ADMIN') {
       throw new HttpsError('failed-precondition', `ACTIVE_GAMES: Cannot score the week while ${activeGamesCount} games are still active.`);

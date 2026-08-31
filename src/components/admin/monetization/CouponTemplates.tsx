@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../../ui/OverlayRoot';
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Pencil, Ticket, Save, X } from 'lucide-react';
 import { dbService } from '../../../services/dbService';
@@ -368,7 +369,7 @@ export const CouponTemplates: React.FC<Props> = ({ templates, locked, prefill, o
 
             {/* Mint dialog */}
             {mintFor && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <OverlayRoot id="coupon-mint" label="Mint a coupon from this template" onEscape={() => setMintFor(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="bg-surface border border-line rounded-2xl p-6 w-full max-w-sm space-y-4">
                         <div className="flex items-center justify-between">
                             <h3 className="font-display font-bold text-gold-500 text-sm uppercase tracking-[0.08em]">
@@ -408,7 +409,7 @@ export const CouponTemplates: React.FC<Props> = ({ templates, locked, prefill, o
                             </button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div>
     );

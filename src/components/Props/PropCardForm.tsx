@@ -1,4 +1,5 @@
 
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState, useEffect } from 'react';
 import type { GameState, PropCard, PropsPool, User } from '../../types';
 import { dbService } from '../../services/dbService';
@@ -506,7 +507,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
 
             {/* Confirmation Modal */}
             {isConfirming && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                <OverlayRoot id="props-confirm-submission" label="Confirm prop card submission" onEscape={() => { if (!isSubmitting) setIsConfirming(false); }} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
                     <div className="bg-card border border-line p-6 rounded-xl shadow-panel max-w-sm w-full">
                         <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-4 flex items-center gap-2">
                             {isSubmitting ? <Loader className="animate-spin text-gold-500" /> : <Check className="text-[#0F7B4A]" />}
@@ -532,9 +533,9 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                         type="checkbox"
                                         checked={liabilityAccepted}
                                         onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                                        className="peer h-5 w-5 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600"
+                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                                     />
-                                    <Check size={14} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
+                                    <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                                 </div>
                                 <p className="text-xs text-muted leading-relaxed group-hover:text-[color:var(--text)] transition-colors">
                                     By checking this box and selecting Purchase Prop Card, I acknowledge and agree that MarchMeleePools does not administer, hold, or distribute prizes. Any prizes are provided solely by the Pool Manager/Organizer. Any questions, disputes, or claims related to prizes or pool outcomes must be resolved directly between the user and the Pool Manager/Organizer.
@@ -560,7 +561,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                             </Button>
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
 
         </div>

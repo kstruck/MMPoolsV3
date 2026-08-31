@@ -25,20 +25,26 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 import Stripe from "stripe";
 import { validated } from "./lib/validated";
+import { assertPoolTypePurchasable } from "./lib/systemGuards";
+import { isPoolOwnerOrManager } from "./poolOps";
+import { normalizeRole } from "./lib/roles";
 import { withHeartbeat } from "./lib/heartbeat";
 import { createCheckoutSessionSchema } from "./schemas/billingCheckout";
 import { decideEventClaim, shouldAlertOnFailure, type WebhookEventDoc } from "./lib/webhookDurability";
 import { captureMonetizationAlert } from "./lib/sentryServer";
-import { dispatchOpsAlert } from "./lib/opsAlertDispatcher";
+import { dispatchOpsAlert, type OpsAlertType } from "./lib/opsAlertDispatcher";
 import {
     writeBillingChargeTxn,
     type BillingCharge,
 } from "./lib/billingCharges";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
-import { computeQuote, pricedAddonKeys } from "./lib/quoteEngine";
+import { computeQuote, computeAddonUpgradeQuote, pricedAddonKeys } from "./lib/quoteEngine";
 import {
     checkoutPoolInputSchema,
+    unsellableClampOutcome,
     type PendingBillableSnapshot,
+    type PoolQuote,
+    isMidseasonSellableAddon,
 } from "./shared/schemas/quote";
 import {
     validateCouponRules,
@@ -64,22 +70,233 @@ const db = admin.firestore();
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
+// =============================================================================
+// FAIL-CLOSED STRIPE CONFIG (PLAN-STRIPE-FAIL-CLOSED.md)
+//
+// The mock-checkout branch below used to fire on ONE input — "is the key
+// missing or a placeholder" — with no environment condition at all. In a
+// deployed function that meant a deleted/never-created/placeholder secret
+// version granted paid pool state and real bundle entitlements, ledger rows
+// included, for free. The environment is now part of the decision, and it is
+// read ONLY from variables the Firebase emulator sets on itself — never from a
+// Firestore config field, a request field, or anything a caller can flip.
+// =============================================================================
+
+/** Placeholder spellings seen in setup docs/scaffolds. Checked case-insensitively. */
+const PLACEHOLDER_KEY_PATTERN = /^(placeholder|changeme|change[-_ ]me|dummy|example|todo|xxx+|your[-_ ]?)/i;
+
+/** Stripe issues secret ("sk_") and restricted ("rk_") API keys. Nothing else. */
+const STRIPE_SECRET_KEY_PREFIX = /^(sk|rk)_/;
+
+export type StripeKeyVerdict = "usable" | "missing" | "placeholder" | "malformed";
+
+/**
+ * True only inside the local Firebase emulator suite. `FUNCTIONS_EMULATOR` is
+ * set to "true" by the Functions emulator and `FIRESTORE_EMULATOR_HOST` by the
+ * Firestore emulator; neither exists in a deployed function. Anything else —
+ * NODE_ENV, a `devMode` field, a config doc — is deliberately ignored, because
+ * a caller-settable dev switch is the same hazard with an extra step.
+ */
+export function isEmulatedEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+    return env.FUNCTIONS_EMULATOR === "true" || !!env.FIRESTORE_EMULATOR_HOST;
+}
+
+/** Classifies the configured secret WITHOUT calling Stripe. A well-formed but
+ *  wrong key is "usable" here — Stripe rejects it at session-create and the
+ *  existing catch releases the reservation. */
+export function classifyStripeKey(raw: string | undefined | null): StripeKeyVerdict {
+    const key = typeof raw === "string" ? raw.trim() : "";
+    if (!key) return "missing";
+    if (PLACEHOLDER_KEY_PATTERN.test(key)) return "placeholder";
+    if (!STRIPE_SECRET_KEY_PREFIX.test(key)) return "malformed";
+    return "usable";
+}
+
+export type StripeMode =
+    | { mode: "live" }
+    | { mode: "mock"; verdict: StripeKeyVerdict }
+    | { mode: "refuse"; verdict: StripeKeyVerdict };
+
+/** The whole policy in one place: usable ⇒ live; unusable + emulated ⇒ mock;
+ *  unusable + deployed ⇒ refuse. */
+export function resolveStripeMode(
+    raw: string | undefined | null,
+    env: NodeJS.ProcessEnv = process.env,
+): StripeMode {
+    const verdict = classifyStripeKey(raw);
+    if (verdict === "usable") return { mode: "live" };
+    if (isEmulatedEnvironment(env)) return { mode: "mock", verdict };
+    return { mode: "refuse", verdict };
+}
+
+/** Reads the secret without throwing when the binding is absent. */
+export function readStripeSecret(): string | undefined {
+    try {
+        return stripeSecretKey.value();
+    } catch {
+        return undefined;
+    }
+}
+
+export const STRIPE_UNAVAILABLE_MESSAGE =
+    "Card payments are temporarily unavailable, so this purchase was not started. " +
+    "You have not been charged and nothing about your pool was changed. " +
+    "Please try again shortly — we have been alerted.";
+
+// -----------------------------------------------------------------------------
+// Alert throttling (codex r1 [P2]).
+//
+// The refusal fires on EVERY checkout attempt for as long as the secret is
+// broken, and `dispatchOpsAlert` writes one mail doc per recipient with no
+// dedupe of its own. Unthrottled, the fix for a config outage would bury the
+// on-call inbox during that same outage. So: one page per cooldown window.
+//
+// Two layers, because neither alone is enough. The in-process gate is free and
+// stops the per-instance flood; the persisted marker stops a cold-start
+// stampede across instances from paging once per instance. The REFUSAL is never
+// throttled — only the paging is.
+// -----------------------------------------------------------------------------
+
+const STRIPE_CONFIG_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
+
+export interface AlertThrottle {
+    /** True when the caller may page; false when a page already went out inside the window. */
+    tryClaim(now: number): boolean;
+    reset(): void;
+}
+
+export function makeAlertThrottle(cooldownMs: number): AlertThrottle {
+    let lastAt = Number.NEGATIVE_INFINITY;
+    return {
+        tryClaim(now: number): boolean {
+            if (now - lastAt < cooldownMs) return false;
+            lastAt = now;
+            return true;
+        },
+        reset() {
+            lastAt = Number.NEGATIVE_INFINITY;
+        },
+    };
+}
+
+const stripeConfigAlertThrottle = makeAlertThrottle(STRIPE_CONFIG_ALERT_COOLDOWN_MS);
+
+/** Cross-instance dedupe marker. Also gives Kevin a doc showing the outage. */
+async function claimStripeConfigAlertPersisted(now: number, verdict: StripeKeyVerdict): Promise<boolean> {
+    try {
+        return await db.runTransaction(async (t) => {
+            const ref = db.collection("monetization_alerts").doc("STRIPE_CONFIG_INVALID");
+            const snap = await t.get(ref);
+            const lastAt = (snap.data()?.lastAlertedAt as number) ?? Number.NEGATIVE_INFINITY;
+            const claim = now - lastAt >= STRIPE_CONFIG_ALERT_COOLDOWN_MS;
+            t.set(
+                ref,
+                {
+                    type: "PAYMENT_FAILED",
+                    reason: "STRIPE_CONFIG_INVALID",
+                    verdict,
+                    status: "open",
+                    updatedAt: now,
+                    ...(claim ? { lastAlertedAt: now, createdAt: (snap.data()?.createdAt as number) ?? now } : {}),
+                    refusalCount: FieldValue.increment(1),
+                },
+                { merge: true },
+            );
+            return claim;
+        });
+    } catch (err) {
+        // Firestore itself is unhappy. Page — the in-process gate above already
+        // caps this instance at one page per window, so this cannot flood.
+        console.error("[Stripe] Could not persist the Stripe-config alert marker:", err);
+        return true;
+    }
+}
+
+/**
+ * THE MONEY GATE. In a deployed environment an unusable STRIPE_SECRET_KEY
+ * refuses the purchase with `failed-precondition` and pages ops — it never
+ * falls through to the mock grant. Injectable so the negative tests exercise
+ * this decision itself rather than a copy of it.
+ */
+export async function assertStripePaymentAllowed(opts: {
+    context: Record<string, unknown>;
+    env?: NodeJS.ProcessEnv;
+    readKey?: () => string | undefined;
+    dispatch?: (input: { type: OpsAlertType; title: string; message: string; context?: Record<string, unknown> }) => Promise<unknown>;
+    throttle?: AlertThrottle;
+    /** Cross-instance claim. `null` skips it (used by the unit tests). */
+    persistClaim?: ((now: number, verdict: StripeKeyVerdict) => Promise<boolean>) | null;
+    now?: number;
+} ): Promise<StripeMode> {
+    const env = opts.env ?? process.env;
+    const readKey = opts.readKey ?? readStripeSecret;
+    const resolution = resolveStripeMode(readKey(), env);
+    if (resolution.mode !== "refuse") return resolution;
+
+    console.error(
+        `[Stripe] REFUSING purchase: STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed environment.`,
+        opts.context,
+    );
+
+    // ⚠️ Everything from here to the throw is BEST EFFORT. Paging must never be
+    // the reason the refusal fails to happen — that is the whole point of the
+    // guard, and a thrown alert would restore the hazard.
+    try {
+        const now = opts.now ?? Date.now();
+        const throttle = opts.throttle ?? stripeConfigAlertThrottle;
+        const persistClaim = opts.persistClaim === undefined ? claimStripeConfigAlertPersisted : opts.persistClaim;
+        if (throttle.tryClaim(now) && (persistClaim === null || (await persistClaim(now, resolution.verdict)))) {
+            const dispatch =
+                opts.dispatch ?? ((input) => dispatchOpsAlert(db, input as Parameters<typeof dispatchOpsAlert>[1]));
+            await dispatch({
+                type: "PAYMENT_FAILED",
+                title: "Stripe is not configured — checkout refused",
+                message:
+                    `A purchase was refused because STRIPE_SECRET_KEY is ${resolution.verdict} in a deployed ` +
+                    "environment. Nothing was granted: no pool activation, no entitlement, no ledger row, no " +
+                    `coupon use. Further refusals in the next ${STRIPE_CONFIG_ALERT_COOLDOWN_MS / 60000} minutes ` +
+                    "are counted on monetization_alerts/STRIPE_CONFIG_INVALID rather than paged. " +
+                    "Set the secret and redeploy functions.",
+                context: { verdict: resolution.verdict, ...opts.context },
+            });
+        }
+    } catch (err) {
+        console.error("[Stripe] Ops alert for invalid Stripe config failed to dispatch:", err);
+    }
+    throw new HttpsError("failed-precondition", STRIPE_UNAVAILABLE_MESSAGE);
+}
+
+/** Mock session ids minted by the emulator-only checkout branches. */
+const MOCK_SESSION_PREFIX = "mock_";
+
+/**
+ * Backstop invariant on the two functions that actually WRITE paid state: in a
+ * deployed environment, a `mock_` session id can never produce a grant, by any
+ * route. Cheap, and it holds even if a future edit moves or drops a gate above.
+ */
+export function assertNotMockSessionInDeployedEnv(
+    sessionId: string | undefined | null,
+    env: NodeJS.ProcessEnv = process.env,
+): void {
+    if (typeof sessionId !== "string" || !sessionId.startsWith(MOCK_SESSION_PREFIX)) return;
+    if (isEmulatedEnvironment(env)) return;
+    console.error(`[Stripe] REFUSING to grant paid state for mock session '${sessionId}' in a deployed environment.`);
+    throw new HttpsError("failed-precondition", STRIPE_UNAVAILABLE_MESSAGE);
+}
+
 // Stripe will be initialized at function invocation time
 let stripeInstance: any = null;
 function getStripe() {
     if (!stripeInstance) {
-        let key = "";
-        try {
-            key = stripeSecretKey.value();
-        } catch (e) {
-            console.warn("[Stripe] STRIPE_SECRET_KEY is not defined in this environment.");
+        const key = readStripeSecret();
+        if (classifyStripeKey(key) !== "usable") {
+            // Unusable key. The CALLER decides what that means — the guards
+            // above refuse in a deployed environment; only the emulator is
+            // allowed to read this as "mock mode".
+            console.warn(`[Stripe] STRIPE_SECRET_KEY is ${classifyStripeKey(key)} in this environment.`);
+            return null;
         }
-
-        if (!key || key.startsWith("placeholder") || key === "") {
-            return null; // Signal mockup bypass mode
-        }
-
-        stripeInstance = new Stripe(key, { apiVersion: "2024-12-18.acacia" as any });
+        stripeInstance = new Stripe(key as string, { apiVersion: "2024-12-18.acacia" as any });
     }
     return stripeInstance;
 }
@@ -158,6 +375,34 @@ const PENDING_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 // 1. createCheckoutSession — Callable Function (onCall v2)
 // =============================================================================
 
+/**
+ * PLAN-COMMISSIONER-TRANSFER K17 (shipped standalone per the 2026-08-16 board
+ * memo, Kevin 2026-08-17): the POOL-purchase path of createCheckoutSession is
+ * owner/manager-only — or a SUPER_ADMIN whose claim AND live users/{uid}.role
+ * agree (the same claim+doc guard assertCallerRole applies). Before this, any
+ * signed-in user could start a hosting checkout for any pool. Bundle purchases
+ * are per-person and untouched.
+ *
+ * `poolData` is whatever the caller has in hand — the pre-read for the fast
+ * refusal, and the IN-TRANSACTION read inside both write transactions (the $0 /
+ * credit activation and the paid reservation), so a checkout racing an
+ * ownership change is refused against the pool as it is being written, not as
+ * it was a moment ago. `userDoc` likewise: the SA path re-reads users/{uid} in
+ * each transaction.
+ */
+export function assertCheckoutOwnership(
+    poolData: any,
+    uid: string,
+    claimRole: unknown,
+    userDocRole: unknown,
+): void {
+    if (isPoolOwnerOrManager(poolData, uid)) return;
+    const claimIsSA = normalizeRole((claimRole as string) ?? null) === "SUPER_ADMIN";
+    const docIsSA = normalizeRole((userDocRole as string) ?? null) === "SUPER_ADMIN";
+    if (claimIsSA && docIsSA) return;
+    throw new HttpsError("permission-denied", "Only the pool commissioner can buy or upgrade hosting for this pool.");
+}
+
 export const createCheckoutSession = validated(
     // Union: { bundleType } (bundle purchase) | checkoutPoolInputSchema (pool
     // purchase) — the same two shapes the old head accepted, now parsed at the
@@ -184,6 +429,10 @@ export const createCheckoutSession = validated(
     // STANDARD POOL PURCHASE PATH
     // =====================================================================
     const { poolId, poolName, poolType, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = input;
+    // PLAN-PER-POOL-PREMIUM C2. Default 'pool', so every client that predates
+    // this field behaves exactly as before.
+    const purchaseKind = input.purchaseKind ?? "pool";
+    const isAddonPurchase = purchaseKind === "addon";
 
     // --- Verify pool exists ---
     const poolDoc = await db.collection("pools").doc(poolId).get();
@@ -191,6 +440,17 @@ export const createCheckoutSession = validated(
         throw new HttpsError("not-found", "Pool not found.");
     }
     const poolData = poolDoc.data() as any;
+    // Hard-closed pool types cannot be bought (codex r3). The PERSISTED type,
+    // never the client's `poolType` — the caller picks that one.
+    assertPoolTypePurchasable(poolData?.type);
+
+    // --- Ownership gate (K17): owner/manager, or a claim+doc-verified SUPER_ADMIN ---
+    const claimRole = request.auth!.token?.role;
+    const readCallerRole = async (getter: (ref: FirebaseFirestore.DocumentReference) => Promise<FirebaseFirestore.DocumentSnapshot>): Promise<unknown> =>
+        normalizeRole((claimRole as string) ?? null) === "SUPER_ADMIN"
+            ? (await getter(db.collection("users").doc(userId))).data()?.role
+            : undefined; // not claiming SA — no doc read needed, the owner check decides
+    assertCheckoutOwnership(poolData, userId, claimRole, await readCallerRole(ref => ref.get()));
 
     // --- Authoritative quote (single price authority; client price never trusted) ---
     const config = await loadBillingConfig(db);
@@ -198,36 +458,138 @@ export const createCheckoutSession = validated(
         ? await resolveCouponForQuote(db, couponCode, { userId, poolType, now: Date.now() })
         : undefined;
 
+    // ---------------------------------------------------------------------
+    // MID-SEASON ADD-ON PURCHASE (C2). Different preconditions, different
+    // quote, different snapshot — so it is resolved here rather than threaded
+    // through the hosting path as a flag.
+    // ---------------------------------------------------------------------
+    const existingBilling = (poolData?.billing ?? {}) as {
+        status?: string;
+        tier?: string;
+        maxPlayersAllowed?: number;
+        featuresUnlocked?: Record<string, boolean>;
+        paid?: { tier?: string; maxPlayersAllowed?: number; addons?: string[] };
+    };
+    /**
+     * What the pool ALREADY holds, from BOTH sources, because they can differ:
+     * `paid.addons` records purchases, `featuresUnlocked` also carries a
+     * super-admin grant (adminSetPoolFeature) on a pool that never bought
+     * anything. Selling a commissioner something Kevin already gave them would
+     * be the worst possible version of this feature.
+     */
+    const ownedAddons: string[] = Array.from(new Set([
+        ...(Array.isArray(existingBilling.paid?.addons) ? existingBilling.paid!.addons! : []),
+        ...Object.entries(existingBilling.featuresUnlocked ?? {})
+            .filter(([, on]) => on === true)
+            .map(([k]) => k),
+    ]));
+
     let quote;
     try {
-        quote = computeQuote({
-            config,
-            poolType,
-            estimatedPlayers,
-            addons,
-            couponState: resolvedCoupon?.state,
-            coupon: resolvedCoupon?.coupon,
-        });
+        quote = isAddonPurchase
+            ? computeAddonUpgradeQuote({
+                config,
+                poolType,
+                // The pool's OWN allowance, never the client's number: an add-on
+                // purchase may not move the seat cap in either direction.
+                estimatedPlayers: existingBilling.paid?.maxPlayersAllowed
+                    ?? existingBilling.maxPlayersAllowed
+                    ?? 0,
+                // `PoolQuote["tier"]`, not `typeof quote.tier`. Both compile
+                // (measured: `npm --prefix functions run build` is clean either
+                // way, so codex r3's TS18048 claim is rejected), but a type
+                // query on the variable being assigned reads as circular and
+                // would genuinely break if `quote` ever gained an annotation.
+                currentTier: (existingBilling.paid?.tier ?? existingBilling.tier ?? "premium_tier") as PoolQuote["tier"],
+                addons,
+                owned: ownedAddons,
+            })
+            : computeQuote({
+                config,
+                poolType,
+                estimatedPlayers,
+                addons,
+                couponState: resolvedCoupon?.state,
+                coupon: resolvedCoupon?.coupon,
+            });
     } catch (e: any) {
         throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
     }
     const serverPrice = quote.total;
 
+    if (isAddonPurchase) {
+        // Preconditions, all server-side. The pool must be ACTIVE (an inactive
+        // pool buys hosting, which is the other path), there must be something
+        // left to sell, and none of the free-activation machinery applies.
+        if (existingBilling.status !== "active") {
+            throw new HttpsError("failed-precondition", "This pool is not active yet. Buy hosting for it first — add-ons come with that purchase.");
+        }
+        if (quote.addonLines.length === 0 || serverPrice <= 0) {
+            throw new HttpsError("failed-precondition", "There is nothing to buy: this pool already has the features you selected, or they are included with every pool.");
+        }
+        if (usedCredit || customCreditId) {
+            throw new HttpsError("invalid-argument", "Pool credits pay for hosting, not for add-ons.");
+        }
+        // Not every priced add-on can be sold ON ITS OWN. `whatIfSimulator` is
+        // priced and premium in the config, but the feature is rendered only by
+        // the Bracket dashboard AND is ungated there, so buying it separately
+        // delivers nothing to anybody. Enforced HERE, on the server, because a
+        // stale client bundle would keep offering it otherwise — the same
+        // reasoning as INCLUDED_ADDON_KEYS. (codex r4 [P1].)
+        const unsellableSeparately = quote.addonLines
+            .map((l) => l.key)
+            .filter((k) => !isMidseasonSellableAddon(k));
+        if (unsellableSeparately.length > 0) {
+            throw new HttpsError(
+                "invalid-argument",
+                `These features cannot be bought on their own: ${unsellableSeparately.join(", ")}.`,
+            );
+        }
+        if (couponCode) {
+            // See computeAddonUpgradeQuote: a coupon reservation is keyed by
+            // (code, userId, poolId) and its limits assume one purchase per
+            // pool. Refusing is honest; silently ignoring the code would let a
+            // commissioner believe a discount applied.
+            throw new HttpsError("invalid-argument", "Coupons apply to a pool's hosting purchase, not to add-ons bought later.");
+        }
+    }
+
     // Pending billable snapshot — copied to billing.paid ONLY on success.
-    const snapshot: PendingBillableSnapshot = {
-        tier: quote.tier,
-        maxPlayersAllowed: estimatedPlayers,
-        addons: pricedAddonKeys(quote.addonLines),
-    };
-    const featuresUnlocked = {
-        aiCommissioner: addons.aiCommissioner === true,
-        smsNotifications: addons.smsNotifications === true,
-        whatIfSimulator: addons.whatIfSimulator === true,
-        customBranding: addons.customBranding === true,
-    };
+    //
+    // ⚠️ For an ADD-ON purchase the snapshot carries the pool's EXISTING tier
+    // and seat allowance (so finalization cannot move them) and ONLY the newly
+    // priced add-ons. The union with what the pool already owns happens at
+    // finalization, against the pool as read in that transaction.
+    const snapshot: PendingBillableSnapshot = isAddonPurchase
+        ? {
+            tier: quote.tier,
+            maxPlayersAllowed: quote.estimatedPlayers,
+            addons: pricedAddonKeys(quote.addonLines),
+        }
+        : {
+            tier: quote.tier,
+            maxPlayersAllowed: estimatedPlayers,
+            addons: pricedAddonKeys(quote.addonLines),
+        };
+    /**
+     * ⚠️ FOR AN ADD-ON PURCHASE THIS IS A PATCH, NOT A PICTURE. It names only
+     * the keys being bought; finalization merges it. Sending the full four-key
+     * object here — the hosting path's shape — would carry `false` for every
+     * add-on the pool already owns and REVOKE them on success.
+     */
+    const featuresUnlocked = isAddonPurchase
+        ? Object.fromEntries(pricedAddonKeys(quote.addonLines).map((k) => [k, true]))
+        : {
+            aiCommissioner: addons.aiCommissioner === true,
+            smsNotifications: addons.smsNotifications === true,
+            whatIfSimulator: addons.whatIfSimulator === true,
+            customBranding: addons.customBranding === true,
+        };
 
     // --- Enforce 1 active free pool limit (unchanged rule) ---
-    if (quote.tier === "free_tier" || serverPrice === 0) {
+    // Skipped for an add-on purchase: that pool is already active and already
+    // counted, and `serverPrice` is guaranteed > 0 above.
+    if (!isAddonPurchase && (quote.tier === "free_tier" || serverPrice === 0)) {
         if (quote.freeTierEligible || snapshot.tier === "free_tier") {
             const activeFreePoolsSnap = await db.collection("pools")
                 .where("ownerId", "==", userId)
@@ -275,6 +637,8 @@ export const createCheckoutSession = validated(
         await db.runTransaction(async (txn) => {
             const poolRef = db.collection("pools").doc(poolId);
             const freshPool = await txn.get(poolRef);
+            // K17: re-check ownership against the pool AS READ IN THIS TRANSACTION.
+            assertCheckoutOwnership(freshPool.data(), userId, claimRole, await readCallerRole(ref => txn.get(ref)));
             const freshBilling = (freshPool.data() as any)?.billing;
             // No-op if already active (idempotency; avoid double credit spend).
             if (freshBilling?.status === "active") {
@@ -354,6 +718,21 @@ export const createCheckoutSession = validated(
     // =====================================================================
     // PAID PATH — reserve coupon + set pending idempotency, THEN create session
     // =====================================================================
+
+    // ⚠️ THE MONEY GATE, AND IT MUST STAY THE FIRST STATEMENT OF THIS BLOCK.
+    // Everything above is reads and pure quoting; the reservation transaction
+    // below is the paid path's FIRST WRITE. Refusing here means a deployed
+    // environment with an unusable STRIPE_SECRET_KEY mutates nothing at all —
+    // no coupon reservation, no billing.pendingSessionId, no checkoutSessions
+    // doc — and hands back no redirect URL. (PLAN-STRIPE-FAIL-CLOSED.md)
+    //
+    // The $0 path above is intentionally NOT gated: it never calls Stripe even
+    // when the key is perfect, and it is separately gated on a validated
+    // credit / free-tier eligibility / 100% coupon.
+    await assertStripePaymentAllowed({
+        context: { path: "pool", poolId, userId, purchaseKind, amount: serverPrice },
+    });
+
     const reservationId = randomUUID();
     // Only a coupon that actually applied a discount is reserved + carried in
     // metadata (so the webhook confirms exactly the reservation we made). A
@@ -364,6 +743,8 @@ export const createCheckoutSession = validated(
     await db.runTransaction(async (txn) => {
         const poolRef = db.collection("pools").doc(poolId);
         const freshPool = await txn.get(poolRef);
+        // K17: re-check ownership against the pool AS READ IN THIS TRANSACTION.
+        assertCheckoutOwnership(freshPool.data(), userId, claimRole, await readCallerRole(ref => txn.get(ref)));
         const freshBilling = (freshPool.data() as any)?.billing;
 
         // Reject a second live checkout on this pool (idempotency).
@@ -371,8 +752,16 @@ export const createCheckoutSession = validated(
         if (pending && typeof pending.at === "number" && Date.now() - pending.at < PENDING_SESSION_TTL_MS) {
             throw new HttpsError("failed-precondition", "A checkout is already in progress for this pool. Please complete or cancel it before starting another.");
         }
-        if (freshBilling?.status === "active") {
+        // An ACTIVE pool has no hosting left to sell — but it is exactly the
+        // pool an ADD-ON purchase targets, so the guard is scoped to the
+        // hosting path rather than being a blanket refusal (C2).
+        if (!isAddonPurchase && freshBilling?.status === "active") {
             throw new HttpsError("failed-precondition", "This pool is already active.");
+        }
+        if (isAddonPurchase && freshBilling?.status !== "active") {
+            // Re-checked inside the transaction, against the pool AS READ HERE:
+            // the pre-transaction check above can race a cancellation.
+            throw new HttpsError("failed-precondition", "This pool is not active yet. Buy hosting for it first — add-ons come with that purchase.");
         }
 
         // Coupon reservation — ONLY reserve a coupon that actually applied a
@@ -404,6 +793,7 @@ export const createCheckoutSession = validated(
             userId,
             poolType,
             status: "pending",
+            purchaseKind,
             couponCode: appliedCouponCode ?? null,
             pendingSnapshot: snapshot,
             featuresUnlocked,
@@ -424,6 +814,7 @@ export const createCheckoutSession = validated(
         userId,
         tier: snapshot.tier,
         poolType,
+        purchaseKind,
         reservationId,
         couponCode: appliedCouponCode || "",
         maxPlayersAllowed: String(snapshot.maxPlayersAllowed),
@@ -431,6 +822,12 @@ export const createCheckoutSession = validated(
     };
 
     if (!stripe) {
+        // Defence in depth. The gate at the top of the paid path has already
+        // refused a deployed environment, so this can only be the emulator —
+        // but the branch that GRANTS carries its own refusal regardless.
+        await assertStripePaymentAllowed({
+            context: { path: "pool-mock-branch", poolId, userId, purchaseKind, amount: serverPrice },
+        });
         // Mock dev sandbox: emulate a completed session inline (activate now).
         console.log(`[Stripe Mockup] Missing/placeholder key — mock checkout for pool ${poolId}.`);
         const mockSessionId = `mock_local_dev_session_${Date.now()}`;
@@ -452,8 +849,19 @@ export const createCheckoutSession = validated(
                     price_data: {
                         currency: "usd",
                         product_data: {
-                            name: `${poolName} — ${snapshot.tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
-                            description: `One-time hosting fee for your ${poolType} pool`,
+                            // codex r1 [P2]. An add-on session used to tell Stripe
+                            // the product was "Premium Hosting" with a hosting-fee
+                            // description — on a pool whose hosting was already
+                            // paid for. The buyer's card statement and receipt
+                            // would both have named something they did not buy,
+                            // which is a dispute waiting to happen. The name now
+                            // comes from the quote's own priced lines.
+                            name: isAddonPurchase
+                                ? `${poolName} — ${quote.addonLines.map((l) => l.label).join(" + ")}`
+                                : `${poolName} — ${snapshot.tier === "premium_tier" ? "Premium" : "Standard"} Hosting`,
+                            description: isAddonPurchase
+                                ? `Add-on${quote.addonLines.length === 1 ? "" : "s"} for your ${poolType} pool. Your hosting is already paid for and is not charged again.`
+                                : `One-time hosting fee for your ${poolType} pool`,
                         },
                         unit_amount: Math.round(serverPrice * 100),
                     },
@@ -485,6 +893,13 @@ async function createBundleCheckout(
     origin: string,
     email: string | undefined
 ): Promise<{ sessionUrl: string | null }> {
+    // ⚠️ THE MONEY GATE, AND IT MUST STAY THE FIRST STATEMENT OF THIS FUNCTION.
+    // A bundle is a durable entitlement (credits / an unlimited pass) granted to
+    // ANY signed-in caller — there is no ownership gate on this path — so a
+    // deployed environment with an unusable STRIPE_SECRET_KEY must refuse before
+    // anything is read or written. (PLAN-STRIPE-FAIL-CLOSED.md)
+    await assertStripePaymentAllowed({ context: { path: "bundle", bundleType, userId } });
+
     // Authoritative bundle price from billing_config.
     let serverPrice: number | undefined;
     let dynamicBundle: any = null;
@@ -504,6 +919,8 @@ async function createBundleCheckout(
 
     const stripe = getStripe();
     if (!stripe) {
+        // Defence in depth — see the pool mock branch.
+        await assertStripePaymentAllowed({ context: { path: "bundle-mock-branch", bundleType, userId } });
         console.log(`[Stripe Mockup] Mock bundle checkout for ${bundleType}.`);
         const mockSessionId = `mock_bundle_session_${Date.now()}`;
         // grantBundle writes the canonical bundle + credit docs + ledger row in
@@ -599,6 +1016,10 @@ async function grantBundle(
     bundleType: string,
     opts: { stripeSessionId?: string; paymentIntentId?: string; amount?: number } = {}
 ): Promise<void> {
+    // Backstop: a `mock_` session id may never grant an entitlement in a
+    // deployed environment, whatever route got here.
+    assertNotMockSessionInDeployedEnv(opts.stripeSessionId);
+
     const pkg = await resolveBundlePackage(bundleType);
     if (!pkg) {
         throw new HttpsError("internal", `Unable to resolve bundle '${bundleType}' for entitlement grant.`);
@@ -661,6 +1082,11 @@ async function finalizePoolPayment(args: {
     metadata: Record<string, string>;
 }): Promise<void> {
     const { sessionId, paymentIntentId, amountTotalCents, metadata } = args;
+    // Backstop: a `mock_` session id may never activate a pool, write a ledger
+    // row, or confirm a coupon in a deployed environment, whatever route got
+    // here. (PLAN-STRIPE-FAIL-CLOSED.md)
+    assertNotMockSessionInDeployedEnv(sessionId);
+
     const poolId = metadata.poolId;
     const userId = metadata.userId;
     const reservationId = metadata.reservationId;
@@ -682,16 +1108,47 @@ async function finalizePoolPayment(args: {
         let snapshot: PendingBillableSnapshot | undefined;
         let featuresUnlocked: Record<string, boolean> | undefined;
         let sessionRef: FirebaseFirestore.DocumentReference | null = null;
+        let sessionKind: string | undefined;
         if (reservationId) {
             sessionRef = db.collection("checkoutSessions").doc(reservationId);
             const sSnap = await txn.get(sessionRef);
             const sData = sSnap.data() as any;
             snapshot = sData?.pendingSnapshot;
             featuresUnlocked = sData?.featuresUnlocked;
+            sessionKind = sData?.purchaseKind;
+        }
+        /**
+         * WHAT THIS SESSION BOUGHT (C2). The SESSION RECORD wins over Stripe
+         * metadata: the session doc is written by our own transaction, the
+         * metadata round-trips through Stripe. They agree in practice; when
+         * they cannot both be read, the one we wrote is the one to trust.
+         */
+        const purchaseKind = sessionKind ?? metadata.purchaseKind ?? "pool";
+        const isAddonPurchase = purchaseKind === "addon";
+
+        /**
+         * ⚠️ AN ADD-ON PURCHASE ARRIVES FOR AN ACTIVE POOL BY DEFINITION, so
+         * `status === "active"` stops being evidence of a double charge for it.
+         * Its idempotency comes from the LEDGER instead: the row's id IS the
+         * Stripe session id, so a replayed webhook finds it and no-ops. That
+         * matters more here than on the hosting path, because `pricePaid` is an
+         * INCREMENT — replaying it would inflate the pool's recorded spend even
+         * though the entitlement writes are idempotent.
+         */
+        if (isAddonPurchase) {
+            const ledgerRef = db.collection("billingCharges").doc(sessionId);
+            const ledgerSnap = await txn.get(ledgerRef);
+            if (ledgerSnap.exists) {
+                console.log(`[Stripe Webhook] Add-on session ${sessionId} already finalized for pool ${poolId}; no-op.`);
+                if (reservationId && sessionRef) {
+                    txn.set(sessionRef, { status: "confirmed", sessionId, confirmedAt: Date.now() }, { merge: true });
+                }
+                return;
+            }
         }
 
         // --- DOUBLE-CHARGE GUARD: pool already active → no-op + alert ---
-        if (billing?.status === "active") {
+        if (!isAddonPurchase && billing?.status === "active") {
             doubleCharge = true;
             const alertRef = db.collection("monetization_alerts").doc(`DOUBLE_CHARGE_${sessionId}`);
             txn.set(alertRef, {
@@ -713,9 +1170,40 @@ async function finalizePoolPayment(args: {
 
         const tier = (snapshot?.tier || metadata.tier || "standard_tier");
         const maxPlayersAllowed = snapshot?.maxPlayersAllowed ?? (Number(metadata.maxPlayersAllowed) || 10);
-        const unlocked = featuresUnlocked || {
+        const rawUnlocked = featuresUnlocked || {
             aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false,
         };
+
+        // IN-FLIGHT SESSION CLAMP (PLAN-COST-CONTROLS 0.5.4; codex round 2).
+        // 0.5.4 stops SMS being SOLD at the shared schema, but this handler
+        // finalizes sessions created BEFORE that deployed, and it trusts the
+        // persisted pendingSnapshot/featuresUnlocked rather than re-parsing the
+        // schema. Without this, such a session still stamps the SMS flag on a
+        // feature Kevin has turned off.
+        //
+        // The clamp alone would leave a customer CHARGED for SMS and not
+        // granted it, silently — so it writes a monetization alert instead,
+        // same idiom as the double-charge guard above. This should never fire:
+        // the wizard stopped offering SMS on 2026-07-07, so it needs a session
+        // that was crafted, not clicked.
+        //
+        // ⚠️ `snapshot.addons` is deliberately NOT filtered (half of the review's
+        // proposed fix, rejected with reason). That array is the record of what
+        // was PAID FOR, and it is what `assertPaidCeilingForUpdate` reads. If
+        // SMS returns, stripping it here would make a customer who already paid
+        // pay again; keeping it costs nothing today because no client path can
+        // write `featuresUnlocked` (`shared/editability.ts` does not expose it).
+        // So: the entitlement is withheld, the purchase record stays truthful.
+        //
+        // ⚠️ DECIDE HERE, WRITE LATER. A Firestore transaction requires every
+        // read before every write, and a coupon `txn.get` runs below — an alert
+        // `txn.set` here threw the whole transaction for any checkout that used
+        // BOTH a coupon and an unsellable add-on (codex round 3). This block is
+        // pure; the alert write sits with the other writes, after the reads.
+        const { unlocked, soldWhileOff } = unsellableClampOutcome(
+            rawUnlocked,
+            Array.isArray(snapshot?.addons) ? snapshot!.addons : [],
+        );
 
         // Confirm coupon reservation (flip pending → confirmed) in this txn.
         if (couponCode && reservationId) {
@@ -729,22 +1217,112 @@ async function finalizePoolPayment(args: {
             }
         }
 
-        // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.
-        txn.update(poolRef, {
-            "billing.status": "active",
-            "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
-            "billing.stripeSessionId": sessionId,
-            "billing.tier": tier,
-            "billing.maxPlayersAllowed": maxPlayersAllowed,
-            "billing.pendingSessionId": FieldValue.delete(),
-            "billing.featuresUnlocked": unlocked,
-            "billing.paid": {
-                tier,
-                maxPlayersAllowed,
-                addons: snapshot?.addons ?? [],
-                at: Date.now(),
-            },
-        });
+        // Deferred from the clamp above: all reads are done, so it is safe to
+        // write. Records the money discrepancy (charged for an add-on whose
+        // entitlement we are withholding) for refund review, rather than
+        // withholding it silently.
+        if (soldWhileOff.length > 0) {
+            txn.set(db.collection("monetization_alerts").doc(`UNSELLABLE_ADDON_SOLD_${sessionId}`), {
+                type: "UNSELLABLE_ADDON_SOLD",
+                addons: soldWhileOff,
+                poolId,
+                userId,
+                sessionId,
+                paymentIntentId: paymentIntentId ?? null,
+                amount,
+                status: "open",
+                createdAt: Date.now(),
+            }, { merge: true });
+            console.warn(`[Stripe Webhook] Unsellable add-on(s) ${soldWhileOff.join(",")} arrived on session ${sessionId} for pool ${poolId}; entitlement withheld, alert written for refund review.`);
+        }
+
+        /**
+         * 🛑 MERGE, NEVER REPLACE.
+         *
+         * `billing.featuresUnlocked` and `billing.paid.addons` used to be
+         * written wholesale from the session snapshot. On the hosting path that
+         * silently revoked a super-admin grant made BEFORE activation
+         * (adminSetPoolFeature can grant on a free or trial pool); on the add-on
+         * path it would revoke every add-on the pool had already bought. Both
+         * are the same defect, so both paths union.
+         */
+        const priorUnlocked = (billing?.featuresUnlocked ?? {}) as Record<string, boolean>;
+        const mergedUnlocked: Record<string, boolean> = { ...priorUnlocked };
+        for (const [key, on] of Object.entries(unlocked)) {
+            if (on === true) mergedUnlocked[key] = true;
+            else if (mergedUnlocked[key] !== true) mergedUnlocked[key] = false;
+        }
+        const paidBefore = billing?.paid as { addons?: unknown } | undefined;
+        const priorPaidAddons: string[] = Array.isArray(paidBefore?.addons)
+            ? (paidBefore!.addons as string[])
+            : [];
+        const mergedPaidAddons = Array.from(new Set([...priorPaidAddons, ...(snapshot?.addons ?? [])]));
+
+        /**
+         * codex r2 [P2] — THE OWNERSHIP SNAPSHOT IS TAKEN AT CHECKOUT AND CAN GO
+         * STALE WHILE THE CUSTOMER IS ON STRIPE.
+         *
+         * `createCheckoutSession` reads what the pool owns and drops those
+         * add-ons before pricing. If Kevin then grants one of the remaining
+         * add-ons with `adminSetPoolFeature` before the commissioner finishes
+         * paying, the merge below is still CORRECT — they end up owning it — but
+         * they have been charged for something that became free in between.
+         *
+         * The money is already taken by the time this webhook runs, so nothing
+         * here can prevent the charge. What it can do is refuse to let the
+         * discrepancy be silent: same idiom as the UNSELLABLE_ADDON_SOLD alert
+         * above, which exists for exactly this class of problem.
+         *
+         * ⚠️ Read from `priorUnlocked` — the pool AS READ IN THIS TRANSACTION —
+         * never from the session's snapshot, which is the stale value.
+         */
+        const grantedWhilePending = isAddonPurchase
+            ? (snapshot?.addons ?? []).filter((k) => priorUnlocked[k] === true)
+            : [];
+        if (grantedWhilePending.length > 0) {
+            txn.set(db.collection("monetization_alerts").doc(`ADDON_ALREADY_OWNED_${sessionId}`), {
+                type: "ADDON_ALREADY_OWNED",
+                addons: grantedWhilePending,
+                poolId,
+                userId,
+                sessionId,
+                paymentIntentId: paymentIntentId ?? null,
+                amount,
+                status: "open",
+                createdAt: Date.now(),
+            }, { merge: true });
+            console.warn(`[Stripe Webhook] Add-on(s) ${grantedWhilePending.join(",")} were already granted on pool ${poolId} before session ${sessionId} completed; entitlement stands, alert written for refund review.`);
+        }
+
+        if (isAddonPurchase) {
+            // Entitlement + ceiling + money. NOT status, NOT tier, NOT the seat
+            // cap: the pool's hosting was bought already and this purchase does
+            // not renegotiate it.
+            txn.update(poolRef, {
+                "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
+                "billing.pendingSessionId": FieldValue.delete(),
+                "billing.featuresUnlocked": mergedUnlocked,
+                "billing.paid.addons": mergedPaidAddons,
+                "billing.paid.at": Date.now(),
+            });
+        } else {
+            // Activate pool + copy pending snapshot → billing.paid + featuresUnlocked.
+            txn.update(poolRef, {
+                "billing.status": "active",
+                "billing.pricePaid": ((billing?.pricePaid as number) || 0) + amount,
+                "billing.stripeSessionId": sessionId,
+                "billing.tier": tier,
+                "billing.maxPlayersAllowed": maxPlayersAllowed,
+                "billing.pendingSessionId": FieldValue.delete(),
+                "billing.featuresUnlocked": mergedUnlocked,
+                "billing.paid": {
+                    tier,
+                    maxPlayersAllowed,
+                    addons: mergedPaidAddons,
+                    at: Date.now(),
+                },
+            });
+        }
 
         if (sessionRef) {
             txn.set(sessionRef, { status: "confirmed", sessionId, confirmedAt: Date.now() }, { merge: true });
@@ -809,6 +1387,34 @@ export const handleStripeWebhook = functions.https.onRequest({ secrets: [stripeS
         return;
     }
     const stripe = getStripe();
+    if (!stripe) {
+        // Without a usable key there is no way to VERIFY the signature, so this
+        // must never fall through to `stripe.webhooks.constructEvent` — which
+        // it used to, dereferencing null and returning a 500 that reads as a
+        // crash rather than the configuration failure it is. 503 keeps Stripe
+        // retrying, which is right: the config can be repaired.
+        console.error("[Stripe Webhook] REFUSING: STRIPE_SECRET_KEY is not usable in this environment.");
+        // Stripe retries a 503 on its own schedule, so this path repeats for as
+        // long as the outage lasts — same throttle as the checkout refusal
+        // (codex r1 [P2]). Best effort: a paging failure must not stop the 503.
+        try {
+            const now = Date.now();
+            if (stripeConfigAlertThrottle.tryClaim(now) && (await claimStripeConfigAlertPersisted(now, classifyStripeKey(readStripeSecret())))) {
+                await dispatchOpsAlert(db, {
+                    type: "WEBHOOK_FAILED",
+                    title: "Stripe webhook refused — secret key not configured",
+                    message:
+                        "A Stripe webhook could not be verified because STRIPE_SECRET_KEY is missing, a placeholder, " +
+                        "or malformed. Nothing was processed and Stripe will retry. Set the secret and redeploy functions.",
+                    context: { verdict: classifyStripeKey(readStripeSecret()) },
+                });
+            }
+        } catch (err) {
+            console.error("[Stripe Webhook] Ops alert for invalid Stripe config failed to dispatch:", err);
+        }
+        res.status(503).send("Stripe is not configured");
+        return;
+    }
     const sig = req.headers["stripe-signature"] as string;
     if (!sig) {
         console.error("[Stripe Webhook] Missing stripe-signature header");

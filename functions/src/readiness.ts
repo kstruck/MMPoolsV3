@@ -17,6 +17,11 @@ import * as admin from "firebase-admin";
 export const readiness = onRequest(
     { timeoutSeconds: 10, memory: "256MiB" },
     async (req, res) => {
+        // Uptime Checks send unauthenticated GETs; nothing else belongs here.
+        if (req.method !== "GET" && req.method !== "HEAD") {
+            res.status(405).send("Method Not Allowed");
+            return;
+        }
         try {
             // Firestore Admin SDK reads don't take an AbortSignal, so race a
             // timeout instead — a hung dependency must read as unready, not

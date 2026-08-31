@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { PlayoffTeam } from '../../types';
@@ -119,10 +120,10 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
         { key: 'SUPER_BOWL', label: 'Super Bowl' },
     ];
 
-    if (isLoading) return <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 text-white font-display font-bold uppercase">Loading Global Results...</div>;
+    if (isLoading) return <OverlayRoot id="playoff-results-loading" dialog={false} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 text-white font-display font-bold uppercase">Loading Global Results...</OverlayRoot>;
 
     return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+        <OverlayRoot id="playoff-results-manager" label="Manage global playoff results" onEscape={onClose} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
             <div className="bg-card rounded-xl border border-line shadow-panel max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6 border-b border-line flex justify-between items-center">
                     <h2 className="text-xl font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
@@ -182,6 +183,6 @@ export const PlayoffResultsManager: React.FC<PlayoffResultsManagerProps> = ({ te
                     </div>
                 </div>
             </div>
-        </div>
+        </OverlayRoot>
     );
 };

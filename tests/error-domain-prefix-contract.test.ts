@@ -102,3 +102,73 @@ describe('MEMBER_NOT_ON_ROSTER domain prefix', () => {
         expect(setPaidStatusSrc).toContain('throw new HttpsError("not-found", "Pool not found.")');
     });
 });
+
+/**
+ * `renameNFLEntry` — PLAN-MULTI-ENTRY K5 follow-up.
+ *
+ * Same cross-boundary contract as above, and the same failure if either half
+ * moves: the server throws `ENTRY_NOT_FOUND:` and the client maps that prefix.
+ * This one matters because the generic `not-found` copy reads as "that pool or
+ * entry couldn't be found" — about a pool the member is looking at — for what
+ * is really "you don't have an entry #2 yet", a state a stale entry list can
+ * put a member in.
+ */
+describe('renameNFLEntry domain prefixes', () => {
+    const renameSrc = readFileSync(
+        resolve(__dirname, '../functions/src/nflEntryRename.ts'),
+        'utf8',
+    );
+
+    // Non-global: `.test()` on a /g regex advances `lastIndex`, so a second
+    // call would answer about the wrong position.
+    const NOT_FOUND_THROW = /HttpsError\(\s*'not-found',\s*`ENTRY_NOT_FOUND:/;
+
+    it('ENTRY_NOT_FOUND is thrown by the never-create guard', () => {
+        expect(NOT_FOUND_THROW.test(renameSrc)).toBe(true);
+    });
+
+    it('🛑 that regex MATCHES THE SHAPE IT WAS WRITTEN TO CATCH, and only it', () => {
+        // GUARD THE GUARD. An inert regex is indistinguishable from a passing
+        // one — #596 shipped a guard whose `\b` had become a literal U+0008
+        // backspace, and only a reviewer reading bytes found it. So it is
+        // asserted against a sample it must catch and one it must not.
+        expect(NOT_FOUND_THROW.test(
+            "throw new HttpsError('not-found',\n  `ENTRY_NOT_FOUND: no entry #2.`);")).toBe(true);
+        // The code moving to a DIFFERENT transport code is exactly the drift
+        // this pins: the client maps the prefix under `functions/not-found`.
+        expect(NOT_FOUND_THROW.test(
+            "throw new HttpsError('failed-precondition', `ENTRY_NOT_FOUND: no entry #2.`);")).toBe(false);
+        // ...and the prefix disappearing is the other half.
+        expect(NOT_FOUND_THROW.test(
+            "throw new HttpsError('not-found', `You do not have an entry #2.`);")).toBe(false);
+    });
+
+    it('ENTRY_NOT_FOUND resolves to entry-specific copy, not the generic not-found', () => {
+        const msg = getUserMessage({
+            code: 'functions/not-found',
+            message: "ENTRY_NOT_FOUND: you do not have an entry #2 in this pool yet.",
+        });
+        expect(msg).toMatch(/first saved pick/i);
+        expect(msg).not.toMatch(/that pool or entry couldn't be found/i);
+    });
+
+    it('leaves a genuinely missing POOL on the generic copy', () => {
+        // The rename callable throws a BARE not-found for the pool itself, so
+        // the prefix above has to be the thing that distinguishes them.
+        expect(renameSrc).toContain(`throw new HttpsError('not-found', 'Pool not found.')`);
+        expect(getUserMessage({ code: 'functions/not-found', message: 'Pool not found.' }))
+            .toMatch(/that pool or entry couldn't be found/i);
+    });
+
+    it('reuses the entry-name prefixes rather than inventing new ones', () => {
+        // `assertEntryNameFree` is shared with the submit path, so its
+        // ENTRY_NAME_TAKEN / ENTRY_NAME_EMPTY copy already exists. A rename that
+        // threw its own wording would need a second registry entry and would
+        // drift from the one the pick sheet shows for the same rule.
+        expect(renameSrc).toContain('assertEntryNameFree');
+        expect(getUserMessage({
+            code: 'functions/already-exists',
+            message: 'ENTRY_NAME_TAKEN: you already have an entry named "Kevin B".',
+        })).toMatch(/already have an entry with that name/i);
+    });
+});

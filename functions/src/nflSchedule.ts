@@ -1,12 +1,15 @@
 import * as admin from 'firebase-admin';
+import { ESPN_SITE_API } from './lib/espnHost';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { writeAuditEvent } from './audit';
 import { NFLGame } from './types';
-import { detectStatCorrections } from './lib/feedSnapshot';
+import { acquireSlateLease, assertSlateFence, releaseSlateLease } from './lib/slateLease';
+import { detectStatCorrections, type GameStateChange } from './lib/feedSnapshot';
 import { captureFeedSnapshot, pruneExpiredSnapshots, readSnapshotGate, reportStatCorrections } from './feedSnapshotStore';
 import { opsCourierAuthToken } from './lib/opsAlertDispatcher';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
-import { isTerminalGame } from './lib/weekCompletion';import { hasReportedScores } from './nflScoringEngine';
+import { isTerminalGame } from './lib/weekCompletion';
+import { hasReportedScores } from './nflScoringEngine';
 import { RESCORE_QUEUE, rescoreEventDoc } from './lib/rescoreQueue';
 import type { Firestore } from 'firebase-admin/firestore';
 import { validated } from "./lib/validated";
@@ -122,12 +125,13 @@ async function resolveScoreboardUrl(
   season: string,
   seasonType: 1 | 2 | 3,
 ): Promise<string> {
-    let url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    // Host lives in lib/espnHost.ts — read its comment before touching it.
+    let url = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
 
     try {
       // 1. Fetch calendar to extract precise date range for the specified week of 2026 season.
       // This prevents ESPN's scoreboard API from falling back to 2025 games during the off-season.
-      const calendarUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?season=${season}`;
+      const calendarUrl = `${ESPN_SITE_API}/football/nfl/scoreboard?season=${season}`;
       const calendarResp = await fetch(calendarUrl);
       if (calendarResp.ok) {
         const calendarData = await calendarResp.json();
@@ -148,7 +152,7 @@ async function resolveScoreboardUrl(
             };
             
             const dateQuery = `${formatDate(start)}-${formatDate(end)}`;
-            url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${dateQuery}`;
+            url = `${ESPN_SITE_API}/football/nfl/scoreboard?dates=${dateQuery}`;
             console.log(`[nflSchedule] Resolved Week ${week} (Type: ${seasonType}) to dates: ${dateQuery}`);
           }
         }
@@ -221,6 +225,40 @@ export async function fetchNFLWeekScheduleWithRaw(
  * silently importing zero games and looking like an outage; but when the field
  * IS present and disagrees, we trust it over our own arguments.
  */
+/**
+ * Which week does ESPN say this event belongs to?
+ *
+ * Same convention as `eventMatchesSeason` directly below: FAIL-OPEN on a
+ * missing field, TRUST ESPN over our own argument when the field is present.
+ * The requested week is only ever a fallback.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE OPPOSITE COST A GAME-DAY DEFECT. `week` used to be
+ * stamped from the REQUESTED week — `week: week` — while season and seasonType
+ * were already validated against ESPN's own answer. So when a scoreboard query
+ * for preseason week 1 came back holding the week-2 slate, all sixteen of those
+ * games were written as week 1.
+ *
+ * Measured in production 2026-08-06: `nfl_games` season 2026 seasonType 1 held
+ * week1=7, week2=10 where the truth is 1 and 16 — six games (DET@CIN, GB@PIT,
+ * IND@NE, LAC@HOU, ARI@LV, TEN@SF) mis-filed into the Hall of Fame week. A
+ * commissioner's HOF pool asked members to pick seven games, six of them from
+ * the following weekend, and the week could not score cleanly because those six
+ * would not be final for another week.
+ *
+ * ESPN reports `event.week.number` correctly for every one of them, so trusting
+ * it would have prevented the whole thing.
+ */
+export function eventWeekNumber(
+  event: { week?: { number?: number | string } } | undefined | null,
+  requestedWeek: number,
+): number {
+  const n = Number(event?.week?.number);
+  // Integral, not merely finite: a fractional 1.5 would file the game outside
+  // EVERY real slate (pools and importer requests are whole weeks) and would
+  // slip the scoped cleanup too. (codex.)
+  return Number.isInteger(n) && n > 0 ? n : requestedWeek;
+}
+
 export function eventMatchesSeason(
   event: { season?: { year?: number | string; type?: number | string } } | undefined | null,
   season: string,
@@ -308,10 +346,43 @@ export function parseScoreboardResponse(
         }
       }
 
+      // TV / streaming listing, e.g. "NFL Net", "ESPN Unlmtd", "CBS".
+      //
+      // ⚠️ OFTEN ABSENT, and that is normal rather than a feed fault. Measured
+      // against the live ESPN scoreboard on 2026-08-12: present on 11 of 16
+      // preseason week-2 games, 13 of 16 in week 3, 11 of 16 in week 4 — a game
+      // carried only in its local markets has no national listing to report.
+      // So this is written only when the feed supplies one; the pick sheet omits
+      // the field rather than printing a placeholder for it.
+      //
+      // `names` can hold more than one entry (a simulcast). They are joined
+      // rather than truncated to the first, because "CBS/Paramount+" is the
+      // honest answer and picking one of the two silently drops where half the
+      // audience will actually watch.
+      // NATIONAL entries only. ESPN also returns `home`/`away` market rows for
+      // local affiliates, and flattening those would put a single city's
+      // station on a label the pick sheet presents as the national listing.
+      // Filtering here is also what makes the measured counts above TRUE — they
+      // were taken over national listings. (codex on this PR.)
+      const broadcastNames: string[] = (competition.broadcasts || [])
+        .filter((b: any) => b?.market === 'national')
+        .flatMap((b: any) => b?.names || [])
+        .filter((n: unknown): n is string => typeof n === 'string' && n.trim().length > 0);
+
+      // ⚠️ `null`, NOT omitted, when there is no listing. Every game write in
+      // this file is `merge: true`, and merge KEEPS a field the new payload
+      // omits — so a game that loses its national listing (a flex, a feed
+      // correction) would keep displaying the old channel forever. An explicit
+      // null overwrites it. Readers already test truthiness, so null and absent
+      // render identically. (codex on this PR — the same merge-semantics trap
+      // this file documents for `scores` and for dropped spreads.)
+      const broadcast: string | null = broadcastNames.join('/') || null;
+
       games.push({
         id: gameId,
         espnGameId: event.id,
-        week: week,
+        // ESPN's own answer wins over the requested week — see eventWeekNumber.
+        week: eventWeekNumber(event, week),
         season: season,
         seasonType: seasonType,
         homeTeam: {
@@ -339,7 +410,8 @@ export function parseScoreboardResponse(
         clock: event.status?.displayClock || '0:00',
         period: safeInt(event.status?.period),
         isMonday: isMonday,
-        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {})
+        ...(spreadFound ? { spread: { value: spreadValue, locked: false } } : {}),
+        broadcast,
       });
     }
 
@@ -352,53 +424,257 @@ export function parseScoreboardResponse(
 export async function importNFLSeason(
   season: string,
   seasonType: 1 | 2 | 3,
-  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1)
-): Promise<{ success: boolean; importedCount: number }> {
+  weeks: number[] = Array.from({ length: 18 }, (_, i) => i + 1),
+  // Injectable ONLY so the write path — the week-scoped orphan cleanup and the
+  // locked-spread preservation — is testable without a network call.
+  // Production always uses the default. Same arrangement as syncScoresWindow.
+  opts: { fetchWeek?: typeof fetchNFLWeekSchedule } = {},
+): Promise<{ success: boolean; importedCount: number; leaseBusyWeeks: number[] }> {
   const db = admin.firestore();
+  const fetchWeek = opts.fetchWeek ?? fetchNFLWeekSchedule;
   let importedCount = 0;
 
   console.log(`[nflSchedule] Starting import of season ${season} (type: ${seasonType}) for weeks: ${weeks.join(', ')}`);
 
-  // Auto-cleanup any existing/legacy games for this season and seasonType to prevent orphan/mismatched data
+  // Read what is already stored for this season+type. Used for two things: the
+  // scoped orphan cleanup below, and preserving manually locked spreads.
+  const requested = new Set(weeks.map(Number));
+  const existingById = new Map<string, Record<string, unknown>>();
+  const inScopeWeekById = new Map<string, number>();
   try {
     const existingSnap = await db.collection('nfl_games')
       .where('season', '==', season)
       .where('seasonType', '==', seasonType)
       .get();
-    
-    if (!existingSnap.empty) {
-      console.log(`[nflSchedule] Found ${existingSnap.size} existing matching games for season ${season} (type ${seasonType}). Cleaning up...`);
-      const deleteBatch = db.batch();
-      existingSnap.docs.forEach(doc => {
-        deleteBatch.delete(doc.ref);
-      });
-      await deleteBatch.commit();
-      console.log(`[nflSchedule] Cleaned up ${existingSnap.size} legacy matching games successfully.`);
+    for (const doc of existingSnap.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      existingById.set(doc.id, data);
+      // ⚠️ SCOPED TO THE WEEKS BEING IMPORTED.
+      //
+      // This cleanup used to delete EVERY game of the season+type regardless of
+      // which weeks the caller asked for, then re-import only those weeks — so
+      // `importNFLSchedule(2026, 1, weeks:[2])` would have destroyed weeks 1, 3
+      // and 4, including a Hall of Fame game hours before kickoff. Nothing in
+      // the signature hinted at that; `weeks` reads like a filter.
+      if (requested.has(Number(data.week))) inScopeWeekById.set(doc.id, Number(data.week));
     }
-  } catch (cleanupErr) {
-    console.warn("[nflSchedule] Failed to clean up legacy matching games in DB:", cleanupErr);
+  } catch (readErr) {
+    // Fail CLOSED on the read. Without it we cannot tell an orphan from a game
+    // in another week, and we cannot see which spreads are locked — proceeding
+    // would risk both deleting the wrong docs and clobbering a manual lock.
+    console.error('[nflSchedule] Could not read existing games; aborting import rather than guessing:', readErr);
+    throw new HttpsError('unavailable', 'Could not read existing NFL games; import aborted.');
   }
 
+  const freshIds = new Set<string>();
+  // Only weeks whose fetch actually returned a slate are eligible for the orphan
+  // sweep below. A week that fetched NOTHING is skipped entirely — otherwise an
+  // ESPN outage or a bad date range would delete a perfectly good stored week,
+  // which is the failure this whole change exists to prevent. Caught by
+  // `importScope.emulator.test.ts`; an earlier revision of this function
+  // asserted in a comment that it could not happen, and it could.
+  const fetchedWeeks = new Set<number>();
+  /** Weeks skipped because a freeze pass held the slate (reported, never silent). */
+  const leaseBusyWeeks: number[] = [];
   for (const week of weeks) {
-    const games = await fetchNFLWeekSchedule(week, season, seasonType);
+    // ⚠️ HOLD THE SLATE LEASE ACROSS THIS WEEK'S FETCH AND COMMIT
+    // (PLAN-NFL-SPREAD-FREEZE 1.3, codex round 11; TAKEN rather than merely
+    // CHECKED after codex r1 on this PR).
+    //
+    // The freeze reconciles the fetched event ids against the stored slate before
+    // it commits, and Firestore does not range-lock — so an import that ADDS a
+    // game between that reconciliation and the commit would leave the newcomer
+    // unfrozen and the week frozen across two states. Serialising the two writers
+    // is the only thing that closes it.
+    //
+    // A read-only `is it held?` check was the first version of this and it did not
+    // serialise anything: an import that observed no lease could still be fetching
+    // when the freeze acquired one, and commit its batch afterwards. The lease has
+    // to be HELD for the whole fetch-and-write, which is what the freeze does with
+    // it too. Per week rather than per import, so an 18-week backfill never parks
+    // the freeze behind seventeen ESPN round-trips.
+    //
+    // This does NOT close the general importer race — `PLAN-IMPORTER-SAFETY.md`
+    // §1.1/§1.5 still owns that. It closes the freeze's half of it.
+    const slateKey = { season, seasonType, week: Number(week) };
+    const importLease = await acquireSlateLease(db, slateKey, Date.now());
+    if (!importLease) {
+      console.warn(`[nflSchedule] Week ${week} is held by a running spread freeze; skipping it rather than racing the commit.`);
+      leaseBusyWeeks.push(Number(week));
+      continue;
+    }
+    /** Every slate this iteration may write to, and the lease held on each. */
+    const held = new Map<number, { key: typeof slateKey; lease: NonNullable<typeof importLease> }>([
+      [Number(week), { key: slateKey, lease: importLease }],
+    ]);
+    try {
+    const games = await fetchWeek(week, season, seasonType);
     if (games.length === 0) {
-      console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping.`);
+      console.log(`[nflSchedule] No games fetched for Week ${week}. Skipping (its stored games are left untouched).`);
       continue;
     }
 
-    const batch = db.batch();
-    for (const game of games) {
+    // ⚠️ THE RESPONSE CAN SPAN SLATES, SO ONE LEASE IS NOT ENOUGH (codex r4 on
+    // this PR). `parseScoreboardResponse` lets the EVENT's own week win over the
+    // requested one, and ESPN's scoreboard is unreliable about which slate it
+    // returns — a fetch for one week has come back with 20 events across two.
+    // Every one of those is written below, so a lease on the requested week alone
+    // leaves a concurrent freeze of the NEIGHBOURING slate free to commit against
+    // its old game set while this import adds a game to it.
+    //
+    // All-or-nothing, the same philosophy as the freeze itself: if any slate in
+    // the response is held, this iteration writes NOTHING and says which week
+    // blocked it. `acquireSlateLease` never waits, so two importers can only skip
+    // each other, never deadlock.
+    const spillWeeks = [...new Set(games.map(g => Number(g.week)))]
+      .filter(w => Number.isInteger(w) && w !== Number(week))
+      .sort((a, b) => a - b);
+    let blockedBy: number | null = null;
+    for (const w of spillWeeks) {
+      const key = { season, seasonType, week: w };
+      const lease = await acquireSlateLease(db, key, Date.now());
+      if (!lease) { blockedBy = w; break; }
+      held.set(w, { key, lease });
+    }
+    if (blockedBy !== null) {
+      console.warn(`[nflSchedule] Week ${week}'s response spills into week ${blockedBy}, which a spread freeze holds; skipping the whole fetch rather than writing part of it.`);
+      leaseBusyWeeks.push(Number(week));
+      continue;
+    }
+    // ⚠️ ONLY when the response actually contains a game FOR THIS WEEK.
+    //
+    // A non-empty response is not proof the week was fetched: at an overlapping
+    // calendar boundary ESPN can return a slate made up ENTIRELY of the next
+    // week's games. Marking the week fetched on `games.length > 0` alone would
+    // then let the orphan sweep below delete every stored game in it, because
+    // none of them appear in `freshIds` — destroying a good week from a response
+    // that said nothing about it. Same spillover class this change exists to
+    // handle, one layer down. (codex r2 on this change.)
+    if (games.some(g => Number(g.week) === Number(week))) fetchedWeeks.add(Number(week));
+
+    // ⚠️ RE-READ THIS WEEK'S DOCS IMMEDIATELY BEFORE WRITING THEM.
+    //
+    // The spread decision below used `existingById`, which is read ONCE before
+    // the week loop — so on an 18-week import the snapshot backing week 18's
+    // decision is minutes old and 17 ESPN round-trips stale. A spread locked in
+    // that gap (a commissioner in the admin UI, or `lockNFLSpreadsJob`) would be
+    // overwritten with the fresh line and `locked: false`, which is the #235 bug
+    // class: an ATS pool then refuses every pick behind SPREADS_NOT_LOCKED.
+    // (qodo #2 on this PR.)
+    //
+    // ✅ THE RE-READ AND THE WRITE ARE NOW ONE TRANSACTION (codex r2 on
+    // PLAN-NFL-SPREAD-FREEZE PR 2). This comment used to say the opposite, and it
+    // was right at the time: read-then-batch-commit left a gap, so a spread locked
+    // in it was overwritten with the fresh line and `locked: false` — the #235 bug
+    // class. The transaction re-reads inside itself, so a concurrent MODIFICATION
+    // of any game it is about to write forces a retry.
+    //
+    // 🛑 IT STILL DOES NOT CLOSE THE WHOLE IMPORTER RACE, and this is the half that
+    // matters here: Firestore transactions do not range-lock, so a document
+    // CREATED concurrently raises no conflict at all. That half is what the slate
+    // lease above covers, and `PLAN-IMPORTER-SAFETY.md` §1.1/§1.5 still owns the
+    // general case.
+    //
+    // The fence assertion is the first read in the transaction. A time-bounded
+    // lease is NOT a mutex on its own: an ESPN fetch slower than the 3-minute TTL
+    // would let a freeze acquire the slate, reconcile it and commit, and this
+    // importer would then add a game the freeze never saw — leaving the newcomer
+    // unfrozen, which is the exact partial slate the lease exists to prevent.
+    let weekWrites = 0;
+    await db.runTransaction(async (tx) => {
+      for (const { key, lease } of held.values()) await assertSlateFence(tx, db, key, lease, Date.now());
+      const refs = games.map(g => db.collection('nfl_games').doc(g.id));
+      const freshExisting = new Map<string, NFLGame>();
+      for (const doc of await tx.getAll(...refs)) {
+        if (doc.exists) freshExisting.set(doc.id, doc.data() as NFLGame);
+      }
+
+      // Reset per ATTEMPT: a transaction body re-runs on contention, and counting
+      // into the outer total from inside it would multiply the import count by the
+      // number of retries.
+      weekWrites = 0;
+      for (const game of games) {
       const cleanedGame = JSON.parse(JSON.stringify(game));
       // Bulk import writes the same parseScoreboardResponse output as the sync,
       // so it can create a scoreless FINAL too — and without the marker that game
       // is outside BOTH doors and never refreshed again (codex r2).
       cleanedGame.scoresMissing = scoresMissingMarker(game);
-      const gameRef = db.collection('nfl_games').doc(cleanedGame.id);
-      batch.set(gameRef, cleanedGame, { merge: true });
-      importedCount++;
-    }
-    await batch.commit();
+
+      // ⚠️ NEVER CLOBBER A MANUALLY LOCKED SPREAD. The parser always emits
+      // `locked: false`, so a re-import used to silently unlock every line a
+      // commissioner had locked — and an ATS pool with an unlocked line refuses
+      // every pick (SPREADS_NOT_LOCKED). Dropping the key lets `merge: true`
+      // keep what is stored.
+      // `freshExisting`, not `existingById` — see the re-read above. The orphan
+      // sweep keeps using `existingById`, which is correct for it: it decides
+      // which STORED ids existed when the run began.
+      const stored = freshExisting.get(cleanedGame.id) as { spread?: { locked?: boolean } } | undefined;
+      if (stored?.spread?.locked === true) {
+        delete cleanedGame.spread;
+      } else if (stored?.spread !== undefined && cleanedGame.spread === undefined) {
+        // ⚠️ AN UNLOCKED SPREAD THE FEED NO LONGER CARRIES MUST BE REMOVED, NOT KEPT.
+        //
+        // This case only exists because this change stopped deleting the docs
+        // first. The old importer wiped the week and rewrote it, so a line ESPN
+        // had dropped simply vanished; the orphan sweep replaced that with
+        // `merge: true`, and merge keeps a field the new payload omits — which is
+        // exactly what makes the locked-spread preservation above work.
+        //
+        // Keeping a stale UNLOCKED line is not harmless. `lockNFLSpreadsJob` locks
+        // any spread it finds with a value and `locked !== true`
+        // (`shouldLockSpread`), so the next Tuesday it would freeze a number ESPN
+        // has withdrawn, and every ATS pick and grade on that game would run
+        // against it. Nothing downstream can tell a withdrawn line from a current
+        // one.
+        //
+        // The opposite reading — "an absent field is feed flakiness, do not act on
+        // it", which `detectStatCorrections` applies to scores — is right for the
+        // 5-minute poll and wrong here: an import is an explicit operator action
+        // whose whole purpose is to make storage match the feed, and it is cheap
+        // to re-run. A locked spread is still preserved above, so this can never
+        // touch a line a commissioner has committed to. (codex.)
+        cleanedGame.spread = admin.firestore.FieldValue.delete();
+      }
+
+      freshIds.add(cleanedGame.id);
+      tx.set(db.collection('nfl_games').doc(cleanedGame.id), cleanedGame, { merge: true });
+      weekWrites++;
+      }
+    });
+    importedCount += weekWrites;
     console.log(`[nflSchedule] Week ${week} imported successfully with ${games.length} games.`);
+    } finally {
+      // Best-effort, same as the freeze: a failed release only means the lease
+      // expires on its own TTL, which is what the expiry is for.
+      for (const [w, { key, lease }] of held) {
+        await releaseSlateLease(db, key, lease).catch((e) => {
+          console.warn(`[nflSchedule] slate lease release failed for week ${w}:`, e);
+        });
+      }
+    }
+  }
+
+  // Orphans: stored games in a SUCCESSFULLY FETCHED week that the fresh slate no
+  // longer returns — a cancelled or re-scheduled fixture. Deleted AFTER the
+  // writes, and only for weeks that actually returned data. Chunked under the
+  // 500-op batch cap.
+  //
+  // RESIDUAL, stated rather than implied away: this runs outside the slate lease.
+  // A delete racing a freeze can only REMOVE a game, never add one, so it cannot
+  // produce the partial-freeze the lease exists to prevent — the worst case is a
+  // frozen record for a game that no longer exists, which no reader consults
+  // (every reader iterates the STORED slate and joins to it).
+  const orphanIds = [...inScopeWeekById.entries()]
+    .filter(([id, wk]) => fetchedWeeks.has(wk) && !freshIds.has(id))
+    .map(([id]) => id);
+  for (let i = 0; i < orphanIds.length; i += 400) {
+    const chunk = orphanIds.slice(i, i + 400);
+    const deleteBatch = db.batch();
+    chunk.forEach(id => deleteBatch.delete(db.collection('nfl_games').doc(id)));
+    await deleteBatch.commit();
+  }
+  if (orphanIds.length > 0) {
+    console.log(`[nflSchedule] Removed ${orphanIds.length} orphaned game(s) from weeks ${weeks.join(', ')}: ${orphanIds.join(', ')}`);
   }
 
   await writeAuditEvent({
@@ -409,7 +685,13 @@ export async function importNFLSeason(
     actor: { uid: 'system', role: 'SYSTEM', label: 'NFL Scheduler' }
   });
 
-  return { success: true, importedCount };
+  // A week skipped for a live freeze lease is NOT an import that quietly did less
+  // than it said. An operator who asked for weeks 3 and 4 and got one of them has
+  // to be able to see that from the result.
+  if (leaseBusyWeeks.length > 0) {
+    console.warn(`[nflSchedule] ${leaseBusyWeeks.length} week(s) skipped for a running spread freeze: ${leaseBusyWeeks.join(', ')}. Re-run the import once it finishes.`);
+  }
+  return { success: true, importedCount, leaseBusyWeeks };
 }
 
 /**
@@ -418,8 +700,17 @@ export async function importNFLSeason(
  */
 // `secrets` is required for the ops-alert SMS path used by the stat-correction
 // page (A5) — dispatchOpsAlert reads COURIER_AUTH_TOKEN at call time.
+//
+// SIZING (item 14, PLAN-AUDIT-BACKEND-RESIDUE §1): 270s/512MiB, copied from
+// nflAutoScoreJob — the ONLY other `*/5` job in the repo — rather than picked.
+// Its comment carries the invariant that governs both: timeoutSeconds must stay
+// under the cadence so two runs can never overlap, and 270s was the value chosen
+// for a 5-minute gap. Before this the job ran on the Gen-2 default 60s/256MiB,
+// which is a wall a multi-slate ESPN fetch can reach.
+// `maxInstances` is deliberately absent: lib/globalOptions.ts caps every v2
+// function at 10 (#548), and naming a key inline is what overrides it.
 export const syncNFLScoresJob = onSchedule(
-  { schedule: '*/5 * * * *', secrets: [opsCourierAuthToken] },
+  { schedule: '*/5 * * * *', timeoutSeconds: 270, memory: '512MiB', secrets: [opsCourierAuthToken] },
   withHeartbeat('syncNFLScoresJob', async () => {
     const db = admin.firestore();
     const now = Date.now();
@@ -619,6 +910,35 @@ export async function syncScoresWindow(
   let slatesNotReconciled = 0;
   let snapshotFailures = 0;
   let correctionReportFailures = 0;
+  /**
+   * Game ids whose correction has already been reported THIS RUN.
+   *
+   * ESPN's calendar ranges overlap, so one corrected game can arrive in two
+   * slots' responses. `activeGamesSnap` is read once before this loop, so after
+   * the first slot writes the new score the second slot still compares against
+   * the stale prior state and detects the SAME correction again — paging twice
+   * and inflating `corrections`. A stat-correction page is a wake-somebody event;
+   * crying it twice for one restatement is how a real one starts getting ignored.
+   *
+   * Keyed by game id, not by the change tuple: two different fields changing on
+   * one game is still one correction event for one game, and the report already
+   * carries the detail. First slot to see it owns it — which is the slot whose
+   * response actually delivered it. (codex r7 on this change.)
+   */
+  const reportedCorrections = new Set<string>();
+  /**
+   * Game ids whose correction has been COUNTED this run.
+   *
+   * Separate from `reportedCorrections` because the two answer different
+   * questions, and collapsing them costs one of the answers. Suppression must
+   * only happen once a report SUCCEEDED — otherwise a failed alert silences the
+   * retry a later overlapping slot could have made, and this file's own
+   * `correctionReportFailures` docblock calls a detected-then-dropped correction
+   * the most expensive silent failure here. Counting, by contrast, must happen
+   * once per correction however many slots deliver it, or a retry inflates the
+   * heartbeat number an operator uses to judge the night. (qodo #3, second pass.)
+   */
+  const countedCorrections = new Set<string>();
 
   for (const [_, slot] of weeksToSync) {
     const { games: freshGames, raw } = await fetchSlate(slot.week, slot.season, slot.seasonType);
@@ -630,23 +950,53 @@ export async function syncScoresWindow(
     if (freshGames.length === 0) { slatesNotReconciled++; continue; }
 
     const slateKey = { season: slot.season, seasonType: slot.seasonType, week: slot.week };
-    // Prior state for this slate, as the finalizer would have seen it. Scoped to
-    // the window we queried — which is why the deep sweep's wider lookback is what
-    // makes a late correction detectable at all.
-    const prevGames = activeGamesSnap.docs
-      .map(d => d.data() as NFLGame)
-      .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
-    const corrections = detectStatCorrections(prevGames, freshGames);
 
-    if (snapshotGate.enabled && raw !== null) {
-      const outcome = await captureFeedSnapshot(db, slateKey, raw, corrections, freshGames.length);
-      if (outcome === "skipped") snapshotFailures++;
+    // ⚠️ SPLIT THE RESPONSE BY THE WEEK EACH GAME ACTUALLY BELONGS TO.
+    //
+    // `resolveScoreboardUrl` queries a DATE RANGE from ESPN's calendar, and those
+    // calendar entries OVERLAP at the boundary — the 2026 "Hall of Fame Weekend"
+    // entry runs 08-06..08-13 and "Preseason Week 1" starts on 08-13. So a slate
+    // fetch legitimately returns games from the NEXT week, and since
+    // `parseScoreboardResponse` now files each game under ESPN's own
+    // `week.number`, `freshGames` can span weeks.
+    //
+    // Everything slate-SCOPED below (correction detection, the feed snapshot,
+    // terminal-transition detection and the rescore-queue key) is keyed on
+    // `slateKey`, so feeding it the spillover would attribute another week's
+    // corrections and rescore events to this one. Reconcile only this slate's
+    // games; still WRITE all of them, because their scores and their corrected
+    // `week` are real data and dropping them would strand the spillover games.
+    // (codex, on the week-stamping change.)
+    const slateGames = freshGames.filter(g => Number(g.week) === Number(slot.week));
+    /** id -> the fresh game, so a correction can be traced back to its owning week. */
+    const freshById = new Map(freshGames.map(g => [g.id, g]));
+    if (slateGames.length !== freshGames.length) {
+      console.log(`[nflSchedule] slate ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}: ${freshGames.length - slateGames.length} game(s) belong to another week; written but reconciled under their own slate.`);
     }
-    // Corrections are reported whether or not snapshots are on — the page is the
-    // point; the snapshot is only the evidence attached to it.
-    if (!(await reportStatCorrections(db, slateKey, corrections))) correctionReportFailures++;
-    correctionCount += corrections.length;
 
+    // ⚠️ A NON-EMPTY RESPONSE IS NOT PROOF THIS SLATE WAS FETCHED.
+    //
+    // The `freshGames.length === 0` guard above counts a slate that returned
+    // nothing. But an overlapping calendar range can return a response made up
+    // ENTIRELY of the neighbouring week's games, and that is a slate-level fetch
+    // failure wearing a success: we asked about week N and learned nothing about
+    // it. Without this the run reports healthy, `slatesNotReconciled` stays 0, and
+    // `captureFeedSnapshot` stores a snapshot claiming `gameCount: 0` beside a
+    // non-empty raw payload — evidence that actively misleads whoever reads it
+    // during the next incident.
+    //
+    // The importer already guards the identical shape
+    // (`games.some(g => Number(g.week) === Number(week))` before marking a week
+    // fetched); this is the sync path catching up to it. (qodo #6 on this PR.)
+    //
+    // The spillover games are still WRITTEN, and their terminal transitions and
+    // stat corrections are still enqueued under their own weeks below — the
+    // response is not discarded, only its claim about THIS slate is. (qodo #6.)
+    const slateReconciled = slateGames.length > 0;
+    if (!slateReconciled) {
+      slatesNotReconciled++;
+      console.warn(`[nflSchedule] slate ${slateKey.season}/${slateKey.seasonType}/wk${slateKey.week}: spillover-only response (${freshGames.length} game(s), none in this week); slate NOT reconciled. Its games are still written under their own weeks.`);
+    }
     // Existing docs for the WHOLE slate, not just the ones inside the time
     // window. ESPN returns the entire week, and every one of those games gets
     // written below — but a game later in the week can already carry a spread
@@ -658,9 +1008,140 @@ export async function syncScoresWindow(
     // week) query: a direct ID lookup needs no composite index and therefore has
     // no way to die silently, which is the failure mode that took out A5 and the
     // finalize sweep.
+    //
+    // Hoisted above correction detection so the spillover pass below has a prior
+    // state to compare against — `activeGamesSnap` only covers this slate.
     const existingById = new Map<string, NFLGame>();
     for (const doc of await db.getAll(...freshGames.map(g => db.collection('nfl_games').doc(g.id)))) {
       if (doc.exists) existingById.set(doc.id, doc.data() as NFLGame);
+    }
+
+    // Prior state for this slate, as the finalizer would have seen it. Scoped to
+    // the window we queried — which is why the deep sweep's wider lookback is what
+    // makes a late correction detectable at all.
+    const prevGames = activeGamesSnap.docs
+      .map(d => d.data() as NFLGame)
+      .filter(g => g.season === slot.season && Number(g.seasonType) === Number(slot.seasonType) && Number(g.week) === Number(slot.week));
+    // Filtered on what has been REPORTED, not on what has been seen: an
+    // overlapping slot that already alerted successfully owns it, but one whose
+    // alert FAILED must not silence this slot's attempt.
+    const corrections = detectStatCorrections(prevGames, slateGames)
+      .filter(c => !reportedCorrections.has(c.gameId));
+
+    // COUNTING AND THE RESCORE ENQUEUE ARE ONCE-PER-RUN; ONLY THE ALERT RETRIES.
+    //
+    // Splitting these is the point (qodo #3, second pass). A failed alert should
+    // be re-attempted by a later overlapping slot, because both of its sinks
+    // swallow their own failures and a dropped correction is the most expensive
+    // silent failure in this file. But the rescore event and the heartbeat count
+    // must not be re-emitted on that retry: the queue would carry a duplicate for
+    // a slate it already covers, and `corrections` is the number an operator reads
+    // to judge how bad a night was.
+    const newCorrections = corrections.filter(c => !countedCorrections.has(c.gameId));
+    for (const c of newCorrections) countedCorrections.add(c.gameId);
+    correctionCount += newCorrections.length;
+
+    // ⚠️ A SPILLOVER GAME CAN CARRY A STAT CORRECTION, AND SLATE-SCOPING SWALLOWS IT.
+    //
+    // Second finding of the same shape as `terminalSlates` below, on the round
+    // after that one was fixed (codex). `detectStatCorrections` above compares
+    // this slate only, so an already-FINAL game from a NEIGHBOURING week whose
+    // score changed produces no correction — while the write loop persists the new
+    // score anyway. After that the evidence is gone: the owning week's pass, on
+    // this run or any later one, compares against the score this run just wrote
+    // and sees nothing changed. If that week has no slot at all, it is never
+    // revisited.
+    //
+    // A stat correction is the one class of change that invalidates a settled
+    // result, so losing it leaves a pool's standings wrong with nothing left to
+    // notice. Detect it against the stored doc — `existingById`, hoisted above for
+    // exactly this — and file the alert and the rescore under the owning week.
+    //
+    // DETECTION RUNS BEFORE THE SNAPSHOT so the snapshot can carry it. Reporting
+    // still happens after, keeping the snapshot-then-report order the main slate
+    // has always used.
+    const spilloverGames = freshGames.filter(g => Number(g.week) !== Number(slot.week));
+    const correctionSlates = new Map<number, GameStateChange[]>();
+    /** Owning weeks carrying at least one correction NEW to this run. */
+    const newCorrectionSlates = new Set<number>();
+    for (const change of detectStatCorrections(
+      spilloverGames.map(g => existingById.get(g.id)).filter((g): g is NFLGame => g !== undefined),
+      spilloverGames,
+    )) {
+      // Same run-level dedupe as the slate pass above — the owning week's own
+      // slot may already have reported this one. Marked reported only after the
+      // report below succeeds.
+      if (reportedCorrections.has(change.gameId)) continue;
+      const week = Number(freshById.get(change.gameId)?.week);
+      // Unusable week: attribute it to the slot we fetched rather than dropping
+      // it or keying an un-drainable event.
+      const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
+      correctionSlates.set(owning, [...(correctionSlates.get(owning) ?? []), change]);
+      // Same split as the slate pass: counted and enqueued once per run, alerted
+      // again if the alert failed.
+      if (!countedCorrections.has(change.gameId)) {
+        countedCorrections.add(change.gameId);
+        correctionCount++;
+        newCorrectionSlates.add(owning);
+      }
+    }
+    const spilloverChanges = [...correctionSlates.values()].flat();
+
+    // THE SNAPSHOT IS THE EVIDENCE BEHIND THE ALERT, so it is captured whenever
+    // there is an alert to support — including on a spillover-only response.
+    //
+    // Two earlier fixes on this PR collided here (codex, the round after both).
+    // One skipped the snapshot when the slate was not reconciled, because
+    // `gameCount: 0` beside a non-empty payload reads as misleading evidence. The
+    // other made the spillover alert point operators at THIS slate's snapshots.
+    // Together they produced an alert that names a slate where the response was
+    // never stored — promising before/after payloads that do not exist, which is
+    // worse than the misleading count either fix was avoiding.
+    //
+    // So the gate is "is there anything to keep", not "was this slate
+    // reconciled", and the snapshot carries BOTH correction lists. That also
+    // resolves the original objection: a row with `gameCount: 0` and a non-empty
+    // `corrections` array explains itself — the response carried no games for this
+    // slate but did carry a correction for another week. The genuinely misleading
+    // shape, `gameCount: 0` with no corrections, is still skipped.
+    //
+    // `gameCount` remains THIS slate's count, so it keeps meaning one thing.
+    // Filing under `slateKey` is deliberate: it is the response we fetched, it is
+    // where `snapshotPointerLine` sends the operator, and writing it under the
+    // owning week would collide with the snapshot that week's own pass stores.
+    const keepEvidence = slateReconciled || spilloverChanges.length > 0;
+    if (snapshotGate.enabled && raw !== null && keepEvidence) {
+      const outcome = await captureFeedSnapshot(
+        db, slateKey, raw, [...corrections, ...spilloverChanges], slateGames.length,
+      );
+      if (outcome === "skipped") snapshotFailures++;
+    }
+    // Corrections are reported whether or not snapshots are on — the page is the
+    // point; the snapshot is only the evidence attached to it. Gated on
+    // `slateReconciled` because a spillover-only response says nothing about THIS
+    // slate; the spillover's own alert follows.
+    if (slateReconciled && corrections.length > 0) {
+      // Marked reported ONLY on success, so a failed alert leaves the retry open
+      // to a later overlapping slot in this same run.
+      if (await reportStatCorrections(db, slateKey, corrections)) {
+        for (const c of corrections) reportedCorrections.add(c.gameId);
+      } else {
+        correctionReportFailures++;
+      }
+    }
+
+    for (const [week, changes] of correctionSlates) {
+      const owningKey = { season: slot.season, seasonType: slot.seasonType, week };
+      // `slateKey` is passed as `observedIn` so the alert names the slate whose
+      // response this arrived in — the snapshot is filed under THAT one, and
+      // pointing an operator at the owning week's snapshots during an incident
+      // would send them somewhere with nothing in it. (qodo #3.)
+      if (await reportStatCorrections(db, owningKey, changes, slateKey)) {
+        for (const c of changes) reportedCorrections.add(c.gameId);
+      } else {
+        correctionReportFailures++;
+      }
+      console.warn(`[nflSchedule] ${changes.length} stat correction(s) arrived for week ${week} inside the week ${slot.week} response: ${changes.map(c => c.gameId).join(', ')}`);
     }
 
     // Any status change where EITHER side is terminal, measured against the WHOLE
@@ -698,8 +1179,45 @@ export async function syncScoresWindow(
       g.id,
       { ...g, scores: g.scores ?? existingById.get(g.id)?.scores } as NFLGame,
     ]));
-    const firstTerminal = freshGames.some(g =>
-      isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!));
+    // Which SLATES had a terminal transition in this response — keyed by each
+    // game's OWN week, not by the slot we fetched.
+    //
+    // ⚠️ THE OBVIOUS VERSION IS WRONG AND SHIPPED IN AN EARLIER REVISION OF THIS
+    // CHANGE. It scoped the test to `slateGames` on the reasoning that a
+    // spillover game "picks itself up on its own pass". It does not, for two
+    // independent reasons (codex, on this change):
+    //
+    //  - THE WRITE BELOW PERSISTS IT. Every game in `freshGames` is written,
+    //    spillover included — deliberately, its scores are real data. So once
+    //    this slot's pass commits a spillover game as FINAL, the pass for the
+    //    week that OWNS it reads that FINAL as its prior state and sees
+    //    `FINAL -> FINAL`, which `isTerminalTransition` correctly reports as no
+    //    transition. The event is not deferred to the other pass; it is lost.
+    //  - THE OTHER PASS MAY NOT EXIST. `weeksToSync` was built from stored docs
+    //    before any of this ran, so a week whose games are outside the
+    //    `startTime` window is not a slot at all and never gets a pass.
+    //
+    // The consequence is the one the rescore queue exists to prevent: a game
+    // goes terminal, its pool's standings are never reconciled, and nothing
+    // downstream ever revisits it. Enqueue under the owning week instead — the
+    // event still rides in this slot's batch, because this slot's write is what
+    // made it necessary.
+    //
+    // `mergedById` deliberately spans all of `freshGames`, because the write loop
+    // below reads it for every game it persists.
+    const terminalSlates = new Map<string, { season: string; seasonType: 1 | 2 | 3; week: number }>();
+    for (const g of freshGames) {
+      if (!isTerminalTransition(existingById.get(g.id), mergedById.get(g.id)!)) continue;
+      const week = Number(g.week);
+      // A game whose week is unusable would key an un-drainable event; file it
+      // under the slot we asked for, which is where it would have gone before
+      // ESPN's week was trusted at all.
+      const owning = Number.isInteger(week) && week > 0 ? week : Number(slot.week);
+      const key = `${slot.season}_${slot.seasonType}_${owning}`;
+      if (!terminalSlates.has(key)) {
+        terminalSlates.set(key, { season: slot.season, seasonType: slot.seasonType, week: owning });
+      }
+    }
 
     // Counted BEFORE the dry-run early-out below. A dry run that re-fetches an
     // already-stranded game, gets another scoreless FINAL, and then reports a
@@ -785,9 +1303,24 @@ export async function syncScoresWindow(
     // reconcile. Both reasons can fire for one slate — they are distinct events
     // and the drain unions them, which is what lets a Survivor pool be scored for
     // a delayed final on a slate that also carries a correction.
-    for (const reason of ['correction', 'terminal'] as const) {
-      if (reason === 'correction' ? corrections.length === 0 : !firstTerminal) continue;
-      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason, enqueuedAt: now }));
+    // BOTH reasons are keyed to the OWNING week now, not to the slot we fetched.
+    // `corrections` covers this slate; `correctionSlates` covers a neighbouring
+    // week whose already-FINAL game was corrected inside this response — the
+    // write below persists that new score, so if this event is not enqueued the
+    // correction is gone for good (see the spillover block above).
+    // Gated on NEW corrections, not on `corrections`: a correction whose alert
+    // failed in an earlier slot is deliberately re-attempted here, and that retry
+    // must not enqueue a second rescore for a slate the queue already covers.
+    if (newCorrections.length > 0) {
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...slateKey, reason: 'correction', enqueuedAt: now }));
+    }
+    for (const week of newCorrectionSlates) {
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({
+        season: slot.season, seasonType: slot.seasonType, week, reason: 'correction', enqueuedAt: now,
+      }));
+    }
+    for (const owning of terminalSlates.values()) {
+      batch.set(db.collection(RESCORE_QUEUE).doc(), rescoreEventDoc({ ...owning, reason: 'terminal', enqueuedAt: now }));
     }
 
     await batch.commit();
@@ -856,8 +1389,13 @@ export function scoreSyncHeartbeat(r: ScoreSyncResult): {
  * DETECTS and REPORTS corrections — it only suppresses the nfl_games write — so
  * the alarm can be observed for a week before the writes are armed.
  */
+// SIZING (item 14, PLAN-AUDIT-BACKEND-RESIDUE §1): 540s/512MiB, matching the
+// repo's other daily sweeps — nflFinalizeSweepJob and recomputeGlobalStatsDaily.
+// This is strictly the heaviest caller of syncScoresWindow (a 7-day window where
+// syncNFLScoresJob takes 24h), so it gets the daily jobs' ceiling, not the
+// 5-minute job's 270s. Was running on the Gen-2 default 60s/256MiB.
 export const nflDeepScoreSweepJob = onSchedule(
-  { schedule: '30 11 * * *', timeZone: 'America/New_York', secrets: [opsCourierAuthToken] },
+  { schedule: '30 11 * * *', timeZone: 'America/New_York', timeoutSeconds: 540, memory: '512MiB', secrets: [opsCourierAuthToken] },
   withHeartbeat('nflDeepScoreSweepJob', async () => {
     const db = admin.firestore();
 
@@ -914,124 +1452,17 @@ export function readJobGate(
   return { enabled: cfg?.enabled === true, dryRun: cfg?.dryRun !== false };
 }
 
-/** Safety cap on writes per run, mirrors autoClosePools / nflFinalizeSweepJob. */
-const MAX_SPREAD_LOCKS_PER_RUN = 200;
-
-/** A spread is lockable when it exists, carries a value, and isn't locked yet. */
-export function shouldLockSpread(game: Pick<NFLGame, 'spread'> | undefined): boolean {
-  const spread = game?.spread;
-  return !!spread && spread.locked !== true && spread.value !== undefined && spread.value !== null;
-}
-
-/**
- * Scheduled job to lock NFL spreads every Tuesday at 9:00 AM EST.
- * Scans upcoming games, and if spread is available, marks it as locked.
- *
- * SAFETY (Rule 1, mmp-change-control): kill-switch
- * system/config.nflSpreadLock.enabled === true required (default OFF, fail-safe);
- * dry-run by default (nflSpreadLock.dryRun !== false) — logs which games it WOULD
- * lock, writing nothing, until explicitly flipped.
- */
-export interface SpreadLockResult {
-  /** Games whose spread was actually written to locked:true (0 when dryRun). */
-  locked: number;
-  /** Games that WOULD be locked — equals `locked` on a live run. */
-  wouldLock: number;
-  /** Eligible games left for the next run because of the per-run cap. */
-  overflow: number;
-}
-
-/**
- * Lock every lockable spread in the next 7 days. Extracted from the scheduled
- * job so the WRITE PATH is testable without a scheduler.
- *
- * Worth stating why this extraction happened: before it, only the pure helpers
- * (`shouldLockSpread`, `readJobGate`) had tests, and every emulator fixture
- * seeded spreads as ALREADY `locked: true`. The unlocked→locked transition, the
- * per-run cap, and the dry-run-writes-nothing guarantee had never been executed
- * by any test — on a job about to be armed for preseason, on the same field
- * whose preservation bug shipped undetected until PR #235.
- *
- * The caller owns the gate; this function assumes it has been checked.
- */
-export async function lockSpreadsOnce(
-  db: Firestore,
-  now: number,
-  opts: { dryRun: boolean },
-): Promise<SpreadLockResult> {
-  const empty: SpreadLockResult = { locked: 0, wouldLock: 0, overflow: 0 };
-
-  // Games starting in the next 7 days that are not finalized.
-  const upcomingSnap = await db.collection('nfl_games')
-    .where('startTime', '>', now)
-    .where('startTime', '<=', now + 7 * 24 * 60 * 60 * 1000)
-    .get();
-
-  if (upcomingSnap.empty) return empty;
-
-  const eligible = upcomingSnap.docs.filter(doc => shouldLockSpread(doc.data() as NFLGame));
-  // Per-run cap, same convention as autoClosePools / nflFinalizeSweepJob. A real
-  // week is ~16 games, so this never binds in practice — it exists so a bad
-  // import can't push one batch past Firestore's 500-write limit and fail the
-  // WHOLE commit, which would leave every spread unlocked and block the week
-  // behind SPREADS_NOT_LOCKED. Overflow is logged, and the next run picks it up.
-  const targets = eligible.slice(0, MAX_SPREAD_LOCKS_PER_RUN);
-  const overflow = eligible.length - targets.length;
-
-  if (opts.dryRun) {
-    console.log(
-      `[lockNFLSpreadsJob] DRY-RUN: would lock ${targets.length} spread(s)${overflow > 0 ? ` (${overflow} deferred past the ${MAX_SPREAD_LOCKS_PER_RUN} cap)` : ''}: ${targets.slice(0, 20).map(d => d.id).join(', ')}`,
-    );
-    return { locked: 0, wouldLock: targets.length, overflow };
-  }
-
-  if (targets.length === 0) return empty;
-
-  const batch = db.batch();
-  for (const doc of targets) batch.update(doc.ref, { 'spread.locked': true });
-  await batch.commit();
-  console.log(
-    `[lockNFLSpreadsJob] Locked spreads for ${targets.length} upcoming games.${overflow > 0 ? ` WARNING: ${overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked.` : ''}`,
-  );
-  return { locked: targets.length, wouldLock: targets.length, overflow };
-}
-
-export const lockNFLSpreadsJob = onSchedule({
-  schedule: '0 9 * * 2', // 9:00 AM every Tuesday
-  timeZone: 'America/New_York'
-}, withHeartbeat('lockNFLSpreadsJob', async () => {
-  const db = admin.firestore();
-
-  let gate = { enabled: false, dryRun: true };
-  let configError: unknown = null;
-  try {
-    const cfg = (await db.doc('system/config').get()).data()?.nflSpreadLock as
-      | { enabled?: boolean; dryRun?: boolean }
-      | undefined;
-    gate = readJobGate(cfg);
-  } catch (e) {
-    configError = e ?? new Error('unknown config read error');
-  }
-  if (configError) return configReadFailedVerdict('lockNFLSpreadsJob', configError);
-  if (!gate.enabled) {
-    console.log('[lockNFLSpreadsJob] disabled (system/config.nflSpreadLock.enabled !== true); nothing to do.');
-    return { detail: { enabled: false } };
-  }
-
-  const result = await lockSpreadsOnce(db, Date.now(), { dryRun: gate.dryRun });
-  // Overflow means eligible games were NOT locked this run. The job runs WEEKLY,
-  // so "the next run picks it up" is up to seven days later — past kickoff for
-  // everything it left behind, which blocks pick submission behind
-  // SPREADS_NOT_LOCKED for every pool on that slate. A run that silently did
-  // part of its job is exactly what a heartbeat is for.
-  return result.overflow > 0
-    ? {
-        ok: false,
-        error: `${result.overflow} eligible game(s) exceeded the ${MAX_SPREAD_LOCKS_PER_RUN} per-run cap and were NOT locked`,
-        detail: { ...result, dryRun: gate.dryRun },
-      }
-    : { detail: { ...result, dryRun: gate.dryRun } };
-}));
+// `shouldLockSpread`, `lockSpreadsOnce`, `SpreadLockResult` and `lockNFLSpreadsJob`
+// LIVED HERE UNTIL 2026-08-20 and are DELETED, not moved (PLAN-NFL-SPREAD-FREEZE
+// Phase 1). They locked whatever value the last import had left on the document —
+// they fetched nothing — so on 2026-08-18 the job ran on schedule and reported
+// `would lock 0 spread(s)` while ESPN carried all sixteen lines for the slate.
+//
+// The replacement is `nflSpreadFreeze.ts`: it FETCHES the target week at the
+// stated instant and writes the result, all or nothing, to `nfl_frozen_spreads`.
+// It keeps the deployed export name `lockNFLSpreadsJob` and the config key
+// `system/config.nflSpreadLock` so the Cloud Scheduler job, the heartbeat history
+// and the armed production config all carry over.
 
 /**
  * SuperAdmin-only HTTPS callable to trigger manual NFL schedule imports.
@@ -1055,9 +1486,12 @@ export const importNFLSchedule = validated(
 
   try {
     const res = await importNFLSeason(season, seasonType, weeks);
-    return { success: true, importedCount: res.importedCount };
+    // Surfaced, not swallowed: the caller asked for N weeks and may have got fewer.
+    return { success: true, importedCount: res.importedCount, leaseBusyWeeks: res.leaseBusyWeeks };
   } catch (err: any) {
     console.error("importNFLSchedule Failure:", err);
-    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`, err);
+    // No 3rd arg: HttpsError's `details` is serialized to the client, and a raw
+    // error object can carry stack traces and internal paths.
+    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`);
   }
 });

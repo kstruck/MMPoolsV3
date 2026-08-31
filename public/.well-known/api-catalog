@@ -1,0 +1,25 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://us-central1-gridiron-gamble-uzuqo.cloudfunctions.net/readiness",
+      "service-desc": [
+        {
+          "href": "https://www.marchmeleepools.com/api/openapi.json",
+          "type": "application/vnd.oai.openapi+json;version=3.1"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://www.marchmeleepools.com/api/docs.html",
+          "type": "text/html"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://us-central1-gridiron-gamble-uzuqo.cloudfunctions.net/readiness",
+          "type": "text/plain"
+        }
+      ]
+    }
+  ]
+}

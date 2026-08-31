@@ -1,21 +1,92 @@
 import React, { useId } from 'react';
 import { cn } from './cn';
+// Direct, not through the `ui` barrel: the barrel exports this file too.
+import { HelpTip } from './HelpTip';
 
 /* Form controls — cream fill, 1.5px line border, navy focus, red error.
    Labels: Saira Condensed 700 uppercase 12px tracking .08em. */
 
-export const FieldLabel: React.FC<React.LabelHTMLAttributes<HTMLLabelElement>> = ({
+/**
+ * `form` is omitted rather than destructured away: it is the one attribute that
+ * is valid on a `<label>` and not on the `<span>` this renders when there is no
+ * `htmlFor`, and dropping it from the type lets the rest be spread onto either
+ * without a cast. Nothing in the codebase sets it.
+ */
+export interface FieldLabelProps
+    extends Omit<React.LabelHTMLAttributes<HTMLLabelElement>, 'form'> {
+    /**
+     * The `HelpTopic` this control is explained by. Renders a `?` beside the
+     * label text; omitted, nothing is rendered and the label is unchanged.
+     *
+     * There is no `text` prop and there must never be one — `HelpTip` takes an
+     * id and nothing else, which is what keeps one explanation in one place.
+     */
+    helpId?: string;
+    /**
+     * Label colour. `default` is the body text colour; `muted` is the greyer
+     * one every label on the NFL manager form has always used.
+     *
+     * A PROP RATHER THAN A `className` OVERRIDE, because `cn` here is a plain
+     * join with no tailwind-merge: passing `text-muted` alongside the built-in
+     * `text-[color:var(--text)]` emits BOTH, and which one wins is decided by
+     * the order Tailwind happens to generate them in. One class, chosen here.
+     *
+     * Either way the class lands on the ROW, so the help tip inherits it.
+     */
+    tone?: 'default' | 'muted';
+}
+
+/**
+ * A form label, with two things the plain `<label>` it replaces got wrong.
+ * Both were settled in the wizard's own `LabelRow`
+ * (`src/components/wizard/fields.tsx`) and are repeated here rather than
+ * re-derived.
+ *
+ * 1. **The `HelpTip` is a SIBLING, never nested.** Its trigger is a
+ *    `<button>`, and a labelable control inside a `<label>` is activated by
+ *    clicking the label text — so nesting would make "click the field name"
+ *    open a tooltip.
+ *
+ * 2. **With no `htmlFor` it renders a `<span>`, not a `<label>`.** A label
+ *    associated with no control announces to a screen reader as a stray
+ *    string. EVERY existing caller of this component is in exactly that state
+ *    — `ContactPage`, `SupportPage`, `HowItWorksPage`, `PlayoffSettingsModal`
+ *    and, until T4, all 33 of `NFLManagerView`'s — so this is a fix for them
+ *    too, not only for the file that prompted it.
+ *
+ * The spacing moves from the label to the row wrapper (`mb-1.5`), so the gap
+ * below a labelled control is unchanged whether or not a tip is present.
+ */
+export const FieldLabel: React.FC<FieldLabelProps> = ({
     className,
+    helpId,
+    htmlFor,
+    tone = 'default',
+    children,
     ...props
-}) => (
-    <label
-        className={cn(
-            'block mb-1.5 font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)]',
-            className
-        )}
-        {...props}
-    />
-);
+}) => {
+    // COLOUR LIVES ON THE ROW, NOT ON THE LABEL. `HelpTip`'s trigger carries
+    // no colour of its own (`text-current`) so that it inherits this one —
+    // which makes the `?` exactly as visible as the label text it explains,
+    // on every surface and in both themes. Put a colour back on the label
+    // alone and the tip silently keeps whatever the row inherited instead.
+    // `className` lands here for the same reason: every caller that passes one
+    // passes a colour, and the tip has to follow it.
+    const rowCls = cn(
+        'mb-1.5 flex items-center gap-1.5',
+        tone === 'muted' ? 'text-muted' : 'text-[color:var(--text)]',
+        className
+    );
+    const textCls = 'font-display font-bold uppercase text-[12px] tracking-[0.08em]';
+    return (
+        <div className={rowCls}>
+            {htmlFor
+                ? <label htmlFor={htmlFor} className={textCls} {...props}>{children}</label>
+                : <span className={textCls} {...props}>{children}</span>}
+            {helpId ? <HelpTip helpId={helpId} /> : null}
+        </div>
+    );
+};
 
 const CONTROL_BASE =
     'w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] ' +

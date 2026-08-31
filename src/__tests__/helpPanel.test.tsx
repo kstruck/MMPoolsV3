@@ -1,0 +1,869 @@
+// @vitest-environment jsdom
+//
+// The Help panel's behaviour — PLAN-HELP-SYSTEM.md §3 D5, ticket T2.
+//
+// WHY THIS FILE OPTS IN TO jsdom. Every other suite in this repo runs in the
+// node environment and must keep doing so — 80-odd of them, and a global
+// `environment: 'jsdom'` would slow all of them down for the sake of three.
+// T1 shipped NO interaction tests for exactly this reason (`billingGate.test.tsx`
+// uses `renderToStaticMarkup`, which cannot fire an event); T2 buys the
+// dependency because a panel whose whole contract is keyboard and focus cannot
+// be proved any other way. `jsdom` and `@testing-library/react` are
+// devDependencies and the docblock above is per-file, so nothing else changes.
+
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { MemoryRouter, useSearchParams } from 'react-router';
+import type { ReactNode } from 'react';
+import { HelpProvider } from '../components/help/HelpPanel';
+import { HelpHeaderButton } from '../components/help/HelpHeaderButton';
+import { HelpRoutePublisher } from '../help/publish';
+import { HelpScopeProvider } from '../help/scope';
+import { HelpTip } from '../components/ui/HelpTip';
+import { helpRegistry, staticCopy } from '../help/registry';
+import { onCurrentRoute } from '../help/route-match';
+import { __resetOverlayStack, useOverlayOwner } from '../components/ui/overlayStack';
+
+beforeAll(() => {
+  // `useIsMobile` asks for it and jsdom does not implement it. Desktop, so the
+  // panel is a drawer rather than a modal — the mobile branch only adds a
+  // backdrop and `aria-modal`.
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }),
+  });
+  // jsdom has no layout, so nothing scrolls.
+  Element.prototype.scrollIntoView = () => {};
+});
+
+beforeEach(() => __resetOverlayStack());
+afterEach(() => {
+  cleanup();
+  __resetOverlayStack();
+});
+
+/** A wizard step, which is the surface with real topics on it today. */
+function WizardHarness({ children }: { children?: ReactNode }) {
+  return (
+    <HelpScopeProvider poolType="NFL_PICKEM" audience="commissioner">
+      <HelpRoutePublisher tab="rules" />
+      <HelpHeaderButton />
+      {children}
+    </HelpScopeProvider>
+  );
+}
+
+function renderApp(ui: ReactNode, opts: { path?: string; isAdmin?: boolean } = {}) {
+  const { path = '/create/pickem', isAdmin = false } = opts;
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <HelpProvider isAdmin={isAdmin}>{ui}</HelpProvider>
+    </MemoryRouter>,
+  );
+}
+
+const panel = () => document.getElementById('help-panel')!;
+const isOpen = () => panel().getAttribute('role') === 'dialog';
+
+describe('the `?` shortcut', () => {
+  it('opens the panel, and a second press closes it', async () => {
+    renderApp(<WizardHarness />);
+    expect(isOpen()).toBe(false);
+
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(false));
+  });
+
+  it('does NOT fire while the reader is typing in an input', async () => {
+    renderApp(
+      <WizardHarness>
+        <input aria-label="Payment instructions" />
+      </WizardHarness>,
+    );
+    const input = screen.getByLabelText('Payment instructions');
+    input.focus();
+    fireEvent.keyDown(input, { key: '?' });
+    // A question mark belongs in the box a commissioner is writing in.
+    await waitFor(() => expect(isOpen()).toBe(false));
+    // Discriminating half: the same press from outside the input DOES open it,
+    // so the assertion above is about the guard and not a dead listener.
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+  });
+
+  it('does NOT fire while another overlay owns the screen', async () => {
+    // A registered overlay, as `T16` will make the remaining ~35 shells.
+    function Modal({ open }: { open: boolean }) {
+      useOverlayOwner('some-modal', { active: open, onEscape: () => {} });
+      return open ? <div role="dialog">A modal</div> : null;
+    }
+    const { rerender } = renderApp(
+      <WizardHarness>
+        <Modal open />
+      </WizardHarness>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(false));
+
+    // …and once it closes, the shortcut works again. This is the case that
+    // `AuthModal`/`ShareModal` break if the stack is pushed on MOUNT: they stay
+    // mounted while closed behind an `isOpen` prop.
+    rerender(
+      <MemoryRouter initialEntries={['/create/pickem']}>
+        <HelpProvider isAdmin={false}>
+          <WizardHarness>
+            <Modal open={false} />
+          </WizardHarness>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+  });
+
+  it('ignores a modifier chord but not the Shift that types the character', async () => {
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?', ctrlKey: true });
+    fireEvent.keyDown(document, { key: '?', metaKey: true });
+    await waitFor(() => expect(isOpen()).toBe(false));
+    fireEvent.keyDown(document, { key: '?', shiftKey: true });
+    await waitFor(() => expect(isOpen()).toBe(true));
+  });
+});
+
+describe('Escape and focus', () => {
+  it('closes the panel and returns focus to whatever opened it', async () => {
+    renderApp(<WizardHarness />);
+    const button = screen.getByLabelText('Help (?)');
+    button.focus();
+    fireEvent.click(button);
+
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // Focus moves INTO the panel, to the search box.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByPlaceholderText('Search help')));
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(isOpen()).toBe(false));
+    expect(document.activeElement).toBe(button);
+  });
+
+  it('gives Escape to the panel only, never also to the overlay underneath it', async () => {
+    const modalEscape = vi.fn();
+    function Modal() {
+      useOverlayOwner('some-modal', { active: true, onEscape: modalEscape });
+      return <div role="dialog">A modal</div>;
+    }
+    renderApp(
+      <WizardHarness>
+        <Modal />
+      </WizardHarness>,
+    );
+    // The panel is opened by the header button, so the modal being open does
+    // not stop it (only the `?` shortcut is gated on the overlay stack).
+    fireEvent.click(screen.getByLabelText('Help (?)'));
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    await waitFor(() => expect(isOpen()).toBe(false));
+    // `stopImmediatePropagation`, not `stopPropagation`: the unmigrated modals
+    // listen on `document` too, and propagation stopping does not reach a
+    // sibling listener on the same target.
+    expect(modalEscape).not.toHaveBeenCalled();
+  });
+
+  it('is out of the tab order while closed', () => {
+    renderApp(<WizardHarness />);
+    expect(panel().getAttribute('aria-hidden')).toBe('true');
+    expect(panel().hasAttribute('inert')).toBe(true);
+    expect(panel().hasAttribute('role')).toBe(false);
+  });
+});
+
+describe('the header button (K3)', () => {
+  it('toggles the panel and reports its state', async () => {
+    renderApp(<WizardHarness />);
+    const button = screen.getByLabelText('Help (?)');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(button.getAttribute('aria-controls')).toBe('help-panel');
+
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-expanded')).toBe('true'));
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute('aria-expanded')).toBe('false'));
+  });
+
+  it('renders nothing when no panel is mounted', () => {
+    render(
+      <MemoryRouter>
+        <HelpHeaderButton />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByLabelText('Help (?)')).toBeNull();
+  });
+});
+
+describe('the panel contents', () => {
+  it('shows the page the reader is on, resolved from the published step', async () => {
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    // `wizard.pickem.rules`, not the wizard's route-level page. Matched as the
+    // HEADING: the same title also appears as its own row in "All pages", so a
+    // plain text query finds two nodes and throws.
+    const stepPage = helpRegistry.getPage('wizard.pickem.rules')!;
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: stepPage.title })).toBeTruthy(),
+    );
+    expect(screen.getByText(stepPage.summary)).toBeTruthy();
+    // And NOT the route-level page it used to fall back to.
+    expect(
+      screen.queryByRole('heading', { name: helpRegistry.getPage('wizard.pickem')!.title }),
+    ).toBeNull();
+  });
+
+  it('finds a topic by a phrase that appears only in its `long` copy', async () => {
+    // Taken from the live registry rather than hard-coded: a literal would rot
+    // the moment the copy was edited and the test would stop proving anything.
+    const topic = helpRegistry.getTopic('settings.weeklyTiebreaker')!;
+    const long = staticCopy(topic.long);
+    const short = staticCopy(topic.short);
+    const phrase = long.split(' ').slice(2, 6).join(' ');
+    expect(short).not.toContain(phrase);
+
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: phrase } });
+    await waitFor(() => expect(screen.getByText(topic.title)).toBeTruthy());
+  });
+
+  it('says so plainly when a screen has no guide yet, rather than rendering blank', async () => {
+    // A SYNTHETIC path, deliberately not a route this app has.
+    //
+    // This test stood on `/privacy` until T3 wrote that page, and then went red
+    // without one thing about the empty state having changed. That is the tell
+    // that it was measuring the wrong subject: the guard is for the PANEL's
+    // no-page branch, and pointing it at whichever real screen currently lacks
+    // help makes it a coverage assertion in disguise — one that fails, by
+    // design, every time the content improves. Re-pointing it at whichever real
+    // route `ROUTE_ALLOWLIST` still marks pending would buy one ticket's grace
+    // and then break again for exactly the same reason.
+    //
+    // The branch it guards stays reachable in the live app: any `App.tsx` route
+    // the registry does not cover renders it, which is precisely what
+    // `ROUTE_ALLOWLIST` exists to enumerate.
+    const path = '/__a-screen-with-no-help-page__';
+
+    // THE PREMISE, asserted rather than assumed. Without this the test would
+    // still pass on the day some page started claiming this path — for the
+    // wrong reason, and silently. `onCurrentRoute` is audience- and
+    // pool-type-blind on purpose: no page may match this path for ANY reader.
+    expect(helpRegistry.pages.filter((p) => onCurrentRoute(p, { pathname: path }))).toEqual([]);
+
+    renderApp(<WizardHarness />, { path });
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(screen.getByText(/no guide for this screen yet/i)).toBeTruthy());
+  });
+
+  it('and does NOT say that on a screen that has one', async () => {
+    // The discriminating half. The assertion above passes on a panel that
+    // renders the empty state unconditionally; this is what stops it.
+    renderApp(<WizardHarness />, { path: '/privacy' });
+    fireEvent.keyDown(document, { key: '?' });
+    const privacy = helpRegistry.getPage('site.privacy')!;
+    await waitFor(() => expect(screen.getByRole('heading', { name: privacy.title })).toBeTruthy());
+    expect(screen.queryByText(/no guide for this screen yet/i)).toBeNull();
+  });
+
+  it('hides commissioner-only pages from a member in "All pages"', async () => {
+    const managerPage = helpRegistry.getPage('pool.nfl.manager')!;
+    const memberPage = helpRegistry.getPage('pool.nfl.picks')!;
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
+            <HelpRoutePublisher tab="picks" />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(screen.getByRole('button', { name: memberPage.title })).toBeTruthy());
+    expect(screen.queryByRole('button', { name: managerPage.title })).toBeNull();
+  });
+
+  it('K5: lists only this pool type until the reader asks for the rest', async () => {
+    const bracketPage = helpRegistry.getPage('pool.bracket.standings')!;
+    render(
+      <MemoryRouter initialEntries={['/pool/abc']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
+            <HelpRoutePublisher tab="picks" />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    expect(screen.queryByRole('button', { name: bracketPage.title })).toBeNull();
+
+    fireEvent.click(screen.getByText('Show all pool types'));
+    // LISTED, NOT LINKED (codex R7). The reader is standing in an NFL pool, so
+    // there is nowhere to take them; forcing Bracket guidance onto an NFL screen
+    // is worse than naming the page they could open from a Bracket pool.
+    await waitFor(() => expect(screen.getByText(bracketPage.title)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: bracketPage.title })).toBeNull();
+    // Discriminating half: a page for THIS pool type in the same list is a button.
+    expect(screen.getByRole('button', { name: helpRegistry.getPage('pool.nfl.standings')!.title })).toBeTruthy();
+  });
+});
+
+describe('a pool page listed from the create wizard (codex R12)', () => {
+  it('is text, not a button — the wizard route cannot build a pool link', async () => {
+    const picks = helpRegistry.getPage('pool.nfl.picks')!;
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // Listed, because the wizard publishes NFL_PICKEM and the page is in scope…
+    expect(screen.getByText(picks.title)).toBeTruthy();
+    // …and not linked, because `/create/pickem?tab=picks` is not a pool.
+    expect(screen.queryByRole('button', { name: picks.title })).toBeNull();
+    // Discriminating: the page for the step this harness IS on is a button.
+    expect(
+      screen.getByRole('button', { name: helpRegistry.getPage('wizard.pickem.rules')!.title }),
+    ).toBeTruthy();
+  });
+
+  /**
+   * The same rule one level down (codex R2 on T14), at the UI.
+   *
+   * The harness publishes `tab="rules"`, so the Fee step's page is on this
+   * route but is NOT the screen the reader is looking at — and its `href` is
+   * `null`, so a click could only force its summary over the rules form.
+   * Listed, and rendered as text.
+   */
+  it('a DIFFERENT wizard step on the same route is text too', async () => {
+    const fee = helpRegistry.getPage('wizard.pickem.fee')!;
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    expect(screen.getByText(fee.title)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: fee.title })).toBeNull();
+  });
+
+  /**
+   * …and SEARCH obeys the same predicate, so it cannot offer what the panel
+   * would then refuse.
+   *
+   * "finishing places" matches the Payouts step PAGE. From the rules step that
+   * page is unreachable: no URL puts the reader on a wizard step, so the click
+   * could only force the Payouts summary over the rules form, or (once
+   * `canOpenPage` refuses that) clear the search and do nothing. Both are the
+   * defect codex R9 fixed for glossary hits.
+   *
+   * ⚠️ THE ASSERTION IS "THAT ROW IS ABSENT", NOT "THE PANEL IS EMPTY".
+   * It was the empty state until T5/T6 (#624) landed, on the reasoning that the
+   * query matched exactly one thing in the registry so the row either appeared
+   * or the empty state did. That reasoning had a shelf life: `Bonus prize share`
+   * says "the finishing places beside it" and now matches the same query, so the
+   * empty state stopped being reachable and this test failed on content that had
+   * nothing to do with it.
+   *
+   * The empty state was only ever a PROXY, and a bad one in both directions — an
+   * `acceptHit` that dropped every hit would have satisfied it just as well. What
+   * the panel owes the reader is that THIS row is not offered while the rest of
+   * the search still works, so that is what is asserted, in three parts:
+   *
+   *   1. unfiltered, the registry really does return the Payouts page for this
+   *      query — so there is something to drop, and content drift makes this
+   *      FAIL rather than pass vacuously;
+   *   2. the panel does not render it;
+   *   3. and the panel is not empty either, which is the half a blanket filter
+   *      would fail.
+   *
+   * Nothing here names the content that made (3) true, so the next topic to use
+   * the phrase costs this test nothing.
+   */
+  const findingPlaces = () => {
+    fireEvent.keyDown(document, { key: '?' });
+    return waitFor(() => expect(isOpen()).toBe(true)).then(() => {
+      fireEvent.change(screen.getByPlaceholderText('Search help'), {
+        target: { value: 'finishing places' },
+      });
+    });
+  };
+
+  it('does not offer a search hit for a step the reader cannot reach', async () => {
+    const payouts = helpRegistry.getPage('wizard.pickem.payouts')!;
+    // (1) There is a hit to drop.
+    expect(
+      helpRegistry
+        .search('finishing places', { poolType: 'NFL_PICKEM', audience: 'commissioner' })
+        .some((r) => r.kind === 'page' && r.id === payouts.id),
+    ).toBe(true);
+
+    renderApp(<WizardHarness />);
+    await findingPlaces();
+    // The results section exists, so the query has landed and the assertions
+    // below are about what it produced rather than about an unrendered panel.
+    await waitFor(() => expect(screen.getByText(/^Results$|^First \d+ results$/)).toBeTruthy());
+
+    // (2) …and the panel does not offer it.
+    expect(screen.queryByRole('button', { name: new RegExp(payouts.title) })).toBeNull();
+    // (3) The rest of the search still works.
+    expect(screen.queryByText(/Nothing in Help matches/)).toBeNull();
+  });
+
+  it('offers the very same hit from the step it belongs to', async () => {
+    // The discriminating half: filtering everything would satisfy the check
+    // above. On the Payouts step the page IS the reader's screen, so the hit
+    // comes back and is clickable.
+    render(
+      <MemoryRouter initialEntries={['/create/pickem']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="commissioner">
+            <HelpRoutePublisher tab="payouts" />
+            <HelpHeaderButton />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    await findingPlaces();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: new RegExp(helpRegistry.getPage('wizard.pickem.payouts')!.title) }),
+      ).toBeTruthy(),
+    );
+  });
+});
+
+describe('a glossary search hit (codex R9)', () => {
+  it('opens the definition it names, wherever the card lives', async () => {
+    // A term NOT referenced by this page's topics, so its card sits inside the
+    // collapsed "All terms" accordion — the case where clicking the result used
+    // to clear the search and reveal nothing.
+    const scope = { poolType: 'NFL_PICKEM', audience: 'commissioner' } as const;
+    const onPage = new Set(
+      helpRegistry
+        .placementsForPage('wizard.pickem.rules', scope)
+        .flatMap((s) => s.topics)
+        .flatMap((t) => t.terms ?? []),
+    );
+    // Chosen so the query returns EXACTLY one hit, and that hit is this term:
+    // searching a term's NAME can also match a topic ("User" matches the
+    // manager-name topic), and clicking the wrong row would prove nothing.
+    const picked = helpRegistry.glossary
+      .filter((t) => !onPage.has(t.id) && t.long.length > 60)
+      .map((t) => ({ term: t, query: t.long.slice(0, 45) }))
+      .find(({ term, query }) => {
+        const hits = helpRegistry.search(query, scope);
+        return hits.length === 1 && hits[0].kind === 'glossary' && hits[0].id === term.id;
+      });
+    expect(picked).toBeDefined();
+    const { term, query } = picked!;
+
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // Collapsed to begin with — this term is not referenced by any topic on the
+    // page, so its card sits inside the closed "All terms" accordion and its
+    // long copy is not rendered at all.
+    const longTail = (t: string) => t.slice(-45);
+    expect(screen.queryByText(longTail(term.long), { exact: false })).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: query } });
+    const hit = await waitFor(() => screen.getByText(term.term));
+    fireEvent.click(hit.closest('button')!);
+
+    // Matched on a TAIL of the long copy, not the whole string: only the long
+    // form contains it (the card renders `short` above it either way), and
+    // substring matching sidesteps whitespace normalisation in the fixture copy.
+    await waitFor(() => expect(screen.getByText(longTail(term.long), { exact: false })).toBeTruthy());
+  });
+});
+
+describe('the tooltip and the panel together', () => {
+  it('a tooltip opens on focus with the ARIA a screen reader needs', async () => {
+    renderApp(
+      <WizardHarness>
+        <HelpTip helpId="settings.weeklyTiebreaker" />
+      </WizardHarness>,
+    );
+    const topic = helpRegistry.getTopic('settings.weeklyTiebreaker')!;
+    const trigger = screen.getByLabelText(`About ${topic.title}`);
+    expect(trigger.getAttribute('aria-describedby')).toBeNull();
+
+    fireEvent.focus(trigger);
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain(staticCopy(topic.short));
+    expect(trigger.getAttribute('aria-describedby')).toBe(tip.id);
+  });
+
+  it('clicking a tooltip opens the panel on that topic — the panel is mounted now', async () => {
+    renderApp(
+      <WizardHarness>
+        <HelpTip helpId="settings.weeklyTiebreaker" />
+      </WizardHarness>,
+    );
+    const topic = helpRegistry.getTopic('settings.weeklyTiebreaker')!;
+    fireEvent.click(screen.getByLabelText(`About ${topic.title}`));
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // Opened TO the topic: its card is rendered and holds the long copy.
+    await waitFor(() => expect(document.getElementById(`help-topic-${topic.id}`)).toBeTruthy());
+    expect(document.getElementById(`help-topic-${topic.id}`)!.textContent).toContain(staticCopy(topic.long));
+  });
+});
+
+/**
+ * A pool dashboard as the real ones behave: the tab comes from `?tab=` and the
+ * tab it ACTUALLY rendered is what gets published.
+ */
+function PoolHarness({ poolType = 'NFL_PICKEM' as const, audience = 'member' as const }) {
+  const [params] = useSearchParams();
+  const tab = params.get('tab') ?? 'dashboard';
+  return (
+    <HelpScopeProvider poolType={poolType} audience={audience}>
+      <HelpRoutePublisher tab={tab} />
+      <HelpHeaderButton />
+    </HelpScopeProvider>
+  );
+}
+
+describe('a tab this pool does not have (codex R3)', () => {
+  // T10 deleted the Results page (its screen is a segment of Standings now), so
+  // the conditional tab this exercises is the Current Picks grid, which a
+  // signed-out reader does not get.
+  it('is not listed in "All pages" without the tab, and is with it', async () => {
+    const results = helpRegistry.getPage('pool.nfl.grid')!;
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_SURVIVOR" audience="member">
+            {/* What NFLPoolDashboard publishes for a signed-out reader. */}
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'standings', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    expect(screen.queryByRole('button', { name: results.title })).toBeNull();
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(screen.getByRole('button', { name: results.title })).toBeTruthy());
+  });
+});
+
+describe('search never offers a screen this pool has no tab for (codex R5)', () => {
+  it('drops the All-picks page when the tab is absent, and keeps it when present', async () => {
+    const results = helpRegistry.getPage('pool.nfl.grid')!;
+    // A phrase from that page's own summary, so nothing else in the registry
+    // matches it — which makes the negative half a clean "nothing found" rather
+    // than an absence hidden among unrelated hits.
+    const phrase = results.summary.split('.')[0];
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_SURVIVOR" audience="member">
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'standings', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: phrase } });
+    await waitFor(() => expect(screen.getByText(/Nothing in Help matches/i)).toBeTruthy());
+    expect(screen.queryByText(results.title)).toBeNull();
+    cleanup();
+
+    render(
+      <MemoryRouter initialEntries={['/pool/abc?tab=dashboard']}>
+        <HelpProvider isAdmin={false}>
+          <HelpScopeProvider poolType="NFL_PICKEM" audience="member">
+            <HelpRoutePublisher
+              tab="dashboard"
+              offeredTabs={['dashboard', 'picks', 'grid', 'standings', 'recaps', 'rules']}
+            />
+          </HelpScopeProvider>
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: phrase } });
+    await waitFor(() => expect(screen.getByText(results.title)).toBeTruthy());
+  });
+});
+
+describe('navigating from "All pages" to another tab', () => {
+  /**
+   * The case the pending-target machinery exists for. The publishers under the
+   * new tab settle in an EFFECT, so the first render after `navigate` still
+   * reports the old tab — a version of this that gave up on the first miss would
+   * pin the panel to a forced page that the route then contradicted.
+   */
+  it('follows the link and lets the route — not a forced page — decide afterwards', async () => {
+    renderApp(<PoolHarness />, { path: '/pool/abc?tab=dashboard' });
+    fireEvent.keyDown(document, { key: '?' });
+
+    const home = helpRegistry.getPage('pool.nfl.dashboard')!;
+    const standings = helpRegistry.getPage('pool.nfl.standings')!;
+    await waitFor(() => expect(screen.getByRole('heading', { name: home.title })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: standings.title }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: standings.title })).toBeTruthy());
+
+    // And the reader clicking a THIRD tab in the app still wins, which is what
+    // proves the panel is following the route rather than holding a forced page.
+    fireEvent.click(screen.getByRole('button', { name: home.title }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: home.title })).toBeTruthy());
+  });
+});
+
+describe('the `?help=` deep link (K11)', () => {
+  it('opens the panel on the named topic and drops the parameter', async () => {
+    const topic = helpRegistry.getTopic('settings.weeklyTiebreaker')!;
+    renderApp(<WizardHarness />, { path: `/create/pickem?help=${topic.id}` });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    await waitFor(() => expect(document.getElementById(`help-topic-${topic.id}`)).toBeTruthy());
+  });
+});
+
+/**
+ * Templated copy in the PANEL — the other half of `TopicScope.settings`.
+ *
+ * The tooltip and the panel read the same scope precisely so they cannot
+ * disagree about one topic's copy. `helpTip.dom.test.tsx` proves the tooltip
+ * half; without this one the panel could keep rendering the fallback beside a
+ * tooltip rendering the branch, and the two would say different things about
+ * the same setting on the same screen.
+ */
+describe('a template renders in the panel from the pool in scope', () => {
+  const TOPIC = 'settings.weeklyTiebreaker';
+
+  /** A Pick'em pool's rules tab, publishing the pool's settings like `PoolRoute`. */
+  function PoolWithSettings({ settings }: { settings?: Record<string, unknown> }) {
+    return (
+      <HelpScopeProvider poolType="NFL_PICKEM" audience="member" settings={settings}>
+        <HelpRoutePublisher tab="rules" />
+        <HelpHeaderButton />
+        <HelpTip helpId={TOPIC} />
+      </HelpScopeProvider>
+    );
+  }
+
+  const cardText = async () => {
+    await waitFor(() => expect(document.getElementById(`help-topic-${TOPIC}`)).toBeTruthy());
+    return document.getElementById(`help-topic-${TOPIC}`)!.textContent ?? '';
+  };
+
+  it('shows the pool’s own rule, not the four-rule fallback', async () => {
+    renderApp(<PoolWithSettings settings={{ weeklyTiebreaker: 'NONE' }} />, { path: '/pool/abc?tab=rules' });
+    fireEvent.click(screen.getByLabelText(`About ${helpRegistry.getTopic(TOPIC)!.title}`));
+    await waitFor(() => expect(isOpen()).toBe(true));
+    const text = await cardText();
+    expect(text).toContain('shares that week outright');
+    expect(text).not.toContain('A few older pools');
+  });
+
+  it('shows the four-rule fallback on the wizard, where no pool exists', async () => {
+    renderApp(
+      <WizardHarness>
+        <HelpTip helpId={TOPIC} />
+      </WizardHarness>,
+    );
+    fireEvent.click(screen.getByLabelText(`About ${helpRegistry.getTopic(TOPIC)!.title}`));
+    await waitFor(() => expect(isOpen()).toBe(true));
+    const text = await cardText();
+    expect(text).toContain('A few older pools');
+    expect(text).not.toContain('shares that week outright');
+  });
+
+  /**
+   * THE DISCRIMINATING CASE. The tooltip and the panel are on screen at the
+   * same time, reading one scope. If either stopped passing `settings` to
+   * `resolveCopy`, one of them would show the fallback while the other showed
+   * the branch — and the assertions above, taken one at a time, would not
+   * notice.
+   */
+  it('the tooltip and the panel agree on which branch to show', async () => {
+    renderApp(<PoolWithSettings settings={{ weeklyTiebreaker: 'MNF_FIRST_GAME' }} />, {
+      path: '/pool/abc?tab=rules',
+    });
+    const trigger = screen.getByLabelText(`About ${helpRegistry.getTopic(TOPIC)!.title}`);
+    fireEvent.focus(trigger);
+    const tip = await screen.findByRole('tooltip');
+    expect(tip.textContent).toContain('FIRST Monday game');
+
+    fireEvent.click(trigger);
+    await waitFor(() => expect(isOpen()).toBe(true));
+    const text = await cardText();
+    expect(text).toContain('first Monday game to kick off');
+    expect(text).not.toContain('A few older pools');
+  });
+});
+
+/**
+ * The admin chunk, at the surface — codex round 2 on T14.
+ *
+ * Round 2 raised a P1 saying `/tournament-sim` cannot show its help page
+ * because `TournamentSimulator.tsx` mounts no `HelpRoutePublisher`, so the
+ * audience stays `member` and an admin-only page is filtered out. The premise
+ * is wrong: `HelpPanelHost` passes `defaultAudience: isAdmin ? 'admin' :
+ * 'member'` (`useHelpPanel.ts`), and `App.tsx` gates BOTH the route and
+ * `HelpProvider` on the same `isSuperAdmin(user)`. A route that renders at all
+ * is therefore already an admin-audience route.
+ *
+ * Untested, though — the finding named a real single point of failure, so it
+ * is pinned here rather than answered in prose. This also covers the lazy
+ * admin registry end to end, which nothing else did.
+ */
+describe('the admin help chunk on an admin route (codex round 2 on T14)', () => {
+  it('summarises /tournament-sim with no publisher on the page at all', async () => {
+    render(
+      <MemoryRouter initialEntries={['/tournament-sim']}>
+        <HelpProvider isAdmin={true}>
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    // The chunk is fetched when the panel opens, so the copy arrives async.
+    // Matched on the SUMMARY, which only the page heading renders — the title
+    // appears twice, as the heading and as the current row in "All pages".
+    await waitFor(() => expect(screen.getByText(/creates a test pool/)).toBeTruthy());
+    // …and it is the current page, not merely listed.
+    expect(
+      screen.getByRole('button', { name: 'Tournament Simulator' }).getAttribute('aria-current'),
+    ).toBe('true');
+  });
+
+  it('shows the same reader NOTHING there when they are not an admin', async () => {
+    // Discriminating: the assertion above must be about the admin audience and
+    // not about a page that is visible to everyone. A non-admin never reaches
+    // this route, but the panel must not describe it either.
+    render(
+      <MemoryRouter initialEntries={['/tournament-sim']}>
+        <HelpProvider isAdmin={false}>
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    expect(screen.queryByText('Tournament Simulator')).toBeNull();
+  });
+});
+
+/**
+ * The search filter is per-kind, and it runs BEFORE the cap — codex R3 on T14.
+ *
+ * Two separate defects, both found on this branch and both about the same
+ * filter, so they are pinned together.
+ */
+describe('search filtering (codex R3 on T14)', () => {
+  it('still finds a TOPIC whose step is not the step the reader is on', async () => {
+    // The regression half. A topic is copy about one setting, not a screen —
+    // holding topic hits to `canOpenPage` (as page hits are held) emptied this
+    // search completely, because `branding.logoUrl` is placed on the branding
+    // step and the harness is on the rules step.
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'logo' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Logo URL/ })).toBeTruthy());
+  });
+
+  it('spends the result cap on hits that survive the filter', async () => {
+    // The cap half. `/super-admin` has sixteen tab pages and the reader can
+    // open only the one they are on, so a broad query used to fill five of the
+    // seven page slots with rows about to be thrown away — and the linkable
+    // Tournament Simulator page fell off the end of a 20-result list.
+    render(
+      <MemoryRouter initialEntries={['/super-admin']}>
+        <HelpProvider isAdmin={true}>
+          <HelpRoutePublisher tab="overview" audience="admin" />
+          <HelpHeaderButton />
+        </HelpProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // Wait for the admin chunk, or the query runs against the base registry.
+    await waitFor(() => expect(screen.getAllByText(/Overview: Dashboard/).length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'the' } });
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Tournament Simulator/ }).length).toBeGreaterThan(0),
+    );
+  });
+});
+
+/**
+ * A topic search hit is ANSWERED, never merely cleared — codex R4 on T14.
+ *
+ * `goToPage` refuses to move to a page the reader cannot open, which is right;
+ * dropping the topic request with it was not. The reader asked to read about a
+ * setting, and `Logo URL` has exactly one placement — the wizard's branding
+ * step — so there is no reachable page to send them to instead. The panel shows
+ * the topic where they are.
+ */
+describe('an off-page topic request (codex R4 on T14)', () => {
+  it('shows the topic without moving the panel off the step the reader is on', async () => {
+    renderApp(<WizardHarness />);
+    fireEvent.keyDown(document, { key: '?' });
+    await waitFor(() => expect(isOpen()).toBe(true));
+    // The rules step is the current page before the search…
+    expect(screen.getAllByText(helpRegistry.getPage('wizard.pickem.rules')!.title).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'logo' } });
+    const hit = await waitFor(() => screen.getByRole('button', { name: /Logo URL/ }));
+    fireEvent.click(hit);
+
+    // The topic is rendered…
+    await waitFor(() => expect(screen.getByText('What you searched for')).toBeTruthy());
+    expect(screen.getAllByText('Logo URL').length).toBeGreaterThan(0);
+    // …and the panel still describes the rules step, NOT the branding step
+    // whose page holds that topic. Answering the request must not smuggle the
+    // page move back in.
+    expect(screen.queryByText(helpRegistry.getPage('wizard.pickem.branding')!.summary)).toBeNull();
+    expect(screen.getAllByText(helpRegistry.getPage('wizard.pickem.rules')!.title).length).toBeGreaterThan(0);
+  });
+});

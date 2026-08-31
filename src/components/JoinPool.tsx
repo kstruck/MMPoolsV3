@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
+import { survivorRebuyJoinCopy } from '../utils/survivorRules';
 import { useParams, useNavigate } from 'react-router';
 import { Trophy, ShieldAlert, Coins, Users, ArrowRight, LogIn, UserPlus, Mail, Phone, Check } from 'lucide-react';
 import { dbService } from '../services/dbService';
@@ -10,6 +11,7 @@ import { getUserMessage } from '../utils/errorMessages';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
+import { effectiveMaxEntriesPerUser } from '@shared/multiEntry';
 import { PayoutsPanel } from './PayoutsPanel';
 import { Button } from './ui';
 
@@ -33,6 +35,9 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
   const toast = useToast();
   const autoJoinFiredRef = useRef(false);
   const castPool = pool as any;
+  // Absent ⇒ 1 (`effectiveMaxEntriesPerUser`), which is every pool created
+  // before multi-entry — so nothing below renders on an existing invite.
+  const maxEntriesPerUser = effectiveMaxEntriesPerUser(castPool?.settings);
 
   const pendingJoinKey = `pendingJoin:${poolId}`;
 
@@ -198,6 +203,15 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                    pool.type === 'NFL_SURVIVOR' ? 'Survivor' :
                    pool.type === 'NFL_MARGIN' ? 'Margin' : 'Squares'}
                 </span>
+                {/* Kevin, 2026-08-25: "On the invite that is sent I want to add
+                    the fact that it is a multi-entry pool." Absent on a
+                    single-entry pool, so every invite sent before today looks
+                    exactly as it did. */}
+                {maxEntriesPerUser > 1 && (
+                  <span className="mt-1 inline-block px-2 py-0.5 rounded-full border border-gold-500/40 bg-gold-500/10 text-gold-700 dark:text-gold-400 font-display font-bold uppercase text-[9px] tracking-[0.08em]">
+                    Multi-Entry
+                  </span>
+                )}
               </div>
             </div>
 
@@ -215,13 +229,44 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             <div className="space-y-4 mb-8 border-b border-line pb-8">
               <h4 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em] mb-2">Pool Rules Configuration</h4>
 
+              {/*
+                ONE line, ABOVE the per-type lists, so it shows on Pick'em,
+                Survivor and Margin without being written three times and
+                drifting apart.
+
+                🛑 IT NAMES THE MONEY, and that is the point rather than a
+                flourish. Kevin hit the confusion himself on the payments page
+                the same day: two entries, a $25 entry fee, and $50 owed reads
+                as a bug unless somebody said up front that the fee is PER
+                ENTRY. This is the last screen before a member commits.
+              */}
+              {maxEntriesPerUser > 1 && (
+                <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body mb-2.5">
+                  <li className="flex items-start gap-2">
+                    <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
+                    <span>
+                      <strong className="text-[color:var(--text)] font-bold">Multiple entries allowed</strong>
+                      {` — up to ${maxEntriesPerUser} per player, each with its own picks and its own place in the standings`}
+                      {(castPool?.settings?.entryFee ?? 0) > 0
+                        ? `. The $${castPool?.settings?.entryFee} entry fee is charged PER ENTRY, so two entries cost $${(castPool?.settings?.entryFee ?? 0) * 2}.`
+                        : '.'}
+                    </span>
+                  </li>
+                </ul>
+              )}
+
               {pool.type === 'NFL_PICKEM' && (() => {
                 const s = castPool?.settings || {};
                 const isConfidence = !!s.confidenceMode;
-                const ptsPerPick = s.pointsPerPick ?? 1;
-                const primetime = s.primetimeBonus || {};
                 const lockMode = s.lockMode ?? 'PER_GAME';
-                const hasPrimetime = primetime.thursday || primetime.sundayNight || primetime.monday;
+                // `s.pointsPerPick` and `s.primetimeBonus` USED TO BE READ HERE
+                // and are not any more. Neither has ever been read by anything
+                // that scores — `scorePickemEntry` awards exactly 1 point per
+                // correct pick on a non-confidence pool — so this preview was
+                // making a promise about what a pick is worth, to somebody
+                // deciding whether to pay an entry fee, that the pool did not
+                // keep. Kevin's ruling 2026-08-22; see
+                // PLAN-DELETE-INERT-PICKEM-SCORING.md.
                 return (
                   <ul className="text-sm text-[color:var(--text)] space-y-2.5 font-body">
                     <li className="flex items-start gap-2">
@@ -234,21 +279,8 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                       <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       {isConfidence
                         ? 'Confidence points scale from 1 to N (number of games in week) — most confident game gets the highest rank'
-                        : `Base scoring: ${ptsPerPick} point${ptsPerPick !== 1 ? 's' : ''} per correct pick`}
+                        : 'Base scoring: 1 point per correct pick'}
                     </li>
-                    {hasPrimetime && (
-                      <li className="flex items-start gap-2">
-                        <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
-                        <span>
-                          Primetime bonus points:{' '}
-                          {[
-                            primetime.thursday  && `TNF +${primetime.thursday}`,
-                            primetime.sundayNight && `SNF +${primetime.sundayNight}`,
-                            primetime.monday    && `MNF +${primetime.monday}`,
-                          ].filter(Boolean).join(' · ')}
-                        </span>
-                      </li>
-                    )}
                     <li className="flex items-start gap-2">
                       <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       Lock Mode:{' '}
@@ -271,9 +303,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                   </li>
                   <li className="flex items-center gap-2">
                     <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" />
-                    {castPool?.settings?.maxRebuys > 0
-                      ? `${castPool?.settings.maxRebuys} rebuys permitted up to ${Number(castPool?.settings.rebuyDeadlineWeek) >= 1 ? nflWeekLabel(poolSeasonType(castPool), Number(castPool?.settings.rebuyDeadlineWeek)) : 'season start'}`
-                      : 'No rebuys/buy-backs allowed'}
+                    {survivorRebuyJoinCopy(castPool?.settings, (w) => nflWeekLabel(poolSeasonType(castPool), w))}
                   </li>
                   <li className="flex items-center gap-2">
                     <Check size={14} className="text-gold-600 dark:text-gold-400 shrink-0" />

@@ -1,3 +1,4 @@
+import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import type { User } from '../types';
@@ -56,6 +57,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
         paymentHandles: {
             venmo: user.paymentHandles?.venmo || '',
             zelle: user.paymentHandles?.zelle || '',
+            cashapp: user.paymentHandles?.cashapp || '',
+            paypal: user.paymentHandles?.paypal || '',
+            googlePay: user.paymentHandles?.googlePay || '',
         }
     });
 
@@ -109,6 +113,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
             paymentHandles: {
                 venmo: user.paymentHandles?.venmo || '',
                 zelle: user.paymentHandles?.zelle || '',
+                cashapp: user.paymentHandles?.cashapp || '',
+                paypal: user.paymentHandles?.paypal || '',
+                googlePay: user.paymentHandles?.googlePay || '',
             }
         });
     }, [user]);
@@ -493,7 +500,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                         checked={formData.smsOptIn || false}
                                         onChange={(e) => setFormData({ ...formData, smsOptIn: e.target.checked })}
                                     />
-                                    <div className="w-11 h-6 bg-line peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
+                                    <div className="w-11 h-6 bg-line peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-gold-500 peer-focus-visible:ring-offset-1 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] transition-colors">Opt-in to SMS Notifications</span>
@@ -528,6 +535,49 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                         type="text"
                                         value={formData.paymentHandles?.zelle || ''}
                                         onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, zelle: e.target.value } })}
+                                        className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                                        placeholder="your@email.com or phone"
+                                    />
+                                </div>
+                                {/* The pool wizard collects FIVE handles; this panel stored two,
+                                    so Cash App / PayPal / Google Pay could be learned from a pool
+                                    but never corrected here — write-only fields. Added 2026-08-06
+                                    alongside the wizard prefill. */}
+                                <div className="space-y-2">
+                                    <label htmlFor="profile-cashapp" className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">
+                                        Cash App Cashtag
+                                    </label>
+                                    <input
+                                        id="profile-cashapp"
+                                        type="text"
+                                        value={formData.paymentHandles?.cashapp || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, cashapp: e.target.value } })}
+                                        className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                                        placeholder="$YourCashtag"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="profile-paypal" className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">
+                                        PayPal
+                                    </label>
+                                    <input
+                                        id="profile-paypal"
+                                        type="text"
+                                        value={formData.paymentHandles?.paypal || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, paypal: e.target.value } })}
+                                        className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                                        placeholder="paypal.me/you"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label htmlFor="profile-googlepay" className="text-[12px] font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">
+                                        Google Pay Email/Phone
+                                    </label>
+                                    <input
+                                        id="profile-googlepay"
+                                        type="text"
+                                        value={formData.paymentHandles?.googlePay || ''}
+                                        onChange={(e) => setFormData({ ...formData, paymentHandles: { ...formData.paymentHandles, googlePay: e.target.value } })}
                                         className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-2.5 font-body text-[15px] text-[color:var(--text)] placeholder:text-faint transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                                         placeholder="your@email.com or phone"
                                     />
@@ -616,7 +666,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
 
             {/* Email Change Modal */}
             {showEmailModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                <OverlayRoot id="profile-update-email" label="Update email address" onEscape={() => { if (!emailUpdateLoading) { setShowEmailModal(false); setPasswordError(''); } }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="bg-card border border-line rounded-xl p-6 max-w-md w-full shadow-panel relative overflow-hidden">
                         {/* Decorative glow */}
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gold-foil"></div>
@@ -678,7 +728,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
         </div>
     );

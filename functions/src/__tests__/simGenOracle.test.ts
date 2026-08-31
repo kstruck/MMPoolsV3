@@ -105,6 +105,36 @@ describe('Scenario Oracle — hand-computable cases', () => {
     expect(bob).toMatchObject({ status: 'ALIVE', strikesUsed: 1 });
   });
 
+  describe('survivor tieCountsAs (PLAN-SURVIVOR-PARITY-SCORING)', () => {
+    // Same fixture with week 1's KC/BUF game TIED. Both entries picked a team
+    // in that game, so every cell of tieCountsAs × pickLosersMode is covered.
+    const tied = {
+      ...season,
+      games: [{ ...season.games[0], homeScore: 20, awayScore: 20 }, season.games[1]],
+    };
+
+    it('DEFAULT: a tie strikes in BOTH modes', () => {
+      expect(expectSurvivor(tied)[0]).toMatchObject({ status: 'ELIMINATED', strikesUsed: 1 });
+      expect(expectSurvivor(tied, { pickLosersMode: true })[0])
+        .toMatchObject({ status: 'ELIMINATED', strikesUsed: 1 });
+    });
+
+    it('WIN + standard: the tie survives', () => {
+      expect(expectSurvivor(tied, { tieCountsAs: 'WIN' })[0])
+        .toMatchObject({ status: 'ALIVE', strikesUsed: 0, eliminatedWeek: null });
+    });
+
+    it('WIN + pick-losers: the tie strikes — the picked team "won"', () => {
+      expect(expectSurvivor(tied, { tieCountsAs: 'WIN', pickLosersMode: true })[0])
+        .toMatchObject({ status: 'ELIMINATED', strikesUsed: 1, eliminatedWeek: 1 });
+    });
+
+    it('explicit LOSS is identical to absent', () => {
+      expect(expectSurvivor(tied, { tieCountsAs: 'LOSS' }))
+        .toEqual(expectSurvivor(tied));
+    });
+  });
+
   it('margin: signed victory margin of the picked team', () => {
     const [alice, bob] = expectMargin(season);
     expect(alice.weeklyScores['1']).toBe(20);   // SF won by 20

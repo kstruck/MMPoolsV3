@@ -1,5 +1,7 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useEffect, useRef } from 'react';
+import { useOverlayOwner } from '../ui/overlayStack';
+import { useFocusTrap } from '../ui/useFocusTrap';
 import { X, Lock, Unlock, Save, Loader } from 'lucide-react';
 import type { PlayoffPool } from '../../types';
 import { db } from '../../firebase';
@@ -22,6 +24,12 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
 
     // Escape closes; focus moves into the dialog on open. (No backdrop-click
     // close on this form modal — avoids losing unsaved edits by accident.)
+    // PLAN-HELP-SYSTEM T2: own the screen while open, so the `?` shortcut stays
+    // quiet and Escape closes exactly one overlay. Registered on `isOpen`, NOT
+    // on mount — this component stays mounted while closed, and pushing on
+    // mount would let it own the stack for the life of the app.
+    useOverlayOwner('playoff-settings-modal', { active: isOpen, onEscape: onClose });
+    useFocusTrap(dialogRef, isOpen); // aria-modal promises containment (a11y audit)
     useEffect(() => {
         if (!isOpen) return;
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -59,7 +67,7 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
     };
 
     return (
-        <div className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div data-overlay-root="" className="fixed inset-0 bg-navy-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
             <div
                 ref={dialogRef}
                 role="dialog"

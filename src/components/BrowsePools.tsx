@@ -7,6 +7,7 @@ import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import { getPoolTypeName } from '../utils/poolUtils';
 import { Badge } from './ui';
+import { isPubliclyListed } from '../utils/publicListing';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -34,9 +35,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
             const isSquares = !p.type || p.type === 'SQUARES';
             const isPlayoff = p.type === 'NFL_PLAYOFFS';
 
-            const isPublic = isBracket ? (p as BracketPool).isListedPublic : (isPlayoff ? true : (isProps ? (p as PropsPool).isPublic : (p as GameState).isPublic));
-
-            if (!isPublic) return false;
+            if (!isPubliclyListed(p)) return false;
 
             // Canceled pools never show in public discovery
             if ((p as any).status === 'CANCELED') return false;
@@ -370,13 +369,13 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                         {/* Matchup */}
                                         <div className="bg-surface rounded-lg p-3 border border-line mb-4 flex items-center justify-between relative z-10">
                                             <div className="flex items-center gap-2">
-                                                {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
+                                                {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
                                                 <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{awayTeam}</span>
                                             </div>
                                             <span className="text-xs text-faint font-display font-bold uppercase">VS</span>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{homeTeam}</span>
-                                                {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} className="w-6 h-6 object-contain opacity-80" />}
+                                                {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
                                             </div>
                                         </div>
 

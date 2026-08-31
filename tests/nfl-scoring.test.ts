@@ -108,6 +108,59 @@ describe('NFL Pools Scoring Engine Tests', () => {
       expect(res.correctCount).toBe(2);
     });
 
+    /**
+     * THE CLAIM THE DELETION RESTS ON, made checkable.
+     *
+     * `settings.pointsPerPick` and `settings.primetimeBonus` were editable on
+     * the manager form and displayed to members as what a pick was worth, and
+     * `scorePickemEntry` has never read either — a pool set to 3 told its
+     * members three and paid one. Kevin ruled on 2026-08-22 that the controls
+     * go and the scorer does NOT change, because honouring the fields would
+     * retroactively rewrite already-scored weeks in any pool holding a non-1
+     * value, mid-season, on a live scorer with money attached
+     * (PLAN-DELETE-INERT-PICKEM-SCORING.md).
+     *
+     * So this fixture stores BOTH fields at values that would visibly change
+     * the answer if they were ever honoured — 2 correct picks would score 6
+     * instead of 2, plus bonuses — and requires the answer to stay 2. If
+     * someone later implements weighted scoring, this is the test that has to
+     * be deliberately changed, with the migration argument made out loud.
+     */
+    it('ignores a stored pointsPerPick and primetimeBonus — 1 point per correct pick, always', () => {
+      const poolWithStoredValues: NFLPickemPool = {
+        ...mockPool,
+        settings: {
+          ...mockPool.settings,
+          // Values a real pool can be holding right now: nothing deleted them.
+          pointsPerPick: 3,
+          primetimeBonus: { thursday: 5, sundayNight: 5, monday: 5 },
+        },
+      } as NFLPickemPool;
+
+      const entry: NFLPickemEntry = {
+        id: 'user_1',
+        poolId: 'pool_pickem',
+        ownerUid: 'user_1',
+        userName: 'User 1',
+        picks: {
+          'espn_g1': 'KC',  // Correct
+          'espn_g2': 'NYG', // Incorrect
+          'espn_g3': 'SF',  // Correct
+        },
+        totalScore: 0,
+        submittedAt: Date.now(),
+        paidStatus: 'PAID',
+      };
+
+      const res = scorePickemEntry(entry, mockGames, poolWithStoredValues);
+      expect(res.points).toBe(2);
+      expect(res.correctCount).toBe(2);
+
+      // Byte for byte the same as the pool WITHOUT the stored values: the
+      // fields make no difference at all, which is what "inert" means.
+      expect(res).toEqual(scorePickemEntry(entry, mockGames, mockPool));
+    });
+
     it('calculates Confidence Mode Pickem score correctly using weighted points', () => {
       const confidencePool: NFLPickemPool = {
         ...mockPool,
@@ -266,10 +319,12 @@ describe('NFL Pools Scoring Engine Tests', () => {
     });
 
     it('processes auto-survive exemption if zero eligible teams remaining', () => {
-      // User has used KC, NYG, SF. The only active games playing are between these teams.
-      // So no eligible playing teams remain.
-      const usedTeams = ['KC', 'NYG', 'SF', 'BAL', 'MIN', 'NYJ'];
-      const isExempt = checkAutoSurviveExemption(usedTeams, mockGames, true);
+      // Every team playing this week was picked in an EARLIER week (1-6), so
+      // strictly-prior counting exhausts the week-7 slate and the exemption
+      // fires. (PLAN-SURVIVOR-EXEMPTION-RESERVATIONS: eligibility is
+      // picks-derived; a submit-time usedTeams array is no longer consulted.)
+      const picks = { 1: 'KC', 2: 'NYG', 3: 'SF', 4: 'BAL', 5: 'MIN', 6: 'NYJ' };
+      const isExempt = checkAutoSurviveExemption(mockGames, true, { maxTeamUses: 1, picks, week: 7 });
       expect(isExempt).toBe(true);
     });
 

@@ -1,4 +1,4 @@
-import { test, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   registerFreshUser,
   promoteToSuperAdmin,
@@ -68,12 +68,23 @@ async function registerAsAdmin(page: Page, email: string): Promise<void> {
 }
 
 test.describe('unified create-pool wizard — all 7 pool types', () => {
-  test('SQUARES', async ({ page }) => {
+  /**
+   * 🛑 SQUARES CREATION IS CLOSED (Kevin, 2026-08-28) — see
+   * `SQUARES_CREATION_OPEN` in `src/config/season.ts` and `SQUARES-BACKLOG.md`.
+   *
+   * This test used to walk the squares wizard end to end. It now asserts the
+   * closure at the route, which is where a member meets it: `/create/squares`
+   * bounces to "/" for EVERYONE, super admins included — and this test
+   * registers as one, so it is also the proof that the switch has no
+   * super-admin exemption.
+   *
+   * Restore the walk-through when the switch flips back.
+   */
+  test('SQUARES — creation is closed, so the route bounces', async ({ page }) => {
     const email = `e2e-squares-${RUN_ID}@example.com`;
     await registerAsAdmin(page, email);
-    await gotoCreateRoute(page, email, '/create/squares');
-    await fillBasicsAndAdvanceToReview(page, 'E2E Squares');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await expect(gotoCreateRoute(page, email, '/create/squares'))
+      .rejects.toThrow(/bounced off \/create\/squares/);
   });
 
   test('BRACKET', async ({ page }) => {
@@ -81,7 +92,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/bracket');
     await fillBasicsAndAdvanceToReview(page, 'E2E Bracket');
-    await submitAndExpectPoolCreated(page, /Create draft/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_PLAYOFFS', async ({ page }) => {
@@ -89,7 +100,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/playoff');
     await fillBasicsAndAdvanceToReview(page, 'E2E Playoff');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_PICKEM', async ({ page }) => {
@@ -97,7 +108,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/pickem');
     await fillBasicsAndAdvanceToReview(page, 'E2E Pickem');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_SURVIVOR', async ({ page }) => {
@@ -105,7 +116,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/survivor');
     await fillBasicsAndAdvanceToReview(page, 'E2E Survivor');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('NFL_MARGIN', async ({ page }) => {
@@ -113,7 +124,7 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await registerAsAdmin(page, email);
     await gotoCreateRoute(page, email, '/create/margin');
     await fillBasicsAndAdvanceToReview(page, 'E2E Margin');
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 
   test('PROPS', async ({ page }) => {
@@ -130,6 +141,6 @@ test.describe('unified create-pool wizard — all 7 pool types', () => {
     await page.locator('#q-0-text').fill('Who wins the coin toss?');
     await page.locator('#q-0-opts').fill('Heads, Tails');
     await advanceToReview(page);
-    await submitAndExpectPoolCreated(page, /Launch pool/i);
+    await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
   });
 });

@@ -1,9 +1,12 @@
 import React from 'react';
-import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Moon, Star, Trophy, Lock, Settings } from 'lucide-react';
+import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
+import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Trophy, Lock, Settings } from 'lucide-react';
 import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType } from '../../utils/nflPending';
+import { survivorRuleCopy, survivorRebuyRuleCopy } from '../../utils/survivorRules';
+import { effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from '@shared/survivorReuse';
 
 interface NFLPoolRulesProps {
   pool: Pool;
@@ -17,6 +20,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
   const castPool = pool as any;
   const type = pool.type;
   const settings = castPool.settings || {};
+  const tiebreakerRule = effectiveWeeklyTiebreaker(settings as { weeklyTiebreaker?: unknown });
 
   const entryFee = settings.entryFee ?? 0;
   const lockBuffer = settings.lockBufferMinutes ?? 5;
@@ -73,6 +77,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
             <h3 className="font-display font-bold uppercase text-lg leading-none text-[color:var(--text)] mb-2">NFL Pools Rules &amp; Specifications</h3>
             <p className="font-body text-muted text-[13px] leading-relaxed">
               Welcome to the pool dashboard! Below are the official configuration and scoring rules initialized by your commissioner. Ensure you submit and lock selections prior to weekly deadlines.
+              The commissioner may name up to three co-commissioners to help run the pool (scoring, reminders, payments); only the commissioner can cancel or close it. A co-commissioner who also plays is bound by the same rules and deadlines as every other member.
             </p>
           </div>
         </div>
@@ -124,6 +129,8 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
         </div>
 
         {/* Card 3: Game Rules Specific to Pool Type */}
+        {/* Resolved, never raw — an unset pool plays MNF_COMBINED and the
+            rules page must say so rather than showing nothing. */}
         {type === 'NFL_PICKEM' && (
           <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-4 md:col-span-2">
             <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted flex items-center gap-2">
@@ -145,30 +152,56 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 {/* Custom scoring display */}
                 <div className="bg-page border border-line rounded-md p-3 space-y-1.5 mt-2">
                   <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint">Scoring Config</p>
-                  <div className="flex justify-between">
-                    <span className="text-muted font-bold">Base Points Per Pick:</span>
-                    <span className="font-display font-bold num text-[color:var(--text)]">
-                      {settings.pointsPerPick ?? 1} pt{(settings.pointsPerPick ?? 1) !== 1 ? 's' : ''}
+                  {/* THE BASE-POINTS AND PRIMETIME-BONUS ROWS ARE GONE
+                      (Kevin, 2026-08-22 — PLAN-DELETE-INERT-PICKEM-SCORING.md).
+                      They read `settings.pointsPerPick` and
+                      `settings.primetimeBonus`, which NOTHING that scores has
+                      ever read: `scorePickemEntry` awards exactly 1 point per
+                      correct pick on a non-confidence pool. A pool set to 3
+                      told its members three here and paid one. The scorer is
+                      unchanged; the false claim is what was removed. The
+                      standard-scoring line below now names the real number. */}
+                  {/* THE HOUSE RULE FOR A TIED WEEK. It belongs on the rules
+                      page and not only on the pick sheet: the sheet asks for the
+                      number, this says what the number decides — and on a NONE
+                      pool the sheet asks nothing at all, so this is the only
+                      place a member can learn that a tied week is shared.
+
+                      🛑 THIS PAGE IS POOL-LEVEL AND CANNOT SPEAK FOR ONE WEEK
+                      (codex r2 P2). It gets no `week` and no schedule, so it
+                      cannot know that a particular week froze an EMPTY target
+                      before the Monday-less fallback existed — a week whose
+                      sheet correctly shows "No tiebreaker this week". Stating
+                      the fallback flatly would contradict that sheet for the
+                      same live week, which is the exact defect
+                      PLAN-TIEBREAKER-MONDAYLESS was opened to fix.
+
+                      So it states the RULE and hands the per-week answer to the
+                      surface that actually knows it. That is a promise the
+                      sheet keeps: it names the target game
+                      (`tiebreakTargetSentence`) and renders the D2 card when a
+                      week has none. */}
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted font-bold flex items-center gap-1 shrink-0"><Trophy size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> Weekly Tie:</span>
+                    <span className="text-[color:var(--text)] font-display font-bold text-right text-[12px]">
+                      {tiebreakerRule === 'NONE' ? 'Shared — no tiebreaker'
+                        : tiebreakerRule === 'MNF_LAST_GAME' ? 'Closest to the LAST Monday game total'
+                          : tiebreakerRule === 'MNF_FIRST_GAME' ? 'Closest to the FIRST Monday game total'
+                            : 'Closest to the combined Monday total'}
                     </span>
                   </div>
-                  {settings.primetimeBonus?.thursday && (
-                    <div className="flex justify-between">
-                      <span className="text-muted font-bold flex items-center gap-1"><Moon size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> TNF Bonus:</span>
-                      <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.thursday} pts</span>
-                    </div>
-                  )}
-                  {settings.primetimeBonus?.sundayNight && (
-                    <div className="flex justify-between">
-                      <span className="text-muted font-bold flex items-center gap-1"><Star size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> SNF Bonus:</span>
-                      <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.sundayNight} pts</span>
-                    </div>
-                  )}
-                  {settings.primetimeBonus?.monday && (
-                    <div className="flex justify-between">
-                      <span className="text-muted font-bold flex items-center gap-1"><Trophy size={11} className="text-gold-600 dark:text-gold-400" aria-hidden="true" /> MNF Bonus:</span>
-                      <span className="text-gold-600 dark:text-gold-400 font-display font-bold num">+{settings.primetimeBonus.monday} pts</span>
-                    </div>
-                  )}
+                  <p className="text-[11px] text-muted leading-relaxed">
+                    {tiebreakerRule === 'NONE'
+                      ? 'Players who finish a week level share it — this pool asks for no tiebreaker prediction.'
+                      : 'Level on points? The player whose predicted score is closest wins the week. On a week with no Monday game, the final game of the week is the target. Still level after that, and it is shared. Your pick sheet names the game each week, and tells you when a week has none — that week is shared.'}
+                  </p>
+                  {/* Season-prize tie (PLAN-WEEKLY-PRIZES §2c / D4): pick record first, then split. */}
+                  <p className="text-[11px] text-muted leading-relaxed mt-2">
+                    <span className="font-bold">Season Tie:</span>{' '}
+                    {settings.confidenceMode
+                      ? 'Level on season points at the end? Most correct picks over the season ranks higher. Still level after that, and the season prize is shared.'
+                      : 'Level on season points at the end? In standard scoring points are the correct-pick count, so there is nothing further to break — the season prize is shared.'}
+                  </p>
                 </div>
               </div>
 
@@ -182,7 +215,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 <p className="leading-relaxed text-[12px] text-muted">
                   {settings.confidenceMode
                     ? `Assign a unique confidence weight from 1 to N for each game. Higher weight earns more points upon success. All games must have unique confidence ranks assigned.`
-                    : `Every correct pick earns ${settings.pointsPerPick ?? 1} point${(settings.pointsPerPick ?? 1) !== 1 ? 's' : ''}. Confidence rankings are disabled in this pool.`}
+                    : 'Every correct pick earns 1 point. Confidence rankings are disabled in this pool.'}
                 </p>
               </div>
             </div>
@@ -209,9 +242,23 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-line pb-2">
+                  <span className="font-bold">Tie Outcome:</span>
+                  <span className="font-display font-bold">
+                    {survivorRuleCopy(settings).tie}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-line pb-2">
+                  <span className="font-bold">Team-Use Limit:</span>
+                  <span className="font-display font-bold num">
+                    {effectiveMaxTeamUses(settings) === UNLIMITED_TEAM_USES
+                      ? 'Unlimited'
+                      : `${effectiveMaxTeamUses(settings)} per team`}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-line pb-2">
                   <span className="font-bold">Auto-Survive Exemption:</span>
                   <span className="font-display font-bold">
-                    {settings.autoSurviveExemptionEnabled ? 'Enabled (Exempt when 0 eligible teams left)' : 'Disabled'}
+                    {survivorRuleCopy(settings).autoSurvive}
                   </span>
                 </div>
               </div>
@@ -221,11 +268,9 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <RefreshCw size={14} /> Rebuy &amp; Strike Rules
                 </p>
                 <ul className="space-y-2 text-[12px] text-muted leading-relaxed list-disc list-inside">
-                  <li>You cannot select the same team twice in a season.</li>
+                  <li>{survivorRuleCopy(settings).reuse}</li>
                   <li>
-                    Rebuys: {settings.maxRebuys > 0
-                      ? `Allowed up to ${settings.maxRebuys} rebuys before ${Number(settings.rebuyDeadlineWeek) >= 1 ? nflWeekLabel(poolSeasonType(castPool), Number(settings.rebuyDeadlineWeek)) : 'the season starts'} at a cost of $${settings.rebuyCost} per rebuy.`
-                      : 'Disabled in this pool.'}
+                    Rebuys: {survivorRebuyRuleCopy(settings, (w) => nflWeekLabel(poolSeasonType(castPool), w))}
                   </li>
                   <li>Failure to submit a pick yields an automatic strike at week-end.</li>
                 </ul>
@@ -253,8 +298,12 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                   <li>Lowest Negative Burden (sum of absolute values of negative margins).</li>
                   <li>Most Positive Weeks (winning selections &gt; 0 margin).</li>
                   <li>Highest Single-Week margin score.</li>
-                  <li>Deterministic ID comparison.</li>
+                  <li>Deterministic ID comparison (display order only).</li>
                 </ol>
+                {/* PLAN-WEEKLY-PRIZES D4: the season prize uses the same cascade IN FULL AND IN ORDER; the ID step never separates a prize. */}
+                <p className="text-[11px] text-muted leading-relaxed">
+                  <span className="font-bold">Season prize ties</span> break on levels 1–4 above, in that order — the same cascade the standings show. Still level after level 4, and the prize is shared.
+                </p>
               </div>
             </div>
           </div>

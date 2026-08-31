@@ -41,7 +41,15 @@ export type OpsAlertType =
     | "AUTH_APPCHECK_OUTAGE"
     | "CHECKOUT_SLO_BREACH"
     | "NFL_SPREADS_NOT_LOCKED"
-    | "NFL_STAT_CORRECTION";
+    | "NFL_STAT_CORRECTION"
+    // Raised by scheduledHealthCheck on a TRANSITION only (a check flipping
+    // ok→fail, or a job newly entering the stale set). Deliberately NOT
+    // high-priority: the probe runs hourly and its checks include third-party
+    // dependencies (ESPN) that blip on their own, so an SMS per blip is the
+    // crying-wolf mode this dispatcher's comments already warn about. Email is
+    // the right latency for "something has been down for an hour".
+    | "HEALTH_CHECK_FAILED"
+    | "SCHEDULED_JOB_STALE";
 
 const HIGH_PRIORITY_TYPES: ReadonlySet<OpsAlertType> = new Set([
     "WEBHOOK_FAILED",
@@ -174,6 +182,17 @@ export async function dispatchOpsAlert(
         // A config we could not READ is a broken pager, not an unconfigured one.
         if (cfg.readFailed) return "failed";
         if (cfg.emailRecipients.length === 0 && cfg.smsRecipients.length === 0) return "no-recipients";
+
+        // An SMS-ONLY config is a real shape, and for an email-only alert type it
+        // means nothing can be attempted at all. Without this, `emailOk` is
+        // vacuously true (no email recipients to fail) and `smsOk` stays true (the
+        // SMS branch is skipped for non-high-priority types), so the dispatcher
+        // returned "sent" having sent nothing. Any caller that treats "sent" as
+        // confirmation — the health check marks the condition alerted and stops
+        // retrying — would then lose the notification entirely. codex round 3.
+        const willSendEmail = cfg.emailRecipients.length > 0;
+        const willSendSMS = HIGH_PRIORITY_TYPES.has(input.type) && cfg.smsRecipients.length > 0;
+        if (!willSendEmail && !willSendSMS) return "no-recipients";
 
         const detailLines = input.context
             ? Object.entries(input.context).map(([k, v]) => `${k}: ${String(v)}`).join("\n")

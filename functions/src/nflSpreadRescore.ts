@@ -16,6 +16,14 @@
 // `nfl_games` client-direct (rules allow `isSuperAdmin()`), so a callable would
 // only cover our own UI and miss a console edit.
 //
+// ⚠️ THIS NOW GUARDS THE LEGACY PATH ONLY (PLAN-NFL-SPREAD-FREEZE Revision 1).
+// The canonical ATS line moved to `nfl_frozen_spreads`, and
+// `nflFrozenSpreadTrigger` in nflSpreadOverride.ts is the handoff for it — same
+// shape, same reasoning, on the collection the value actually lives in. This one
+// still earns its place: for a slate with NO frozen record, reads fall back to
+// `nfl_games.spread`, so that field is still what such a week is graded on. It is
+// not deleted, and it is not the main path any more.
+//
 // SCOPED TO LOCKED SPREADS, which is what keeps it quiet. `syncScoresWindow`
 // rewrites the whole slate every 5 minutes and would trip an unconditional
 // spread-value watcher on every ESPN line move; it explicitly PRESERVES a locked

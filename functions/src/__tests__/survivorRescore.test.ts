@@ -2,7 +2,16 @@ import { describe, it, expect } from 'vitest';
 import {
     computeSurvivorWeekUpdate,
     computeMNFTiebreakerTotal,
+    evaluateSurvivorWeek,
+    checkAutoSurviveExemption,
 } from '../nflScoringEngine';
+import {
+    blockedTeamsFor,
+    countTeamUses,
+    normalizePickWeeks,
+    effectiveMaxTeamUses,
+    effectiveTieCountsAs,
+} from '../shared/survivorReuse';
 import type { NFLGame, NFLSurvivorPool, SurvivorEntry } from '../nflPoolTypes';
 
 // PLAN-TEST-SUITE Phase 2 item 13: scoreNFLWeek must be idempotent per
@@ -86,13 +95,34 @@ describe('computeSurvivorWeekUpdate — idempotency', () => {
     });
 
     it('exemption weeks use set semantics across reruns', () => {
-        const e0 = entry({ usedTeams: ['KC', 'BUF'] }); // all playing teams used
+        // Rebuilt for strictly-prior counting (PLAN-SURVIVOR-EXEMPTION-
+        // RESERVATIONS): the exemption now needs uses in EARLIER weeks, so the
+        // entry holds week-1/2 picks for both playing teams and week 3 is the
+        // scored week. (It was a bare seeded usedTeams at week 1, which no
+        // longer grants anything — pinned by the divergence test below.)
+        const e0 = entry({ picks: { 1: 'KC', 2: 'BUF' }, usedTeams: ['KC', 'BUF'] });
         const p = pool(1);
         p.settings.autoSurviveExemptionEnabled = true;
-        const r1 = computeSurvivorWeekUpdate(e0, 1, games, p);
-        expect(r1.update.exemptWeeks).toEqual([1]);
-        const r2 = computeSurvivorWeekUpdate(apply(e0, r1), 1, games, p);
-        expect(r2.update.exemptWeeks).toEqual([1]); // not [1, 1]
+        const r1 = computeSurvivorWeekUpdate(e0, 3, games, p);
+        expect(r1.update.exemptWeeks).toEqual([3]);
+        const r2 = computeSurvivorWeekUpdate(apply(e0, r1), 3, games, p);
+        expect(r2.update.exemptWeeks).toEqual([3]); // not [3, 3]
+    });
+
+    it('a legacy divergent usedTeams ledger GRADES instead of exempting (fix-forward)', () => {
+        // The plan's legacy-divergence obligation: assert the NEW outcome
+        // explicitly so the change is recorded rather than discovered. This
+        // entry's seeded ledger says every playing team is spent, but its
+        // picks map is empty — zero uses had actually occurred, so the missed
+        // pick is a strike again. Existing exemptions already recorded in
+        // exemptWeeks are untouched (fix-forward); only future gradings move.
+        const e = entry({ usedTeams: ['KC', 'BUF'] }); // divergent: no picks at all
+        const p = pool(1);
+        p.settings.autoSurviveExemptionEnabled = true;
+        const r = computeSurvivorWeekUpdate(e, 1, games, p);
+        expect(r.update.exemptWeeks).toEqual([]);
+        expect(r.update.strikeWeeks).toEqual([1]);
+        expect(r.update.status).toBe('ALIVE'); // maxStrikes 1 absorbs it
     });
 });
 
@@ -114,7 +144,267 @@ describe('computeMNFTiebreakerTotal', () => {
         expect(computeMNFTiebreakerTotal(games)).toBeNull();
     });
 
-    it('returns null when the week has no Monday game', () => {
-        expect(computeMNFTiebreakerTotal([game({ isMonday: false })])).toBeNull();
+    it('falls back to the final game of the week when there is no Monday game (PLAN-TIEBREAKER-MONDAYLESS, Kevin 2026-08-27)', () => {
+        // The default rule here is MNF_COMBINED, which is also what an unset
+        // `settings.weeklyTiebreaker` resolves to. It used to return null on a
+        // Monday-less week, and the pick sheet then rendered no input at all.
+        expect(computeMNFTiebreakerTotal([game({ isMonday: false, scores: { home: 20, away: 10 } })])).toBe(30);
+        // NONE has no target under any schedule.
+        expect(computeMNFTiebreakerTotal([game({ isMonday: false })], 'NONE')).toBeNull();
+    });
+});
+
+// ============================================================================
+// PLAN-SURVIVOR-PARITY-SCORING Phase 1 — tieCountsAs + maxTeamUses
+// ============================================================================
+
+/** A survivor pool carrying arbitrary extra settings. */
+const parityPool = (settings: Record<string, unknown>): NFLSurvivorPool => ({
+    id: 'p1', type: 'NFL_SURVIVOR', name: 'T', season: '2026',
+    settings: {
+        maxStrikes: 0, maxRebuys: 0, entryFee: 0,
+        autoSurviveExemptionEnabled: false, pickLosersMode: false,
+        ...settings,
+    },
+} as unknown as NFLSurvivorPool);
+
+const tiedGame = [game({ id: 'g1', scores: { home: 17, away: 17 } })]; // KC 17 - BUF 17
+
+describe('countTeamUses — week-key grammar', () => {
+    it('counts one use per LOGICAL week and excludes the current week', () => {
+        const picks = { 1: 'KC', 2: 'KC', 3: 'BUF' } as Record<number, string>;
+        expect(countTeamUses(picks)).toEqual({ KC: 2, BUF: 1 });
+        expect(countTeamUses(picks, 2)).toEqual({ KC: 1, BUF: 1 });
+    });
+
+    it('treats "01" as week 1 — so it is EXCLUDED when week 1 is', () => {
+        // The self-resubmit case: a stringified-with-leading-zero key must not
+        // consume a use against its own week (PR #384's rule, generalized).
+        expect(countTeamUses({ '01': 'KC' } as never, 1)).toEqual({});
+        expect(countTeamUses({ '01': 'KC' } as never, 2)).toEqual({ KC: 1 });
+    });
+
+    it('collapses duplicate spellings of one week — canonical spelling wins', () => {
+        expect(countTeamUses({ '1': 'KC', '01': 'KC' } as never)).toEqual({ KC: 1 });
+        // Different teams for the same logical week: canonical "1" holds.
+        expect(countTeamUses({ '01': 'BUF', '1': 'KC' } as never)).toEqual({ KC: 1 });
+        expect(normalizePickWeeks({ '01': 'BUF', '1': 'KC' } as never).get(1)).toBe('KC');
+    });
+
+    it('skips malformed and out-of-range keys rather than coercing them', () => {
+        const picks = {
+            '1.5': 'KC', '2junk': 'KC', ' 1': 'KC', '1e0': 'KC',
+            '-1': 'KC', '0': 'KC', '24': 'KC', '': 'KC',
+        } as never;
+        expect(countTeamUses(picks)).toEqual({});
+    });
+
+    it('tolerates a missing or non-object picks map', () => {
+        expect(countTeamUses(undefined)).toEqual({});
+        expect(countTeamUses(null)).toEqual({});
+    });
+});
+
+describe('effective setting defaults', () => {
+    it('absent settings read as today behaviour', () => {
+        expect(effectiveTieCountsAs(undefined)).toBe('LOSS');
+        expect(effectiveTieCountsAs({})).toBe('LOSS');
+        expect(effectiveMaxTeamUses(undefined)).toBe(1);
+        expect(effectiveMaxTeamUses({})).toBe(1);
+    });
+
+    it('a garbage stored value falls back to the default, never to unlimited', () => {
+        // An Admin-SDK or console write is not bound by the callable's
+        // validation; a negative must not read as "0 = unlimited".
+        expect(effectiveMaxTeamUses({ maxTeamUses: -1 })).toBe(1);
+        expect(effectiveMaxTeamUses({ maxTeamUses: 1.5 })).toBe(1);
+        expect(effectiveMaxTeamUses({ maxTeamUses: '0' })).toBe(1);
+        expect(effectiveTieCountsAs({ tieCountsAs: 'win' })).toBe('LOSS');
+        // The legitimate values still read through.
+        expect(effectiveMaxTeamUses({ maxTeamUses: 0 })).toBe(0);
+        expect(effectiveTieCountsAs({ tieCountsAs: 'WIN' })).toBe('WIN');
+    });
+});
+
+describe('blockedTeamsFor — the client grid must agree with the callable', () => {
+    // The component holds no branch of its own: it calls this. These are the
+    // client-gating regression cases (SurvivorPickEntry.tsx).
+    it('default limit: usedTeams is the authority, current week excluded', () => {
+        const blocked = blockedTeamsFor({ 1: 'KC', 2: 'BUF' }, ['KC', 'BUF', 'SF'], 2, 1);
+        expect([...blocked].sort()).toEqual(['KC', 'SF']); // BUF is this week's own pick
+    });
+
+    it('default limit: a DIVERGENT ledger still wins — today behaviour, unchanged', () => {
+        // Seeded/legacy entries exist whose usedTeams does not match picks
+        // (e.g. the auto-survive fixtures). Counting picks here would offer a
+        // team the ledger says is spent.
+        expect([...blockedTeamsFor({}, ['KC'], 1, 1)]).toEqual(['KC']);
+        // ...and a team in picks but NOT in the ledger stays offered.
+        expect([...blockedTeamsFor({ 3: 'SF' }, [], 1, 1)]).toEqual([]);
+    });
+
+    it('handles a stringified current-week key when excluding this week', () => {
+        expect([...blockedTeamsFor({ '2': 'BUF' }, ['BUF'], 2, 1)]).toEqual([]);
+    });
+
+    it('limit 2: blocked only at the limit, current week excluded', () => {
+        expect([...blockedTeamsFor({ 1: 'KC' }, [], 5, 2)]).toEqual([]);
+        expect([...blockedTeamsFor({ 1: 'KC', 2: 'KC' }, [], 5, 2)]).toEqual(['KC']);
+        // The member is looking at week 2, where KC is already their pick — it
+        // must stay re-submittable, matching the callable's exclusion.
+        expect([...blockedTeamsFor({ 1: 'KC', 2: 'KC' }, [], 2, 2)]).toEqual([]);
+    });
+
+    it('unlimited blocks nothing, however long the history', () => {
+        expect([...blockedTeamsFor({ 1: 'KC', 2: 'KC', 3: 'KC' }, ['KC'], 9, 0)]).toEqual([]);
+    });
+});
+
+describe('evaluateSurvivorWeek — tieCountsAs × pickLosersMode', () => {
+    const e = entry({ picks: { 1: 'KC' } });
+
+    it('DEFAULT (absent): a tie strikes in BOTH modes — today behaviour', () => {
+        expect(evaluateSurvivorWeek(e, 1, tiedGame, parityPool({})).strikeLogged).toBe(true);
+        expect(evaluateSurvivorWeek(e, 1, tiedGame, parityPool({ pickLosersMode: true })).strikeLogged).toBe(true);
+    });
+
+    it('explicit LOSS is identical to absent, in both modes', () => {
+        expect(evaluateSurvivorWeek(e, 1, tiedGame, parityPool({ tieCountsAs: 'LOSS' })).strikeLogged).toBe(true);
+        expect(evaluateSurvivorWeek(e, 1, tiedGame, parityPool({ tieCountsAs: 'LOSS', pickLosersMode: true })).strikeLogged).toBe(true);
+    });
+
+    it('WIN + standard: the tie survives', () => {
+        const r = evaluateSurvivorWeek(e, 1, tiedGame, parityPool({ tieCountsAs: 'WIN' }));
+        expect(r).toEqual({ survived: true, strikeLogged: false });
+    });
+
+    it('WIN + pick-losers: the tie STRIKES — the picked team "won"', () => {
+        const r = evaluateSurvivorWeek(e, 1, tiedGame, parityPool({ tieCountsAs: 'WIN', pickLosersMode: true }));
+        expect(r).toEqual({ survived: false, strikeLogged: true });
+    });
+
+    it('a decided game is unaffected by tieCountsAs', () => {
+        const decided = [game({ id: 'g1' })]; // KC 20 - BUF 10
+        for (const tieCountsAs of ['WIN', 'LOSS'] as const) {
+            expect(evaluateSurvivorWeek(e, 1, decided, parityPool({ tieCountsAs })).strikeLogged).toBe(false);
+            expect(evaluateSurvivorWeek(entry({ picks: { 1: 'BUF' } }), 1, decided, parityPool({ tieCountsAs })).strikeLogged).toBe(true);
+        }
+    });
+});
+
+describe('checkAutoSurviveExemption — maxTeamUses tri-mode', () => {
+    const games = [game({ id: 'g1' })]; // KC and BUF play
+
+    it('default (maxTeamUses 1): a PRIOR-week use makes a team ineligible', () => {
+        const bothUsed = { maxTeamUses: 1, picks: { 1: 'KC', 2: 'BUF' } as Record<number, string>, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, bothUsed)).toBe(true);
+        const oneLeft = { maxTeamUses: 1, picks: { 1: 'KC' } as Record<number, string>, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, oneLeft)).toBe(false);
+    });
+
+    it('an empty picks map has ZERO uses — the divergent-ledger exemption is gone (INVERTS #399)', () => {
+        // #399 pinned the opposite: at maxTeamUses 1 a seeded usedTeams
+        // ['KC','BUF'] with empty picks granted the exemption, preserving
+        // legacy divergent seeds byte-for-byte. PLAN-SURVIVOR-EXEMPTION-
+        // RESERVATIONS is the sanctioned, non-silent removal of that
+        // behaviour: eligibility is picks-derived in EVERY mode, `usedTeams`
+        // is no longer consulted (it cannot say WHEN a team was used), and an
+        // empty picks map leaves every playing team eligible.
+        const ctx = { maxTeamUses: 1, picks: {} as Record<number, string>, week: 1 };
+        expect(checkAutoSurviveExemption(games, true, ctx)).toBe(false);
+    });
+
+    it('maxTeamUses 2: a team picked once before is still eligible, twice is not', () => {
+        const once = { maxTeamUses: 2, picks: { 1: 'KC', 2: 'BUF' }, week: 9 };
+        expect(checkAutoSurviveExemption(games, true, once)).toBe(false);
+        const twice = { maxTeamUses: 2, picks: { 1: 'KC', 2: 'KC', 3: 'BUF', 4: 'BUF' }, week: 9 };
+        expect(checkAutoSurviveExemption(games, true, twice)).toBe(true);
+    });
+
+    it('maxTeamUses 0 (unlimited): the exemption can NEVER fire', () => {
+        const exhausted = {
+            maxTeamUses: 0,
+            picks: { 1: 'KC', 2: 'KC', 3: 'BUF', 4: 'BUF', 5: 'KC' },
+            week: 9,
+        };
+        expect(checkAutoSurviveExemption(games, true, exhausted)).toBe(false);
+        // And an all-cancelled slate still cannot reach it — teamsPlaying is
+        // empty, which is isVoidWeek's job, not this helper's.
+        const cancelled = [game({ id: 'g1', status: 'CANCELLED' })];
+        expect(checkAutoSurviveExemption(cancelled, true, exhausted)).toBe(false);
+    });
+
+    it('a FUTURE-week reservation does NOT count — in EITHER mode (INVERTS #399)', () => {
+        // The defect this plan exists to fix (codex round 4 on #399): scoring
+        // week 3 while the member has pre-submitted weeks 5-8 counted those
+        // reservations as uses, so a thin slate could be "exhausted" by picks
+        // that had not happened yet and a missed pick excused instead of
+        // struck. The #399 version of this test pinned the two modes EQUAL on
+        // that behaviour; both now ignore weeks at or after the scored week,
+        // so they remain equal — inverted together, never split.
+        const reservedLater2 = { maxTeamUses: 2, picks: { 5: 'KC', 6: 'KC', 7: 'BUF', 8: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, reservedLater2)).toBe(false);
+        const reservedLater1 = { maxTeamUses: 1, picks: { 5: 'KC', 6: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, reservedLater1)).toBe(false);
+    });
+
+    it('mixed past and future: only the past uses count', () => {
+        // KC used in week 1 (past) — blocked. BUF only reserved for week 5
+        // (future) — still eligible, so no exemption...
+        const mixed = { maxTeamUses: 1, picks: { 1: 'KC', 5: 'BUF' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, mixed)).toBe(false);
+        // ...and once BUF's use is also in the past, the exemption fires.
+        const bothPast = { maxTeamUses: 1, picks: { 1: 'KC', 2: 'BUF', 5: 'KC' }, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, bothPast)).toBe(true);
+    });
+
+    it("the scored week's OWN pick is not a prior use", () => {
+        // Strictly-before is doing work here: a member who picked KC for the
+        // week being scored has not "used" KC by that week, so KC is eligible
+        // and the week grades the pick instead of exempting it. (Under the old
+        // submit-time usedTeams read, the current week's own un-scored pick
+        // already counted — nflScoringEngine.ts's projection comment.)
+        const ownPick = { maxTeamUses: 1, picks: { 3: 'KC' } as Record<number, string>, week: 3 };
+        expect(checkAutoSurviveExemption(games, true, ownPick)).toBe(false);
+    });
+
+    it('the exemption toggle still wins over every mode', () => {
+        expect(checkAutoSurviveExemption(games, false, { maxTeamUses: 1, picks: { 1: 'KC', 2: 'BUF' }, week: 3 })).toBe(false);
+    });
+});
+
+describe('computeSurvivorWeekUpdate — idempotency under the new settings', () => {
+    it('rescoring a tied week twice is identical, for WIN and for LOSS', () => {
+        for (const tieCountsAs of ['WIN', 'LOSS'] as const) {
+            const p = parityPool({ tieCountsAs, maxStrikes: 1 });
+            const e0 = entry({ picks: { 1: 'KC' } });
+            const r1 = computeSurvivorWeekUpdate(e0, 1, tiedGame, p);
+            const r2 = computeSurvivorWeekUpdate(apply(e0, r1), 1, tiedGame, p);
+            expect(r2.update, tieCountsAs).toEqual(r1.update);
+            expect(r2.strikeIsNew, tieCountsAs).toBe(false);
+        }
+    });
+
+    it('flipping tieCountsAs to WIN on rescore clears the tie strike', () => {
+        const e0 = entry({ picks: { 1: 'KC' } });
+        const struck = computeSurvivorWeekUpdate(e0, 1, tiedGame, parityPool({ maxStrikes: 1 }));
+        expect(struck.update.strikeWeeks).toEqual([1]);
+        const rescored = computeSurvivorWeekUpdate(
+            apply(e0, struck), 1, tiedGame, parityPool({ maxStrikes: 1, tieCountsAs: 'WIN' }),
+        );
+        expect(rescored.update.strikeWeeks).toEqual([]);
+    });
+
+    it('maxTeamUses 2 grants no exemption to an entry with a team still available', () => {
+        const p = parityPool({ maxStrikes: 1, maxTeamUses: 2, autoSurviveExemptionEnabled: true });
+        // usedTeams says both teams are spent — the picks map is the authority,
+        // and under strictly-prior counting KC has ONE use before week 9 (the
+        // week-9 key is the scored week itself, not a prior use), so KC stays
+        // eligible, no exemption, and the week grades normally. Same verdict as
+        // #399, re-derived under the new counting rule (sweep S2 row).
+        const e = entry({ usedTeams: ['KC', 'BUF'], picks: { 1: 'KC', 9: 'KC' } });
+        const r = computeSurvivorWeekUpdate(e, 9, [game({ id: 'g1' })], p);
+        expect(r.update.exemptWeeks).toEqual([]);
+        expect(r.update.strikeWeeks).toEqual([]); // KC won
     });
 });

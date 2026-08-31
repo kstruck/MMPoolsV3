@@ -23,6 +23,7 @@
  * reason, comment corrected instead.
  */
 import * as admin from 'firebase-admin';
+import { isPoolOwnerOrManager } from './poolOps';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAdminAudit, capMetadata } from './lib/adminAudit';
 import { assertNotBannedLive } from './lib/systemGuards';
@@ -140,14 +141,15 @@ export const simFillSquares = onCall(async (request) => {
         const pool = snap.data() as Record<string, any>;
 
         const isSuper = role === 'SUPER_ADMIN';
-        const owns = [pool.createdByUid, pool.ownerId, pool.managerUid].includes(uid);
-        const isCoManager = Array.isArray(pool.coManagers) && pool.coManagers.includes(uid);
-        if (!isSuper && !owns && !isCoManager) {
+        // `coManagers` is NOT consulted here (PLAN-CO-COMMISSIONERS D3 — see
+        // simulateGameUpdate for why).
+        const owns = isPoolOwnerOrManager(pool, uid);
+        if (!isSuper && !owns) {
             throw new HttpsError('permission-denied', 'You do not have permission to fill this pool\'s grid.');
         }
 
         // The check above authorizes from PERSISTED POOL FIELDS and never reads
-        // `users/{uid}.role`, so a BANNED owner or co-manager keeps the ability
+        // `users/{uid}.role`, so a BANNED owner keeps the ability
         // to fill a real pool's grid. CONTEXT.md requires bans server-side; see
         // SECURITY-BARE-ONCALL-CLASSIFICATION.md. After the ownership check, so
         // a banned non-owner costs no extra read.

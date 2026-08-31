@@ -1,0 +1,257 @@
+// Help copy shared by the three NFL SEASON pool types — PLAN-HELP-SYSTEM.md T9.
+//
+// `pool.nfl.*` is ONE set of Help pages covering Pick'em, Survivor and Margin
+// (`content/pool-pages.ts`), so a topic placed there is read by all three. This
+// file holds only the copy that is true for all three; anything whose meaning
+// changes with the format lives in that format's own file
+// (`nfl-pickem.ts` here, `nfl-survivor.ts` in T10, `nfl-margin.ts` in T11) and
+// is scoped to its type, which is what stops a Survivor reader from being shown
+// a Pick'em rule.
+//
+// Written against `docs/help-voice.md` (K8). Every claim below was read out of
+// the source it describes, clause by clause — voice rule 5 is the one that has
+// broken four times in this effort, and three of the four were copy that named
+// a behaviour nobody had checked.
+
+import type { HelpPlacement, HelpTopic } from '../types';
+
+/** The three season-long NFL formats. `pool.nfl.*` pages cover exactly these. */
+export const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const;
+
+/** A setting members meet too — on the rules page or the join screen. */
+export const EVERYONE = ['member', 'commissioner'] as const;
+/** Commissioner-only surfaces: the manager tabs. */
+export const HOST_ONLY = ['commissioner'] as const;
+
+export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
+  {
+    // ---- RELEASED BY #482, same as `settings.lockMode` -------------------
+    //
+    // Lives here rather than in `nfl-pickem.ts` because ALL THREE season
+    // formats have this control: Pick'em labels it "Lock Buffer" and offers
+    // 0 / 5 / 10, Survivor and Margin label it "Weekly Deadline" and offer
+    // 60 / 30 / 5 (`NFLManagerView.tsx:1199` and `:1383`). One control, one
+    // topic (voice rule 10), so the copy has to be true of every one of those
+    // six values.
+    //
+    // Read off `shared/weeklyHardLock.ts` and `shared/nflLockMode.ts`:
+    //   `DEFAULT_LOCK_BUFFER_MINUTES` = 5 — the default, on all three
+    //   `gameLockAt()`                  — kickoff minus the buffer
+    //   `weekLockAtFor()`               — which kickoff that is
+    // WHERE A MEMBER ACTUALLY READS A DEADLINE: the pool-home countdown
+    // (`NFLPoolDashboard.tsx:895-905`), which prints `nextLockAt` and counts
+    // down to it. The PICK SHEET shows kickoff times and a locked marker, not
+    // the buffer-adjusted instant — an earlier draft sent members there to
+    // read a deadline that is not on it (codex round 3).
+    //
+    //   `weekLockOverrideFor()` + `gameLockAt()` — `Math.max(base, override)`,
+    //     so a commissioner's extension moves a Pick'em deadline LATER and can
+    //     put it past kickoff. Hard-lock types get `undefined` there and cannot
+    //     be extended at all (codex round 2).
+    //
+    // NOTHING IS CLAIMED ABOUT CHANGING THE SETTING MID-WEEK, IN EITHER
+    // DIRECTION, and both halves of that were found by review. Narrowing a
+    // Survivor or Margin buffer does NOT move an already-frozen week later
+    // (`Math.min(frozen, computed)` keeps the frozen one — codex round 5), and
+    // widening one is not reliably held either, per the residual below. So the
+    // copy states the setting and the tip warns off mid-week changes, without
+    // describing a mechanism that is true in only one direction.
+    //
+    // NO GUARANTEE ABOUT MOVING A DEADLINE BACK OUT. `resolveHardWeekLock()`
+    // is `Math.min(frozen, computed)`, which reads like "a week's deadline may
+    // only ever move earlier" — and an earlier draft of this topic said
+    // exactly that. It is not reliably true: the KNOWN RESIDUAL in
+    // `functions/src/lib/effectiveLock.ts` records that `updatePoolSettings`
+    // bumps `lockRevision` but never calls `ensureHardLockFreezeForPoolDoc`, so
+    // a week nothing has frozen yet has no floor to be held to. The hole is
+    // narrow, and this copy simply does not go there — the tip below is
+    // advice, and it is true whatever the freeze did (codex round 1).
+    id: 'settings.lockBufferMinutes',
+    title: 'When picks close',
+    short: 'How long before kickoff picks close. Five minutes is the default; a Pick’em pool can set none.',
+    long: [
+      'This is how far ahead of a kickoff a pick closes. A Pick’em pool can also set none, which closes the pick at kickoff itself.',
+      'Which kickoff that is depends on the pool. A Pick\u2019em pool that locks per game counts from each game\u2019s own kickoff; a Pick\u2019em pool that locks weekly counts from the first kickoff of the week. Survivor and Margin always count from the first kickoff of the week, and their shortest setting is five minutes \u2014 those formats never leave a pick open once a game is running.',
+      'On a Pick’em pool your commissioner can extend a week, which moves that week’s deadline later — later than this setting says, and past kickoff if they choose. Survivor and Margin weeks cannot be extended.',
+      'Your pool home counts down to the next deadline and names the date and time it falls on. The pick sheet marks a game whose pick has closed, and that pick cannot be changed.',
+    ].join('\n\n'),
+    tips: [
+      'Change it between weeks rather than during one. Changing it while a week is running is not a reliable way to move that week’s deadline, and your members read the deadline off the pool home — so some of them have already been told a different one.',
+    ],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: EVERYONE,
+    related: ['settings.lockMode'],
+  },
+  {
+    id: 'nfl.payments.yours',
+    title: 'What you owe and what you paid',
+    // READ-ONLY for a member. `PaymentsPanel.tsx:91` renders its only control —
+    // "Open Payment Ledger" — behind `isManager`. A member has no control here
+    // at all, so copy inviting one to "mark yourself paid" would describe a
+    // button that does not exist for them.
+    short: 'What your entries owe, and what your commissioner has recorded as paid. You cannot change it from here.',
+    long: [
+      'Your commissioner records payments as the money arrives, so this page shows what they have marked, not what you have sent.',
+      'The money moves between you and your commissioner through whatever payment app you both use. No entry money is ever held here.',
+      'If something looks wrong, tell your commissioner — they are the only person who can change it.',
+    ].join('\n\n'),
+    // Explains a screen, not a setting anybody writes, so it claims no path.
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: EVERYONE,
+    terms: ['paid-status', 'entry-fee'],
+    related: ['settings.entryFee'],
+  },
+  {
+    id: 'nfl.manager.ledger',
+    title: 'Recording a payment',
+    short: 'One sheet for the money: what each member owes, what you have marked paid, and every prize you have published.',
+    long: [
+      'You mark a member paid once their money reaches you. Nothing on this screen moves money — it records what already happened between the two of you.',
+      'Prizes work the same way. Any prize you have published — a week’s or the season’s — appears here with its own paid box, so what you still owe your players is one list rather than a memory.',
+      'A member sees their own row on their Payments tab and cannot change it.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+    terms: ['paid-status', 'payout-record', 'weekly-prize'],
+    related: ['nfl.payments.yours'],
+  },
+  {
+    id: 'nfl.manager.scoreWeek',
+    title: 'Scoring a week',
+    // The tab offers exactly one action — "Score & Recap <week>" — plus the
+    // matchup / completed counts above it (`NFLManagerView.tsx:1596-1640`).
+    // There is no per-result correction control here; re-running the week is
+    // how a corrected feed is taken up.
+    //
+    // ⚠️ THE BUTTON IS REFUSED WHILE ANY GAME IS UNFINISHED. `scoreNFLWeek`
+    // throws ACTIVE_GAMES unless the caller is a SUPER_ADMIN
+    // (`functions/src/nflPools.ts:2010-2013`) — the note under the button says
+    // "SuperAdmins may override", and a commissioner is not one. An earlier
+    // draft of this topic said a commissioner could score early; they cannot.
+    short: 'Scores arrive on their own as games finish. This is where you check a week and run it again if a result changed.',
+    long: [
+      'The counts at the top say how many of the week’s games have finished. Every game has to be final or cancelled before the week can be scored.',
+      'Press the button before then and it is refused, with a message naming how many games are still running. Waiting is the only way through it.',
+      'Running it again on a week already scored reads the results as they stand now and writes the standings from them. That is how a corrected result is taken up.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+    terms: ['weekly-prize'],
+  },
+  {
+    id: 'nfl.manager.settingsLock',
+    title: 'Changing settings later',
+    // `shared/editability.ts` MATRIX: the `locked` phase keeps only basics,
+    // contact, paymentHandles, branding, reminders and lifecycle. `settings`,
+    // `payouts` and `entryFee` are refused there.
+    short: 'Most rules can be changed while the pool is open. Locking the pool freezes the fee, the prize split and the rules.',
+    long: [
+      'While the pool is open you can change the entry fee, the prize split and the pool rules, and every member sees the new version on the rules page.',
+      'Once the pool is locked, only the name, your contact details, the pay-to handles, the branding and the reminders can still be changed. The fee, the split and the rules are fixed from then on, so nobody’s finished week is rewritten under them.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+    terms: ['pool-lifecycle-state'],
+  },
+
+  // ---- T4: the audited commissioner exceptions --------------------------
+  //
+  // `nfl.manager.extendDeadline` is NOT here — it lives in `nfl-pickem.ts`.
+  // `extendWeekDeadline` refuses a Survivor or Margin pool outright
+  // (HARD_WEEKLY_LOCK), so the topic is scoped to Pick'em, and this file's
+  // contract is that everything in it names all three season formats
+  // (`tests/help-content-nfl-pickem.test.ts`).
+  //
+  // ONE topic per ACTION, not one per input. "Extra minutes", "Week", "Team"
+  // and three separate "Reason" boxes are parts of a single thing a
+  // commissioner does, and a tooltip on each would be four restatements of the
+  // label (voice rule 2). The tip sits on the first field of each form and the
+  // rest carry none.
+  {
+    id: 'nfl.manager.proxyPick',
+    title: 'Entering a pick for a member',
+    // ⚠️ THIS COPY IS ONLY TRUE AS OF 2026-08-22. Until then the Pick'em form
+    // was hidden behind "not available yet" and the payload it would have sent
+    // was rejected by the callable. #506 fixed the payload and opened the form,
+    // which is what makes writing this honest rather than aspirational.
+    short: 'Records one pick on a member’s behalf. It respects the real deadline, and it is logged with your name and your reason.',
+    long: [
+      'For the member who texted you their pick and could not get to the app. You choose the entry, the week and the team.',
+      'On a Pick’em pool it records ONE game — the game that team is playing that week — so repeat it for any other game they need. On Survivor and Margin it records their pick for the week.',
+      'It obeys the same deadline everyone else has. If the week is already locked, extend the deadline first or it will be refused.',
+      'It does not enter a tie-breaker prediction, and on a pool that uses confidence points it is not offered at all, because a pick with no confidence value would be worth nothing.',
+      'Every one of these is written to the pool’s log with your name and the reason you type.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+  },
+  {
+    id: 'nfl.manager.cancelPool',
+    title: 'Cancelling the pool',
+    short: 'Marks the pool cancelled and emails every member the reason and who to ask about dues. It cannot be undone from here.',
+    long: [
+      'The pool stops being playable for everyone. Nobody can submit another pick.',
+      'Every member is emailed the reason you type, together with who to contact about money they have already paid — because dues are between you and your players and nothing is refunded here.',
+      'It cannot be undone from this screen. Only the pool’s owner sees this control; a co-commissioner cannot cancel a pool.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+    terms: ['pool-lifecycle-state'],
+  },
+];
+
+/**
+ * Where the shared copy sits, plus the T1 wizard topics that belong on a pool's
+ * rules page.
+ *
+ * The rules page is the one screen a member reads to find out what they joined,
+ * and voice rule 10 says the sentence explaining a setting exists once — so the
+ * entry fee is the SAME topic here as on the wizard's fee step, not a second
+ * copy written for members.
+ */
+export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
+  { topic: 'nfl.payments.yours', page: 'pool.nfl.payments', section: 'payments', order: 0 },
+  { topic: 'settings.entryFee', page: 'pool.nfl.payments', section: 'payments', order: 1 },
+
+  { topic: 'settings.entryFee', page: 'pool.nfl.rules', section: 'money', order: 0 },
+  { topic: 'paymentHandles', page: 'pool.nfl.rules', section: 'money', order: 1 },
+  { topic: 'paymentInstructions', page: 'pool.nfl.rules', section: 'money', order: 2 },
+
+  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.rules', section: 'general', order: 0 },
+  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.picks', section: 'general', order: 0 },
+
+  { topic: 'nfl.manager.ledger', page: 'pool.nfl.manager.members', section: 'money', order: 0 },
+  { topic: 'settings.entryFee', page: 'pool.nfl.manager.members', section: 'money', order: 1 },
+
+  { topic: 'nfl.manager.scoreWeek', page: 'pool.nfl.manager.scoring', section: 'scoring', order: 0 },
+
+  { topic: 'nfl.manager.settingsLock', page: 'pool.nfl.manager.settings', section: 'settings', order: 0 },
+  { topic: 'settings.lockBufferMinutes', page: 'pool.nfl.manager.settings', section: 'settings', order: 3 },
+  { topic: 'settings.entryFee', page: 'pool.nfl.manager.settings', section: 'settings', order: 1 },
+  { topic: 'settings.maxEntriesPerUser', page: 'pool.nfl.manager.settings', section: 'settings', order: 2 },
+  // Placed here only once the manager's toggle actually moved the listing.
+  // Until then the control wrote `settings.isListedPublic` while Browse read
+  // the top-level `isPublic`, so this copy would have promised, beside a live
+  // control, something that control did not do — see the topic in
+  // `wizard-shared.ts`.
+  { topic: 'isPublic', page: 'pool.nfl.manager.settings', section: 'settings', order: 4 },
+
+  // T4 — the contact pair, edited ONLY here. Neither has a create-wizard
+  // control, which is why both sat in the schema allowlist until this ticket.
+  { topic: 'contactEmail', page: 'pool.nfl.manager.settings', section: 'contact', order: 0 },
+  { topic: 'contactPhone', page: 'pool.nfl.manager.settings', section: 'contact', order: 1 },
+  { topic: 'contactMethod', page: 'pool.nfl.manager.settings', section: 'contact', order: 2 },
+  { topic: 'managerName', page: 'pool.nfl.manager.settings', section: 'contact', order: 3 },
+
+  // T4 — the three audited exceptions, on the tab that renders them.
+  { topic: 'nfl.manager.proxyPick', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 1 },
+  { topic: 'nfl.manager.cancelPool', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 2 },
+
+  { topic: 'nfl.manager.settingsLock', page: 'pool.nfl.manager.overview', section: 'general', order: 0 },
+];

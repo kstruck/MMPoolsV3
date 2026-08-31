@@ -20,6 +20,43 @@ service cloud.firestore {
       }
     }
 
+    // FROZEN NFL SPREADS (PLAN-NFL-SPREAD-FREEZE Revision 1).
+    //
+    // The line every ATS pool is picked against and graded against, once it has
+    // been committed to. `allow write: if false` — NO client may write it, and
+    // that includes a SUPER_ADMIN. Not "refused when locked": refused, full stop.
+    // A conditional deny is a condition that can be subtly wrong, and this whole
+    // collection exists because an invariant defended in four writers kept
+    // leaking.
+    //
+    // The only writers are Cloud Functions, which bypass rules by design: the
+    // weekly freeze pass and `overrideLockedSpread`. The Spread Manager keeps
+    // writing `nfl_games.spread` as a WORKING line and cannot affect a frozen one.
+    //
+    // Public read, same as `nfl_games`: the pick sheet renders this value, so a
+    // member has to be able to see the number they are graded against.
+    match /nfl_frozen_spreads/{gameId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // NFL SLATE LEASES (PLAN-NFL-SPREAD-FREEZE 1.3) — the mutex between the weekly
+    // freeze and the importer. Pure server bookkeeping: nothing renders it and no
+    // client has any business reading a lock token, so both doors are shut.
+    match /nfl_slate_leases/{slateId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    // POOL ACCESS ATTEMPT COUNTERS (PLAN-AUDIT-AUTH-HARDENING Phase B) — the
+    // per-(pool, principal) failure throttle behind the PUBLIC `verifyPoolAccess`
+    // callable. Server bookkeeping only: a client that could read it would learn
+    // how many guesses remain, and one that could write it would erase the cap.
+    match /pool_access_attempts/{attemptId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     // SITE-WIDE CONSENSUS (ADR 0004) — server-written post-lock aggregate (counts only, never
     // individual picks), scoped by pool type. Public read; write server-only.
     match /consensus/{weekKey}/{poolType}/{gameId} {
@@ -72,7 +109,16 @@ service cloud.firestore {
                      (request.auth != null && (
                         resource.data.ownerId == request.auth.uid || 
                         resource.data.managerUid == request.auth.uid || 
-                        request.auth.uid in resource.data.participantIds
+                        request.auth.uid in resource.data.participantIds ||
+                        // Commissioner Hub (PLAN-CO-COMMISSIONERS D7). A LIST rule must be
+                        // PROVABLE from the query's own filters, so this is written with
+                        // plain field access (no `.get()`), and the Hub query MUST carry
+                        // BOTH `where('coManagers','array-contains',uid)` AND
+                        // `where('type','in',[the three NFL types])` — the type filter is
+                        // what lets the prover discharge the type guard. Measured: the
+                        // array-contains filter alone is DENIED (coManagers.rules.test.mjs).
+                        (resource.data.type in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] &&
+                         request.auth.uid in resource.data.coManagers)
                      )) || 
                      isSuperAdmin();
 
@@ -83,9 +129,29 @@ service cloud.firestore {
         isSuperAdmin()
       );
       
-      // Helper: is user the pool owner or manager?
+      // PLAN-CO-COMMISSIONERS T3 (deploy step 3 — ships WITH the setter callable,
+      // never before it): a uid named in a server-owned `coManagers` array is a
+      // commissioner of an NFL pool. The type guard is enforced here exactly as
+      // in functions `isPoolCommissioner` and the client `isNFLPoolCommissioner`
+      // — a `coManagers` array on a Squares/Bracket/Props/Playoff pool grants
+      // nothing in any layer (codex r3 on the plan). Takes the pool DATA so the
+      // subcollection rows can pass their `get()` result.
+      function isNFLCoManagerOf(pool) {
+        return request.auth != null
+          && pool.get('type', '') in ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']
+          && pool.get('coManagers', []) != null
+          && request.auth.uid in pool.get('coManagers', []);
+      }
+
+      // Helper: is user the pool owner, manager, or (NFL) co-commissioner?
+      // ⚠️ WIDENED by PLAN-CO-COMMISSIONERS T3. Callers: the pool `update` rule
+      // (co-commissioners edit settings under the SAME protectedFieldsUnchanged /
+      // nflSettingsWriteBlocked chain — R2) and nothing else; `delete` below is
+      // deliberately inline ownerId/managerUid (C8: destructive stays owner-only).
       function isPoolManager() {
-        return request.auth.uid == resource.data.ownerId || request.auth.uid == resource.data.managerUid;
+        return request.auth.uid == resource.data.ownerId
+          || request.auth.uid == resource.data.managerUid
+          || isNFLCoManagerOf(resource.data);
       }
 
       // Protected fields that ONLY the Admin SDK (cloud functions) can write.
@@ -94,12 +160,62 @@ service cloud.firestore {
         return !changed.hasAny([
           'managerUid', 'ownerId', 'createdAt', 'createdBy',
           'axisNumbers', 'squares', 'participants',
+          // 🛑 THE ROSTER IS AN AUTHORIZATION INPUT, SO IT IS SERVER-OWNED.
+          //
+          // `participantIds` decides who may read a pool's PICKS
+          // (PLAN-MEMBER-PICKS-VISIBILITY, Kevin's K9 ruling 2026-08-14) via
+          // `isProvableMember`. While it stayed client-writable, a manager could
+          // add any uid and hand that account a DURABLE, self-refreshing feed of
+          // every future pick reveal — not a one-time disclosure they could have
+          // made verbally anyway, but a standing capability that outlives their
+          // interest in granting it. `participants` was already protected here;
+          // `participantIds` — the one every membership check actually reads —
+          // was not.
+          //
+          // Nothing legitimate loses a capability. Pool CREATE is server-only,
+          // and every join / rebuy / removal path writes this array through the
+          // Admin SDK (`lib/memberRecord.ts`), which bypasses rules entirely.
+          // Measured before shipping: ZERO client writes anywhere in `src/`
+          // (PLAN-MEMBER-PICKS-VISIBILITY-SWEEPS S4). The wizards' full-object
+          // updates still pass, because a same-value write is not an
+          // affectedKey — the same reasoning as `type` below.
+          'participantIds',
+          // 🛑 `coManagers` IS AN AUTHORIZATION INPUT TOO, SO IT IS SERVER-OWNED
+          // (PLAN-CO-COMMISSIONERS T1, deploy step 2 of D2). Three callable gates
+          // used to trust this array while it sat OUTSIDE this list — an owner
+          // could `updateDoc({coManagers:[uid]})` from a browser and hand that
+          // uid scoreNFLWeek / recordPoolPayouts / cancelPool. Same hole as
+          // `participantIds` above, one field over. `coManagersRevision` rides
+          // along: it is the add-vs-remove race fence for the setter callable,
+          // and a client-writable revision lets a current co-manager reset it
+          // after a remove and slip a stale add through (codex r3).
+          //
+          // ⚠️ THIS IS A LOCK ONLY. No rule in this file READS `coManagers` yet
+          // — the reading predicates ship in T3, in the SAME deploy as the
+          // callable that writes it, never in this one. Reading before the
+          // audited clear has run would honour a legacy forged array.
+          'coManagers', 'coManagersRevision',
           'billing', // Billing status managed exclusively by Cloud Functions
           // Frozen weekly pick deadlines for Survivor/Margin. The server only ever
           // moves these EARLIER; a manager who could clear the map would erase the
           // record of a deadline that already passed and reopen that week by
           // widening the lock buffer.
           'hardLockByWeek',
+          // Frozen weekly tiebreak TARGET game ids (PLAN-WEEKLY-PRIZES §2b).
+          // Written once per pool-week by the first submitNFLPicks of that week
+          // and read by every later sheet and by the scorer; a manager who could
+          // rewrite the map could re-point predictions members already made.
+          'frozenTiebreakTargets',
+          // The frozen weeks divisor of the weekly prize pot (PLAN-WEEKLY-PRIZES
+          // D5): written by createPool or set-once by the scorer at first prize
+          // publication; a manager who could rewrite it would re-price every
+          // future weekly prize.
+          'weeksInSeason',
+          // The published Season Places + frozen season prize (PLAN-WEEKLY-PRIZES
+          // step 3), written by finalization; recordPoolPayouts BINDS season
+          // PLACE awards to this list, so a manager who could rewrite it could
+          // bind an award to a figure the ranking never produced.
+          'seasonPlaces', 'seasonPrize', 'seasonPlacesError',
           // Scorer-owned state (PLAN-REALTIME-SCORING §3a, PR-B′). Every one of
           // these is a field a manager could otherwise use to undo the reveal
           // guarantee or the scoring mutex:
@@ -221,6 +337,144 @@ service cloud.firestore {
                || s is float;
       }
 
+      // These settings are CALLABLE-ONLY, for EVERY client principal including
+      // SUPER_ADMIN (PLAN-SURVIVOR-PARITY-SCORING decision 4;
+      // PLAN-WEEKLY-TIEBREAKERS §5).
+      //
+      // `updatePoolSettings` refuses to change either field once the pool has
+      // published a scored week, because both regrade past weeks on the next
+      // rescore. A direct client write skips that refusal entirely, and
+      // `firestore.rules:242` grants isSuperAdmin() unrestricted pool updates —
+      // so without this the gate is one console-adjacent write away from being
+      // decorative.
+      //
+      // ⚠️ THE NESTED DIFF IS THE POINT. Root-level
+      // `request.resource.data.diff(resource.data).affectedKeys()` reports only
+      // the top-level `settings` key — documented at the nflSettingsWriteBlocked()
+      // comment above and at poolUpdate.ts's flatten helper — so a per-field check
+      // written against the ROOT diff would never fire and this rule would read as
+      // a guard while guarding nothing. Diffing the settings MAPS catches all
+      // three shapes: a dotted `settings.maxTeamUses` update, a wholesale
+      // `settings` replacement with the value changed inside it, and a deletion.
+      //
+      // Applied OUTSIDE the super-admin disjunction below, deliberately. Scoped to
+      // these two fields, also deliberately: a blanket SA lockout of NFL settings
+      // would change the repair surface for every other field, which is a bigger
+      // blast radius than the bypass being closed. Privileged edits go through the
+      // gated callable.
+      //
+      // Admin-SDK and console writes bypass rules by nature; they carry the same
+      // invariant by convention, not by enforcement.
+      //
+      // ⚠️ `weeklyTiebreaker` JOINED THIS LIST FOR EXACTLY THE SAME REASON, and
+      // it was nearly missed. `updatePoolSettings` refuses to change the weekly
+      // tie-breaker rule once anybody has submitted a sheet, because the number
+      // members already typed was an answer to the OLD question — and under the
+      // `NONE` rule they were never asked at all, so the scorer would read every
+      // one of them as having predicted 0.
+      //
+      // The plan for that change asserted the opposite of what this file does:
+      // it read `nflSettingsWriteBlocked()` and concluded NFL settings were
+      // denied to every client principal, so no rules work was owed. They are
+      // denied to MANAGERS. `nflSettingsWriteBlocked()` lives INSIDE the
+      // isPoolManager() branch of the disjunction below, and `isSuperAdmin()`
+      // short-circuits past it. Only the nested check in this function applies
+      // to both. (codex, on the implementation PR.)
+      function callableOnlySettingsUnchanged() {
+        let changed = request.resource.data.get('settings', {})
+                        .diff(resource.data.get('settings', {}))
+                        .affectedKeys();
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        // entryFee/payoutMode join the guard ON NFL POOLS ONLY: a direct write
+        // to either can unbalance a stored hybridSplit the callable would have
+        // refused (codex P1 on the split PR). Scoped to NFL because other pool
+        // types legitimately edit fee fields through non-callable admin paths.
+        // maxEntriesPerUser joins the NFL-ONLY clause (PLAN-MULTI-ENTRY D8):
+        // raise-only through the callable — a direct write could LOWER it under
+        // a member who already holds three entries. NFL-scoped because Bracket
+        // and Playoff carry the SAME key and save it by direct updateDoc
+        // (BracketPoolDashboard handleSaveSettings, SuperAdmin) — an unscoped
+        // deny broke every Bracket settings save (qodo #1 on #449).
+        // `weeklyPayouts` (PLAN-PAYMENT-LEDGER T1): the validator lives in the
+        // callable, so no direct write — SUPER_ADMIN clients included — may bypass it.
+        return !changed.hasAny(['tieCountsAs', 'maxTeamUses', 'weeklyTiebreaker', 'hybridSplit', 'weeklyPayouts'])
+               // `payouts` (PLAN-PAYMENT-LEDGER T1 / K9): the unique-rank + ≤100 %
+               // validation lives in updatePoolSettings; a SUPER_ADMIN client
+               // bypasses nflSettingsWriteBlocked(), so without this line a
+               // direct write could persist a duplicate rank the scorer then
+               // fails closed on (codex r2 on #470). NFL only — Bracket/Playoff
+               // managers still edit payouts directly.
+               && (!isNfl || !changed.hasAny(['entryFee', 'payoutMode', 'maxEntriesPerUser', 'payouts']));
+      }
+
+      // POOL PASSWORD MATERIAL IS SERVER-OWNED (PLAN-AUDIT-AUTH-HARDENING
+      // Phase B; audit item 13a).
+      //
+      // The bracket dashboard used to write `accessControl.password` in the
+      // CLEAR with a direct client `updateDoc`, onto a document that is
+      // `allow get: if true` — and `joinBracketPool` never read that field, so
+      // the value was simultaneously exposed and unenforced. The wizards did
+      // the same with `gridPassword`. Both now route through the
+      // `setPoolPassword` callable, which writes a PBKDF2 record to
+      // `pools/{id}/private/access`; this function is what makes that the ONLY
+      // path rather than merely the intended one.
+      //
+      // ⚠️ IT DENIES *CHANGING* THE VALUE, IN EITHER DIRECTION. An earlier
+      // version only refused a NON-EMPTY value, reasoning that a full-object
+      // wizard save legitimately carries `gridPassword: ''` (the empty default
+      // in src/constants.ts) once the field is gone from the document. That let
+      // an owner CLEAR a pre-migration pool's plaintext by submitting `''` —
+      // deleting the only value that makes the gate render, and silently opening
+      // the pool (codex r5 P1). Clearing is exactly as dangerous as setting, and
+      // in the fail-OPEN direction.
+      //
+      // So the test is equality, with `null`/absent/`''` treated as one value.
+      // What still passes: the wizard resending the SAME stored value; the
+      // wizard sending `''` for a pool that has no password; any edit to a
+      // sibling field of `accessControl` while the password rides along
+      // unchanged. What no longer passes: setting one, changing one, or clearing
+      // one. Removing a password is `setPoolPassword(poolId, null)`; removing a
+      // legacy plaintext is the migration. Both hold an Admin SDK handle, which
+      // rules never see.
+      //
+      // ⚠️ Applied OUTSIDE the disjunction below, like
+      // callableOnlySettingsUnchanged(): `isSuperAdmin()` short-circuits every
+      // check inside the manager branch, and a SUPER_ADMIN writing a plaintext
+      // password back onto the public document is the same leak by a different
+      // hand.
+      //
+      // `hasPoolPassword` is the non-secret marker the UI renders the lock
+      // from. It is server-written for the same reason `participantIds` is: a
+      // client that could clear it could make a gated pool render ungated.
+      // UNCHANGED, or empty on BOTH sides. `null` and `''` are the same thing
+      // here: an absent field reads as `''` through the default, and a client
+      // that sends `null` means the same as one that sends nothing.
+      function poolPasswordUnchanged(newVal, oldVal) {
+        return newVal == oldVal
+               || ((newVal == null || newVal == '') && (oldVal == null || oldVal == ''));
+      }
+
+      function poolPasswordNotWritten() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return poolPasswordUnchanged(
+                 request.resource.data.get('gridPassword', ''),
+                 resource.data.get('gridPassword', ''))
+               && poolPasswordUnchanged(
+                 request.resource.data.get('accessControl', {}).get('password', ''),
+                 resource.data.get('accessControl', {}).get('password', ''))
+               // `accessControl.password` here is a LITERAL top-level field name
+               // with a dot in it, NOT the nested path (codex r5 P1). The dotted
+               // OBJECT-KEY form of updateDoc is parsed by the SDK into the
+               // nested path and is caught by the clause above; but
+               // `updateDoc(ref, new FieldPath('accessControl.password'), v)`
+               // writes a genuine top-level field, `affectedKeys()` reports that
+               // literal key, and nothing above would have looked at it — the
+               // same bypass the create schema had to close.
+               && !changed.hasAny(['passwordHash', 'hasPoolPassword', 'accessControl.password']);
+      }
+
       // Pool is in an editable state.
       // NOTE: 'PUBLISHED' is removed — status was renamed to 'OPEN'.
       function poolIsEditable() {
@@ -239,8 +493,14 @@ service cloud.firestore {
         );
       }
 
-      // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted)
-      allow update: if request.auth != null && (
+      // Update: Owner/Manager (filtered) OR SuperAdmin (unrestricted) — except
+      // the callable-only settings, which NO client principal may write.
+      //
+      // ⚠️ THE POSITION OF THIS CALL IS THE WHOLE GUARD. It sits OUTSIDE the
+      // disjunction, so it applies to the super-admin branch too. Every other
+      // settings protection — `nflSettingsWriteBlocked()` included — is inside
+      // the manager branch and is short-circuited by `isSuperAdmin()`.
+      allow update: if request.auth != null && callableOnlySettingsUnchanged() && poolPasswordNotWritten() && (
         (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );
@@ -250,6 +510,26 @@ service cloud.firestore {
       // simulator now creates through the real create callables with a
       // server-stamped simRunId trust anchor — no client path may mint pool docs.
       allow create: if false;
+
+      // POOL ACCESS SECRET (PLAN-AUDIT-AUTH-HARDENING Phase B).
+      //
+      // `pools/{poolId}/private/access` holds the PBKDF2 record for a pool's
+      // password and nothing else. BOTH doors are shut, to every principal
+      // including SUPER_ADMIN: the only legitimate reader is the
+      // `verifyPoolAccess` callable, which holds an Admin SDK handle and
+      // bypasses rules entirely, and nothing in the product ever needs to
+      // display a pool password back to anyone.
+      //
+      // ⚠️ This is the whole point of the phase. The material used to live on
+      // the PARENT document, which is `allow get: if true` for guest share
+      // links — so `gridPassword`, `accessControl.password` and `passwordHash`
+      // were readable by anyone holding a pool link. The wildcard covers the
+      // whole subcollection so a future private doc cannot be added under a
+      // laxer default.
+      match /private/{docId} {
+        allow read: if false;
+        allow write: if false;
+      }
 
       // WINNERS (Subcollection)
       match /winners/{winnerId} {
@@ -281,6 +561,8 @@ service cloud.firestore {
       // Readable only by the pool owner/manager or a SuperAdmin. Writes are
       // Cloud Functions only (reserveSquare / updatePlayer / releaseSquares).
       match /squarePrivate/{squareId} {
+        // Squares PII stays owner/managerUid/SA — PLAN-CO-COMMISSIONERS K7 = No
+        // (and co-commissioners are NFL-only in v1 anyway, C13).
         allow read: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
@@ -295,6 +577,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow write, delete: if false; 
@@ -309,8 +592,28 @@ service cloud.firestore {
       match /ai_requests/{docId} {
          // Scoped to pool participants — requests can contain prompt/user context (audit M2).
          allow read: if isPoolParticipant();
+         // CREATE COSTS MONEY: each doc triggers onAIRequest -> Gemini. Before
+         // PLAN-COST-CONTROLS 0.5.1 this required only auth + own-uid, so ANY
+         // signed-in user could burn the paid provider on ANY pool, including
+         // pools that never bought the addon. All four conditions are load-
+         // bearing and none replaces another:
+         //   - auth + userId==uid: identity binding. Dropping it lets a
+         //     participant forge userId (attribution poisoning, and per-user
+         //     quota framing once PLAN Phase 2 lands).
+         //   - isPoolParticipant(): read already required it; create did not.
+         //   - the entitlement: AI Commissioner is a paid addon.
+         // The entitlement reads the SAME pool doc isPoolParticipant() gets, so
+         // no extra document read is billed. The .get(field, default) chain is
+         // deliberate: a pool with no billing map denies EXPLICITLY rather than
+         // by raising an evaluation error, so the deny-by-default is readable
+         // here and does not depend on error semantics.
          allow create: if request.auth != null
-                       && request.resource.data.userId == request.auth.uid;
+                       && request.resource.data.userId == request.auth.uid
+                       && isPoolParticipant()
+                       && get(/databases/$(database)/documents/pools/$(poolId)).data
+                            .get('billing', {})
+                            .get('featuresUnlocked', {})
+                            .get('aiCommissioner', false) == true;
          allow update, delete: if false;
       }
 
@@ -320,18 +623,66 @@ service cloud.firestore {
         allow create, update, delete: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
       }
 
-      // BANTER MESSAGES
-      // Reads scoped to pool participants (audit M2). authorUid must match the
-      // authenticated user to prevent identity spoofing.
+      // BANTER MESSAGES — the AI Commissioner feed (PLAN-WIZARD-BUYFLOW-FIXES T9).
+      //
+      // Reads stay scoped to pool participants (audit M2), which is what makes
+      // this feed member-visible on the pool homepage. The three changes are:
+      //
+      //  1. CREATE now also requires `isPoolParticipant()`. It required only
+      //     `auth != null` + own-uid, so ANY signed-in user could post into ANY
+      //     pool's feed — harmless while nothing rendered it, and not harmless
+      //     now that every member sees it on the Overview tab.
+      //  2. CREATE refuses `kind: 'AI'`. AI banter is written by `onAIRequest`
+      //     through the Admin SDK, which bypasses rules; a client that could
+      //     stamp that kind could put words in the AI's mouth in a feed the
+      //     whole pool reads.
+      //  3. DELETE is allowed for the pool's commissioners — Kevin's T9
+      //     requirement ("commissioners must be able to delete any message").
+      //     Deliberately DELETE only: `update` stays false, so a message can be
+      //     removed but never silently rewritten under its author's name.
+      //
+      // The commissioner set is the same one `announcements` uses, co-managers
+      // included; it is not widened here.
       match /messages/{messageId} {
         allow read: if isPoolParticipant();
         allow create: if request.auth != null
-                      && request.resource.data.authorUid == request.auth.uid;
-        allow update, delete: if false;
+                      && request.resource.data.authorUid == request.auth.uid
+                      && isPoolParticipant()
+                      && request.resource.data.kind != 'AI'
+                      // The byline may not CLAIM to be the AI either (codex r2
+                      // [P1]). `kind` is already refused above, but the feed
+                      // prints `authorName` for human rows, so a member could
+                      // otherwise post under the one identity in this feed that
+                      // carries authority. A member using another MEMBER's name
+                      // is not addressed here and cannot be: display names are
+                      // self-set (`users/{uid}.name` is self-editable) and
+                      // already appear in standings, so a rule binding this
+                      // field to the profile would stop nothing.
+                      && request.resource.data.get('authorName', '') != 'AI Commissioner'
+                      && request.resource.data.text is string
+                      && request.resource.data.text.size() > 0
+                      && request.resource.data.text.size() <= 2000
+                      // The feed is ORDERED on this field (`subscribeToPoolFeed`
+                      // sorts timestamp desc), so a client-controlled value is a
+                      // client-controlled position: a member could post with a
+                      // far-future stamp and stay pinned above the commissioner
+                      // and the AI for everyone, indefinitely (codex r4 [P2]).
+                      // Bound to request time with a minute of clock-skew slack —
+                      // not `request.time` equality, which no client can hit.
+                      && request.resource.data.timestamp is number
+                      && request.resource.data.timestamp <= request.time.toMillis() + 60000;
+        allow update: if false;
+        allow delete: if request.auth != null && (
+          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
+          isSuperAdmin()
+        );
       }
 
       // PROP CARDS
@@ -347,7 +698,20 @@ service cloud.firestore {
       }
 
       // BRACKET/PLAYOFF/NFL ENTRIES
-      // A member always reads their OWN entry; owner/manager/admin retain management reads.
+      // A member always reads their OWN entry; SUPER_ADMIN reads everything.
+      //
+      // ⚠️ THE POOL'S OWNER AND managerUid ARE DELIBERATELY NOT LISTED HERE
+      // (PLAN-COMMISSIONER-BLIND-PICKS T3, 2026-08-12). They used to be, which
+      // meant a commissioner read every member's picks before kickoff — Kevin:
+      // "Pool commissioners should not see picks until pool lock. Only superadmin
+      // should have the ability to see all picks at all times."
+      //
+      // An entry document bundles EVERY week's picks, so no document-level rule
+      // can say "week 4 yes, week 5 no". Commissioner reads therefore go through
+      // the `getPoolPicks` callable, which has a server-side clock and assembles
+      // its response by allowlist of revealed game ids. Do not re-add them here
+      // to fix a manager surface: that reopens the whole season, for every week.
+      //
       // Non-owner PARTICIPANT reads split by pool type (ADR 0004 finding, closed by ADR 0005
       // Phase 2):
       // - NFL season types (PER_GAME/WEEKLY lock): an entry doc bundles ALL of a member's
@@ -359,8 +723,6 @@ service cloud.firestore {
       match /entries/{entryId} {
         allow read: if request.auth != null && (
           request.auth.uid == resource.data.ownerUid ||
-          get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
-          get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
           isSuperAdmin() ||
           (
             request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds &&
@@ -429,6 +791,9 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/pools/$(poolId)).data.participantIds ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          // A named NFL co-commissioner runs the ledger (PLAN-PAYMENT-LEDGER T5;
+          // the callable admits them) — same predicate the private records use.
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow write: if false;
@@ -441,6 +806,7 @@ service cloud.firestore {
           request.auth.uid == resource.data.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow write: if false;
@@ -477,6 +843,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (
           get(/databases/$(database)/documents/pools/$(poolId)).data.ownerId == request.auth.uid ||
           get(/databases/$(database)/documents/pools/$(poolId)).data.managerUid == request.auth.uid ||
+          isNFLCoManagerOf(get(/databases/$(database)/documents/pools/$(poolId)).data) ||
           isSuperAdmin()
         );
         allow create: if request.auth != null;

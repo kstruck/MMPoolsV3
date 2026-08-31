@@ -2,10 +2,14 @@ import { useMemo } from 'react';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { survivorCreateInputSchema } from '@shared/schemas';
-import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
+import { MAX_TEAM_USES } from '@shared/survivorReuse';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBrandingThemed, LaunchStep } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, NumberField, CheckboxField, SelectField } from '../fields';
+import { ReadOnlyField, NumberField, CheckboxField, SelectField } from '../fields';
+import { MultiEntryFields } from './MultiEntryFields';
+import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
+import { prefillFromUser } from './profilePrefill';
 import { buildNFLPayload } from './buildNFLPayload';
 
 // Creates the NFL Survivor pool and RESOLVES its poolId (no navigation) for LaunchStep.
@@ -18,7 +22,7 @@ function StepSurvivorRules() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Survivor rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season, strikes, and buy-backs.</p>
-      <TextField name="season" label="Season" placeholder="2025" />
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} helpId="wizard.season" />
       <SelectField
         name="seasonType"
         label="Season type"
@@ -34,8 +38,20 @@ function StepSurvivorRules() {
         <NumberField name="settings.rebuyDeadlineWeek" label="Rebuy deadline week" min={0} />
         <NumberField name="settings.rebuyCost" label="Rebuy cost ($)" min={0} />
       </div>
+      <div className="grid grid-cols-2 gap-x-4">
+        <SelectField
+          name="settings.tieCountsAs"
+          label="Tie outcome"
+          options={[
+            { value: 'LOSS', label: 'Tie counts as a loss (strike)' },
+            { value: 'WIN', label: 'Tie counts as a win for the picked team' },
+          ]}
+        />
+        <NumberField name="settings.maxTeamUses" label="Team-use limit (0 = unlimited)" min={0} max={MAX_TEAM_USES} />
+      </div>
       <CheckboxField name="settings.pickLosersMode" label="Pick teams to LOSE (reverse survivor)" />
       <CheckboxField name="settings.autoSurviveExemptionEnabled" label="Auto-survive when no eligible teams remain" />
+      <MultiEntryFields />
     </div>
   );
 }
@@ -43,7 +59,7 @@ function StepSurvivorRules() {
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_SURVIVOR',
   name: '', managerName: '', contactEmail: '', isPublic: true,
-  season: '2025',
+  season: CURRENT_SEASON,
   seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
@@ -55,6 +71,10 @@ const defaultValues: Record<string, unknown> = {
     entryFee: 0, isListedPublic: true,
     maxStrikes: 1, maxRebuys: 0, rebuyDeadlineWeek: 4, rebuyCost: 0,
     pickLosersMode: false, autoSurviveExemptionEnabled: true,
+    // Today's rules, spelled out. Both are also the read-site defaults, so a
+    // pool created before these existed behaves identically.
+    tieCountsAs: 'LOSS', maxTeamUses: 1,
+    maxEntriesPerUser: 1,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
   },
   _tosAccepted: false,
@@ -62,17 +82,29 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreateNFLSurvivorPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  // Start from the commissioner's own profile: they are already a signed-in
+  // member, so their name, contact email and payout handles are known.
+  //
+  // Read ONCE, at mount. `useForm({ defaultValues })` in WizardShell does not
+  // re-initialise when this object changes, and that is fine here rather than a
+  // latent bug: App.tsx gates this whole route on `user &&`, so the wizard never
+  // mounts with a null user and there is no late-arriving profile to wait for.
+  // It is also the safe direction — the post-create write-back updates the user
+  // doc, and a shell that DID re-initialise would wipe a half-filled form the
+  // moment that landed. The useMemo is for referential stability, nothing more.
+  const seededDefaults = useMemo(() => ({ ...defaultValues, ...prefillFromUser(user) }), [user]);
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'rules', title: 'Survivor rules', fields: ['season'], Component: StepSurvivorRules },
+    { id: 'rules', title: 'Survivor rules', Component: StepSurvivorRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
-    { id: 'branding', title: 'Branding', Component: StepBranding },
+    { id: 'branding', title: 'Branding', Component: StepBrandingThemed },
     {
       id: 'launch', title: 'Launch', ownsSubmit: true,
       Component: () => (
         <LaunchStep
           uid={user.id}
+          user={user}
           poolType="NFL_SURVIVOR"
           feeField="settings.entryFee"
           createPool={createSurvivorPool}
@@ -80,7 +112,7 @@ export function CreateNFLSurvivorPool(props: { user: User; onComplete: (poolId: 
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
@@ -91,7 +123,7 @@ export function CreateNFLSurvivorPool(props: { user: User; onComplete: (poolId: 
         poolType="NFL_SURVIVOR"
         steps={steps}
         schema={survivorCreateInputSchema}
-        defaultValues={defaultValues}
+        defaultValues={seededDefaults}
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {

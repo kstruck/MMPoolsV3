@@ -1,8 +1,10 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { ESPN_SITE_API } from './lib/espnHost';
 import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
+import { playoffSyncInWindow } from "./lib/scanBounds";
 import { PlayoffPool, PlayoffEntry } from "./types";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
@@ -13,6 +15,7 @@ import { submitPlayoffPicksSchema, managePlayoffEntrySchema } from "./schemas/pl
 import { withHeartbeat } from "./lib/heartbeat";
 import { syncPlayoffPoolsSchema } from "./schemas/noInputAdmin";
 import { calculatePlayoffScoresSchema } from "./schemas/playoffEntries";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 
 
 
@@ -206,8 +209,8 @@ export const submitPlayoffPicks = validated(
 
             // Enforce 10-player Free Plan participant lock
             const billingStatus = fresh.billing?.status ?? 'free';
-            if (billingStatus === 'free' && Object.keys(fresh.entries || {}).length >= 10) {
-                throw new HttpsError('failed-precondition', 'This pool is on the Free Plan and has reached the limit of 10 participants. The pool manager must upgrade to premium to allow more participants to join.');
+            if (billingStatus === 'free' && Object.keys(fresh.entries || {}).length >= FREE_PLAN_PARTICIPANT_CAP) {
+                throw new HttpsError('failed-precondition', FREE_PLAN_FULL_MESSAGE);
             }
             // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot
             // exceed its purchased participant ceiling. No-op for free/trial pools.
@@ -275,7 +278,11 @@ export const managePlayoffEntry = validated(
     const { poolId, entryId, action } = input;
     const value = input.action === 'togglePaid' ? input.value : undefined;
     const uid = request.auth!.uid;
-    const isAdmin = request.auth!.token.role === 'SUPER_ADMIN';
+    // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d). This flag widens `isManager`
+    // below, so a bare `token.role === 'SUPER_ADMIN'` let a demoted admin with an
+    // un-expired token toggle payment and edit entries on any pool. The doc read
+    // only happens when the claim already says SUPER_ADMIN.
+    const isAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
     const db = admin.firestore();
 
     const poolRef = db.collection('pools').doc(poolId);
@@ -384,10 +391,27 @@ export const updateGlobalPlayoffResults = validated(
 
 // Scheduled Function: Check ESPN Scores
 export const checkPlayoffScores = onSchedule("every 30 minutes", withHeartbeat('checkPlayoffScores', async () => {
+    // PLAN-AUDIT-SCAN-BOUNDS 1.3: the NFL postseason lives in Jan–early Feb;
+    // this job used to fetch ESPN every 30 minutes YEAR-ROUND (~17,500
+    // fetches/yr for ~3 useful weeks). Off-window it returns healthy with an
+    // explicit detail so monitors don't cry wolf. The config read is fail-open
+    // to the window: in-window, a config error still syncs.
+    let forceActive: boolean | undefined;
+    try {
+        const cfg = await admin.firestore().doc("system/config").get();
+        forceActive = (cfg.data() as { playoffSync?: { forceActive?: boolean } } | undefined)?.playoffSync?.forceActive;
+    } catch {
+        forceActive = undefined;
+    }
+    if (!playoffSyncInWindow(new Date(), forceActive)) {
+        logger.info("checkPlayoffScores: off-season skip (window Jan 1 – Feb 20 UTC; override system/config.playoffSync.forceActive)");
+        return { ok: true, detail: { offSeasonSkip: true } };
+    }
+
     logger.info("Checking ESPN Playoff Scores...");
 
     try {
-        const resp = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard');
+        const resp = await fetch(`${ESPN_SITE_API}/football/nfl/scoreboard`);
         // A 429 or 5xx used to return undefined, which the wrapper reads as
         // success — so a sustained ESPN outage would keep stamping fresh healthy
         // beats while playoff results were never propagated.
@@ -459,6 +483,7 @@ export const checkPlayoffScores = onSchedule("every 30 minutes", withHeartbeat('
 }));
 
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
 
 export const onPlayoffConfigUpdate = onDocumentWritten("config/playoffs", async (event) => {
     const after = event.data?.after.data();

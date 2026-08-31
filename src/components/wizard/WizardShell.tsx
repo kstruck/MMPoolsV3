@@ -3,6 +3,8 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { WizardShellProps } from './types';
 import { useWizardDraft } from './useWizardDraft';
+import { HelpScopeProvider } from '../../help/scope';
+import { HelpRoutePublisher } from '../../help/publish';
 
 // Transient RHF field for the Review-step Terms acceptance. Underscore-prefixed
 // so it reads as non-persisted; zod strips unknown keys so it never reaches the
@@ -116,6 +118,14 @@ export function WizardShell(props: WizardShellProps) {
   };
 
   return (
+    // The wizard publishes the help scope for everything below it: it is the
+    // one place that knows the pool type before a pool exists, and `HelpTip`
+    // reads that rather than taking a pool type as a prop. Audience is always
+    // `commissioner` — nobody reaches a create wizard for someone else's pool.
+    <HelpScopeProvider poolType={poolType} audience="commissioner">
+    {/* T2: the wizard step is the help "page". It lives in this component's
+        state and in no URL, so it is published rather than read. */}
+    <HelpRoutePublisher tab={step.id} />
     <FormProvider {...methods}>
       <div className="mx-auto w-full max-w-2xl text-slate-100">
         {/* Draft resume prompt */}
@@ -216,5 +226,6 @@ export function WizardShell(props: WizardShellProps) {
         </div>
       </div>
     </FormProvider>
+    </HelpScopeProvider>
   );
 }

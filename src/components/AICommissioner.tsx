@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { getUserMessage } from '../utils/errorMessages';
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/dbService'; // Ensure this uses your shared db instance
 import { collection, query, orderBy, limit, onSnapshot, addDoc, where } from 'firebase/firestore';
@@ -47,6 +48,11 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
         return onSnapshot(q, (snap) => {
             const reqs = snap.docs
                 .map(d => ({ ...d.data(), id: d.id } as AIRequest))
+                // BANTER requests belong to the commissioner's card (T9); they
+                // are not questions this panel asked and listing them here
+                // would show a commissioner their own trash-talk prompts in
+                // their dispute history.
+                .filter(r => r.category !== 'BANTER')
                 .sort((a, b) => b.createdAt - a.createdAt); // Client-side sort
             setUserRequests(reqs);
         });
@@ -90,7 +96,12 @@ export const AICommissioner: React.FC<AICommissionerProps> = ({ poolId, userId, 
             setActiveTab('DISPUTE');
         } catch (e) {
             logger.error("Error submitting insight", e);
-            toast.error("Failed to request insight. Try again.");
+            // The SERVER's reason, not a flat sentence. This write is refused by
+            // `firestore.rules` when the pool lacks the AI entitlement, and
+            // "Failed to request insight. Try again." described that exactly as
+            // it described a dropped connection — so a permanent, actionable
+            // refusal looked like something worth retrying.
+            toast.error(getUserMessage(e, "Failed to request insight. Try again."));
         } finally {
             setIsSubmitting(false);
         }

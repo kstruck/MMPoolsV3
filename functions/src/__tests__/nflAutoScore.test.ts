@@ -191,6 +191,25 @@ describe('computeWeekFingerprint — every skip-forever trap', () => {
     expect(computeWeekFingerprint(survivor({ autoSurviveExemptionEnabled: false }), 1, [game()], NOW)).not.toBe(s());
   });
 
+  it('moves on a survivor-parity settings edit — else the rescore never happens', () => {
+    // Both settings regrade a week with identical game data: `tieCountsAs`
+    // flips a tied week's strike, `maxTeamUses` moves the auto-survive
+    // exemption. Without these terms an allowed pre-publication edit leaves the
+    // hash identical and the pool takes the skip path forever.
+    const s = () => computeWeekFingerprint(survivor(), 1, [game()], NOW);
+    expect(computeWeekFingerprint(survivor({ tieCountsAs: 'WIN' }), 1, [game()], NOW)).not.toBe(s());
+    expect(computeWeekFingerprint(survivor({ maxTeamUses: 2 }), 1, [game()], NOW)).not.toBe(s());
+    expect(computeWeekFingerprint(survivor({ maxTeamUses: 0 }), 1, [game()], NOW)).not.toBe(s());
+  });
+
+  it('hashes the EFFECTIVE value — saving the defaults is not a change', () => {
+    // A legacy pool and one that explicitly wrote today's defaults grade
+    // identically, so they must hash identically; otherwise every settings save
+    // on an untouched pool forces a pointless rescore.
+    const s = () => computeWeekFingerprint(survivor(), 1, [game()], NOW);
+    expect(computeWeekFingerprint(survivor({ tieCountsAs: 'LOSS', maxTeamUses: 1 }), 1, [game()], NOW)).toBe(s());
+  });
+
   it('moves for Survivor the moment the weekly lock passes, with no game final', () => {
     // The at-lock no-pick strike must fire at the deadline, not wait for a game
     // to finish. Nothing else about the week has changed at that instant.

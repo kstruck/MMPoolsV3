@@ -39,6 +39,9 @@ import { recomputeCommissionerAggregate, ownerOf } from "../lib/commissionerAggr
 import { isSimPool, isExplicitlyMarkedTestPool } from "../shared/testPool";
 import { validated } from "../lib/validated";
 import { reconcilePaymentTruthSchema } from "../schemas/migrations";
+import { readPoolDues, writePoolDues, DUES_PREFIX, DUES_PREFIX_END, type PaidEntryMap } from "../lib/poolDues";
+import { entryHasPick } from "../lib/multiEntry";
+import { derivePaidStatus, isPaidRow, liableEntryIds, paidEntryCountOf, type MemberRecord } from "../shared/memberRecord";
 
 /** The pool types whose authoritative payment store is the Member Record. */
 const NFL_SEASON_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
@@ -83,6 +86,23 @@ export const reconcilePaymentTruth = validated(
     poolsScanned: 0,
     /** entry PAID + member UNPAID → member promoted + ledger row appended. */
     membersPromoted: 0,
+    /** entry PAID + member UNPAID, but the per-entry dues map ALREADY records
+     *  this payment and derives to PAID — only the member's summary
+     *  `paidStatus` fell behind. Repaired by writing the SUMMARY ONLY: no ledger
+     *  row, because whatever wrote the dues row also wrote its event, and a
+     *  second `MARKED_PAID` would duplicate a participant-visible money event;
+     *  and no dues rewrite, because the stored row is the original. Counted
+     *  apart from `membersPromoted` so the operator can see that these moved a
+     *  flag rather than recorded money (codex round 11 on `6f15ec54`). */
+    staleSummariesRepaired: 0,
+    /** Member Records whose mirrored `paidEntryCount` was absent or wrong and
+     *  has been stamped from their per-entry dues map — the D2 backfill half of
+     *  PLAN-PARTIAL-DUES-AGGREGATES. NOT a payment repair: no money moves, no
+     *  ledger row, no `paidStatus` change. Counted separately so a dry-run
+     *  report of "0 divergences, 40 counts stamped" cannot read as "nothing to
+     *  do". Only members WITH a dues document are ever counted: one without cannot
+     *  be partially paid, so the field would change nothing for them. */
+    countsStamped: 0,
     /** member PAID + entry UNPAID → entry display mirrored. No ledger row. */
     entriesMirrored: 0,
     alreadyConsistent: 0,
@@ -100,6 +120,14 @@ export const reconcilePaymentTruth = validated(
      *  never auto-promoted (codex r4). Only members with ZERO ledger history —
      *  whose only-ever write path was the Bento entry write — are promoted. */
     ambiguousSkipped: 0,
+    /** entry PAID + member UNPAID, but the entry NEVER COMMITTED A PICK — so it
+     *  is not in `liableEntryIds` and `setPaidStatus` refuses the same id with
+     *  ENTRY_NOT_FOUND. Recording a dues row and a MARKED_PAID event for it
+     *  would put a payment on the participant-readable ledger that the
+     *  authoritative path would have rejected, and it could never make the
+     *  member paid, because the derivation only consults liable ids. Reported
+     *  for the operator, never written (codex r8). */
+    entriesPaidNotLiable: 0,
     /** Sim-harness pools + hand-flagged isTestPool pools. Unconditional. */
     testPoolsSkipped: 0,
     /** Pools whose type keeps payment on the entry itself — nothing to reconcile. */
@@ -107,11 +135,11 @@ export const reconcilePaymentTruth = validated(
     failures: [] as { poolId: string; error: string }[],
     nextCursor: null as string | null,
     /** Capped list of the individual fixes (planned on dry, applied on live). */
-    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' }[],
+    plannedFixes: [] as { poolId: string; uid: string; fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED' }[],
     plannedFixesTruncated: false,
   };
 
-  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED') => {
+  const notedFix = (poolId: string, uid: string, fix: 'PROMOTE_MEMBER' | 'REPAIR_SUMMARY' | 'MIRROR_ENTRY' | 'AMBIGUOUS_SKIPPED' | 'NOT_LIABLE_SKIPPED') => {
     if (report.plannedFixes.length < PLANNED_FIX_CAP) report.plannedFixes.push({ poolId, uid, fix });
     else report.plannedFixesTruncated = true;
   };
@@ -136,11 +164,53 @@ export const reconcilePaymentTruth = validated(
 
     try {
       const entryFee: number | undefined = pool.settings?.entryFee;
-      const [entriesSnap, membersSnap, paymentsSnap] = await Promise.all([
+      const [entriesSnap, membersSnap, paymentsSnap, duesSnap] = await Promise.all([
         doc.ref.collection('entries').get(),
         doc.ref.collection('members').get(),
         doc.ref.collection('payments').get(),
+        // 🛑 THE PER-ENTRY MAP, READ FOR IDEMPOTENCE (codex r6, P2).
+        //
+        // Before P2-T7 this migration wrote a literal `PAID`, so a second run
+        // saw `entry PAID + member PAID` and counted `alreadyConsistent`. T7
+        // made it write the DERIVED summary, which for a member with one of two
+        // liable entries paid is correctly `UNPAID` — so run 2 sees the same
+        // `entry PAID + member UNPAID` shape it started with, AND now finds the
+        // ledger row run 1 appended, and files the pair as AMBIGUOUS_SKIPPED.
+        //
+        // That is a false ambiguity this migration manufactured itself, and it
+        // would land on the operator's desk for EVERY partial payment it
+        // repaired. The map is the evidence that distinguishes the two cases:
+        // an entry already recorded there was reconciled by a previous run.
+        //
+        // The id-range bound is the same lexical-successor trick `getPoolDues`
+        // uses, and for the same reason — `private/` also holds the pool's
+        // PBKDF2 password record, and `dues__` + U+F8FF is NOT a safe upper
+        // bound (an id above that codepoint sorts past it and is skipped).
+        doc.ref.collection('private')
+          .orderBy(admin.firestore.FieldPath.documentId())
+          .startAt(DUES_PREFIX)
+          .endBefore(DUES_PREFIX_END)
+          .get(),
       ]);
+      /** uid → the entry ids already recorded as paid in that member's dues map. */
+      const paidEntryIdsByUid = new Map<string, Set<string>>();
+      for (const d of duesSnap.docs) {
+        if (!d.id.startsWith(DUES_PREFIX)) continue;      // never `private/access`
+        const duesUid = d.id.slice(DUES_PREFIX.length);
+        if (!duesUid) continue;
+        const map = d.get('paidEntries');                 // ONE field, named. Never spread.
+        if (map && typeof map === 'object' && !Array.isArray(map)) {
+          // 🛑 `isPaidRow`, NOT `Object.keys` (codex r7). A malformed row —
+          // `{ [entryId]: null }`, a Timestamp, an array — is treated as UNPAID
+          // by `derivePaidStatus`, so keying off mere PRESENCE would make this
+          // gate and the derivation disagree about the same document. The gate
+          // would then report `alreadyConsistent` for an entry that is PAID
+          // while its member is UNPAID: the divergence this migration exists to
+          // repair, silently skipped. Same predicate, so they cannot drift.
+          paidEntryIdsByUid.set(duesUid,
+            new Set(Object.keys(map).filter((id) => isPaidRow(map, id))));
+        }
+      }
       const membersById = new Map(membersSnap.docs.map((m) => [m.id, m.data() as any]));
       // Members with ANY MARKED_* ledger history were touched by the
       // authoritative setPaidStatus path at some point (it has always appended a
@@ -154,7 +224,86 @@ export const reconcilePaymentTruth = validated(
           .map((p) => p.uid)
           .filter(Boolean),
       );
+      // The owners' PICKED entry ids, built once per pool from the same
+      // documents `getPoolDues` uses. Needed by the idempotence gate below: "is
+      // this entry already in the dues map" is only a reason to skip if the
+      // member's STORED summary already equals what the map DERIVES. Without
+      // this the gate reports `alreadyConsistent` for a member whose every
+      // liable entry is paid while their record still says UNPAID — a real
+      // stale summary, skipped, and a dishonest report line (codex r8).
+      const pickedByOwner = new Map<string, string[]>();
+      for (const e of entriesSnap.docs) {
+        const ed = e.data() as Record<string, unknown>;
+        if (!entryHasPick(ed)) continue;
+        const owner = typeof ed.ownerUid === 'string' ? ed.ownerUid : e.id;
+        pickedByOwner.set(owner, [...(pickedByOwner.get(owner) ?? []), e.id]);
+      }
+      /** The dues map exactly as `derivePaidStatus` would see it, per uid. */
+      const duesMapByUid = new Map<string, PaidEntryMap>();
+      for (const d of duesSnap.docs) {
+        if (!d.id.startsWith(DUES_PREFIX)) continue;
+        const duesUid = d.id.slice(DUES_PREFIX.length);
+        const map = d.get('paidEntries');
+        if (duesUid && map && typeof map === 'object' && !Array.isArray(map)) {
+          duesMapByUid.set(duesUid, map as PaidEntryMap);
+        }
+      }
       let changedThisPool = 0;
+
+      // ---- D2: STAMP THE MIRRORED `paidEntryCount` ---------------------------
+      //
+      // PLAN-PARTIAL-DUES-AGGREGATES D2 = A (Kevin, 2026-08-27): this migration
+      // stamps the count rather than a new backfill job existing. It already
+      // carries the kill-switch, the dryRun default and the per-run cap Rule 1
+      // demands, already reads both the dues maps and the liability evidence,
+      // and is already the operator-run repair tool for this class of drift.
+      //
+      // 🛑 ONLY MEMBERS WITH A DUES DOCUMENT, and that is a correctness argument
+      // rather than an optimisation. A member with no dues document cannot be
+      // partially paid: `collectedBaseDues` gives a PAID one the whole fee and
+      // an UNPAID one zero, with or without the field. Stamping them would write
+      // `paidEntryCount: 0` onto every legacy record in the platform to change
+      // nothing.
+      //
+      // ⚠️ THIS RUNS BEFORE THE ENTRY LOOP, DELIBERATELY. That loop's promotion
+      // writes the count transactionally from a map it re-read inside the
+      // transaction. Running afterwards, this pass would compute from the
+      // page-level snapshot and could OVERWRITE the fresher transactional value
+      // with a stale one. Ordering it first makes the authoritative write the
+      // last one.
+      for (const [duesUid, pageMap] of duesMapByUid) {
+        const member = membersById.get(duesUid);
+        if (!member) continue;   // dues without a member record: nothing to stamp.
+        const liable = liableEntryIds(member as MemberRecord, duesUid, pickedByOwner.get(duesUid) ?? []);
+        const want = paidEntryCountOf(pageMap, liable);
+        if ((member as { paidEntryCount?: unknown }).paidEntryCount === want) continue;
+        // 🛑 COUNTED, BUT NOT ADDED TO `plannedFixes` — self-review, after the
+        // codex round could not run.
+        //
+        // That list is capped at 50 and is what an operator eyeballs to see WHO
+        // before going live. This pass runs FIRST, so on a platform-wide run its
+        // rows would fill the cap and TRUNCATE the PROMOTE_MEMBER lines — the
+        // money repairs, which are the only ones that need a human to look. A
+        // stamp moves no money and changes no `paidStatus`, so `countsStamped`
+        // carries everything the operator needs about it.
+        report.countsStamped++;
+        changedThisPool++;
+        if (dryRun) continue;
+        const mRef = doc.ref.collection('members').doc(duesUid);
+        // Re-read both inputs inside the transaction. A commissioner marking
+        // someone paid between the page read and here would otherwise have their
+        // fresh count clobbered by this stale one — the same race the promotion
+        // transaction below guards, and the same answer.
+        await db.runTransaction(async (tx) => {
+          const [freshM, freshDues] = await Promise.all([tx.get(mRef), readPoolDues(tx, doc.ref, duesUid)]);
+          if (!freshM.exists) return;
+          const fm = freshM.data() as MemberRecord & { paidEntryCount?: number };
+          const freshLiable = liableEntryIds(fm, duesUid, pickedByOwner.get(duesUid) ?? []);
+          const freshWant = paidEntryCountOf(freshDues ?? undefined, freshLiable);
+          if (fm.paidEntryCount === freshWant) return;
+          tx.set(mRef, { paidEntryCount: freshWant }, { merge: true });
+        });
+      }
 
       for (const entryDoc of entriesSnap.docs) {
         const entry: any = entryDoc.data();
@@ -173,7 +322,70 @@ export const reconcilePaymentTruth = validated(
         }
 
         if (entryPaid && !memberPaid) {
-          if (uidsWithLedgerHistory.has(uid)) {
+          // ⚠️ THIS TEST MUST COME BEFORE THE LEDGER-HISTORY TEST, because a
+          // previous run of this migration wrote BOTH the dues row and a
+          // MARKED_PAID ledger row. Checked second, the ledger row would win
+          // and every partial payment this repaired would be re-reported as
+          // ambiguous forever (codex r6).
+          //
+          // The per-entry map already records THIS entry as paid, so the pair
+          // is reconciled: the member is UNPAID only because their OTHER liable
+          // entries have not been paid, which is the correct derived answer and
+          // not a disagreement to fix.
+          const liableNow = liableEntryIds(
+            member as MemberRecord, uid, pickedByOwner.get(uid) ?? []);
+
+          // 🛑 NON-LIABLE IS DECIDED HERE, NOT INSIDE THE TRANSACTION (codex r9).
+          //
+          // The transaction only runs on a LIVE run, so classifying there made
+          // the dry run report PROMOTE_MEMBER for an entry the live run refuses
+          // and files as NOT_LIABLE_SKIPPED. This file's contract is that the
+          // dry run IS the divergence count and lists what a live run would do,
+          // so the two must reach the same verdict from the same evidence. The
+          // transaction keeps its own re-check as the authority — page data can
+          // be stale — but the REPORT is decided from one place.
+          if (!liableNow.includes(entryDoc.id)) {
+            report.entriesPaidNotLiable++;
+            notedFix(poolId, uid, 'NOT_LIABLE_SKIPPED');
+            continue;
+          }
+
+          // ⚠️ AND ONLY WHEN THE SUMMARY IS NOT STALE (codex r8). Presence in
+          // the map is not on its own a reason to skip: if EVERY liable entry
+          // now has a valid row, the derived status is `PAID` and the stored
+          // `UNPAID` is stale — a real divergence, which must fall through to
+          // the promotion below rather than be counted as consistent.
+          let staleFullyPaid = false;
+          if (paidEntryIdsByUid.get(uid)?.has(entryDoc.id)) {
+            const derivedNow = derivePaidStatus(
+              { ...(member as MemberRecord), paidEntries: duesMapByUid.get(uid) ?? {} },
+              liableNow,
+            );
+            if (derivedNow !== 'PAID') {
+              // Partially paid, and the record agrees. Nothing to reconcile.
+              report.alreadyConsistent++;
+              continue;
+            }
+            staleFullyPaid = true;
+          }
+          // 🛑 `staleFullyPaid` SKIPS THE AMBIGUITY GATE, AND WITHOUT THAT THE
+          // FIX ABOVE IS INERT (found by self-review, not by codex).
+          //
+          // The gate exists for one shape: a deliberate later un-mark through
+          // `setPaidStatus` that the never-updated entry document predates. But
+          // whatever filled this member's dues map — `setPaidStatus`, or an
+          // earlier run of this migration — ALSO wrote ledger rows, so in
+          // production `uidsWithLedgerHistory` is essentially always true here
+          // and the gate would swallow every stale-summary case the check above
+          // just identified. (The r8 test passed only because it seeds no
+          // payments rows; realistic data has them.)
+          //
+          // The map settles it. D1b says an un-mark DELETES the entry's key, so
+          // a map covering every liable entry cannot be the product of one — it
+          // is a summary that fell behind its own evidence. Sending that to an
+          // operator as AMBIGUOUS is manufacturing manual work the data already
+          // answers.
+          if (!staleFullyPaid && uidsWithLedgerHistory.has(uid)) {
             // A pre-P1 un-mark through the roster toggle leaves exactly this
             // shape (member UNPAID via setPaidStatus, entry never updated) —
             // the entry is STALE, not recoverable history. Operator's call.
@@ -181,8 +393,13 @@ export const reconcilePaymentTruth = validated(
             notedFix(poolId, uid, 'AMBIGUOUS_SKIPPED');
             continue;
           }
-          // The pre-P1 Bento write: commissioner marked paid, only the entry heard.
-          notedFix(poolId, uid, 'PROMOTE_MEMBER');
+          // The pre-P1 Bento write: commissioner marked paid, only the entry
+          // heard — EXCEPT under `staleFullyPaid`, where the payment is already
+          // recorded per-entry and only the summary flag is behind. The two are
+          // reported apart so an operator is not told money was recorded when a
+          // flag was flipped, and the DRY-RUN decides it from the same page-level
+          // evidence the live run does, so the two reports still agree.
+          notedFix(poolId, uid, staleFullyPaid ? 'REPAIR_SUMMARY' : 'PROMOTE_MEMBER');
           if (!dryRun) {
             // ONE transaction for the promotion + its ledger row (codex r1, P1
             // severity): written separately, a crash between the two leaves the
@@ -194,14 +411,155 @@ export const reconcilePaymentTruth = validated(
             const mRef = doc.ref.collection('members').doc(uid);
             const ledgerRef = doc.ref.collection('payments').doc();
             const acted = await db.runTransaction(async (tx) => {
-              const [freshM, freshE] = await Promise.all([tx.get(mRef), tx.get(entryDoc.ref)]);
+              // 🛑 THE OWNER'S WHOLE ENTRY SET IS READ, NOT JUST THE ONE THAT
+              // TRIGGERED THIS (PLAN-MULTI-ENTRY-DUES D1a writer #5, P2-T7).
+              //
+              // This is the writer the plan named as "the one that will be
+              // missed": it runs from the Operations panel, sits in no hot path,
+              // and nothing exercises it in normal testing. Under per-entry dues
+              // it cannot promote a member on the evidence of ONE entry —
+              // `paidStatus` is now DERIVED from the per-entry map, so writing
+              // the summary without the map means the next writer recomputes it
+              // from a map that never heard about this payment and UN-PAYS what
+              // this just paid.
+              //
+              // A single entry document also cannot answer "which entries is
+              // this member liable for", which is what the derivation needs. So
+              // the owner's entries come along, in the same transaction, before
+              // any write.
+              const ownedQuery = doc.ref.collection('entries').where('ownerUid', '==', uid);
+              // 🛑 AND THE LEGACY PRIMARY, ALWAYS (codex r9, P1).
+              //
+              // `entries/{uid}` predates `ownerUid` and can carry none, so the
+              // query above MISSES it. Folding it in only when it happens to be
+              // the TRIGGERING document is not enough: promoting a paid EXTRA
+              // entry (`e2:uid`) would then derive liability from a set that
+              // omits the member's unpaid primary pick, and with a stale
+              // `playableEntryCount` of 1 the derivation returns PAID on the
+              // evidence of one fee. `setPaidStatus` reads it unconditionally,
+              // and a migration that derives from a smaller liability set than
+              // the authoritative path writes a paid status that path would
+              // never have written.
+              const primaryRef = doc.ref.collection('entries').doc(uid);
+              const [freshM, freshE, ownedSnap, primarySnap, storedDues] = await Promise.all([
+                tx.get(mRef),
+                tx.get(entryDoc.ref),
+                tx.get(ownedQuery),
+                tx.get(primaryRef),
+                readPoolDues(tx, doc.ref, uid),
+              ]);
               const fm: any = freshM.data();
               const fe: any = freshE.data();
               if (!freshM.exists || fe?.paidStatus !== 'PAID' || fm?.paidStatus === 'PAID') return false;
+              // 🛑 AND THE DUES ROW, RE-READ IN THIS TRANSACTION (codex r7, P1).
+              //
+              // The page-level gate above cannot see a commissioner who marks
+              // THIS entry paid between the page read and this transaction.
+              // Under per-entry dues that write leaves the member `UNPAID` —
+              // correctly, because another entry is still unpaid — so every
+              // check above still passes, and this would rewrite the row and
+              // append a SECOND `MARKED_PAID` for one payment. A duplicated
+              // money event in the participant-readable ledger is worse than
+              // the divergence being repaired.
+              //
+              // Before T7 this race was unreachable: the concurrent write set
+              // the member to `PAID`, and `fm?.paidStatus === 'PAID'` caught it.
+              // Deriving the summary is what re-opened it.
+              // The owner's picked entries — the same input `ownerStateAfter`
+              // hands the submit path, rebuilt here from the documents this
+              // transaction just read. The legacy `entries/{uid}` doc can carry
+              // no `ownerUid` and so miss the query; it IS this entry when the
+              // ids match, so it is folded in.
+              const pickedIds = ownedSnap.docs.filter(d => entryHasPick(d.data())).map(d => d.id);
+              // The legacy primary, whether or not it is the triggering doc.
+              if (primarySnap.exists && !pickedIds.includes(uid)
+                  && entryHasPick(primarySnap.data() as Record<string, unknown>)) {
+                pickedIds.push(uid);
+              }
+              const liable = liableEntryIds(fm as MemberRecord, uid, pickedIds);
+
+              // 🛑 NEVER RECORD MONEY AGAINST A NON-LIABLE ENTRY (codex r8, P2).
+              //
+              // Liability is "this entry has committed a pick". A legacy entry
+              // marked PAID that never picked is NOT in `liable`, and
+              // `setPaidStatus` refuses that exact id with `ENTRY_NOT_FOUND`.
+              // Writing a dues row and a MARKED_PAID event for it would put a
+              // payment on the ledger that the authoritative path would have
+              // rejected — and it cannot help, because `derivePaidStatus` only
+              // ever consults the liable ids, so the row could never make the
+              // member paid. Reported, not written.
+              if (!liable.includes(entryDoc.id)) return 'NOT_LIABLE';
+
+              // The race guard, staleness-aware for the same reason the page
+              // gate is (codex r7 for the guard, r8 for the staleness limb): a
+              // dues row written between the page read and here means the
+              // payment is already recorded, so re-recording it would append a
+              // SECOND MARKED_PAID for one payment. But if that row completed
+              // the member's liability, the summary is stale and the write
+              // below is exactly what should happen — so only bail when the
+              // derivation still says UNPAID.
+              if (storedDues && isPaidRow(storedDues, entryDoc.id)
+                  && derivePaidStatus({ ...(fm as MemberRecord), paidEntries: storedDues }, liable) !== 'PAID') {
+                return false;
+              }
+
+              // 🛑 IS THE PAYMENT ALREADY RECORDED? (codex round 11.)
+              //
+              // The `staleFullyPaid` path deliberately reaches this transaction
+              // with the dues row for THIS entry already present — that is what
+              // it means: the map is right and only the member's summary
+              // `paidStatus` fell behind. There is nothing to record, because
+              // whatever wrote that row (`setPaidStatus`, or an earlier run of
+              // this migration) also wrote its ledger event.
+              //
+              // Falling through to the write below would append a SECOND
+              // `MARKED_PAID` for one payment — a duplicated money event in the
+              // participant-readable ledger, which the r7 guard a few lines up
+              // calls "worse than the divergence being repaired." It would also
+              // overwrite the row's original `paidAt`/`method`/`note` with the
+              // entry doc's, quietly losing what the commissioner recorded.
+              //
+              // So a stale summary is repaired by writing the SUMMARY ONLY.
+              const alreadyRecorded = Boolean(storedDues) && isPaidRow(storedDues as PaidEntryMap, entryDoc.id);
+
+              // The entry that triggered this is marked paid; everything the
+              // member already had is kept. The legacy shape (no dues document)
+              // starts from empty — this member has no per-entry history, which
+              // is exactly the pre-P1 world this migration exists to repair.
+              const nextDues: PaidEntryMap = { ...(storedDues ?? {}) };
+              nextDues[entryDoc.id] = {
+                ...(typeof fe.paidAt === 'number' ? { paidAt: fe.paidAt } : {}),
+                ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod ? { method: fe.paymentMethod } : {}),
+                ...(typeof fe.paymentNote === 'string' && fe.paymentNote ? { note: fe.paymentNote.slice(0, 500) } : {}),
+              };
+              const derived = derivePaidStatus({ ...(fm as MemberRecord), paidEntries: nextDues }, liable);
               // Same field conventions as setPaidStatus's authoritative PAID write.
               const stampedPaidAt = typeof fe.paidAt === 'number' ? fe.paidAt : Date.now();
+
+              // THE STALE-SUMMARY REPAIR: the summary, and nothing else. No
+              // ledger row (the payment is already on it), and no dues rewrite
+              // (the stored row is the original and outranks the entry doc's
+              // copy of it). See `alreadyRecorded` above.
+              if (alreadyRecorded) {
+                tx.set(mRef, {
+                  paidStatus: derived,
+                  // The count rides along on the repair: this member's summary
+                  // was stale, and an un-stamped `paidEntryCount` beside it is
+                  // the same staleness in the field the money surfaces read.
+                  paidEntryCount: paidEntryCountOf(nextDues, liable),
+                }, { merge: true });
+                return 'SUMMARY_ONLY';
+              }
+              // ⚠️ THE DERIVED SUMMARY, NOT A LITERAL `'PAID'`. Promoting a
+              // member whose OTHER liable entries were never paid would be the
+              // money lie per-entry dues exists to remove — the commissioner
+              // marked ONE entry paid pre-P1, and that is all this knows. When
+              // the member does turn out to be paid in full, `derived` is
+              // `'PAID'` and the behaviour is unchanged from before this ticket.
               tx.set(mRef, {
-                paidStatus: 'PAID',
+                paidStatus: derived,
+                // D1 writer #3, same transaction as `writePoolDues` below.
+                paidEntryCount: paidEntryCountOf(nextDues, liable),
                 paidAt: stampedPaidAt,
                 paidBy: actorUid,
                 ...(typeof fe.paymentMethod === 'string' && fe.paymentMethod
@@ -235,12 +593,24 @@ export const reconcilePaymentTruth = validated(
                 createdAt: FieldValue.serverTimestamp(),
                 note: noteParts.join(' — '),
               });
+              writePoolDues(tx, doc.ref, poolId, uid, nextDues, Date.now());
               return true;
             });
-            if (acted) { report.membersPromoted++; changedThisPool++; }
+            if (acted === 'NOT_LIABLE') {
+              // Reached only when the entry LOST its liability between the page
+              // read and this transaction — the page-level test above already
+              // filtered the settled case, and wrote the report line for it.
+              // Counted once, here, because the page level did not (codex r9).
+              report.entriesPaidNotLiable++;
+              notedFix(poolId, uid, 'NOT_LIABLE_SKIPPED');
+            } else if (acted === 'SUMMARY_ONLY') {
+              // The flag was repaired; no money was recorded and none needed to be.
+              report.staleSummariesRepaired++; changedThisPool++;
+            } else if (acted) { report.membersPromoted++; changedThisPool++; }
             else report.alreadyConsistent++; // raced with a live setPaidStatus
           } else {
-            report.membersPromoted++;
+            if (staleFullyPaid) report.staleSummariesRepaired++;
+            else report.membersPromoted++;
             changedThisPool++;
           }
         } else if (memberPaid && !entryPaid) {

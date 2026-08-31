@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import type { Firestore } from "firebase-admin/firestore";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { isSimPool } from "./shared/testPool";
+import { seasonHistoryDocIdFor } from "./shared/multiEntry";
 import { sortMarginLeaderboard } from "./nflScoringEngine";
 import { recomputeUserProfile } from "./userProfile";
 import { writeAdminAudit } from "./lib/adminAudit";
@@ -11,6 +12,7 @@ import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 import { fencedWrite, withScoringLease, type ScoringFence } from "./lib/scoringLease";
 import { isVoidedPool } from "./lib/autoScoreDecisions";
 import { isTerminalGame } from "./lib/weekCompletion";
+import { computeSeasonPrizeSnapshot, priceSeasonPlaces, type SeasonPlace, type SeasonPrizeSnapshot } from "./shared/seasonPrizes";
 
 /**
  * Season Finalization (ADR 0005 decision 2 / PLAN-PLAYER-PROFILES Phase 3).
@@ -156,31 +158,49 @@ async function isSeasonComplete(db: Firestore, pool: any): Promise<Completeness>
   return assessSeasonCompleteness(games, pool.scoredWeeks || {}, Date.now());
 }
 
-/** Competition ranking (ties share a rank) over a desc-sorted score list. */
-function competitionRanks<T>(sorted: T[], scoreOf: (e: T) => number): Map<T, number> {
+/** Σ weeklyResults[*].correct — the Pick'em season-tie discriminator (§2c). */
+function pickemCorrect(e: any): number {
+  const wr = Object.values((e as NFLPickemEntry).weeklyResults || {}) as Array<{ correct?: number }>;
+  return wr.reduce((s, w) => s + (w.correct || 0), 0);
+}
+
+/**
+ * Competition ranking over a list already sorted by the cascade: two adjacent
+ * rows SHARE a rank when every key of the cascade is equal, the next rank skips.
+ */
+function cascadeRanks<T>(sorted: T[], keys: Array<(e: T) => number>): Map<T, number> {
   const ranks = new Map<T, number>();
   sorted.forEach((e, idx) => {
     const prev = idx > 0 ? sorted[idx - 1] : null;
-    ranks.set(e, prev && scoreOf(e) === scoreOf(prev) ? (ranks.get(prev) as number) : idx + 1);
+    ranks.set(e, prev && keys.every(k => k(e) === k(prev)) ? (ranks.get(prev) as number) : idx + 1);
   });
   return ranks;
 }
 
 /**
  * Final ranks + type-specific record per entry. Pure given the entries array.
- * - Pickem: totalScore desc, ties share rank
+ * Season-prize ties break on the §2c cascade (PLAN-WEEKLY-PRIZES, D4) and
+ * residual ties SHARE a rank so the prize splits (§4):
+ * - Pickem: totalScore desc → Σ correct picks desc (a real discriminator only in
+ *   confidence mode; in standard scoring points ARE the correct count) → share
  * - Survivor: ALIVE entries rank 1 (co-champions), then eliminated by
  *   eliminatedWeek desc (lasted longer = better), strikes asc as tiebreak
- * - Margin: the existing 5-level sortMarginLeaderboard cascade, ties do not share
- *   (the cascade is deterministic through uid)
+ * - Margin: the standings cascade IN FULL AND IN ORDER — seasonTotal desc →
+ *   negativeBurden asc → positiveWeeks desc → bestWeek desc → share. The uid
+ *   fallback in `sortMarginLeaderboard` orders the rows but never separates a
+ *   rank: a prize order that contradicts the visible standings is the worst
+ *   outcome, and the standings show those four keys.
  */
 export function computeFinalRanks(
   poolType: string,
   entries: any[],
 ): Array<{ entry: any; rank: number; record: Record<string, number | boolean | null>; points: number | null }> {
   if (poolType === 'NFL_PICKEM') {
-    const sorted = [...entries].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
-    const ranks = competitionRanks(sorted, e => e.totalScore || 0);
+    const sorted = [...entries].sort((a, b) =>
+      (b.totalScore || 0) - (a.totalScore || 0) ||
+      pickemCorrect(b) - pickemCorrect(a) ||
+      String(a.ownerUid ?? a.id).localeCompare(String(b.ownerUid ?? b.id)));
+    const ranks = cascadeRanks(sorted, [e => e.totalScore || 0, pickemCorrect]);
     return sorted.map(e => {
       const wr = Object.values((e as NFLPickemEntry).weeklyResults || {}) as Array<{ correct?: number; total?: number }>;
       const correct = wr.reduce((s, w) => s + (w.correct || 0), 0);
@@ -211,9 +231,12 @@ export function computeFinalRanks(
   }
   if (poolType === 'NFL_MARGIN') {
     const ranked = sortMarginLeaderboard(entries as MarginEntry[]);
-    return ranked.map((e, idx) => ({
+    const ranks = cascadeRanks(ranked, [
+      e => e.seasonTotal ?? 0, e => e.negativeBurden ?? 0, e => e.positiveWeeks ?? 0, e => e.bestWeek ?? 0,
+    ]);
+    return ranked.map((e) => ({
       entry: e,
-      rank: idx + 1,
+      rank: ranks.get(e) as number,
       record: { seasonTotal: e.seasonTotal ?? 0 },
       points: e.seasonTotal ?? 0,
     }));
@@ -245,6 +268,63 @@ function recordOfSurvivor(e: any): Record<string, number | boolean | null> {
  * Existing importers (nflAutoScore, nflLockWatch, the sweep below) keep this path.
  */
 export { isSimPool };
+
+/**
+ * What the POOL doc carries for the season places and prize at finalization
+ * (PLAN-WEEKLY-PRIZES step 3 — the season half of §3b-i/§4), computed from the
+ * pool doc AS READ IN THE FINALIZE TRANSACTION (`freshPool`), never the
+ * pre-lease snapshot. Never throws: a malformed place list (duplicate ranks,
+ * >100 %) publishes the ranking with `seasonPlacesError` and no prize —
+ * fail-closed, same as the weekly publication (§9 A5).
+ *
+ * `frozen`: an existing `seasonPrize` on the pool — a snapshot or `null`
+ * (published unpriced) — is reused verbatim; `undefined` = compute now.
+ * Finalization is terminal so this runs once per pool in practice; the reuse
+ * rule keeps a sim/re-run from re-pricing.
+ */
+export function seasonPlacesPublication(
+  freshPool: any,
+  ranked: ReadonlyArray<{ entry: any; rank: number; points: number | null }>,
+  entryDocCount: number,
+): { seasonPlaces: SeasonPlace[]; seasonPrize?: SeasonPrizeSnapshot | null; seasonPlacesError?: string } {
+  const rows: SeasonPlace[] = ranked
+    .filter(r => r.entry?.ownerUid || r.entry?.id)
+    .map(r => ({
+      entryId: String(r.entry.id ?? r.entry.ownerUid),
+      userId: String(r.entry.ownerUid ?? r.entry.id),
+      userName: String(r.entry.userName ?? r.entry.ownerUid ?? ''),
+      ...(r.entry.entryName ? { entryName: String(r.entry.entryName) } : {}),
+      rank: r.rank,
+      points: r.points,
+    }));
+  try {
+    const frozen: SeasonPrizeSnapshot | null | undefined = freshPool?.seasonPrize;
+    let snapshot: SeasonPrizeSnapshot | null | undefined = frozen;
+    if (snapshot === undefined) {
+      const entryCount = Number.isInteger(freshPool?.entryCount) && freshPool.entryCount >= 0 ? freshPool.entryCount : entryDocCount;
+      snapshot = computeSeasonPrizeSnapshot(freshPool?.settings ?? {}, entryCount, Date.now()) ?? null;
+    }
+    if (snapshot === null) return { seasonPlaces: rows, seasonPrize: null };
+    const priced = priceSeasonPlaces(rows, snapshot);
+    return { seasonPlaces: priced.rows, seasonPrize: snapshot };
+  } catch (e) {
+    const code = e instanceof Error ? (e.message.split(':')[0] || 'SEASON_PLACES_ERROR') : 'SEASON_PLACES_ERROR';
+    return { seasonPlaces: rows, seasonPlacesError: code };
+  }
+}
+
+/**
+ * Thin wrapper over `seasonHistoryDocIdFor` that reads the index off the entry
+ * document (PLAN-MULTI-ENTRY D9). `entryIndex` is absent on every
+ * pre-multi-entry entry, which is exactly entry #1 — the `?? 1` default is the
+ * legacy answer, not a guess.
+ */
+export function seasonHistoryDocId(
+  poolId: string,
+  entry: { entryIndex?: unknown },
+): string {
+  return seasonHistoryDocIdFor(poolId, typeof entry.entryIndex === 'number' ? entry.entryIndex : undefined);
+}
 
 export async function maybeFinalizeNFLPool(
   db: Firestore,
@@ -304,9 +384,13 @@ export async function maybeFinalizeNFLPool(
   for (const { entry, rank, record, points } of ranked) {
     if (!entry.ownerUid) continue;
     staged.push([
-      db.collection('users').doc(entry.ownerUid).collection('seasonHistory').doc(poolId),
+      db.collection('users').doc(entry.ownerUid).collection('seasonHistory').doc(seasonHistoryDocId(poolId, entry)),
       {
         poolId,
+        // 🛑 THE ENTRY THIS HISTORY ROW IS ABOUT (PLAN-MULTI-ENTRY D9).
+        // Readers query by FIELD, never by parsing the document id — the id is
+        // a uniqueness device, this is the fact.
+        entryId: String(entry.id ?? entry.ownerUid),
         poolName: pool.name || '',
         poolType: pool.type,
         season,
@@ -327,20 +411,39 @@ export async function maybeFinalizeNFLPool(
     finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
     ...(pool.firstFinalizedAt ? {} : { firstFinalizedAt: admin.firestore.FieldValue.serverTimestamp() }),
   };
+  // Season Places + frozen season prize ride the same write as `finalizedAt`
+  // (PLAN-WEEKLY-PRIZES step 3): derived from the pool AS READ IN THE FENCED
+  // TRANSACTION so a settings edit racing the finalize is frozen in or out,
+  // never half-seen. `seasonPlacesError` is only ever SET here (fail-closed);
+  // a clean publication clears any earlier one.
+  const seasonPatch = (freshPool: any) => {
+    const pub = seasonPlacesPublication(freshPool ?? pool, ranked, entries.length);
+    return {
+      seasonPlaces: pub.seasonPlaces,
+      ...(pub.seasonPrize !== undefined ? { seasonPrize: pub.seasonPrize } : {}),
+      seasonPlacesError: pub.seasonPlacesError ?? admin.firestore.FieldValue.delete(),
+    };
+  };
   if (fence) {
-    await fencedWrite(db, poolRef, fence, () => {}, finalizeStamp);
+    await fencedWrite(db, poolRef, fence, (_tx, poolData) => seasonPatch(poolData), finalizeStamp);
   } else {
-    await poolRef.update(finalizeStamp);
+    await poolRef.update({ ...finalizeStamp, ...seasonPatch(pool) });
   }
 
   // Refresh each member's public profile projection (bounded by pool size;
   // best-effort per member so one bad profile never blocks the rest).
-  for (const { entry } of ranked) {
-    if (!entry.ownerUid) continue;
+  //
+  // DEDUPED BY OWNER (PLAN-MULTI-ENTRY D9): the profile is a per-PERSON
+  // aggregate across every entry they hold, so a two-entry player would
+  // otherwise be recomputed twice from identical inputs — the same document
+  // written twice, and on a pool where several members hold several entries the
+  // cost is multiplied for no changed byte.
+  const owners = [...new Set(ranked.map(r => r.entry?.ownerUid).filter((u): u is string => !!u))];
+  for (const ownerUid of owners) {
     try {
-      await recomputeUserProfile(db, entry.ownerUid);
+      await recomputeUserProfile(db, ownerUid);
     } catch (e) {
-      console.warn(`[finalizeNFLPool] profile recompute failed for ${entry.ownerUid}:`, e);
+      console.warn(`[finalizeNFLPool] profile recompute failed for ${ownerUid}:`, e);
     }
   }
 

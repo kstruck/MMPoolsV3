@@ -3,6 +3,7 @@ import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2, X }
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PoolBilling, BillingStatus } from '../../types';
 import { isHostingBannerDismissed, dismissHostingBanner } from './hostingBannerDismissal';
+import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from '@shared/freePlanCap';
 
 interface BillingGateProps {
   pool: { billing?: PoolBilling; [key: string]: any };
@@ -37,6 +38,16 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 }) => {
   const billing = pool.billing;
   const status: BillingStatus = billing?.status ?? 'free';
+
+  /**
+   * Every commissioner CTA here carries the pool it is about
+   * (PLAN-WIZARD-BUYFLOW-FIXES T3). A bare `/pricing` made the commissioner
+   * re-find and re-select their own pool on the upgrade page — and the free /
+   * grace / locked banners are the moments where that dead end costs the most.
+   * `PricingPage` has read `?poolId=` since it shipped; nothing ever sent it.
+   */
+  const poolId = typeof pool?.id === 'string' ? pool.id : '';
+  const pricingHref = poolId ? `/pricing?poolId=${encodeURIComponent(poolId)}` : '/pricing';
 
   const trialDaysLeft = useMemo(
     () => getDaysRemaining(billing?.trialEndsAt),
@@ -263,8 +274,11 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       count = pool.entryCount || 0;
     }
 
-    const isLocked = count >= 10;
-    const isApproaching = count >= 8 && count < 10;
+    // The SAME constants the join gate enforces and the wizard promises
+    // (shared/freePlanCap.ts) — a banner counting to a different number than
+    // the gate would be the contradiction this centralisation exists to stop.
+    const isLocked = count >= FREE_PLAN_PARTICIPANT_CAP;
+    const isApproaching = count >= FREE_PLAN_WARNING_AT && count < FREE_PLAN_PARTICIPANT_CAP;
 
     let bannerBg = 'linear-gradient(135deg, rgba(30,41,59,0.4) 0%, rgba(15,23,42,0.5) 100%)';
     let bannerBorder = '1px solid rgba(51,65,85,0.3)';
@@ -272,8 +286,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     let badgeBorder = '1px solid rgba(51,65,85,0.25)';
     let textColor = '#cbd5e1';
     let titleColor = '#94a3b8';
-    let titleText = `Participants: ${count}/10 (Free Plan)`;
-    let descText = 'Upgrade to Premium to allow more than 10 participants.';
+    let titleText = `Participants: ${count}/${FREE_PLAN_PARTICIPANT_CAP} (Free Plan)`;
+    let descText = `Upgrade to Premium to allow more than ${FREE_PLAN_PARTICIPANT_CAP} participants.`;
 
     if (isLocked) {
       bannerBg = 'linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.15) 100%)';
@@ -282,7 +296,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       badgeBorder = '1px solid rgba(239,68,68,0.35)';
       textColor = '#fca5a5';
       titleColor = '#f87171';
-      titleText = 'Participant entries locked! (10/10 reached)';
+      titleText = `Participant entries locked! (${FREE_PLAN_PARTICIPANT_CAP}/${FREE_PLAN_PARTICIPANT_CAP} reached)`;
       descText = 'Upgrade to Premium now to unlock the pool and allow new entries to join.';
     } else if (isApproaching) {
       bannerBg = 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(217,119,6,0.14) 100%)';
@@ -291,8 +305,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
       badgeBorder = '1px solid rgba(245,158,11,0.35)';
       textColor = '#fde68a';
       titleColor = '#fbbf24';
-      titleText = `Participants: ${count}/10 (Free Plan Limit Approaching)`;
-      descText = 'Upgrade to Premium to avoid locking entries once the 10-player limit is hit.';
+      titleText = `Participants: ${count}/${FREE_PLAN_PARTICIPANT_CAP} (Free Plan Limit Approaching)`;
+      descText = `Upgrade to Premium to avoid locking entries once the ${FREE_PLAN_PARTICIPANT_CAP}-player limit is hit.`;
     }
 
     return (
@@ -359,7 +373,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -460,14 +474,25 @@ export const BillingGate: React.FC<BillingGateProps> = ({
                   fontWeight: 700,
                 }}
               >
-                Upgrade to keep full access after your trial period.
+                {/* T7 — "upgrade to keep full access" told the commissioner
+                    nothing about WHEN, or whether a card was about to be
+                    charged. Nothing charges automatically: there is no card on
+                    file, which is the fact that stops a trial banner reading
+                    like a countdown to a debit. */}
+                {/* Addressed by ROLE, like the grace and locked banners already
+                    are (codex [P2]). This banner renders for everyone but the
+                    pay CTA is commissioner-only, so second-person "you pay"
+                    told a member to take an action they cannot take. */}
+                {isCommissioner
+                  ? 'Nothing is charged automatically. When the trial ends you get a short grace period to pay; after that the pool locks until you do.'
+                  : 'Your picks and standings are safe. When the trial ends the commissioner has a short grace period to pay; after that the pool pauses until they do.'}
               </p>
             </div>
           </div>
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -573,7 +598,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
 
           {isCommissioner && (
             <a
-              href="/pricing"
+              href={pricingHref}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -704,7 +729,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
             {/* CTA */}
             {isCommissioner ? (
               <a
-                href="/pricing"
+                href={pricingHref}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

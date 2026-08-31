@@ -7,6 +7,7 @@
  */
 
 import { z } from "zod";
+import { MAX_ENTRIES_PER_USER_CAP } from "../shared/multiEntry";
 
 const poolId = z.string().trim().min(1).max(200);
 /** Mirrors the old assertReason hand check: 3-200 chars after trim. */
@@ -31,6 +32,8 @@ export const proxyPickSchema = z.strictObject({
     poolId,
     week,
     targetUid: z.string().trim().min(1).max(200),
+    /** PLAN-MULTI-ENTRY T2 — which of the target's entries (1..max, default 1). */
+    entryIndex: z.number().int().min(1).max(MAX_ENTRIES_PER_USER_CAP).optional(),
     picks: z
         .record(z.string().min(1).max(100), z.string().min(1).max(100))
         .refine((o) => Object.keys(o).length <= 50, { message: "too many picks" }),

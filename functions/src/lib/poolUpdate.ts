@@ -9,7 +9,10 @@ import {
   isGroupEditable,
 } from '../shared/editability';
 import { writePaymentHandles, CLEAR, LEGACY_TOP_LEVEL_HANDLE_KEYS } from '../shared/paymentHandles';
+import { isPinnableMessageId } from '../shared/pinnedMessage';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
+import { MAX_TEAM_USES } from '../shared/survivorReuse';
+import { MAX_ENTRIES_PER_USER_CAP } from '../shared/multiEntry';
 
 export interface PoolSettingsUpdatePlan {
   // Fields to set on the pool doc.
@@ -40,6 +43,15 @@ export function buildPoolSettingsUpdate(
     }
     if (!isGroupEditable(phase, group)) {
       rejected.push(`${key} (${group} is locked while the pool is ${phase})`);
+      continue;
+    }
+    // The matrix decides which KEYS may be written; it says nothing about their
+    // values. `pinnedMessageId` is the one key here whose value becomes a
+    // Firestore PATH SEGMENT on the client, and an id containing `/` (or a
+    // non-string) makes `doc()` throw inside the effect every member runs.
+    // (codex r1 [P2].)
+    if (key === 'pinnedMessageId' && !isPinnableMessageId(value)) {
+      rejected.push(`${key} (not a valid message id)`);
       continue;
     }
     set[key] = value;
@@ -100,6 +112,8 @@ export const LOCK_AFFECTING_SETTINGS_KEYS: readonly string[] =
 
 /** Widest Pick'em buffer we will store: a full day before the first kickoff. */
 const MAX_PICKEM_LOCK_BUFFER_MINUTES = 24 * 60;
+
+
 
 export function touchesLockSettings(patch: Record<string, unknown>): boolean {
   // `flattenSettingsPatch` always expands a `settings` key into dotted paths, so
@@ -184,6 +198,49 @@ export function flattenSettingsPatch(
         continue;
       }
       out['settings.lockBufferMinutes'] = n;
+      continue;
+    }
+    // Survivor parity settings. `updatePoolSettingsSchema.updates` is
+    // `z.record(z.string(), z.unknown())` — permissive, which means these arrive
+    // UNVALIDATED. A negative `maxTeamUses` sliding through would read as
+    // "unlimited" to any `> 0` test, so reject rather than coerce: a mis-set
+    // value must be visible, not silently reinterpreted.
+    if (key === 'tieCountsAs') {
+      if (value !== 'WIN' && value !== 'LOSS') {
+        rejected.push(`settings.tieCountsAs (must be WIN or LOSS)`);
+        continue;
+      }
+      out['settings.tieCountsAs'] = value;
+      continue;
+    }
+    if (key === 'maxTeamUses') {
+      // A NUMBER, not something Number() can chew into one. `Number('')` is 0 —
+      // which is the "unlimited" sentinel — so an empty-string field from some
+      // future form would quietly remove the restriction it was meant to set.
+      // That is the same hazard as the negative value, wearing a different hat.
+      const n = value;
+      // Capped at the number of weeks a season can hold: above that the limit
+      // is indistinguishable from unlimited, which `0` already expresses.
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > MAX_TEAM_USES) {
+        rejected.push(
+          `settings.maxTeamUses (must be a whole number from 0 to ${MAX_TEAM_USES}; 0 means unlimited)`,
+        );
+        continue;
+      }
+      out['settings.maxTeamUses'] = n;
+      continue;
+    }
+    if (key === 'maxEntriesPerUser') {
+      // PLAN-MULTI-ENTRY D8. Same reasoning as maxTeamUses: `updates` arrives
+      // unvalidated, and a coerced value would be silently reinterpreted.
+      // Raise-only is judged in updatePoolSettings' transaction (multiEntryGate);
+      // this is only the shape.
+      const n = value;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > MAX_ENTRIES_PER_USER_CAP) {
+        rejected.push(`settings.maxEntriesPerUser (must be a whole number from 1 to ${MAX_ENTRIES_PER_USER_CAP})`);
+        continue;
+      }
+      out['settings.maxEntriesPerUser'] = n;
       continue;
     }
     out[`settings.${key}`] = value;

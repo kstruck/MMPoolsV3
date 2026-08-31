@@ -7,8 +7,10 @@ import {
   WizardShell, StepBasics, StepFeeAndPayment, StepBranding, StepReminders, LaunchStep,
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, NumberField, Field } from '../fields';
+import { ReadOnlyField, NumberField, Field } from '../fields';
+import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
+import { prefillFromUser } from './profilePrefill';
 import { buildPlayoffPayload } from './buildPlayoffPayload';
 
 // Creates the NFL_PLAYOFFS pool and RESOLVES its poolId (no navigation) for LaunchStep.
@@ -24,16 +26,20 @@ function StepPlayoffDetails() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Playoff details</h3>
       <p className="mb-5 text-sm text-slate-400">Season, lock time, and how each round scores.</p>
-      <TextField name="season" label="Season" placeholder="2025" />
-      <Field label="Lock date &amp; time" htmlFor="lockDate" hint="Picks lock at Wild Card kickoff by default.">
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} helpId="wizard.season" />
+      <Field label="Lock date &amp; time" htmlFor="lockDate" helpId="lockDate">
         <input id="lockDate" type="datetime-local" className={inputCls} {...register('lockDate')} />
       </Field>
       <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Round multipliers</p>
       <div className="grid grid-cols-2 gap-x-4">
-        <NumberField name="settings.scoring.roundMultipliers.WILD_CARD" label="Wild Card" min={0} />
-        <NumberField name="settings.scoring.roundMultipliers.DIVISIONAL" label="Divisional" min={0} />
-        <NumberField name="settings.scoring.roundMultipliers.CONF_CHAMP" label="Conf. Championship" min={0} />
-        <NumberField name="settings.scoring.roundMultipliers.SUPER_BOWL" label="Super Bowl" min={0} />
+        {/* ONE topic for all four (T12). Four boxes are one decision — how
+            steeply a round outweighs the one before it — and four tooltips
+            would be four copies of the same sentence (voice rule 10). None of
+            the four paths is the topic's id, so each names it explicitly. */}
+        <NumberField name="settings.scoring.roundMultipliers.WILD_CARD" helpId="playoff.roundMultipliers" label="Wild Card" min={0} />
+        <NumberField name="settings.scoring.roundMultipliers.DIVISIONAL" helpId="playoff.roundMultipliers" label="Divisional" min={0} />
+        <NumberField name="settings.scoring.roundMultipliers.CONF_CHAMP" helpId="playoff.roundMultipliers" label="Conf. Championship" min={0} />
+        <NumberField name="settings.scoring.roundMultipliers.SUPER_BOWL" helpId="playoff.roundMultipliers" label="Super Bowl" min={0} />
       </div>
     </div>
   );
@@ -42,7 +48,7 @@ function StepPlayoffDetails() {
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_PLAYOFFS',
   name: '', managerName: '', contactEmail: '', isPublic: true,
-  season: '2025', slug: '', lockDate: '',
+  season: CURRENT_SEASON, slug: '', lockDate: '',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
   branding: { logoUrl: '', primaryColor: '', secondaryColor: '' },
@@ -61,9 +67,20 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  // Start from the commissioner's own profile: they are already a signed-in
+  // member, so their name, contact email and payout handles are known.
+  //
+  // Read ONCE, at mount. `useForm({ defaultValues })` in WizardShell does not
+  // re-initialise when this object changes, and that is fine here rather than a
+  // latent bug: App.tsx gates this whole route on `user &&`, so the wizard never
+  // mounts with a null user and there is no late-arriving profile to wait for.
+  // It is also the safe direction — the post-create write-back updates the user
+  // doc, and a shell that DID re-initialise would wipe a half-filled form the
+  // moment that landed. The useMemo is for referential stability, nothing more.
+  const seededDefaults = useMemo(() => ({ ...defaultValues, ...prefillFromUser(user) }), [user]);
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'details', title: 'Playoff details', fields: ['season'], Component: StepPlayoffDetails },
+    { id: 'details', title: 'Playoff details', Component: StepPlayoffDetails },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
     { id: 'branding', title: 'Branding', Component: StepBranding },
@@ -73,6 +90,7 @@ export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: stri
       Component: () => (
         <LaunchStep
           uid={user.id}
+          user={user}
           poolType="NFL_PLAYOFFS"
           feeField="settings.entryFee"
           createPool={createPlayoffPool}
@@ -80,7 +98,7 @@ export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: stri
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
@@ -91,7 +109,7 @@ export function CreatePlayoffPool(props: { user: User; onComplete: (poolId: stri
         poolType="NFL_PLAYOFFS"
         steps={steps}
         schema={playoffCreateInputSchema}
-        defaultValues={defaultValues}
+        defaultValues={seededDefaults}
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {

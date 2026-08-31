@@ -1,3 +1,6 @@
+// FIRST import on purpose: setGlobalOptions only affects v2 functions defined
+// after it runs, and modules evaluate in import order.
+import "./lib/globalOptions";
 import * as admin from "firebase-admin";
 
 if (!admin.apps.length) {
@@ -15,13 +18,16 @@ export { onSystemConfigWritten } from "./systemConfigAudit";
 export { onUserCreated, syncAllUsers } from "./userSync";
 export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail, sendUserEmail } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";
+export { notifyPasswordReset } from "./securityNotices"; // PLAN-AUDIT-AUTH-HARDENING A3
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
 export { autoClosePools } from "./autoClosePools"; // T2: daily stuck-pool close sweep (dry-run + kill-switch)
 export { onPoolLocked, recalculateGlobalStats, recomputeGlobalStatsDaily } from "./statsTrigger";
 export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
-export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds } from "./poolOps";
+export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds, clearLegacyCoManagers } from "./poolOps";
+export { setPoolCoCommissioner } from "./coCommissioners";
 export { backfillPools } from "./backfill";
 export { createBracketPool, publishBracketPool, joinBracketPool } from "./bracketPools";
+export { setPoolPassword, verifyPoolAccess, migratePoolPasswords } from "./poolPassword";
 export { createBracketEntry, updateBracketEntry, submitBracketEntry, deleteBracketEntry, updateEntryPayment, adminUpdateEntryOverrides, adminDeleteEntry } from "./bracketEntries";
 export { markEntryPaidStatus, updateTournamentData } from "./bracketOps";
 export { adminInitTournament, syncBracketTournament, scheduledBracketSync, importTournamentFromESPN, importConferenceTournamentFromESPN, syncPlayInPicks } from "./espnBracket";
@@ -32,7 +38,7 @@ export { joinWaitlist, onSquareReleased } from "./waitlist";
 export { generateTestScenario, validateTestResults, generateTestReport } from "./aiTesting";
 export { setUserRole, setSuperAdminClaim, syncMyClaims, backfillUserRoles } from "./adminClaims";
 export { logAdminAction } from "./adminOps";
-export { adminSaveBillingConfig, adminManageCoupon, adminUpdatePoolBilling, adminAdjustUserCredits } from "./adminBillingOps";
+export { adminSaveBillingConfig, adminManageCoupon, adminUpdatePoolBilling, adminSetPoolFeature, adminAdjustUserCredits } from "./adminBillingOps";
 // Canonical entitlements (Bundles + Pool Credits) — PLAN Phase 4 #14-17.
 export { adminGrantEntitlement, adminRevokeEntitlement, redeemPoolCredit } from "./entitlements";
 // Monetization tab — accounting alerts + coupon templates (PLAN Phase 6 #22-23).
@@ -48,8 +54,17 @@ export { initializeBigEastTournamentHttp, initializeBig12TournamentHttp } from "
 export { scoreBracketEntries, finalizeTournamentPayouts } from "./bracketScoring";
 
 // --- NFL POOLS FUNCTIONS ---
-export { syncNFLScoresJob, importNFLSchedule, lockNFLSpreadsJob, nflDeepScoreSweepJob } from "./nflSchedule";
+export { syncNFLScoresJob, importNFLSchedule, nflDeepScoreSweepJob } from "./nflSchedule";
+// `lockNFLSpreadsJob` keeps its deployed name and moved to nflSpreadFreeze.ts
+// (PLAN-NFL-SPREAD-FREEZE Phase 1) — it now FETCHES the slate and writes
+// nfl_frozen_spreads instead of flipping a flag on whatever was lying around.
+export { lockNFLSpreadsJob, runNFLSpreadFreeze } from "./nflSpreadFreeze";
+export { overrideLockedSpread, nflFrozenSpreadTrigger } from "./nflSpreadOverride";
 export { createNFLPool, joinNFLPool, submitNFLPicks, executeSurvivorRebuy, scoreNFLWeek } from "./nflPools";
+export { renameNFLEntry } from "./nflEntryRename";
+export { deleteNFLEntry } from "./nflEntryDelete";
+export { getPoolDues } from "./nflPoolDues";
+export { getPoolPicks } from "./nflPickReveal";
 // Operator loop (PLAN-NFL-PRESEASON-PILOT A3a): hourly pre-kickoff tripwire that
 // pages ops when a week's spreads aren't all locked. Kill-switch + dry-run gated.
 export { nflLockWatchJob } from "./nflLockWatch";
@@ -112,6 +127,7 @@ export { sendPoolInvites } from "./invites";
 // --- MEMBER RECORD ROSTER (ADR 0003) — additive; writer wiring lands separately ---
 export { setPaidStatus } from "./setPaidStatus";
 export { onMemberRecordWrite, onWinnerWrite, onPoolRosterFieldsChange } from "./rosterAggregate";
+export { backfillFrozenSpreads } from "./migrations/backfillFrozenSpreads";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 export { backfillProfileData } from "./migrations/backfillProfileData";
 export { backfillPublishedWeeks } from "./migrations/backfillPublishedWeeks";
@@ -132,11 +148,14 @@ export { nflFinalizeSweepJob } from "./nflFinalize";
 export { replayFeedSnapshot } from "./feedReplay";
 
 // --- PAYOUT RECORDS (ADR 0005 Phase 4) — commissioner-recorded prize truth ---
-export { recordPoolPayouts } from "./payoutRecords";
+export { recordPoolPayouts, setPayoutSettled } from "./payoutRecords";
 
 // --- SITE AVERAGES — real league-average line for the profile Performance Chart ---
 export { siteAveragesJob, refreshSiteAverages } from "./siteAverages";
 
 // --- EXPERT PROFILES (ADR 0005 Phase 6) — experts rendered through the same projection ---
 export { gradeExpertProfilesJob, refreshExpertProfiles } from "./expertProfiles";
+export { cspReport } from "./cspReport"; // CSP violation sink — bounded collector behind the CSP report-uri/report-to
 
+// --- FIREBASE AUTH BACKUP (PLAN-BACKUPS-PHASE3 item 18) — kill-switched, dry-run-default ---
+export { authBackupJob, runAuthBackup } from "./authBackup";

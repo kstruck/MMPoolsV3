@@ -36,6 +36,8 @@ describe('editability matrix', () => {
     expect(classifyUpdateKey('name')).toBe('basics');
     expect(classifyUpdateKey('venmo')).toBe('paymentHandles');
     expect(classifyUpdateKey('isLocked')).toBe('lifecycle');
+    expect(classifyUpdateKey('isPublic')).toBe('lifecycle');
+    expect(classifyUpdateKey('isListedPublic')).toBe('lifecycle');
     expect(classifyUpdateKey('bogus')).toBeUndefined();
   });
 });
@@ -52,11 +54,96 @@ describe('buildPoolSettingsUpdate', () => {
   it('rejects unknown keys', () => {
     expect(() => buildPoolSettingsUpdate({ status: 'OPEN' }, { billing: { status: 'active' } })).toThrow();
   });
+  /**
+   * The claim `NFLManagerView`'s public-listing fix is built on.
+   *
+   * That toggle sent `settings.isListedPublic` and nothing else, while Browse
+   * (`src/utils/publicListing.ts`) decides an NFL pool's listing from the
+   * TOP-LEVEL `isPublic` — so the toggle wrote a field nothing reads. The fix
+   * sends both halves, which is only safe if this callable accepts the
+   * top-level key and writes it top-level. These pin that.
+   */
+  it('accepts a top-level isPublic and keeps it top-level', () => {
+    const plan = buildPoolSettingsUpdate(
+      { status: 'OPEN' },
+      { isPublic: false, settings: { isListedPublic: false } },
+    );
+    expect(plan.set).toEqual({ isPublic: false, settings: { isListedPublic: false } });
+  });
+
+  it('still accepts isPublic on a LOCKED pool — visibility is lifecycle, not settings', () => {
+    // The blast radius, stated as a test: listing can be turned off after the
+    // pool locks. The settings blob cannot, which is why the manager form's
+    // whole save is refused there — but the classification itself is this.
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { isPublic: false })).not.toThrow();
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { settings: { isListedPublic: false } })).toThrow();
+  });
+
   it('dual-writes legacy handles and clears the absent ones', () => {
     const plan = buildPoolSettingsUpdate({ status: 'OPEN' }, { paymentHandles: { venmo: '@me', googlePay: 'g' } });
     expect(plan.set.paymentHandles).toEqual({ venmo: '@me', googlePay: 'g' });
     expect(plan.set.venmo).toBe('@me');
     expect(plan.clearLegacy.sort()).toEqual(['cashapp', 'paypal', 'zelle']);
+  });
+});
+
+describe('pinnedMessageId — the commissioner pins a post mid-season', () => {
+  /**
+   * Kevin, 2026-08-23: pin a message to the top of the pool home page. The id
+   * lives on the POOL doc rather than as a `pinned` flag on the message, so
+   * `pools/{id}/messages` keeps `allow update: if false`.
+   *
+   * ⚠️ THE LOCKED CASE IS THE POINT. The client rule for a pool update carries
+   * `poolIsEditable()` (DRAFT/OPEN only), so a direct `updateDoc` would be
+   * denied in the middle of a locked season — which is exactly when a pin is
+   * wanted. This callable is the path that works, and this is the assertion that
+   * says so.
+   */
+  it('is accepted while the pool is LOCKED', () => {
+    const plan = buildPoolSettingsUpdate({ isLocked: true }, { pinnedMessageId: 'msg123' });
+    expect(plan.set.pinnedMessageId).toBe('msg123');
+  });
+
+  it('unpins with an empty string, in every phase', () => {
+    for (const pool of [{ status: 'DRAFT' }, { status: 'OPEN' }, { isLocked: true }, { status: 'ARCHIVED' }]) {
+      expect(buildPoolSettingsUpdate(pool, { pinnedMessageId: '' }).set.pinnedMessageId).toBe('');
+    }
+  });
+
+  it('refuses a value that would break the document path (codex r1 [P2])', () => {
+    // The matrix gates KEYS, not values, and this value becomes a path segment
+    // on the client: `doc(db, 'pools', id, 'messages', <this>)` throws for a
+    // slash or a non-string, inside the effect every member of the pool runs.
+    for (const bad of ['a/b', '..', { id: 'x' }, 42, null]) {
+      expect(() => buildPoolSettingsUpdate({ status: 'OPEN' }, { pinnedMessageId: bad })).toThrow();
+    }
+  });
+
+  it('does not unlock anything else on a locked pool', () => {
+    // Discriminating: the new `announcement` group is one key wide.
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { entryFee: 25 })).toThrow();
+    expect(() => buildPoolSettingsUpdate({ isLocked: true }, { pinned: 'msg123' })).toThrow();
+  });
+});
+
+describe('the public-listing payload survives the whole pipeline', () => {
+  it('lands isPublic at the top level and isListedPublic under settings', () => {
+    const { set } = buildPoolSettingsUpdate(
+      { status: 'OPEN' },
+      { isPublic: false, settings: { isListedPublic: false, entryFee: 5 } },
+    );
+    const patch = flattenSettingsPatch(set, 'NFL_PICKEM');
+    expect(patch).toEqual({
+      isPublic: false,
+      'settings.isListedPublic': false,
+      'settings.entryFee': 5,
+    });
+    // The half the old code sent, on its own, never reaches the field Browse
+    // reads — which is the entire defect, asserted rather than described.
+    expect(Object.keys(flattenSettingsPatch(
+      buildPoolSettingsUpdate({ status: 'OPEN' }, { settings: { isListedPublic: false } }).set,
+      'NFL_PICKEM',
+    ))).toEqual(['settings.isListedPublic']);
   });
 });
 
@@ -158,5 +245,28 @@ describe('touchesLockSettings — which saves must serialize with the scoring le
     // Defence against a future caller that skips flattenSettingsPatch: an
     // unexamined settings blob must not be waved through the lease check.
     expect(touchesLockSettings({ settings: { entryFee: 5 } })).toBe(true);
+  });
+});
+
+describe('flattenSettingsPatch — survivor parity settings are validated, not forwarded', () => {
+  // `updatePoolSettingsSchema.updates` is `z.record(z.string(), z.unknown())`, so
+  // whatever a caller sends arrives here unvalidated. The failure this exists to
+  // stop is specific: a NEGATIVE maxTeamUses reads as "unlimited" to any `> 0`
+  // test, which is the opposite of the restriction the manager was tightening.
+  it('passes the legitimate values through', () => {
+    expect(flattenSettingsPatch({ settings: { tieCountsAs: 'WIN', maxTeamUses: 0 } }, 'NFL_SURVIVOR'))
+      .toEqual({ 'settings.tieCountsAs': 'WIN', 'settings.maxTeamUses': 0 });
+  });
+
+  // '' is in this list on purpose: `Number('')` is 0, the unlimited sentinel, so
+  // a coercing guard would turn an empty form field into "no restriction".
+  it.each([-1, 1.5, '2', '', true, NaN, 24, null])('REJECTS maxTeamUses %p rather than coercing it', (value) => {
+    expect(() => flattenSettingsPatch({ settings: { maxTeamUses: value } }, 'NFL_SURVIVOR'))
+      .toThrow(/maxTeamUses/);
+  });
+
+  it.each(['win', 'TIE', '', 1, null])('REJECTS tieCountsAs %p', (value) => {
+    expect(() => flattenSettingsPatch({ settings: { tieCountsAs: value } }, 'NFL_SURVIVOR'))
+      .toThrow(/tieCountsAs/);
   });
 });

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import type { User as UserType, Pool, NFLGame } from '../../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { User as UserType, Pool, NFLGame, BanterMessage } from '../../types';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { useToast } from '../ui/Toast';
@@ -10,13 +10,8 @@ import {
   Activity,
   CheckCircle,
   AlertCircle,
-  Search,
-  DollarSign,
-  X,
-  Edit,
-  Save,
   PartyPopper,
-  Megaphone
+  Sparkles
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -32,7 +27,9 @@ import {
 import { gamesForPoolWeek, weekDeadline, poolSeasonType } from '../../utils/nflPending';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { effectiveBufferMinutesForWeek, usesWeeklyHardLock } from '@shared/weeklyHardLock';
-import { buildPoolRoster, rosterPotStats, outstandingDue, clearingRate, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
+import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutstanding, unsubmittedRoster } from '../../utils/poolRoster';
+import { BanterFeed } from './BanterFeed';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { formatDeadline } from '../../utils/formatTime';
 
 interface NFLManagerBentoDashboardProps {
@@ -43,7 +40,17 @@ interface NFLManagerBentoDashboardProps {
   games: NFLGame[];
   week: number;
   user: UserType | null;
+  /**
+   * uid → games picked this week, from `getPoolPicks`
+   * (PLAN-COMMISSIONER-BLIND-PICKS D1). The commissioner no longer holds other
+   * members' entry documents, so this is now the ONLY source for pick
+   * completeness before the reveal boundary. Undefined while the callable is in
+   * flight, in which case `unsubmittedRoster` falls back to entry inspection.
+   */
+  pickCounts?: Record<string, number>;
   onSelectTab: (tab: 'picks' | 'standings' | 'recaps' | 'rules' | 'manager') => void;
+  /** "View full ledger" opens THE Payment Ledger (Members & Payments) — one ledger, one door (Kevin, 2026-08-16). */
+  onOpenLedger?: () => void;
 }
 
 export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> = ({
@@ -53,40 +60,61 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   games: _games,
   week,
   user: _user,
-  onSelectTab: _onSelectTab
+  pickCounts,
+  onSelectTab: _onSelectTab,
+  onOpenLedger,
 }) => {
   const castPool = pool as any;
   const toast = useToast();
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
-  // Starts EMPTY. It used to be seeded with invented commissioner analysis: a
-  // claim that the current leader had a history of collapsing late in the
-  // season, where the top-player fallback on an empty pool was a mock name
-  // lifted from DevDashboardPreview — so a one-player pool that had never
-  // played a week was shown a scouting report on a rival. Nothing posted here
-  // is persisted (HANDOFF item 8), so an empty feed is the honest start.
+  const [banterBusy, setBanterBusy] = useState<null | 'post' | 'ai'>(null);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
+  const pinnedMessageId = (castPool.pinnedMessageId as string | undefined) ?? '';
+  const [feedError, setFeedError] = useState(false);
+  const aiUnlocked = castPool.billing?.featuresUnlocked?.aiCommissioner === true;
+  // The feed is PERSISTED now (T9). It used to be `useState<string[]>` seeded
+  // with invented commissioner analysis — a claim that the current leader had a
+  // history of collapsing late in the season, where the top-player fallback on
+  // an empty pool was a mock name lifted from DevDashboardPreview, so a
+  // one-player pool that had never played a week was shown a scouting report on
+  // a rival. That is gone twice over: the seed, and the whole local-only store.
+  //
+  // Posts live in `pools/{id}/messages` and every member reads the same feed on
+  // the Overview tab, which is what Kevin asked for ("where are these messages
+  // shown to members?").
   //
   // tests/admin-surface-invariants.test.ts asserts the removed strings are
   // absent from this FILE, comments included. Paraphrase them; never quote them
   // back in, or the guard fails on the explanation of its own defect.
-  const [banterFeed, setBanterFeed] = useState<string[]>([]);
+  const [banterFeed, setBanterFeed] = useState<BanterMessage[]>([]);
+
+  useEffect(() => {
+    if (!pool?.id) return;
+    return dbService.subscribeToPoolFeed(
+      pool.id,
+      (messages) => { setFeedError(false); setBanterFeed(messages); },
+      () => setFeedError(true),
+    );
+  }, [pool?.id]);
+
+  /**
+   * Generation is ASYNCHRONOUS (codex r5 [P2]). "Asked the AI" is an optimistic
+   * toast; if the provider fails, the model returns nothing, or authority was
+   * revoked in between, the request is marked ERROR and no post ever arrives.
+   * Without this the commissioner waits for something that is not coming.
+   */
+  const [lastBanterRequest, setLastBanterRequest] = useState<{ status: string; error?: string; errorDetail?: string } | null>(null);
+  useEffect(() => {
+    if (!pool?.id || !_user?.id) return;
+    return dbService.subscribeToMyBanterRequests(pool.id, _user.id, (reqs) => {
+      setLastBanterRequest(reqs[0] ?? null);
+    });
+  }, [pool?.id, _user?.id]);
 
   const [isNudging, setIsNudging] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [savingLedgerId, setSavingLedgerId] = useState<string | null>(null);
-
-  // Modal State for full payment ledger
-  const [isLedgerOpen, setIsLedgerOpen] = useState(false);
-  const [ledgerSearch, setLedgerSearch] = useState('');
-  const [ledgerFilter, setLedgerFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
-
-  // Local state for editing payment details in ledger
-  // Keyed by member UID, not entry id — the ledger's rows are roster rows now.
-  const [editingUid, setEditingUid] = useState<string | null>(null);
-  const [editPaidStatus, setEditPaidStatus] = useState<'PAID' | 'UNPAID'>('UNPAID');
-  const [editMethod, setEditMethod] = useState('Venmo');
-  const [editDate, setEditDate] = useState('');
-  const [editNote, setEditNote] = useState('');
 
   // Both payment writes go through setPaidStatus — the AUTHORITATIVE path
   // (PLAN-PAYMENT-TRUTH P1 / D13). The old updateEntryPayment callable wrote
@@ -142,28 +170,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     }
   };
 
-  const saveDetailedPayment = async (uid: string, hasMember: boolean) => {
-    setSavingLedgerId(uid);
-    try {
-      const timestamp = editDate ? new Date(editDate).getTime() : Date.now();
-      // Details ride only with PAID; an UNPAID save is a full clear server-side
-      // (the schema refuses details with it — an unpaid member must not display
-      // a payment method and transaction note).
-      await dbService.setPaidStatus(
-        pool.id, uid, editPaidStatus === 'PAID',
-        editPaidStatus === 'PAID'
-          ? { paymentMethod: editMethod, paidAt: timestamp, paymentNote: editNote || null }
-          : undefined,
-      );
-      setEditingUid(null);
-    } catch (err) {
-      console.error("Failed to update detailed payment:", err);
-      toast.error(paymentError(err, hasMember, 'Failed to save the payment details. Please try again.'));
-    } finally {
-      setSavingLedgerId(null);
-    }
-  };
-
   // Roster truth for every money figure and every member row on this card
   // (utils/poolRoster — the same merge the Member Roster panel below uses).
   const roster = useMemo(
@@ -192,6 +198,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       poolType: pool.type,
       week,
       weeklyGameIds: weeklyGames.map(g => g.id),
+      pickCounts,
     }).map(r => ({
       id: r.entry?.id || r.uid,
       uid: r.uid,
@@ -205,7 +212,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
       hasEntry: r.hasEntry,
       hasMember: r.hasMember,
     })),
-    [roster, week, pool.type, weeklyGames],
+    [roster, week, pool.type, weeklyGames, pickCounts],
   );
 
   // 1. Calculations for Pick submissions status — denominator is the ROSTER.
@@ -241,23 +248,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
   // Unpaid members shown on the summary card (MAX 10)
   const dashboardUnpaidPlayers = useMemo(() => unpaidRoster.slice(0, 10), [unpaidRoster]);
-
-  // Filtered roster for the full Payment Ledger Modal
-  const ledgerFilteredPlayers = useMemo(() => {
-    const query = ledgerSearch.toLowerCase();
-    return roster.filter(p => {
-      const matchesSearch =
-        p.displayName.toLowerCase().includes(query) ||
-        (p.email || '').toLowerCase().includes(query) ||
-        (p.paymentNote || '').toLowerCase().includes(query);
-
-      const matchesFilter = ledgerFilter === 'ALL' ||
-                            (ledgerFilter === 'PAID' && p.paidStatus === 'PAID') ||
-                            (ledgerFilter === 'UNPAID' && p.paidStatus !== 'PAID');
-
-      return matchesSearch && matchesFilter;
-    });
-  }, [roster, ledgerSearch, ledgerFilter]);
 
   // The deadline the SERVER actually enforces for this week — and ONLY for pool
   // types that genuinely have one. It used to render a hardcoded sixteen-hour
@@ -324,19 +314,89 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
     }
   };
 
-  const handleSendBanter = (e: React.FormEvent) => {
+  /** Post the commissioner's OWN words, verbatim, under their name. No AI. */
+  const handlePostBanter = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!banterText.trim()) return;
+    const text = banterText.trim();
+    if (!text || banterBusy) return;
+    if (!_user?.id) { toast.error('Sign in to post to your pool.'); return; }
+    setBanterBusy('post');
+    try {
+      await dbService.sendBanterMessage(pool.id, {
+        authorUid: _user.id,
+        authorName: _user.name || 'Commissioner',
+        text,
+        kind: 'COMMISSIONER',
+        timestamp: Date.now(),
+      });
+      setBanterText('');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setBanterBusy(null);
+    }
+  };
 
-    let Prefix = "COMMISSIONER [Savage Mode]: ";
-    if (aiMood === 'professional') Prefix = "COMMISSIONER [Professional]: ";
-    if (aiMood === 'analyst') Prefix = "COMMISSIONER [Data Analyst]: ";
+  /**
+   * Ask the AI to write the post. This goes through the REAL pipeline —
+   * `ai_requests` → `onAIRequest` → Gemini → the same feed — not a local
+   * string. The result arrives through the subscription above, so there is
+   * nothing to await here beyond the request landing.
+   */
+  const handleAskAI = async () => {
+    const prompt = banterText.trim();
+    if (!prompt || banterBusy) return;
+    if (!_user?.id) { toast.error('Sign in to post to your pool.'); return; }
+    setBanterBusy('ai');
+    try {
+      await dbService.requestAIBanter(pool.id, _user.id, prompt, aiMood);
+      setBanterText('');
+      toast.success('Asked the AI Commissioner — the post appears in the feed in a few seconds.');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setBanterBusy(null);
+    }
+  };
 
-    setBanterFeed(prev => [
-      `${Prefix}${banterText}`,
-      ...prev
-    ]);
-    setBanterText('');
+  /**
+   * Pin / unpin, from the same card the commissioner posts and deletes from.
+   *
+   * ⚠️ WRITTEN THROUGH `updatePoolSettings`, NOT a direct `updateDoc`. The pool
+   * document's client update rule carries `poolIsEditable()`, which allows a
+   * manager write only while the pool is DRAFT or OPEN — so a direct write would
+   * fail exactly when pinning is wanted, in the middle of a locked season. The
+   * callable applies `shared/editability.ts` instead, where `announcement` is
+   * editable in every phase.
+   *
+   * `messageId` is '' to unpin. One field means one pinned post: pinning a
+   * second necessarily unpins the first, with nothing to enforce.
+   */
+  const handleTogglePin = async (messageId: string) => {
+    // While unpinning, the row being acted on is the CURRENTLY pinned one — its
+    // id, not the empty string, is what has to show a busy state.
+    setPinningId(messageId || pinnedMessageId || null);
+    try {
+      await dbService.updatePoolSettings(pool.id, { pinnedMessageId: messageId });
+      toast.success(messageId
+        ? 'Pinned to the top of your pool home page.'
+        : 'Unpinned. Nothing sits at the top of the pool home page now.');
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setPinningId(null);
+    }
+  };
+
+  const handleDeleteBanter = async (messageId: string) => {
+    setDeletingMessageId(messageId);
+    try {
+      await dbService.deletePoolMessage(pool.id, messageId);
+    } catch (err) {
+      toast.error(getUserMessage(err));
+    } finally {
+      setDeletingMessageId(null);
+    }
   };
 
   // Submission Health PieChart Data (Recharts)
@@ -496,14 +556,14 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
         <div>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Buy-In Ledger</h3>
-              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Member Financial Tracking</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Buy-ins at a glance</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Full detail in the Payment Ledger</p>
             </div>
             <button
-              onClick={() => setIsLedgerOpen(true)}
+              onClick={onOpenLedger}
               className="bg-navy-800 hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
             >
-              View Full Ledger
+              Open Payment Ledger
             </button>
           </div>
 
@@ -549,7 +609,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 // dues, which settle independently (P3). "Mark Paid" would toggle
                 // them to UNPAID — the opposite of what a commissioner clicking it
                 // wants — and rebuy settlement is a different callable mode
-                // (settleRebuys) that lives on the member roster below. So the row
+                // (settleRebuys) that lives on the Payment Ledger. So the row
                 // names the debt and offers no misleading action.
                 //
                 // This branch is why codex r1's separate "base cleared, rebuy
@@ -580,7 +640,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
                     {baseDuesPaid ? (
                       <span className="font-display font-bold text-[9px] uppercase tracking-[0.08em] text-gold-700 dark:text-gold-400 bg-gold-400/10 border border-gold-500/40 px-2.5 py-1.5 rounded-md text-center leading-tight">
-                        Rebuy dues<br />settle below
+                        Rebuy dues<br />settle in the ledger
                       </span>
                     ) : (
                       <button
@@ -622,27 +682,41 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
         className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
       >
         <div>
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <div>
-              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">AI Commissioner Chat</h3>
-              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Generate custom trash talk banter</p>
+              <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Feed &amp; AI Commissioner</h3>
+              <p className="font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint mt-0.5">Everyone in your pool sees this</p>
             </div>
             <Volume2 size={18} className="text-gold-600 dark:text-gold-400" />
           </div>
 
-          {/* AI Commissioner Mood configurations */}
-          <div className="grid grid-cols-3 gap-2.5 mb-5">
+          {/* T9 - the card explains itself. It used to be three unlabelled mood
+              buttons and one box, under a footer that admitted the whole thing
+              was a local draft nothing kept: a commissioner had no way to know
+              what any of it did, and in fact it did nothing. */}
+          <p className="mb-4 font-body text-xs text-muted leading-relaxed">
+            Write a note to your pool, or describe what you want and let the AI Commissioner write it.
+            Posts appear on every member&rsquo;s pool page. You can delete any post, including the AI&rsquo;s.
+          </p>
+
+          {/* Mood - only affects what the AI writes, so say that. */}
+          <p className="mb-2 font-display font-bold uppercase text-[10px] tracking-[0.08em] text-faint">
+            AI tone
+          </p>
+          <div className="grid grid-cols-3 gap-2.5 mb-4">
             {[
-              { id: 'savage', label: 'Savage', desc: 'Rants & burns', color: 'border-gold-500/50 text-gold-600' },
-              { id: 'professional', label: 'Pro', desc: 'Firm & direct', color: 'border-navy-600/50 text-navy-700' },
-              { id: 'analyst', label: 'Analyst', desc: 'Data & stats', color: 'border-gold-500/50 text-gold-600' }
+              { id: 'savage', label: 'Savage', desc: 'Jokes & roasts' },
+              { id: 'professional', label: 'Pro', desc: 'Firm & direct' },
+              { id: 'analyst', label: 'Analyst', desc: 'Data & stats' }
             ].map(mood => (
               <button
                 key={mood.id}
-                onClick={() => setAiMood(mood.id as any)}
+                type="button"
+                aria-pressed={aiMood === mood.id}
+                onClick={() => setAiMood(mood.id as 'savage' | 'professional' | 'analyst')}
                 className={`text-left p-3.5 rounded-lg border transition-all duration-150 ${
                   aiMood === mood.id
-                    ? `bg-card border-gold-500 shadow-card scale-[1.02]`
+                    ? 'bg-card border-gold-500 shadow-card scale-[1.02]'
                     : 'bg-page border-line opacity-60 hover:opacity-100'
                 }`}
               >
@@ -652,48 +726,106 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             ))}
           </div>
 
-          {/* Live Banter entry feed */}
-          <form onSubmit={handleSendBanter} className="flex gap-2 mb-5">
+          <form onSubmit={handlePostBanter} className="mb-4">
             <input
               type="text"
-              placeholder={`Type a comment or prompt the AI as a ${aiMood} commissioner...`}
+              aria-label="Message or AI prompt"
+              placeholder="Type your own message, or describe what the AI should write..."
               value={banterText}
               onChange={e => setBanterText(e.target.value)}
-              className="flex-1 bg-page border border-line rounded-md px-4 py-3 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
+              maxLength={500}
+              className="w-full bg-page border border-line rounded-md px-4 py-3 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
             />
-            <button
-              type="submit"
-              className="bg-brandred-600 hover:bg-brandred-500 text-white p-3 rounded-md transition-all duration-150 hover:-translate-y-px shadow-red-cta active:scale-95"
-            >
-              <Send size={15} />
-            </button>
+            <div className="flex gap-2 mt-2">
+              {/* Two BUTTONS, not one, because they do different things and the
+                  old single Send button hid that entirely. */}
+              <button
+                type="submit"
+                disabled={!banterText.trim() || banterBusy !== null}
+                className="flex items-center justify-center gap-1.5 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={13} aria-hidden="true" /> {banterBusy === 'post' ? 'Posting...' : 'Post as me'}
+              </button>
+              <button
+                type="button"
+                onClick={handleAskAI}
+                disabled={!banterText.trim() || banterBusy !== null || !aiUnlocked}
+                title={aiUnlocked ? 'The AI writes the post in the selected tone' : 'AI Commissioner is not unlocked on this pool'}
+                className="flex items-center justify-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={13} aria-hidden="true" /> {banterBusy === 'ai' ? 'Asking...' : 'Let AI write it'}
+              </button>
+            </div>
+            {lastBanterRequest?.status === 'ERROR' && (
+              <p className="mt-2 font-body text-[11px] text-brandred-600" role="alert">
+                {lastBanterRequest.error === 'BANTER_NOT_COMMISSIONER'
+                  ? 'Only a commissioner of this pool can have the AI post to the feed.'
+                  : 'The AI could not write that one. Nothing was posted — try again, or post it yourself.'}
+                {/* The provider's own reason, when there is one. A commissioner
+                    cannot act on `API_KEY_HTTP_REFERRER_BLOCKED` — but they can
+                    READ it to you, which is the difference between a screenshot
+                    and a production log pull. Rendered only for a real code, so
+                    an ordinary transient failure still reads as one sentence. */}
+                {lastBanterRequest.errorDetail && lastBanterRequest.errorDetail !== 'UNKNOWN' && (
+                  <span className="block mt-0.5 font-mono text-[10px] text-muted">
+                    Reason: {lastBanterRequest.errorDetail}
+                  </span>
+                )}
+              </p>
+            )}
+            {lastBanterRequest?.status === 'GENERATING' && (
+              <p className="mt-2 font-body text-[11px] text-muted">The AI Commissioner is writing…</p>
+            )}
+            {!aiUnlocked && (
+              /* Honest, and specific: T5 makes a TRIAL unlock the add-ons the
+                 wizard selected, so this now means "not selected / not bought",
+                 not "wait until you pay". */
+              <>
+                <p className="mt-2 font-body text-[11px] text-muted">
+                  AI Commissioner is not switched on for this pool - your own posts still work.
+                </p>
+                {/* C2: the commissioner can buy it here, mid-season, and it
+                    switches on by itself when Stripe confirms - no admin step.
+                    Offered only on an ACTIVE pool: a trial or free pool has no
+                    hosting purchase yet, and the server refuses an add-on
+                    checkout for one. */}
+                {castPool.billing?.status === 'active' && (
+                  <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                )}
+              </>
+            )}
           </form>
 
-          {/* Scrolling Feed of Recent Banters */}
-          <div className="space-y-3 max-h-40 overflow-y-auto pr-1">
-            <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Live banter feed</span>
-            {banterFeed.length === 0 && (
-              <div className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-muted leading-relaxed">
-                Nothing posted yet. Anything you post here is local to this browser tab and is not saved.
-              </div>
-            )}
-            {banterFeed.map((item, idx) => (
-              <div key={idx} className="p-3.5 bg-page border border-line rounded-lg font-body text-xs text-[color:var(--text)] leading-relaxed font-semibold flex items-start gap-2">
-                <Megaphone size={13} className="text-brandred-600 shrink-0 mt-0.5" aria-hidden="true" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
+          <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-2">Pool feed</span>
+          <BanterFeed
+            messages={banterFeed}
+            error={feedError}
+            canDelete
+            onDelete={handleDeleteBanter}
+            deletingId={deletingMessageId}
+            canPin
+            pinnedId={pinnedMessageId}
+            onTogglePin={handleTogglePin}
+            pinningId={pinningId}
+            emptyText="Nothing posted yet. Anything you post here appears on every member's pool page."
+            maxHeightClass="max-h-56"
+          />
+          <p className="mt-2 font-body text-[11px] text-muted">
+            Pin one post to put it at the top of the pool home page, right under the score ticker. Pinning another moves it; the pin button unpins.
+          </p>
         </div>
 
         <div className="mt-6 pt-4 border-t border-line flex justify-between items-center text-[10px]">
-          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Banter engine status</span>
-          {/* This used to claim an active AI moderation capability. There is no AI
-              and no moderation here yet — nothing is sent anywhere (HANDOFF item
-              8). PLAN-BANTER-PANEL makes it real; until then the label says
-              what it actually does. */}
+          <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">Pool feed</span>
+          {/* This used to admit the card kept nothing — the honest label of an
+              unbuilt feature: nothing was persisted and no member ever saw it
+              (HANDOFF item 8). T9 built it, so the label states what is true
+              now. Paraphrased on purpose: tests/ai-commissioner-feed.test.ts
+              asserts the old string is absent from this FILE, comments
+              included, so quoting it back would fail the guard on the
+              explanation of its own fix. */}
           <span className="text-muted font-display font-bold uppercase tracking-[0.08em]">
-            Draft only — not saved
+            {banterFeed.length === 0 ? 'Visible to all members' : `${banterFeed.length} post${banterFeed.length === 1 ? '' : 's'} - visible to all members`}
           </span>
         </div>
       </div>
@@ -717,237 +849,6 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           (pools/{id}/payments) with real timestamps, for the commissioner too.
           A second copy here would be a duplicate reader, so this card is
           removed rather than rebuilt. */}
-
-      {/* FULL FEATURED PAYMENT LEDGER MODAL */}
-      {isLedgerOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-card border border-line rounded-xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-panel flex flex-col text-[color:var(--text)]">
-            {/* Header */}
-            <div className="p-6 border-b border-line flex justify-between items-center bg-surface">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 rounded-lg">
-                  <DollarSign size={20} />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-lg text-[color:var(--text)] uppercase tracking-[0.05em]">Advanced Payment Ledger</h3>
-                  <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-faint mt-0.5">{pool.name} Roster Financials</p>
-                </div>
-              </div>
-              <button
-                onClick={() => { setIsLedgerOpen(false); setEditingUid(null); }}
-                className="p-2 hover:bg-page rounded-md text-muted hover:text-[color:var(--text)] transition-all duration-150"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Sub-Header stats panels & Filters */}
-            <div className="p-6 bg-surface border-b border-line space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                  { title: 'Total Projected', value: `$${pot.expected}`, color: 'text-[color:var(--text)]' },
-                  { title: 'Total Collected', value: `$${pot.collected}`, color: 'text-[#0F7B4A]' },
-                  { title: 'Outstanding Due', value: `$${outstandingDue(pot)}`, color: 'text-gold-600 dark:text-gold-400' },
-                  // Denominator is everyone who JOINED, not everyone with an entry —
-                  // the old figure read 100% on a pool where only the one entry
-                  // holder had paid and three other members had not.
-                  { title: 'Clearing Rate', value: `${clearingRate(pot)}%`, color: 'text-navy-700 dark:text-gold-400' }
-                ].map((stat, idx) => (
-                  <div key={idx} className="bg-page border border-line p-3 rounded-lg text-center">
-                    <span className="font-display font-bold uppercase text-[8px] tracking-[0.08em] text-faint block mb-0.5">{stat.title}</span>
-                    <span className={`font-display font-bold text-sm ${stat.color} num`}>{stat.value}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Filtering & Search Row */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    placeholder="Search player name, email, note..."
-                    value={ledgerSearch}
-                    onChange={(e) => setLedgerSearch(e.target.value)}
-                    className="w-full bg-page border border-line rounded-md py-2.5 px-4 pl-10 font-body text-xs text-[color:var(--text)] placeholder:text-faint focus:ring-1 focus:ring-navy-600 dark:focus:ring-gold-500 focus:outline-none"
-                  />
-                  <Search className="absolute left-3 top-3 text-faint" size={14} />
-                </div>
-
-                <div className="flex gap-1 bg-page p-1 border border-line rounded-md">
-                  {['ALL', 'PAID', 'UNPAID'].map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setLedgerFilter(type as any)}
-                      className={`px-3 py-1.5 rounded-sm text-[9px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 ${
-                        ledgerFilter === type
-                          ? 'bg-navy-800 text-white shadow-card'
-                          : 'text-muted hover:text-[color:var(--text)]'
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Table Area */}
-            <div className="flex-1 overflow-auto p-6">
-              <table className="w-full text-left border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b border-line font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
-                    <th className="pb-3 px-2">Player / Contact</th>
-                    <th className="pb-3 px-2 text-center w-28">Status</th>
-                    <th className="pb-3 px-2 w-32">Method</th>
-                    <th className="pb-3 px-2 w-36">Paid Date</th>
-                    <th className="pb-3 px-2">Transaction ID / Notes</th>
-                    <th className="pb-3 px-2 text-right w-24">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {ledgerFilteredPlayers.length > 0 ? (
-                    ledgerFilteredPlayers.map((player) => {
-                      const rowUid = player.uid;
-                      const isEditing = editingUid === rowUid;
-                      const isPaid = player.paidStatus === 'PAID';
-
-                      return (
-                        <tr key={rowUid} className="hover:bg-page transition-colors duration-150">
-                          {/* Name / Email */}
-                          <td className="py-3 px-2">
-                            <span className="font-display font-bold text-[color:var(--text)] block uppercase">{player.displayName}</span>
-                            <span className="font-body text-[9px] text-faint">{player.email || 'Email not shown here'}</span>
-                          </td>
-
-                          {/* Status */}
-                          <td className="py-3 px-2 text-center">
-                            {isEditing ? (
-                              <select
-                                value={editPaidStatus}
-                                onChange={(e) => setEditPaidStatus(e.target.value as any)}
-                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)] font-bold"
-                              >
-                                <option value="PAID">PAID</option>
-                                <option value="UNPAID">UNPAID</option>
-                              </select>
-                            ) : (
-                              <Badge status={isPaid ? 'paid' : 'unpaid'} className="text-[10px] px-2 py-1">
-                                {player.paidStatus || 'UNPAID'}
-                              </Badge>
-                            )}
-                          </td>
-
-                          {/* Payment Method */}
-                          <td className="py-3 px-2 font-body text-muted font-semibold">
-                            {isEditing ? (
-                              <select
-                                value={editMethod}
-                                onChange={(e) => setEditMethod(e.target.value)}
-                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)]"
-                              >
-                                <option value="Venmo">Venmo</option>
-                                <option value="Zelle">Zelle</option>
-                                <option value="PayPal">PayPal</option>
-                                <option value="Cash">Cash</option>
-                                <option value="Card">Credit Card</option>
-                                <option value="Other">Other</option>
-                              </select>
-                            ) : (
-                              player.paymentMethod || <span className="text-faint italic">N/A</span>
-                            )}
-                          </td>
-
-                          {/* Paid Date */}
-                          <td className="py-3 px-2 font-body text-muted num">
-                            {isEditing ? (
-                              <input
-                                type="date"
-                                value={editDate}
-                                onChange={(e) => setEditDate(e.target.value)}
-                                className="bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)]"
-                              />
-                            ) : (
-                              player.paidAt ? new Date(player.paidAt).toLocaleDateString() : <span className="text-faint italic">N/A</span>
-                            )}
-                          </td>
-
-                          {/* Notes */}
-                          <td className="py-3 px-2 font-body text-muted">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                placeholder="Tx ID or comments..."
-                                value={editNote}
-                                onChange={(e) => setEditNote(e.target.value)}
-                                className="w-full bg-page border border-line rounded-sm px-2 py-1 font-body text-[color:var(--text)] placeholder:text-faint"
-                              />
-                            ) : (
-                              player.paymentNote || <span className="text-faint italic">None</span>
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-3 px-2 text-right">
-                            {isEditing ? (
-                              <div className="flex justify-end gap-1.5">
-                                <button
-                                  onClick={() => saveDetailedPayment(rowUid, player.hasMember)}
-                                  disabled={savingLedgerId === rowUid}
-                                  className="p-1 bg-navy-800 text-white hover:bg-navy-700 rounded-sm transition-all duration-150 disabled:opacity-50"
-                                >
-                                  <Save size={14} />
-                                </button>
-                                <button
-                                  onClick={() => setEditingUid(null)}
-                                  className="p-1 bg-page text-muted border border-line hover:bg-surface rounded-sm transition-all duration-150"
-                                >
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setEditingUid(rowUid);
-                                  setEditPaidStatus(player.paidStatus || 'UNPAID');
-                                  setEditMethod(player.paymentMethod || 'Venmo');
-                                  setEditDate(player.paidAt ? new Date(player.paidAt).toISOString().split('T')[0] : '');
-                                  setEditNote(player.paymentNote || '');
-                                }}
-                                className="p-1 bg-page hover:bg-surface border border-line rounded-sm text-muted hover:text-[color:var(--text)] transition-all duration-150"
-                              >
-                                <Edit size={14} />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={6} className="text-center py-10 text-faint font-body font-bold">
-                        {/* An empty ROSTER and an empty FILTER are different facts. The
-                            old table said "no members matching filter criteria" for
-                            both, which read as a filter problem on a pool that simply
-                            had nobody in it — and, before the roster fix, on pools that
-                            did. */}
-                        {roster.length === 0
-                          ? 'No members have joined this pool yet.'
-                          : 'No members match the current search or filter.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-line bg-surface flex justify-between items-center text-[10px] text-faint font-display font-bold uppercase tracking-[0.08em]">
-              <span>Platform TLS Accreditation: Secure</span>
-              <span>Clearing Ledger Logs v2.4</span>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

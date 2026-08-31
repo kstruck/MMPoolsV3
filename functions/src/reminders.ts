@@ -148,16 +148,46 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 // no new deploy prerequisite. On deploy, SMS reminders start actually going out
 // to members who have a phone number and have opted in. Reverting is deleting
 // this one option — the job keeps working, minus SMS.
+//
+// SIZING (item 14, PLAN-AUDIT-BACKEND-RESIDUE §1): 540s/512MiB. This job had NO
+// explicit sizing, so it ran on the Gen-2 default of 60 SECONDS — and the shape
+// of that failure is the reason the audit named this job specifically. It scans
+// the bounded pool union above and then SENDS email and SMS per pool, so the
+// wall lands mid-send: some members notified, some not, and the only trace is a
+// timeout with no indication that anything was half-delivered.
+// 540s/512MiB is the repo's ceiling for a scan-and-write job — the same values
+// nflFinalizeSweepJob and recomputeGlobalStatsDaily carry. It stays under the
+// 900s cadence gap, so two runs still cannot overlap.
 export const runReminders = functions.scheduler.onSchedule(
-    { schedule: "every 15 minutes", secrets: [courierAuthToken] },
+    { schedule: "every 15 minutes", timeoutSeconds: 540, memory: "512MiB", secrets: [courierAuthToken] },
     withHeartbeat('runReminders', async () => {
     const db = admin.firestore();
     const now = Date.now();
     let failedPools = 0;
     const delivery = newDeliveryTally();
     console.log(`[runReminders] Starting reminder check at ${new Date(now).toISOString()}`);
-    const poolsSnapshot = await db.collection("pools").get();
-    console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check`);
+    // PLAN-AUDIT-SCAN-BOUNDS 1.1: bounded union instead of a full-collection
+    // scan (was 96 × total-pools-ever reads/day). Sweep S1 proves the union
+    // covers every pool the loop does anything with:
+    //  - q1: NFL/bracket/playoff pools are fetched WHOLESALE — NFL reminders
+    //    default ON with no config, the bracket 'locked' trigger is flag-free,
+    //    and checkNFLNonPickerReminders also writes the hard-lock freeze. Do
+    //    NOT narrow q1 to reminder flags.
+    //  - q2/q3: squares/legacy sends each require the explicit enabled flag
+    //    the query matches. A .limit() was rejected: it drops pools silently.
+    const [typePools, paymentPools, lockPools] = await Promise.all([
+        db.collection("pools").where("type", "in",
+            ["NFL_PICKEM", "NFL_SURVIVOR", "NFL_MARGIN", "NFL_PLAYOFFS", "BRACKET"]).get(),
+        db.collection("pools").where("reminders.payment.enabled", "==", true).get(),
+        db.collection("pools").where("reminders.lock.enabled", "==", true).get(),
+    ]);
+    const poolDocsById = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    for (const d of [...typePools.docs, ...paymentPools.docs, ...lockPools.docs]) {
+        if (!poolDocsById.has(d.id)) poolDocsById.set(d.id, d);
+    }
+    const poolsSnapshot = { size: poolDocsById.size, docs: Array.from(poolDocsById.values()) };
+    console.log(`[runReminders] Found ${poolsSnapshot.size} pools to check ` +
+        `(types:${typePools.size} payment:${paymentPools.size} lock:${lockPools.size})`);
 
     // ONE week lookup per (season, seasonType) for the whole run, instead of one
     // per NFL pool. Scoped to this run on purpose — see WeekContextCache.
@@ -288,7 +318,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             // Send SMS if opted in and pool enables SMS
             if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {
                 const smsMessage = `Hi ${recipient.name}, your entry "${recipient.entryName}" in ${pool.name} is Unpaid. Pool locks in < 2 hours!`;
-                recordDelivery(tally, await sendCourierSMS(recipient.phone, smsMessage));
+                recordDelivery(tally, await sendCourierSMS(recipient.phone, smsMessage, 'member'));
             }
         }
 
@@ -754,7 +784,7 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
             }
 
             if (pool.reminders?.smsEnabled && userData.smsOptIn && userData.phone) {
-                recordDelivery(tally, await sendCourierSMS(userData.phone, smsBody));
+                recordDelivery(tally, await sendCourierSMS(userData.phone, smsBody, 'member'));
                 smsSentCount++;
             }
         }

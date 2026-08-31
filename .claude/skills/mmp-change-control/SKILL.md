@@ -47,7 +47,7 @@ Classify FIRST. The gate is determined by blast radius, not effort.
 
 | Class | Definition | Gate required |
 |---|---|---|
-| **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` (**judgement up to 10 rounds; past 10 ask Kevin with a reason** — CLAUDE.md §2c, his ruling 2026-07-27, which replaced the earlier 5-round cap. Stop on evidence — a clean round your own read of the diff agrees with — not on the counter; if you stop with findings still open, name them in the PR body), PR through CI, **AND qodo on the PR — restored 2026-07-30, required on every PR (CLAUDE.md §2b)**. The stopping rule is JOINT: qodo clean AND a codex round clean AND your own read of the diff agrees. "qodo clean" means it REPORTED and every finding is fixed or rejected with reasoning on the PR — not that a fresh pass came back empty; it was observed not re-reviewing after a fix push. **No plan doc.** Own worktree if another session may be active (Rule 4). |
+| **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` (**judgement up to 10 rounds; past 10 ask Kevin with a reason** — CLAUDE.md §2c, his ruling 2026-07-27, which replaced the earlier 5-round cap. Stop on evidence — a clean round your own read of the diff agrees with — not on the counter; if you stop with findings still open, name them in the PR body), PR through CI. **qodo is DORMANT as of 2026-08-19 (Kevin: "Turn off the Qodo reviews for now") — do NOT wait for it and do NOT load `mmp-qodo-cycle`; CLAUDE.md §2b carries the ruling and the held procedure.** So the stopping rule is TWO conditions: a codex round clean AND your own read of the diff agrees. It becomes three again when §2b is restored. "qodo clean" means it REPORTED and every finding is fixed or rejected with reasoning on the PR — not that a fresh pass came back empty; it was observed not re-reviewing after a fix push. **No plan doc.** Own worktree if another session may be active (Rule 4). |
 | **Plan-gated change** | Touches **money, authorization, production data, or scoring** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
 | **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Prod data is itself a Rule-3 trigger, so new code here takes the plan gate too. |
 | **Deploy** | Anything reaching prod: functions, firestore rules/indexes, www frontend | Rule 2 deploy ritual. Frontend additionally requires Kevin (Section 6). |
@@ -525,7 +525,10 @@ Prod state snapshot (owner-confirmed 2026-07-06, overrides any staler doc):
 PR #139 merged (`53d9872`); all Phase 3.1 functions (`onUserCreated`,
 `syncAllUsers`, `searchUsersByEmail`) + `adminHealth` deployed; tightened
 `firestore.rules` deployed functions-first; `searchName` backfill run. Note:
-the Gemini API key was NOT leaked — disregard any doc claiming it was.
+~~the Gemini API key was NOT leaked~~ **CORRECTED 2026-08-23: it WAS leaked.**
+`git show 3340fff0^:.env | grep -c VITE_API_KEY` (count-only — never reprint the value) in the PUBLIC repo shows `VITE_API_KEY` (a Gemini key,
+per the Dockerfile:24 removal note), exposed since 2025-12-13. The 2026-07-06
+owner statement was wrong. Rotation CLOSED 2026-08-24 (Kevin ruling, evidence-verified): the leaked value returns API_KEY_INVALID when tested live, and .env history contains no other private key — the live key ("New MarchMeleePoolsAPI2", Jan 2026) never touched git. Kevin had already rotated; no further action..
 
 ---
 

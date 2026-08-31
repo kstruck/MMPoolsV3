@@ -6,6 +6,7 @@ import { propsCreateInputSchema } from '@shared/schemas';
 import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import { TextField, NumberField, Field } from '../fields';
 import type { WizardStepDef } from '../types';
+import { prefillFromUser } from './profilePrefill';
 import { buildPropsPayload } from './buildPropsPayload';
 
 // Creates the PROPS pool and RESOLVES its poolId (no navigation) for LaunchStep.
@@ -28,8 +29,10 @@ function StepPropsSetup() {
       <p className="mb-5 text-sm text-slate-400">The matchup and the questions players answer.</p>
 
       <div className="grid grid-cols-2 gap-x-4">
-        <TextField name="homeTeam" label="Home team" placeholder="Optional" />
-        <TextField name="awayTeam" label="Away team" placeholder="Optional" />
+        {/* One explanation, two fields (voice rule 10) — both point at the
+            shared `matchup.teams` topic rather than repeating it. */}
+        <TextField name="homeTeam" label="Home team" placeholder="Optional" helpId="matchup.teams" />
+        <TextField name="awayTeam" label="Away team" placeholder="Optional" helpId="matchup.teams" />
       </div>
       <NumberField name="props.maxCards" label="Max cards per player" min={1} />
 
@@ -41,14 +44,14 @@ function StepPropsSetup() {
               <span className="text-xs font-semibold text-slate-400">Question {i + 1}</span>
               <button type="button" onClick={() => remove(i)} className="text-xs font-semibold text-rose-400 hover:text-rose-300">Remove</button>
             </div>
-            <Field label="Prompt" htmlFor={`q-${i}-text`}>
+            <Field label="Prompt" htmlFor={`q-${i}-text`} helpId="props.questions.*.text">
               <input id={`q-${i}-text`} className={inputCls} placeholder="Who wins the coin toss?" {...register(`props.questions.${i}.text`)} />
             </Field>
             <Controller
               control={control}
               name={`props.questions.${i}.options`}
               render={({ field }) => (
-                <Field label="Options (comma-separated, 2–4)" htmlFor={`q-${i}-opts`} hint="e.g. Heads, Tails">
+                <Field label="Options (comma-separated, 2–4)" htmlFor={`q-${i}-opts`} helpId="props.questions.*.options">
                   <input
                     id={`q-${i}-opts`}
                     className={inputCls}
@@ -93,6 +96,17 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreatePropsPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  // Start from the commissioner's own profile: they are already a signed-in
+  // member, so their name, contact email and payout handles are known.
+  //
+  // Read ONCE, at mount. `useForm({ defaultValues })` in WizardShell does not
+  // re-initialise when this object changes, and that is fine here rather than a
+  // latent bug: App.tsx gates this whole route on `user &&`, so the wizard never
+  // mounts with a null user and there is no late-arriving profile to wait for.
+  // It is also the safe direction — the post-create write-back updates the user
+  // doc, and a shell that DID re-initialise would wipe a half-filled form the
+  // moment that landed. The useMemo is for referential stability, nothing more.
+  const seededDefaults = useMemo(() => ({ ...defaultValues, ...prefillFromUser(user) }), [user]);
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
     { id: 'setup', title: 'Props setup', fields: ['props.questions'], Component: StepPropsSetup },
@@ -103,6 +117,7 @@ export function CreatePropsPool(props: { user: User; onComplete: (poolId: string
       Component: () => (
         <LaunchStep
           uid={user.id}
+          user={user}
           poolType="PROPS"
           feeField="props.cost"
           createPool={createPropsPool}
@@ -110,7 +125,7 @@ export function CreatePropsPool(props: { user: User; onComplete: (poolId: string
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
@@ -121,7 +136,7 @@ export function CreatePropsPool(props: { user: User; onComplete: (poolId: string
         poolType="PROPS"
         steps={steps}
         schema={propsCreateInputSchema}
-        defaultValues={defaultValues}
+        defaultValues={seededDefaults}
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {

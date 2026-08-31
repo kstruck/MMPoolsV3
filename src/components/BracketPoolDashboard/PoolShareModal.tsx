@@ -1,3 +1,4 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import React, { useState } from 'react';
 import { X, Copy, Check, Link } from 'lucide-react';
 import { InviteByEmail } from '../InviteByEmail';
@@ -112,7 +113,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
     };
 
     return (
-        <div
+        <OverlayRoot id="pool-share-modal" label="Share this pool" onEscape={onClose}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
         >
@@ -201,6 +202,6 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                     <InviteByEmail poolId={poolId} />
                 </div>
             </div>
-        </div>
+        </OverlayRoot>
     );
 };

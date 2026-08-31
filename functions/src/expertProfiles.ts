@@ -17,6 +17,7 @@ import { EXPERT_SUBJECT_IDS } from "./shared/profile";
 import { buildPublicProfile, type ProfilePoolInput } from "./lib/profileBuild";
 import type { PickSide } from "./expertPicks";
 import { withHeartbeat } from "./lib/heartbeat";
+import { assertCallerRole } from "./lib/assertRole";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -154,11 +155,9 @@ export const gradeExpertProfilesJob = onSchedule(
   }
 }));
 
-/** On-demand (SUPER_ADMIN): grade a specific season now. */
+/** On-demand (SUPER_ADMIN — claim+doc agreement, PLAN-AUDIT-AUTH-HARDENING A1): grade a specific season now. */
 export const refreshExpertProfiles = onCall(async (request) => {
-  if (!request.auth || request.auth.token?.role !== 'SUPER_ADMIN') {
-    throw new HttpsError('permission-denied', 'Super Admin only.');
-  }
+  await assertCallerRole(request, 'SUPER_ADMIN');
   const { season, seasonType } = request.data || {};
   if (!season) throw new HttpsError('invalid-argument', 'season is required.');
   return recomputeExpertProfiles(admin.firestore(), String(season), Number(seasonType || 2));

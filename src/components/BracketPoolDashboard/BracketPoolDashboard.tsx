@@ -1,15 +1,20 @@
+import { OverlayRoot } from '../ui/OverlayRoot';
 import { logger } from '../../utils/logger';
 import { BillingGate } from '../billing';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
+import { HelpRoutePublisher } from '../../help/publish';
+// PLAN-HELP-SYSTEM T6. Direct, not through the `ui` barrel — the barrel does
+// not export it (see `ui/Field.tsx`, which imports it the same way).
+import { HelpTip } from '../ui/HelpTip';
 import { createPortal } from 'react-dom';
 import type { BracketPool, BracketEntry, Tournament, User } from '../../types';
 import { LayoutDashboard, Users, Trophy, Share2, PlusCircle, ArrowLeft, Loader2, Send, Save, BarChart3, FileText, GitBranch, ShieldCheck, Target, Check, Copy, Download, MessageSquare, Edit3, X, Coins, Printer, Lock, ChevronDown, ChevronUp, Palette, Bell, CreditCard, Key, Globe, Trash2, ClipboardList, Mail, AlertTriangle } from 'lucide-react';
 import { BracketBuilder } from '../BracketBuilder/BracketBuilder';
 import { ConferenceBracketBuilder } from '../BracketBuilder/ConferenceBracketBuilder';
 import { StandingsTable } from './StandingsTable';
+import { resolveOwnerNames, pendingOwnerUids, nextRetryDelay, ownerNameCacheFor, type OwnerNameCache } from './ownerNames';
 import { dbService } from '../../services/dbService';
-import { userRepository } from '../../services/userRepository';
 import { shareTrackingService, type ShareStats } from '../../services/shareTrackingService';
 import { calculateCorrectPicks } from '../../utils/bracketScoring';
 import { isPoolManager, isSuperAdmin } from '../../utils/auth';
@@ -30,6 +35,7 @@ import { LiveScoreTicker } from './LiveScoreTicker';
 import { EliminationTracker } from './EliminationTracker';
 import { BracketCountdown } from './BracketCountdown';
 import { AICommissioner } from '../AICommissioner';
+import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { BanterBoard } from './BanterBoard';
 import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
@@ -148,8 +154,21 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         auto24h: true, auto1h: true, autoLock: true, announceWinner: true, recipientFilter: 'all' as const
     });
 
-    // Access Control
-    const [editPassword, setEditPassword] = useState(pool.accessControl?.password || '');
+    // Access Control (PLAN-AUDIT-AUTH-HARDENING Phase B, audit item 13a).
+    //
+    // This used to seed itself from `pool.accessControl?.password` and save the
+    // value back with a direct client `updateDoc` — plaintext, onto a document
+    // that is `allow get: if true`, and `joinBracketPool` never even read that
+    // field. It is now write-only: the stored value is a PBKDF2 record in
+    // `pools/{id}/private/access` that no client can read, so the box starts
+    // EMPTY and an empty box means "leave the password as it is". Removing one
+    // is an explicit action (`clearPassword`), never an empty save.
+    const [editPassword, setEditPassword] = useState('');
+    const [clearPassword, setClearPassword] = useState(false);
+    const poolHasPassword = Boolean(
+        (pool as unknown as { hasPoolPassword?: boolean }).hasPoolPassword
+        || pool.accessControl?.password,
+    );
 
     // Collapsible section toggles
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({ details: true, rules: true });
@@ -157,6 +176,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     const toggleSection = (key: string) => setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
 
     const isManager = isPoolManager(user, pool);
+    /**
+     * The pool's billing, read ONCE and typed — the AI Commissioner gate and the
+     * mid-season add-on offer both need it, and `(pool as any)` would be two new
+     * lint warnings for a shape this file can name.
+     */
+    const aiPoolBilling = (pool as unknown as {
+        billing?: { status?: string; featuresUnlocked?: Record<string, boolean> };
+    }).billing;
     const userEntries = entries.filter(e => e.ownerUid === user?.id);
     const maxEntriesPerUser = pool.settings?.maxEntriesPerUser || 1;
     const canCreateMore = userEntries.length < maxEntriesPerUser && (pool.status === 'OPEN' || pool.status === 'DRAFT');
@@ -198,20 +225,85 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
         return () => unsub();
     }, [pool.id]);
 
-    // Build uid -> display name map whenever entries change
+    // Build uid -> display name map whenever entries change.
+    //
+    // Reads `publicProfiles/{uid}` (world-readable), NOT `users/{uid}` — an
+    // ordinary member may only read their OWN user doc, so the old code hit
+    // permission-denied once per other member and reported every one of them to
+    // Sentry + logClientError. See ownerNames.ts for the full note.
+    //
+    // Only owners with no FINAL name yet are re-read. The entries subscription
+    // hands back a new array on every snapshot, and during live scoring one
+    // lands whenever any score changes, so re-reading every profile each time
+    // is a real cost now that these reads succeed. Remembering the whole owner
+    // set instead would be worse than that cost: recomputeUserProfile is
+    // triggered BY the entry write, so a snapshot can arrive before the profile
+    // it causes, and the fallback name would then be frozen in for the life of
+    // the mount (codex r1 P2). A name from a profile is final; anything else is
+    // retried.
+    //
+    // A retry cannot wait for the next entries snapshot: the profile write does
+    // not touch the entry, and an idle pool produces no further snapshot at all
+    // (codex r2 P2). So an unresolved owner is re-read on a timer instead,
+    // MAX_PROFILE_ATTEMPTS times — enough to win the race, bounded so that a
+    // pool whose owners have no profile at all cannot loop.
+    //
+    // The cache is scoped to pool.id: PoolRoute renders this dashboard without a
+    // `key`, so /pool/a -> /pool/b reuses the instance and every ref in it
+    // (codex r4 P2).
+    const nameCacheRef = React.useRef<OwnerNameCache | null>(null);
+    const [nameRetry, setNameRetry] = useState(0);
     useEffect(() => {
+        const previousCache = nameCacheRef.current;
+        const cache = ownerNameCacheFor(previousCache, pool.id);
+        if (cache !== previousCache) {
+            nameCacheRef.current = cache;
+            // Only when REPLACING another pool's cache — on first mount the map
+            // is already empty and clearing it would cost a render for nothing.
+            if (previousCache) setUserNames({});
+        }
         if (entries.length === 0) return;
-        const uniqueUids = [...new Set(entries.map(e => e.ownerUid))];
-        Promise.all(
-            uniqueUids.map((uid: string) => userRepository.getById(uid))
-        ).then(users => {
-            const map: Record<string, string> = {};
-            users.forEach((u: { name?: string; email?: string } | null, i: number) => {
-                if (u) map[uniqueUids[i]] = u.name || u.email || uniqueUids[i];
-            });
-            setUserNames(map);
-        }).catch(() => { /* silent fallback */ });
-    }, [entries]);
+        const now = Date.now();
+        const pending = pendingOwnerUids(entries, cache.resolved, cache.attempts, now);
+
+        if (pending.length === 0) {
+            // Either everyone has a final name, or someone is only waiting out
+            // the interval — in which case wake up when it elapses. Nothing else
+            // will: the profile write does not touch the entry.
+            const wait = nextRetryDelay(entries, cache.resolved, cache.attempts, now);
+            if (wait === null) return;
+            const waitTimer = setTimeout(() => setNameRetry(n => n + 1), wait);
+            return () => clearTimeout(waitTimer);
+        }
+
+        // Counted before the read, not after: an abandoned attempt still cost a
+        // read, and the cap has to bound READS. The interval above is what keeps
+        // a burst of snapshots from spending the whole budget at once.
+        pending.forEach(uid => {
+            cache.attempts[uid] = { count: (cache.attempts[uid]?.count ?? 0) + 1, lastAt: now };
+        });
+
+        let cancelled = false;
+        resolveOwnerNames(entries, (uid) => dbService.getPublicProfile(uid), pending)
+            .then(({ names, resolvedFromProfile }) => {
+                // Not `nameCacheRef.current`: if the pool changed mid-flight this
+                // is the OLD pool's cache, and the new one must not inherit it.
+                if (cancelled || nameCacheRef.current !== cache) return;
+                resolvedFromProfile.forEach(uid => cache.resolved.add(uid));
+                // Merge: names resolved by an earlier snapshot are not re-read,
+                // so they are not in `names` and must not be dropped.
+                setUserNames(prev => ({ ...prev, ...names }));
+                // Someone is still on a fallback. Re-enter so the branch above
+                // schedules the wait; this terminates because every re-entry
+                // spends one of that owner's attempts.
+                if (resolvedFromProfile.length < pending.length) setNameRetry(n => n + 1);
+            })
+            // resolveOwnerNames swallows per-uid failures by contract, so this
+            // only fires on a real bug. Log it rather than dropping it silently;
+            // StandingsTable already renders 'Unknown' for a missing name.
+            .catch(err => logger.error('[BracketPoolDashboard] Failed to resolve owner names:', err));
+        return () => { cancelled = true; };
+    }, [entries, nameRetry, pool.id]);
 
     // Listen for master bracket print event
     useEffect(() => {
@@ -365,14 +457,26 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 branding: editBranding,
                 // Reminders
                 reminders: editReminders,
-                // Access Control
-                'accessControl.password': editPassword || null,
+                // Access Control: NOT written here any more. The password goes
+                // through the setPoolPassword callable below — see the state
+                // declaration for why a direct write was both a leak and a no-op.
                 // Dates
                 registrationDeadline: editRegDeadline || null,
                 submissionDeadline: editSubDeadline || null,
                 lockAt: editLockAt || pool.lockAt,
             };
             await dbService.updateBracketPool(pool.id, updates);
+            // Password last, and only when the commissioner actually asked for a
+            // change: a set (non-empty box) or an explicit removal. An untouched
+            // box leaves the stored value alone — the field cannot be read back,
+            // so "empty" carries no information about what is stored.
+            if (clearPassword) {
+                await dbService.setPoolPassword(pool.id, null);
+            } else if (editPassword) {
+                await dbService.setPoolPassword(pool.id, editPassword);
+            }
+            setEditPassword('');
+            setClearPassword(false);
             setSettingsSaved(true);
             setEditingSettings(false);
             setTimeout(() => setSettingsSaved(false), 2000);
@@ -385,7 +489,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
     }, [pool.id, pool.lockAt, editPoolName, editManagerName, editContactEmail, editIsPublic,
         editVenmo, editZelle, editCashapp, editPaypal, editPaymentInstructions,
         editEntryFee, editMaxTotal, editMaxPerUser, editScoring, editCustomScoring, editTiebreaker,
-        editPayouts, editBranding, editReminders, editPassword,
+        editPayouts, editBranding, editReminders, editPassword, clearPassword,
         editRegDeadline, editSubDeadline, editLockAt, editUpsetBonusEnabled, editUpsetMultiplier]);
 
     // CSV Export
@@ -605,6 +709,13 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
     return (
         <BillingGate pool={pool as any} isCommissioner={isManager}>
+        {/* T2: `tab` already rides in `?tab=`; the reports sub-tab does not, so
+            it is published. Only meaningful on the reports tab. */}
+        <HelpRoutePublisher
+            tab={activeTab}
+            subTab={activeTab === 'reports' ? bracketSubTab : undefined}
+            isManager={isManager}
+        />
         <div className="min-h-screen bg-page pb-20">
             {/* Header */}
             <div className="bg-surface border-b border-line p-4 relative">
@@ -830,10 +941,25 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     </div>
                                 </div>
 
-                                {(pool as any).billing?.featuresUnlocked?.aiCommissioner && (
+                                {aiPoolBilling?.featuresUnlocked?.aiCommissioner ? (
                                     <div className="mt-8 pt-8 border-t border-line">
                                         <AICommissioner poolId={pool.id} userId={user?.id} userName={user?.name} poolType="BRACKET" />
                                     </div>
+                                ) : (
+                                    /* C2 / codex r1 [P1]: the add-on checkout is pool-type
+                                       agnostic on the server, so a Bracket commissioner gets
+                                       the same mid-season path the NFL one does. Commissioner
+                                       only, and only on an ACTIVE pool — the server refuses an
+                                       add-on checkout for a pool with no hosting purchase. */
+                                    isManager && aiPoolBilling?.status === 'active' && (
+                                        <div className="mt-8 pt-8 border-t border-line">
+                                            <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">AI Commissioner</h3>
+                                            <p className="mt-1 font-body text-[13px] text-muted">
+                                                Written recaps and banter for this pool, generated from its own results. Not switched on yet.
+                                            </p>
+                                            <AddonUpgradeButton pool={pool} addon="aiCommissioner" label="AI Commissioner" />
+                                        </div>
+                                    )
                                 )}
 
                                 {/* User's existing entries */}
@@ -901,7 +1027,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                 {/* ── Full-Screen Bracket Editor Portal ─────────────────────────────── */}
                 {isCreating && createPortal(
-                    <div className="fixed inset-0 z-[60] flex flex-col bg-page animate-in fade-in duration-150">
+                    <OverlayRoot id="bracket-entry-editor" dialog={false} className="fixed inset-0 z-[60] flex flex-col bg-page animate-in fade-in duration-150">
                         {/* ── Top bar ─────────────────────────────────────────────────── */}
                         <div className="flex-shrink-0 flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-line bg-card/95 backdrop-blur">
                             <div>
@@ -1018,7 +1144,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </button>
                             </div>
                         </div>
-                    </div>,
+                    </OverlayRoot>,
                     document.body
                 )}
 
@@ -1553,9 +1679,31 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {/* Bonuses */}
                                                 <div className="pt-2 border-t border-line">
                                                     <p className="text-xs text-faint mb-2">Bonus Payouts</p>
+                                                    {/* PLAN-HELP-SYSTEM T6: the two `?`s for the bonus rows.
+                                                        ON A COLUMN HEADER, ONCE, rather than on every row — the
+                                                        list repeats and a tip per input would draw two icons per
+                                                        bonus for one explanation each (voice rule 10). The two
+                                                        inputs below carry no label at all today, so this row is
+                                                        also what names them; `aria-label` gives a screen reader
+                                                        the same two words. `text-muted`, NOT the `text-faint` of
+                                                        the title above it: `HelpTip` is `text-current` and
+                                                        `--faint` is 2.81:1 on the light page, which is the exact
+                                                        regression `tests/help-tip-contrast.test.ts` exists for.
+                                                        Rendered even with NO bonus rows yet, deliberately: that
+                                                        is the moment a commissioner most needs to be told what a
+                                                        bonus is, and the `?` is the only thing here that says. */}
+                                                    <div className="flex items-center gap-2 mb-1 text-xs text-muted">
+                                                        <span className="flex-1 flex items-center gap-1.5">Name<HelpTip helpId="settings.payouts.bonuses.*.name" /></span>
+                                                        <span className="w-20 flex items-center gap-1.5">Share<HelpTip helpId="settings.payouts.bonuses.*.percentage" /></span>
+                                                        {/* Keeps the two headings over their columns: the `%`
+                                                            suffix and the remove button sit to the right of the
+                                                            share input on every row below. */}
+                                                        <span className="w-[38px]" aria-hidden="true" />
+                                                    </div>
                                                     {editPayouts.bonuses.map((b, i) => (
                                                         <div key={i} className="flex items-center gap-2 mb-2">
                                                             <input value={b.name}
+                                                                aria-label="Bonus name"
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, name: e.target.value };
@@ -1563,6 +1711,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                                 }}
                                                                 className="flex-1 bg-surface border border-line rounded p-2 text-[color:var(--text)] text-sm" placeholder="Bonus name" />
                                                             <input type="number" value={b.percentage}
+                                                                aria-label="Bonus share, percent"
                                                                 onChange={e => {
                                                                     const updated = [...editPayouts.bonuses];
                                                                     updated[i] = { ...b, percentage: Number(e.target.value) };
@@ -1715,10 +1864,22 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         {openSections.access && (
                                             <div className="p-4 bg-card space-y-3">
                                                 <div>
-                                                    <label className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Pool Password</label>
-                                                    <input value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Leave blank for no password"
-                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm" />
-                                                    <p className="text-[10px] text-faint mt-1">Participants must enter this to join. Leave empty for open access.</p>
+                                                    <label htmlFor="bracket-pool-password" className="text-xs font-display font-bold uppercase tracking-[0.08em] text-muted block mb-1">Pool Password</label>
+                                                    <input id="bracket-pool-password" type="password" autoComplete="new-password"
+                                                        value={editPassword} onChange={e => setEditPassword(e.target.value)} disabled={clearPassword}
+                                                        placeholder={poolHasPassword ? 'Enter a new password to change it' : 'Leave blank for no password'}
+                                                        className="w-full bg-surface border border-line rounded-lg p-2.5 font-body text-[color:var(--text)] text-sm disabled:opacity-50" />
+                                                    <p className="text-[10px] text-faint mt-1">
+                                                        {poolHasPassword
+                                                            ? 'This pool has a password. It is stored encrypted and cannot be shown again — leave this blank to keep it unchanged.'
+                                                            : 'Participants must enter this to join. Leave empty for open access.'}
+                                                    </p>
+                                                    {poolHasPassword && (
+                                                        <label className="mt-2 flex items-center gap-2 text-[11px] text-muted font-body">
+                                                            <input type="checkbox" checked={clearPassword} onChange={e => setClearPassword(e.target.checked)} />
+                                                            Remove the password (anyone with the link can join)
+                                                        </label>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -2033,7 +2194,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
             </div>
             {/* Viewing Entry Modal */}
             {viewingEntry && tournament && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                <OverlayRoot id="bracket-view-entry" label="Entry details" onEscape={() => setViewingEntry(null)} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-card border border-line rounded-2xl w-full max-w-[98vw] max-h-[95vh] flex flex-col shadow-card-hover">
                         <div className="flex items-center justify-between p-4 border-b border-line bg-surface rounded-t-2xl">
                             <div>
@@ -2101,7 +2262,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                             )}
                         </div>
                     </div>
-                </div>
+                </OverlayRoot>
             )}
 
             {/* Payment Ledger Tab */}
@@ -2179,7 +2340,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                 })() : '';
 
                 return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                    <OverlayRoot id="bracket-name-entry" label="Name your bracket" onEscape={() => setShowNameModal(false)} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
                         <div className="bg-card border border-line rounded-xl max-w-md w-full p-6 shadow-card-hover relative">
                             <button
                                 onClick={() => setShowNameModal(false)}
@@ -2245,7 +2406,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </OverlayRoot>
                 );
             })()}
         </div>

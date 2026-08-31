@@ -3,6 +3,9 @@ import type { GameState } from '../types';
 import { Sparkles, Trash2, Settings } from 'lucide-react';
 import { useToast } from './ui/Toast';
 import { Button } from './ui';
+// PLAN-HELP-SYSTEM T5. Direct, not through the `ui` barrel — the barrel does
+// not export it (see `ui/Field.tsx`, which imports it the same way).
+import { HelpTip } from './ui/HelpTip';
 
 interface WizardStepBrandingProps {
     gameState: GameState;
@@ -75,8 +78,15 @@ export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({ gameStat
 
                     {/* Background Color */}
                     <div className="bg-surface p-6 rounded-xl border border-line">
+                        {/* PLAN-HELP-SYSTEM T5: the `?` for `branding.backgroundColor`.
+                            On the HEADING, not on a `FieldLabel`, because this control
+                            is a bare `<input type="color">` under an `<h4>` — there is
+                            no label component here to hang it off. The heading already
+                            carries `text-[color:var(--text)]`, which is what the tip
+                            inherits (`HelpTip` is `text-current`). */}
                         <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] mb-4 flex items-center gap-2">
                             <Settings size={16} className="text-gold-500" /> Background color
+                            <HelpTip helpId="branding.backgroundColor" />
                         </h4>
                         <div className="flex items-center gap-4">
                             <input

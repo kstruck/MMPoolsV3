@@ -1,12 +1,13 @@
 import { logger } from '../utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { HelpRoutePublisher } from '../help/publish';
 import type { User, GameState, Winner, Pool, PlayoffPool, BracketPool, SystemSettings, PoolType, NFLGame } from '../types';
 import { isNFLSeasonPool, getMyNFLEntry, subscribeToSeasonGames, computePendingStatus, type PoolPendingStatus } from '../services/nflStatusService';
 import { formatDeadline } from '../utils/formatTime';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
-import { isSuperAdmin } from '../utils/auth';
+import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -44,6 +45,7 @@ import { Footer } from './Footer';
 import { GlobalStandingsCard } from './Dashboards/GlobalStandingsCard';
 import { GlobalCommissionerDashboard } from './Dashboards/GlobalCommissionerDashboard';
 import { Badge, Button } from './ui';
+import { poolTypeLabel, poolOptionLabels } from '../utils/poolTypeLabel';
 
 const BRAND = {
   emeraldGlow: 'rgba(201, 168, 103, 0.15)',
@@ -132,12 +134,16 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         setIsLoading(true);
         let unsubParticipating: () => void = () => { };
         let unsubOwned: () => void = () => { };
+        let unsubCoCommissioned: () => void = () => { };
         let unsubAll: () => void = () => { };
 
         // Helper to process and filter pools
         const processPools = (allPools: Pool[]) => {
             const participating = allPools.filter(p => {
-                const isOwner = p.ownerId === user.id || p.managerUid === user.id;
+                // PLAN-CO-COMMISSIONERS D7: owner/managerUid OR NAMED NFL co-commissioner —
+                // deliberately NOT the SUPER_ADMIN-admitting helper, or a super admin's
+                // "my pools" would become every pool (codex r6).
+                const isOwner = isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p);
 
                 // Squares Logic - Only show if user currently owns at least one square
                 if (p.type === 'SQUARES') {
@@ -187,9 +193,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             // Regular User: Fetch Participating + Owned logic
             let participatingPools: Pool[] = [];
             let ownedPools: Pool[] = [];
+            let coCommissionedPools: Pool[] = [];
 
             const mergeAndUpdate = () => {
-                const merged = [...participatingPools, ...ownedPools];
+                const merged = [...participatingPools, ...ownedPools, ...coCommissionedPools];
                 // Unique by ID
                 const uniqueAll = Array.from(new Map(merged.map(p => [p.id, p])).values());
                 processPools(uniqueAll);
@@ -209,11 +216,23 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             }, (err) => {
                 logger.error("Owned Pools Error", err);
             }, user.id);
+
+            // Commissioner Hub feed for NFL co-commissioners (PLAN-CO-COMMISSIONERS
+            // D7). K6 makes every co-commissioner a member, so this usually
+            // overlaps the participating feed — it is what makes the Hub NOT depend
+            // on `participantIds` for a role that lives in `coManagers`.
+            unsubCoCommissioned = dbService.subscribeToCoCommissionedPools(user.id, (pools) => {
+                coCommissionedPools = pools;
+                mergeAndUpdate();
+            }, (err) => {
+                logger.error("Co-commissioned Pools Error", err);
+            });
         }
 
         return () => {
             unsubParticipating();
             unsubOwned();
+            unsubCoCommissioned();
             unsubAll();
         };
     }, [user.id, user.role]);
@@ -415,6 +434,34 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return { all: myPools.length, open, live, completed, entries };
     }, [myPools, user.id]);
 
+    /**
+     * The tab strip, built ONCE and used twice: rendered below, and published to
+     * the Help panel as `offeredTabs`.
+     *
+     * Commissioner Hub is conditional — it appears only for someone who owns or
+     * co-runs a pool — and Help has a page for it (`account.entries.commissioner`).
+     * Without this list the panel offered that page to everyone, so a reader with
+     * no pools of their own got an "All pages" row that navigates to
+     * `?tab=commissioner`, a tab their own strip does not have. `offeredTabs` is
+     * the mechanism for exactly this (`help/types.ts` `HelpRouteContext`): the
+     * surface publishes the list it just rendered rather than the content
+     * re-deriving the condition. Deriving it from the SAME array is the point —
+     * a second copy of the ownership test could drift from the strip.
+     */
+    const tabStrip = useMemo(() => {
+        const managed = myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p)).length;
+        return [
+            { id: 'insights', label: 'Empire Overview', icon: Activity, count: undefined as number | undefined },
+            { id: 'entries', label: 'My Entries', icon: LayoutGrid, count: counts.entries },
+            ...(managed > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown, count: undefined as number | undefined }] : []),
+            { id: 'live', label: 'Live Pools', icon: undefined, count: counts.live },
+            { id: 'open', label: 'Open', icon: undefined, count: counts.open },
+            { id: 'completed', label: 'Completed', icon: undefined, count: counts.completed },
+            { id: 'all', label: 'All Pools', icon: undefined, count: counts.all },
+        ];
+    }, [myPools, user, counts]);
+    const offeredTabs = useMemo(() => tabStrip.map(t => t.id), [tabStrip]);
+
     const getStatusBadge = (pool: Pool) => {
         const tabStatus = getPoolTabStatus(pool);
 
@@ -425,6 +472,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body flex flex-col selection:bg-gold-500 selection:text-navy-950">
+            {/* T2: My Entries' tab is in memory. Published so the Help panel can
+                tell the SEVEN lists apart (the comment said six; the union at
+                :67 has always had seven). `offeredTabs` is the strip actually
+                rendered — see `tabStrip` above. The page copy is T3. */}
+            <HelpRoutePublisher tab={activeTab} offeredTabs={offeredTabs} />
             <Header user={user} onOpenAuth={() => { }} onLogout={onLogout} onCreatePool={onCreatePool} />
 
             <main className="flex-grow max-w-7xl mx-auto w-full p-4 md:p-8">
@@ -493,15 +545,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                 {/* Tabs */}
                 <div className="flex items-center gap-2 mb-6 border-b border-line overflow-x-auto">
-                    {[
-                        { id: 'insights', label: 'Empire Overview', icon: Activity },
-                        { id: 'entries', label: 'My Entries', icon: LayoutGrid, count: counts.entries },
-                        ...(myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id).length > 0 ? [{ id: 'commissioner', label: 'Commissioner Hub', icon: Crown }] : []),
-                        { id: 'live', label: 'Live Pools', count: counts.live },
-                        { id: 'open', label: 'Open', count: counts.open },
-                        { id: 'completed', label: 'Completed', count: counts.completed },
-                        { id: 'all', label: 'All Pools', count: counts.all },
-                    ].map(tab => (
+                    {tabStrip.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
@@ -528,7 +572,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         <p className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em]">Loading active roster...</p>
                     </div>
                 ) : activeTab === 'commissioner' ? (
-                    <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => p.ownerId === user.id || p.managerUid === user.id)} />
+                    <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p))} />
                 ) : activeTab === 'insights' ? (
                     /* INSIGHTS TAB - PREMIUM RECHARTS DASHBOARD */
                     <div className="space-y-8 animate-in fade-in duration-300">
@@ -750,7 +794,19 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 userEntryCount = bracketEntryCounts[pool.id] || 0;
                                 percentFull = 0;
                                 costDisplay = bPool.settings?.entryFee ? `$${bPool.settings.entryFee} Entry` : 'Free';
+                            } else if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
+                                const fee = (pool as any).settings?.entryFee;
+                                costDisplay = fee ? `$${fee} Entry` : 'Free';
                             }
+                            // The card never reads NFL entry docs (commissioner-blind picks; and
+                            // under PLAN-MULTI-ENTRY a member may hold several), so it cannot
+                            // honestly print "Your Entries N" for the three NFL season types —
+                            // it printed 0 for a player ranked #1. Hide the line rather than
+                            // fabricate a count.
+                            const showEntryCount = !(pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN');
+                            // Item 14 (Kevin, 2026-08-14): testers could not tell pools apart.
+                            const typeLabel = poolTypeLabel(pool as any);
+                            const optionLabels = poolOptionLabels(pool as any);
 
                             return (
                                 <div
@@ -783,6 +839,16 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                         {getStatusBadge(pool)}
                                                         <span className="text-[10px] text-muted font-display font-bold num">{costDisplay}</span>
                                                     </div>
+                                                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap" data-testid="pool-card-type">
+                                                        {/* Fixed ink on a fixed background. `--text` flips to near-white in
+    dark mode while bg-cream stays light, which rendered this chip
+    white-on-white (Kevin, 2026-08-23). Same fixed-pair pattern as
+    Badge's `open`/`paid` styles. */}
+<span className="text-[10px] font-display font-bold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full border border-[#E4DFD3] bg-cream text-navy-800">{typeLabel}</span>
+                                                        {optionLabels.map(o => (
+                                                            <span key={o} className="text-[10px] font-body text-muted">{o}</span>
+                                                        ))}
+                                                    </div>
                                                     {pendingByPool[pool.id] && (
                                                         <div className="flex items-center gap-1 mt-1.5 bg-brandred-600/10 border border-brandred-600/40 text-brandred-600 text-[10px] font-display font-bold px-2 py-0.5 rounded-full w-fit">
                                                             <AlertTriangle size={10} aria-hidden="true" />
@@ -800,10 +866,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                         </div>
 
                                         <div className="space-y-2 mb-4">
+                                            {showEntryCount && (
                                             <div className="flex justify-between text-[11px] font-bold">
                                                 <span className="text-muted font-body">{isSquares ? 'Your Squares' : 'Your Entries'}</span>
                                                 <span className="text-[color:var(--text)] font-display font-bold num">{userEntryCount}</span>
                                             </div>
+                                            )}
                                             {isSquares && (
                                                 <div className="h-1.5 w-full bg-line rounded-full overflow-hidden">
                                                     <div

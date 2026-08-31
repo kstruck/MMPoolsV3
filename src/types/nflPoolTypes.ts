@@ -1,4 +1,7 @@
 import type { PayoutSettings } from './index';
+import type { WeeklyPlace, WeeklyPrizeSnapshot } from '@shared/weeklyPrizes';
+import type { SeasonPlace, SeasonPrizeSnapshot } from '@shared/seasonPrizes';
+import type { WeeklyTiebreaker } from '@shared/nflTiebreaker';
 
 export interface NFLGame {
   id: string; // e.g. "espn_401671234"
@@ -27,6 +30,26 @@ export interface NFLGame {
   clock?: string;
   period?: number;
   isMonday?: boolean; // Helpful for tiebreakers
+  /**
+   * TV / streaming listing for the game, e.g. "NFL Net", "CBS", "CBS/Paramount+".
+   *
+   * Captured by the importer from ESPN's
+   * `events[].competitions[].broadcasts[].names` (joined on `/` for a simulcast)
+   * and rendered on the pick sheet's game row.
+   *
+   * ⚠️ ABSENT on most games, and that is the feed's normal state, not a defect:
+   * a game carried only in its local markets has no national listing. Measured
+   * 2026-08-12 — present on 11/16 preseason week-2 games, 13/16 week 3, 11/16
+   * week 4. Also absent on every game imported before 2026-08-12; there is no
+   * backfill, so it fills in on the next import of that week. Surfaces must omit
+   * the field, never print a placeholder for it.
+   *
+   * ⚠️ Written as `null` rather than omitted when the feed has no listing. Game
+   * writes are `merge: true`, and merge KEEPS a field the new payload omits — so
+   * omission would leave a stale channel on a game that lost its national slot.
+   * `null` and absent are equivalent to every reader (all test truthiness).
+   */
+  broadcast?: string | null;
   spread?: {
     value: number; // Relative to home team. Negative means home is favored.
     locked: boolean;
@@ -40,6 +63,13 @@ export interface NFLPickemPool {
   name: string;
   ownerId: string;
   managerUid: string;
+  /**
+   * SERVER-OWNED (PLAN-CO-COMMISSIONERS D2). Written only by the
+   * `setPoolCoCommissioner` callable; `firestore.rules` refuses every client
+   * write. `coManagersRevision` is the fence an `add` must present.
+   */
+  coManagers?: string[];
+  coManagersRevision?: number;
   participantIds?: string[];
   urlSlug?: string;
   season: string;
@@ -51,8 +81,20 @@ export interface NFLPickemPool {
   status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
+  /**
+   * Published at finalization (PLAN-WEEKLY-PRIZES step 3): the season ranking
+   * after the §2c tie cascade + the frozen season prize (`null` = unpriced), or
+   * `seasonPlacesError` when the place list was malformed (fail-closed). Server-
+   * owned (firestore.rules protectedFieldsUnchanged); recordPoolPayouts binds
+   * season PLACE awards to `seasonPlaces`.
+   */
+  seasonPlaces?: SeasonPlace[];
+  seasonPrize?: SeasonPrizeSnapshot | null;
+  seasonPlacesError?: string;
 
   settings: {
+    /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
+    maxEntriesPerUser?: number;
     entryFee: number;
     paymentInstructions: string;
     isListedPublic: boolean;
@@ -62,12 +104,36 @@ export interface NFLPickemPool {
     lockBufferMinutes: number; // grace period buffer (default: 5)
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
     pickMode: 'STRAIGHT' | 'ATS'; // ATS scored vs game.spread (push = 0 points)
-    // Custom scoring options
-    pointsPerPick?: number; // base points awarded per correct pick (default: 1)
+    /**
+     * How a weekly tie breaks. OPTIONAL, and absence means `MNF_COMBINED` —
+     * the rule every pool created before this setting has been playing. Resolve
+     * it through `effectiveWeeklyTiebreaker` (`@shared/nflTiebreaker`), never by
+     * reading this field raw, or an unset pool changes behaviour on read.
+     */
+    weeklyTiebreaker?: WeeklyTiebreaker;
+    /**
+     * ⚠️ HISTORICAL AND INERT. Neither field has ever been read by anything
+     * that scores: `scorePickemEntry` awards exactly 1 point per correct pick
+     * on a non-confidence pool, and the confidence branch reads
+     * `entry.confidence`. The comments below described what they were MEANT to
+     * do; nothing implemented it.
+     *
+     * Every control and every member-facing display of them was deleted on
+     * 2026-08-22 (Kevin's ruling, PLAN-DELETE-INERT-PICKEM-SCORING.md): a pool
+     * set to 3 told its members three and paid one, and honouring the field
+     * instead would have retroactively rewritten already-scored weeks on a
+     * live scorer with money attached.
+     *
+     * They stay on the type because stored pool documents still carry them.
+     * A type that denied them would be lying in the other direction. DO NOT
+     * add a reader — that is weighted scoring, which is a feature with a plan
+     * and a migration, not a field to start honouring.
+     */
+    pointsPerPick?: number;
     primetimeBonus?: {
-      thursday?: number;    // bonus points added for correct Thursday Night Game pick
-      sundayNight?: number; // bonus points added for correct Sunday Night Game pick
-      monday?: number;      // bonus points added for correct Monday Night Game pick
+      thursday?: number;
+      sundayNight?: number;
+      monday?: number;
     };
   };
 
@@ -95,6 +161,13 @@ export interface NFLSurvivorPool {
   name: string;
   ownerId: string;
   managerUid: string;
+  /**
+   * SERVER-OWNED (PLAN-CO-COMMISSIONERS D2). Written only by the
+   * `setPoolCoCommissioner` callable; `firestore.rules` refuses every client
+   * write. `coManagersRevision` is the fence an `add` must present.
+   */
+  coManagers?: string[];
+  coManagersRevision?: number;
   participantIds?: string[];
   urlSlug?: string;
   season: string;
@@ -106,8 +179,20 @@ export interface NFLSurvivorPool {
   status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
+  /**
+   * Published at finalization (PLAN-WEEKLY-PRIZES step 3): the season ranking
+   * after the §2c tie cascade + the frozen season prize (`null` = unpriced), or
+   * `seasonPlacesError` when the place list was malformed (fail-closed). Server-
+   * owned (firestore.rules protectedFieldsUnchanged); recordPoolPayouts binds
+   * season PLACE awards to `seasonPlaces`.
+   */
+  seasonPlaces?: SeasonPlace[];
+  seasonPrize?: SeasonPrizeSnapshot | null;
+  seasonPlacesError?: string;
 
   settings: {
+    /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
+    maxEntriesPerUser?: number;
     entryFee: number;
     paymentInstructions: string;
     isListedPublic: boolean;
@@ -118,6 +203,11 @@ export interface NFLSurvivorPool {
     rebuyCost: number; // Default equal to entryFee
     pickLosersMode: boolean; // true = pick team to LOSE. false = pick team to WIN
     autoSurviveExemptionEnabled: boolean; // optional: survives if no eligible teams are left (on bye or picked)
+    // Both OPTIONAL and both default to today's behaviour, so no existing pool
+    // doc carries them and none needs a migration. Defaults are applied at read
+    // sites only, via @shared/survivorReuse.
+    tieCountsAs?: 'WIN' | 'LOSS';   // absent ⇒ a tie is a strike in BOTH modes
+    maxTeamUses?: number;           // absent ⇒ 1; 0 = unlimited
   };
 
   managerName?: string;
@@ -144,6 +234,13 @@ export interface NFLMarginPool {
   name: string;
   ownerId: string;
   managerUid: string;
+  /**
+   * SERVER-OWNED (PLAN-CO-COMMISSIONERS D2). Written only by the
+   * `setPoolCoCommissioner` callable; `firestore.rules` refuses every client
+   * write. `coManagersRevision` is the fence an `add` must present.
+   */
+  coManagers?: string[];
+  coManagersRevision?: number;
   participantIds?: string[];
   urlSlug?: string;
   season: string;
@@ -155,8 +252,20 @@ export interface NFLMarginPool {
   status?: 'OPEN' | 'LOCKED' | 'LIVE' | 'FINAL' | 'CANCELED' | 'COMPLETED' | 'archived';
   isPublic?: boolean;
   entryCount?: number;
+  /**
+   * Published at finalization (PLAN-WEEKLY-PRIZES step 3): the season ranking
+   * after the §2c tie cascade + the frozen season prize (`null` = unpriced), or
+   * `seasonPlacesError` when the place list was malformed (fail-closed). Server-
+   * owned (firestore.rules protectedFieldsUnchanged); recordPoolPayouts binds
+   * season PLACE awards to `seasonPlaces`.
+   */
+  seasonPlaces?: SeasonPlace[];
+  seasonPrize?: SeasonPrizeSnapshot | null;
+  seasonPlacesError?: string;
 
   settings: {
+    /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
+    maxEntriesPerUser?: number;
     entryFee: number;
     paymentInstructions: string;
     isListedPublic: boolean;
@@ -187,6 +296,8 @@ export interface NFLPickemEntry {
   ownerUid: string;
   userName: string;
   entryName?: string;
+  /** PLAN-MULTI-ENTRY D1 — 1 for `entries/{uid}` (absent on legacy docs ⇒ 1), n for `e${n}:${uid}`. */
+  entryIndex?: number;
   picks: Record<string, string>; // gameId -> pickedTeamId (abbreviation or name)
   confidence?: Record<string, number>; // gameId -> confidence rank [1-16]
   weeklyTiebreakers?: Record<number, number>; // week -> predicted MNF combined score
@@ -213,6 +324,8 @@ export interface SurvivorEntry {
   ownerUid: string;
   userName: string;
   entryName?: string;
+  /** PLAN-MULTI-ENTRY D1 — 1 for `entries/{uid}` (absent on legacy docs ⇒ 1), n for `e${n}:${uid}`. */
+  entryIndex?: number;
   status: 'ALIVE' | 'ELIMINATED';
   strikesUsed: number;
   rebuysUsed: number;
@@ -230,6 +343,8 @@ export interface MarginEntry {
   ownerUid: string;
   userName: string;
   entryName?: string;
+  /** PLAN-MULTI-ENTRY D1 — 1 for `entries/{uid}` (absent on legacy docs ⇒ 1), n for `e${n}:${uid}`. */
+  entryIndex?: number;
   picks: Record<number, string>; // week -> pickedTeamId
   usedTeams: string[]; // List of team abbreviations/names picked previously
   weeklyScores: Record<number, number>; // week -> score differential
@@ -249,6 +364,31 @@ export interface WeeklyRecap {
   biggestUpsetPick?: { userId: string; userName: string; gameId: string; teamName: string };
   closestTiebreaker?: { userId: string; userName: string; diff: number };
   mostContrarianPick?: { userId: string; userName: string; gameId: string; teamName: string };
+  /**
+   * Who won the week, after the pool's tie-breaker rule
+   * (PLAN-WEEKLY-TIEBREAKERS §8b). Hand-duplicated from
+   * `functions/src/nflPoolTypes.ts` — keep the two in step.
+   *
+   * ALWAYS an array: more than one entry is a SHARED win, the ordinary outcome
+   * of a tie the tiebreaker cannot separate. ABSENT means "not computed" (an
+   * older recap, a Survivor pool, a week with no scored entries) and never
+   * "nobody won" — so a renderer must not print an empty-state for it.
+   */
+  weeklyWinners?: Array<{ entryId?: string; userId: string; userName: string; points: number; tiebreakDiff?: number }>;
+  /**
+   * The Weekly Winners List (PLAN-WEEKLY-PRIZES §3): EVERY scored entry,
+   * competition-ranked (1,1,3), `prize` on paid ranks of a priced week.
+   * ABSENT = not computed (older recap, void week, Survivor) — never "nobody".
+   */
+  weeklyPlaces?: WeeklyPlace[];
+  /**
+   * The frozen pot/places/entryCount/weeks the prizes came from (§3b-i), or
+   * `null` = published UNPRICED (SEASON mode / no pot) — never re-priced.
+   * Absent = not published by this feature.
+   */
+  weeklyPrize?: WeeklyPrizeSnapshot | null;
+  /** Publication failed closed (§9 A5): an error code, e.g. PRIZE_SPLIT_DUPLICATE_RANK. */
+  weeklyPlacesError?: string;
   attritionCount?: number; // Survivor remaining alive count
   recapText?: string; // AI generated context
   createdAt: number;

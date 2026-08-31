@@ -107,7 +107,10 @@ export const SuperBowlOddsArticle: React.FC = () => {
 
                     <figure>
                         <img
-                            src="/images/squares-digit-frequency.png"
+                            src="/images/squares-digit-frequency.webp"
+                            loading="lazy"
+                            width={1024}
+                            height={558}
                             alt="Bar chart showing frequency of final score digits in NFL games. 0 and 7 are the highest bars."
                             className="w-full h-auto rounded-xl border border-[rgba(230,206,150,0.16)] shadow-lg"
                         />
@@ -144,6 +147,9 @@ export const SuperBowlOddsArticle: React.FC = () => {
                     <figure>
                         <img
                             src="/images/squares-heatmap.jpg"
+                            loading="lazy"
+                            width={1024}
+                            height={1024}
                             alt="Heatmap showing probability of Super Bowl square combinations. 0-0, 7-0, 0-7, 3-0, 7-7 are highlighted in red/orange."
                             className="w-full h-auto rounded-xl border border-[rgba(230,206,150,0.16)] shadow-lg"
                         />

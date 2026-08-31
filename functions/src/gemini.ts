@@ -1,6 +1,11 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { defineSecret } from "firebase-functions/params";
+import { AIProviderError, providerFailureReason } from "./lib/aiProviderError";
+
+// Re-exported so existing importers of `./gemini` keep working; the logic is
+// pure and lives in `lib/` so it can be unit-tested without the provider SDK.
+export { AIProviderError, providerFailureReason };
 
 export const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
@@ -34,11 +39,17 @@ export const generateAIResponse = async (
     jsonSchema: any = OUTPUT_SCHEMA
 ): Promise<any> => {
     const apiKey = geminiApiKey.value();
+    // Checked BEFORE any network call. It used to sit below model discovery, so a
+    // missing secret produced a fetch with `key=undefined` and a confusing 400
+    // before the honest "not set" error ever fired.
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not set.");
+    }
     let selectedModelName = "gemini-1.5-flash"; // Default fallback
 
     // Dynamic Model Discovery
     try {
-        console.log("DEBUG: Discovering available models...");
+        console.log("[gemini] discovering available models...");
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         if (response.ok) {
             const data = await response.json();
@@ -55,15 +66,11 @@ export const generateAIResponse = async (
                 // or keep it if SDK handles it. SDK usually handles 'models/' prefix fine or needs it.
                 // Let's use the exact name returned by API but strip 'models/' prefix if present just in case the SDK adds it.
                 selectedModelName = bestModel.replace("models/", "");
-                console.log(`DEBUG: Selected Dynamic Model: ${selectedModelName} (from ${bestModel})`);
+                console.log(`[gemini] selected model: ${selectedModelName} (from ${bestModel})`);
             }
         }
     } catch (e) {
-        console.warn("DEBUG: Model discovery failed, using fallback:", e);
-    }
-
-    if (!apiKey) {
-        throw new Error("GEMINI_API_KEY is not set.");
+        console.warn("[gemini] model discovery failed, using fallback:", e);
     }
 
     const genAI = new GoogleGenAI({ apiKey });
@@ -116,19 +123,25 @@ export const generateAIResponse = async (
             return { raw_response: text };
         }
     } catch (error: any) {
-        console.error("Gemini API Error Full Details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        // 🛑 THE REASON IS EXTRACTED AND CARRIED, not just logged.
+        //
+        // On 2026-08-24 the AI Commissioner had never once worked in production:
+        // the Gemini key carried an HTTP-referrer restriction, Cloud Functions
+        // send no `Referer`, and every call came back 403
+        // API_KEY_HTTP_REFERRER_BLOCKED. Diagnosing that took a production log
+        // pull, because every layer above this reported "could not write that
+        // one" — a config problem and a network blip were indistinguishable.
+        // The reason now rides on the thrown error so the request document, and
+        // therefore the commissioner's own screen, can name it.
+        const reason = providerFailureReason(error);
+        console.error(`[gemini] request failed (${reason}):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
 
-        // DEBUG: Try to list models to see if key is valid
-        try {
-            console.log("Attempting to list models via raw fetch...");
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-            const data = await response.json();
-            console.log("Debug: Available Models Response", JSON.stringify(data));
-        } catch (fetchError) {
-            console.error("Debug: Failed to list models", fetchError);
-        }
+        // The "list the models to see if the key is valid" retry that used to
+        // live here is GONE. The key had just been rejected, so it fired a
+        // second doomed request and logged the identical error a second time —
+        // noise that made the real one harder to find, on a paid API.
 
-        throw new Error(`Failed to generate AI response: ${error.message || error}`);
+        throw new AIProviderError(reason, error?.message || String(error));
     }
 };
 
@@ -144,6 +157,43 @@ CORE RULES:
    - The Intersection square ID.
 3. **TONE**: Professional, authoritative, yet approachable. Like a fair referee.
 4. **INTEGRITY**: Use the Audit Log events to prove when actions happened (e.g. "Numbers were locked at [Time] which is BEFORE the game started").
+
+OUTPUT FORMAT:
+Return a JSON object matching the provided schema.
+`;
+
+/**
+ * The banter voice (PLAN-WIZARD-BUYFLOW-FIXES T9). A SEPARATE prompt from
+ * COMMISSIONER_SYSTEM_PROMPT on purpose: that one's whole job is neutrality and
+ * "show the math" for dispute resolution, and asking the same instruction set
+ * for trash talk produces a referee reading a scoreboard.
+ *
+ * The no-hallucination rule survives the tone change, and one rule is added
+ * that a dispute prompt never needed: this text is posted to a shared feed the
+ * whole pool reads, so it must be rude about PLAY, never about people.
+ */
+export const BANTER_SYSTEM_PROMPT = `
+You are the AI Commissioner of a fantasy-style NFL pool, writing a short post
+for the pool's shared feed. The human commissioner asked for this post and it
+appears under your name to every member.
+
+TONE: set by the "mood" field in the facts.
+  - savage:       cocky, teasing, heavy on jokes. Roast the PICKS and the standings.
+  - professional: brisk and businesslike. A commissioner's note, not a rant.
+  - analyst:      numbers first. Cite ranks, records, margins, streaks.
+
+CORE RULES:
+1. **NO HALLUCINATIONS.** Only use names, records, ranks and results present in
+   the facts. If the pool has not played a week yet, say so and keep it short —
+   never invent a rivalry, a collapse, or a history that is not in the data.
+2. **PLAY, NOT PEOPLE.** Mock picks, records, streaks and standings. Never a
+   member's appearance, intelligence, character, job, family, or anything
+   outside this pool. No slurs and no profanity, at any mood.
+3. **HONOUR THE COMMISSIONER'S PROMPT.** The "commissionerPrompt" field is what
+   they asked for. If it asks for something rule 2 forbids, write the closest
+   thing that does not, rather than refusing silently.
+4. **SHORT.** 1-3 sentences in the headline plus at most 3 bullets. This is a
+   feed post, not a recap.
 
 OUTPUT FORMAT:
 Return a JSON object matching the provided schema.

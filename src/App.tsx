@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router';
 import { Loader } from 'lucide-react';
 
@@ -10,6 +10,10 @@ import { RouteSEO } from './components/RouteSEO';
 import { AuthModal } from './components/modals';
 import { OfflineBanner } from './components/ui/OfflineBanner';
 import { useToast } from './components/ui/Toast';
+// PLAN-HELP-SYSTEM T2. Mounted once, here, next to the router and inside the
+// providers — so the panel can read the route and the auth state, and every
+// surface below it publishes where the reader is (`src/help/publish.tsx`).
+import { HelpProvider } from './components/help/HelpPanel';
 
 // Lazy-loaded route components (loaded on demand)
 const GamedaySquaresLanding = React.lazy(() => import('./components/GamedaySquaresLanding').then(m => ({ default: m.GamedaySquaresLanding })));
@@ -57,7 +61,8 @@ const TournamentSimulator = React.lazy(() => import('./components/TournamentSimu
 import { authService } from './services/authService';
 import { dbService, type GlobalStats } from './services/dbService';
 import type { User, Pool } from './types';
-import { isSuperAdmin, canAccessPoolCreation } from './utils/auth';
+import { isSuperAdmin, canAccessPoolCreation, canAccessSquaresCreation } from './utils/auth';
+import { setPostAuthIntent, takePostAuthIntent, clearPostAuthIntent, hasPostAuthIntent } from './utils/postAuthIntent';
 import { logger } from './utils/logger';
 
 // Loading spinner for lazy-loaded routes
@@ -172,17 +177,49 @@ const App: React.FC = () => {
   }, []);
 
   // Auth Helpers
+  /**
+   * Did the auth modal close because sign-in SUCCEEDED, or because the visitor
+   * dismissed it? Only the second case discards a pending post-auth intent
+   * (G2). A ref, not state: it is read inside handlers, never rendered.
+   */
+  const authSucceededRef = useRef(false);
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
+    authSucceededRef.current = false;
     setAuthMode(mode);
     setShowAuthModal(true);
   };
+
+  /**
+   * Post-auth continuation (G2, codex r4 [P1]). Runs when `user` has actually
+   * materialised — the auth observer resolves asynchronously, so the modal's
+   * success callback is too early to navigate into a `user &&`-guarded route.
+   */
+  useEffect(() => {
+    if (!user) return;
+    const intent = takePostAuthIntent();
+    if (intent) navigate(intent);
+  }, [user, navigate]);
   const handleLogout = async () => {
     await authService.logout();
     navigate('/');
   };
 
   // Pool Creation Handlers
-  const handleCreatePoolClick = () => navigate('/create-pool');
+  // G2 — `/create-pool` requires `user &&` on its route, so sending an anonymous
+  // visitor there bounced them to `/` with no modal and no message. This is the
+  // GLOBAL create entry (header button, landing hero), so it was the most-used
+  // way to hit that silent dead end. `checkAccess` opens the register modal.
+  const handleCreatePoolClick = () => {
+    if (!user) {
+      // Record where they were going BEFORE opening auth, so the modal's
+      // success handler continues here instead of dropping them on
+      // /participant (or leaving a returning user where they stood) —
+      // codex r3 [P2]. Same one-shot intent /pricing's CTAs use.
+      setPostAuthIntent('/create-pool');
+    }
+    if (!checkAccess()) return;
+    navigate('/create-pool');
+  };
 
   const checkAccess = () => {
     if (!user) {
@@ -204,7 +241,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <>
+    <HelpProvider isAdmin={isAdmin}>
       <LegacyHashHandler />
       <RouteSEO />
       <OfflineBanner />
@@ -313,8 +350,11 @@ const App: React.FC = () => {
               </div>
             ) : <Navigate to="/" replace />
           } />
+          {/* SQUARES CREATION IS CLOSED (config/season.ts). The route bounces
+              rather than 404s, so a bookmarked or emailed wizard link lands
+              somewhere useful instead of nowhere. */}
           <Route path="/create/squares" element={
-            user && canAccessPoolCreation(user) ? (
+            user && canAccessSquaresCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">
                 <Header user={user} isManager={false} onOpenAuth={handleOpenAuth} onLogout={handleLogout} onCreatePool={handleCreatePoolClick} />
                 <CreateSquaresPool user={user} onComplete={(id) => navigate('/pool/' + id)} onCancel={() => navigate('/create-pool')} />
@@ -475,23 +515,41 @@ const App: React.FC = () => {
 
       <AuthModal
         isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
+        onClose={() => {
+          // Closed WITHOUT authenticating: drop any create intent, or it fires
+          // on a LATER unrelated sign-in from the header (G2, codex r2 [P2]).
+          // The ref is what separates "cancelled" from "succeeded, and the
+          // modal is closing because of it" — on success the intent must
+          // survive until `user` actually lands (codex r4 [P1]).
+          if (!authSucceededRef.current) clearPostAuthIntent();
+          setShowAuthModal(false);
+        }}
         initialMode={authMode}
         onAuthenticated={(result) => {
           const path = window.location.pathname;
+          authSucceededRef.current = true;
           if (result?.isNewUser) {
             toast.success('Account created! Check your email for a verification link.');
+          } else {
+            toast.success('Welcome back!');
+          }
+          // ⚠️ Do NOT navigate to the intent here (codex r4 [P1]). Firebase's
+          // auth observer has not necessarily finished `syncUserToFirestore`
+          // yet, so `user` can still be null at this instant — and
+          // `/create-pool` is guarded on `user &&`, so navigating now would
+          // bounce the freshly-signed-in visitor to `/` and burn the intent
+          // doing it. The effect above waits for `user` to actually land.
+          if (hasPostAuthIntent()) return;
+          if (result?.isNewUser) {
             // Join/pool pages handle their own post-auth continuation (auto-join) —
             // don't yank a fresh signup away from the pool they came to join
             if (!path.startsWith('/join') && !path.startsWith('/pool')) {
               navigate('/participant');
             }
-          } else {
-            toast.success('Welcome back!');
           }
         }}
       />
-    </>
+    </HelpProvider>
   );
 };
 

@@ -93,3 +93,55 @@ export const reconcilePaymentTruthSchema = z.strictObject({
         z.string().min(1).max(1500).optional(),
     ),
 });
+
+/**
+ * backfillProfileData - SUPER_ADMIN prod batch migration (ADR 0005 /
+ * PLAN-PLAYER-PROFILES Phase 8, Operations tab). PLAN-AUDIT-BACKEND-RESIDUE 17b:
+ * the callable was a raw onCall with NO schema at all, so `request.data` reached
+ * the handler unvalidated and untyped.
+ *
+ * dryRun defaults TRUE at the schema layer, house Rule 1 and the #183 lesson the
+ * three schemas above record: a handler-side truthy check runs LIVE when the
+ * flag is omitted. The handler's own `!== false` already failed safe; declaring
+ * it here makes the default explicit and machine-checked.
+ *
+ * afterPoolId is the resume cursor, compared against FieldPath.documentId() - a
+ * document id, so it is NOT trimmed (altering it would silently skip or repeat a
+ * page). It takes NULL as first-page for the same reason its three siblings do:
+ * the Firebase JS SDK's callable serializer encodes an explicit-undefined
+ * property as null on the wire, which a plain .optional() rejects (found in prod
+ * on the D25 run, 2026-07-27). No client sends it today - OperationsPanel sends
+ * `{ dryRun }` alone - but the handler implements the cursor, so the schema
+ * describes the handler rather than the current caller.
+ */
+export const backfillProfileDataSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    afterPoolId: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
+});
+
+/**
+ * backfillFrozenSpreads - SUPER_ADMIN prod one-off (PLAN-NFL-SPREAD-FREEZE
+ * Revision 1, "Cutover: backfill first, or the fallback is a hole").
+ *
+ * Writes an `nfl_frozen_spreads` record for every game whose
+ * `nfl_games.spread.locked === true` today, so the `frozen ?? working` fallback
+ * covers only slates that were never locked at all. It is a PRECONDITION of the
+ * read path, not a tidy-up: while a live locked slate has no frozen record, its
+ * line is still whatever the Spread Manager last wrote and can move between pick
+ * time and grading.
+ *
+ * dryRun defaults TRUE at the schema layer (house Rule 1), and the cursor takes
+ * null as first-page — the same JS SDK undefined-to-null encoding the three
+ * schemas above were bitten by in prod on 2026-07-27.
+ */
+export const backfillFrozenSpreadsSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    limit: z.number().int().positive().max(500).optional(),
+    startAfter: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
+});

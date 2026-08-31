@@ -33,10 +33,13 @@ Activity event types (exhaustive for v1):
 A top-level `admin_audit` collection keyed by actor UID and timestamp. Records every administrative action (role changes, emails sent, password resets) from the actor's perspective. Enables forensic queries like "what did moderator X do today?" without scanning per-user activity subcollections. Written by the same Cloud Functions that write to the target User's Activity Log.
 
 ### Pool
-A contest (bracket, squares grid, pick'em, survivor, margin, prop bet) managed by a Commissioner or Super Admin. A Pool has one owner (`ownerId`) and optionally a separate manager (`managerUid`).
+A contest (bracket, squares grid, pick'em, survivor, margin, prop bet) managed by a Commissioner or Super Admin. A Pool has one owner (`ownerId`), optionally a separate manager (`managerUid`), and — on the three NFL types only — up to three named Co-Commissioners (`coManagers`).
 
 ### Commissioner
 A User with Role `COMMISSIONER`. Can create Pools and manage their own Pools. Corresponds to the existing `POOL_MANAGER` role value being renamed.
+
+### Co-Commissioner
+A Member of an NFL Pool (Pick'em, Survivor, Margin) whom the Pool's owner has named to help run it. Stored as a uid in the SERVER-OWNED `pools/{id}.coManagers` array (max 3), written only by the `setPoolCoCommissioner` callable; a Co-Commissioner must hold a Member Record. Can do the day-to-day work — edit settings, lock, extend a deadline, proxy-pick, score a week, send invites and reminders, mark members paid, record payouts, and see pre-lock pick counts. Cannot cancel, close or delete the Pool, touch Billing, or name other Co-Commissioners. Not a Role — the User keeps `MEMBER`; the grant is per Pool. Non-NFL formats have no Co-Commissioners. See `PLAN-CO-COMMISSIONERS.md` §3.
 
 ### Member
 A User with Role `MEMBER`. The default role assigned on registration. Formerly called `Participant` in code.
@@ -129,10 +132,30 @@ The member-facing landing view for a single Pool (the "Pool Home" tab, formerly 
 The distribution of how players picked each game — the share who picked each team. Distinct from Live Win Probability (a game-outcome estimate). Consensus has two scopes: Pool Consensus and Site-Wide Consensus. Consensus replaces the former fabricated "win probability" pick tile.
 
 ### Pool Consensus
-Consensus over the entries of one Pool: of the members who picked a given game, what percentage took each team. Produced as a Pool-scoped server aggregate and revealed per game only after that game's effective lock — never computed on the client from raw entries, so a member cannot read other members' picks before a game locks.
+Consensus over the entries of one Pool: of the members who picked a given game, what percentage took each team. Produced as a Pool-scoped server aggregate and **visible live, at all times** — recomputed on every submit, never gated on a lock. It is never computed on the client from raw entries, so it exposes counts only and never says who picked what.
+
+> 🔨 **Kevin's ruling, 2026-08-11** (`PLAN-COMMISSIONER-BLIND-PICKS` Q4, overruling that plan's own recommendation). This entry previously read *"revealed per game only after that game's effective lock"*, and the client enforced that in `PickDistribution`. Both are gone: a live crowd split is a product feature, and what commissioner-blind picks protects is an **individual's** pick, which an aggregate cannot express. Known and accepted consequence: in a very small Pool the split is close to identifying. Reopening that is a product decision, not a bug.
+
+### Pick Reveal
+When one Member's actual pick becomes visible to another. Enforced **server-side only**, by the `getPoolPicks` callable — no client re-derives it, and raw entry documents stay unreadable until the Pool is `FINAL`/`COMPLETED`.
+
+The boundary is the **same instant the picker's own deadline was**, so nobody is shown a pick the picker could still change:
+
+| Pool shape | A pick reveals |
+|---|---|
+| Pick'em, per-game lock | per GAME, as each kicks off |
+| Pick'em in confidence or weekly-lock mode, Survivor, Margin | the whole WEEK at once, at its single deadline |
+
+**Who may read a reveal:** any **proven Member** of the Pool (Kevin's ruling, 2026-08-14 — *"make it visible for all users if pool is locked"*), the Commissioner, and Super Admin. A non-member is refused. Membership for THIS read is a **canonical Member Record** — one carrying a server-stamped `joinedAt`, which no client path can write. `participantIds` is deliberately **not** accepted here, and is separately server-owned in `firestore.rules` because it is an authorization input.
+
+> ⚠️ **Both halves are needed and they do different jobs.** The rules lock stops FUTURE manager writes; requiring a canonical record ignores the ones already there, since a pool created before that lock carries an array a manager could already have added anyone to. Locking a door does not evict who is inside. Cost, accepted by Kevin 2026-08-14: a member on a legacy pool with no server-written record sees no picks until a join path writes them one.
+
+> ⚠️ **This SUPERSEDES `PLAN-COMMISSIONER-BLIND-PICKS` Q5**, which read *"Does anything change for ordinary members? **No.**"* Members now see the same reveal a Commissioner does. What did **not** change is the TIMING — the widening is about **who**, never **when**.
+
+**One Commissioner-only exception:** the per-Member *completeness count* ("14 of 16 Picks Set") is returned live, before any reveal, because chasing missing picks is the Commissioner's job. Members receive it only once the week reveals — otherwise the whole Pool could watch each other's sheets fill in before kickoff. A Member who has left the Pool is filtered out of a Member's view entirely, though the Commissioner still sees their entry.
 
 ### Site-Wide Consensus
-Consensus aggregated across every Pool on the platform for a given game/week: of all players site-wide who picked that game, the percentage on each team. Maintained by a server aggregation (no client may read every Pool's entries) built from per-Pool shards and rolled up idempotently. Scoped by Pool type (never one blended figure across types) and published only after a game's effective lock, as aggregate counts only — individual picks are never exposed. The client reads the resulting projection.
+Consensus aggregated across every Pool on the platform for a given game/week: of all players site-wide who picked that game, the percentage on each team. Maintained by a server aggregation (no client may read every Pool's entries) built from per-Pool shards and rolled up idempotently. Scoped by Pool type (never one blended figure across types) and **published live**, as aggregate counts only — individual picks are never exposed. The client reads the resulting projection. Same ruling as Pool Consensus above: the former "only after a game's effective lock" wording is superseded.
 
 ### Live Win Probability
 A real, game-outcome win estimate for an in-progress or scheduled NFL game, sourced from ESPN's win-probability data and stored on the game record. Distinct from Consensus (which is about picks, not outcomes). Shown alongside the live score and Consensus on the Pool Homepage.
@@ -147,7 +170,13 @@ A per-player page showing that player's Performance Stats across all Pools they 
 The net money a player has won across all Pools they have participated in: prizes recorded for them via Payout Records (whether or not the Commissioner has settled them yet) minus Entry Fees owed. Aggregated per player for the Player Profile. Entry Fees and prizes move peer-to-peer; Profit is a recorded figure, not money the platform holds. A Pool whose payouts have not yet been recorded still counts its Entry Fees, and the profile discloses how many Pools have payouts pending — the figure is never silently incomplete.
 
 ### Payout Record
-A Commissioner's server-logged statement that a prize amount was awarded to a Member in a Pool, including whether it has been settled yet. The platform records the figure and the settlement state; the money itself moves peer-to-peer. Payout Records are the sole source of the prizes side of Profit — the platform never computes or fabricates a payout a Commissioner did not record.
+A Commissioner's server-logged statement that a prize amount was awarded to a Member in a Pool, including whether it has been settled yet. The platform records the figure and the settlement state; the money itself moves peer-to-peer. Payout Records are the sole source of the prizes side of Profit — the platform never computes or fabricates a payout a Commissioner did not record. A Payout Record **may name a week** (a Weekly Prize award, bound to that week's published places and frozen prize) or an entry with no week (a Season Prize award, bound to the Pool's published season places); such bound awards live at a deterministic id, so recording twice records once, and are corrected by supersession after a rescore. A record with no entry (bonus, adjustment) is free-form. Every prize is **displayed until recorded** — the published figure is an estimate the Commissioner turns into a Payout Record by ticking it in the Payment Ledger (ADR 0008).
+
+### Weekly Prize
+The whole-dollar amount an entry is owed for its place in one scored week of an NFL Pool with a weekly pot: the frozen per-week pot (weekly allocation ÷ weeks in season) × the payout place percentages, ties splitting the covered places evenly. Published by the scorer on the week's recap together with the full ranking (`weeklyPlaces` + `weeklyPrize`), frozen at first publication, re-ranked but never re-priced on a rescore, and `null` when the week has no weekly pot. An estimate the Commissioner settles peer-to-peer; not money the platform holds.
+
+### Season Prize
+The whole-dollar amount an entry is owed for its final season place: the frozen season pot (the whole net pot for a single-pot Pool, the season half for a Hybrid Pool) × the payout place percentages, ties — after the season-tie cascade (Pick'em: most correct picks; Margin: the standings cascade in full) — splitting the covered places evenly. Published on the Pool at Season Finalization (`seasonPlaces` + `seasonPrize`), frozen there, and re-ranked but never re-priced if a rescore re-finalizes. Same estimate-until-recorded rule as the Weekly Prize.
 
 ### Season Finalization
 The automatic settling of an NFL Pool's competitive results once its last scheduled week is scored: final ranks and season history are written for every Member who actually played, without any human action, and are re-derived (not frozen) if results are later corrected. Distinct from admin close (an administrative archival that settles nothing) and from recording payouts (a separate Commissioner action). Stats never wait on a human; money always does.

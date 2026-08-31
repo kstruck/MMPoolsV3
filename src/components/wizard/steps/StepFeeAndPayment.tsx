@@ -1,5 +1,6 @@
 import { useFormContext } from 'react-hook-form';
 import { NumberField, TextField, TextAreaField } from '../fields';
+import { HybridSplitFields } from '../create/HybridSplitFields';
 
 // Shared entry-fee + payment-handle step. The fee lives at a type-specific path
 // (settings.entryFee, costPerSquare, props.cost), so each wizard passes it in.
@@ -15,7 +16,11 @@ export function StepFeeAndPayment(props: { feeField: string; feeLabel?: string }
       <h3 className="mb-1 text-lg font-bold text-white">Entry fee &amp; payment</h3>
       <p className="mb-5 text-sm text-slate-400">Set the buy-in. Players pay you directly — the app never touches this money.</p>
 
-      <NumberField name={feeField} label={feeLabel} min={0} placeholder="0" hint="Leave at 0 for a free pool." />
+      <NumberField name={feeField} label={feeLabel} min={0} placeholder="0" />
+      {/* PLAN-PAYMENT-LEDGER T0 (D0, K8): the HYBRID split renders directly under
+          the fee it must sum to. Self-gating on settings.payoutMode === 'HYBRID',
+          so every non-hybrid wizard that shares this step renders nothing here. */}
+      <HybridSplitFields />
 
       {fee > 0 && (
         <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/50 p-4">
@@ -23,11 +28,11 @@ export function StepFeeAndPayment(props: { feeField: string; feeLabel?: string }
             How players pay you
           </p>
           <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
-            <TextField name="paymentHandles.venmo" label="Venmo" placeholder="@handle" />
-            <TextField name="paymentHandles.zelle" label="Zelle" placeholder="email / phone" />
-            <TextField name="paymentHandles.cashapp" label="Cash App" placeholder="$cashtag" />
-            <TextField name="paymentHandles.paypal" label="PayPal" placeholder="paypal.me/…" />
-            <TextField name="paymentHandles.googlePay" label="Google Pay" placeholder="email / phone" />
+            <TextField name="paymentHandles.venmo" label="Venmo" placeholder="@handle" helpId="paymentHandles" />
+            <TextField name="paymentHandles.zelle" label="Zelle" placeholder="email / phone" helpId="paymentHandles" />
+            <TextField name="paymentHandles.cashapp" label="Cash App" placeholder="$cashtag" helpId="paymentHandles" />
+            <TextField name="paymentHandles.paypal" label="PayPal" placeholder="paypal.me/…" helpId="paymentHandles" />
+            <TextField name="paymentHandles.googlePay" label="Google Pay" placeholder="email / phone" helpId="paymentHandles" />
           </div>
           <TextAreaField
             name="paymentInstructions"

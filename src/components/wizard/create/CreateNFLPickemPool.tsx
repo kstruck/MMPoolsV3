@@ -1,13 +1,18 @@
 import { useMemo } from 'react';
+import { DEFAULT_NEW_POOL_TIEBREAKER, WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
+import { useFormContext } from 'react-hook-form';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { pickemCreateInputSchema } from '@shared/schemas';
 import {
-  WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep,
+  WizardShell, StepBasics, StepFeeAndPayment, StepBrandingThemed, LaunchStep,
 } from '../index';
 import { StepPayouts } from '../steps/StepPayouts';
-import { TextField, SelectField, CheckboxField } from '../fields';
+import { ReadOnlyField, SelectField, CheckboxField } from '../fields';
+import { MultiEntryFields } from './MultiEntryFields';
+import { CURRENT_SEASON } from './currentSeason';
 import type { WizardStepDef } from '../types';
+import { prefillFromUser } from './profilePrefill';
 import { buildNFLPayload } from './buildNFLPayload';
 
 // Creates the NFL Pick'em pool and RESOLVES its poolId (no navigation) for LaunchStep.
@@ -21,7 +26,7 @@ function StepPickemRules() {
     <div>
       <h3 className="mb-1 text-lg font-bold text-white">Pick&apos;em rules</h3>
       <p className="mb-5 text-sm text-slate-400">Season and how picks lock and score.</p>
-      <TextField name="season" label="Season" placeholder="2025" />
+      <ReadOnlyField label="Season" value={CURRENT_SEASON} helpId="wizard.season" />
       <SelectField
         name="seasonType"
         label="Season type"
@@ -48,7 +53,57 @@ function StepPickemRules() {
           { value: 'HYBRID', label: 'Hybrid' },
         ]}
       />
+      <SelectField
+        name="settings.pickMode"
+        label="Scoring mode"
+        options={[
+          { value: 'STRAIGHT', label: 'Straight up — pick the winner, no point spread' },
+          { value: 'ATS', label: 'Against the spread (ATS) — picks graded against the line' },
+        ]}
+      />
+      <AtsWarning />
+      <SelectField
+        name="settings.weeklyTiebreaker"
+        label="Weekly tie-breaker"
+        options={[...WEEKLY_TIEBREAKER_OPTIONS]}
+      />
       <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
+      <MultiEntryFields />
+    </div>
+  );
+}
+
+/**
+ * ATS has a hard operational precondition and choosing it blind is a trap.
+ *
+ * `submitNFLPicks` refuses EVERY pick for the week unless all of that week's
+ * games have `spread.locked === true` (`poolUsesSpreads`, scoped in #214). So an
+ * ATS pool on a week with no betting lines is a pool nobody can enter — the
+ * member sees "Spreads Not Yet Finalized" and can do nothing.
+ *
+ * That is not a rare edge: the 2026 PRESEASON feed carries a line on 1 of 49
+ * games. A commissioner picking ATS for a preseason pool would lock their whole
+ * room out, and the failure surfaces only later, to the members, not to them.
+ *
+ * Shown at the point of choice rather than documented elsewhere, because the
+ * cost lands on someone who never saw the decision.
+ */
+function AtsWarning() {
+  const { watch } = useFormContext();
+  if (watch('settings.pickMode') !== 'ATS') return null;
+  return (
+    <div
+      role="status"
+      className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-200"
+    >
+      <p className="font-semibold">ATS needs locked spreads before anyone can pick.</p>
+      <p className="mt-1 text-amber-200/80">
+        Members cannot submit picks for a week until <strong>every</strong> game that week has a
+        finalized spread. Preseason slates mostly have no betting line, so an ATS preseason pool
+        will show <em>&ldquo;Spreads Not Yet Finalized&rdquo;</em> and accept nothing. Choose{' '}
+        <strong>Straight up</strong> unless you are running a regular-season pool and will lock
+        spreads each week.
+      </p>
     </div>
   );
 }
@@ -56,7 +111,7 @@ function StepPickemRules() {
 const defaultValues: Record<string, unknown> = {
   type: 'NFL_PICKEM',
   name: '', managerName: '', contactEmail: '', isPublic: true,
-  season: '2025',
+  season: CURRENT_SEASON,
   seasonType: '2',
   paymentInstructions: '',
   paymentHandles: { venmo: '', zelle: '', cashapp: '', paypal: '', googlePay: '' },
@@ -70,8 +125,13 @@ const defaultValues: Record<string, unknown> = {
     lockMode: 'PER_GAME',
     payoutMode: 'SEASON',
     pickMode: 'STRAIGHT',
+    // PLAN-WEEKLY-PRIZES D1: written EXPLICITLY at create, so a new pool never
+    // relies on the resolver's legacy default (absent ⇒ MNF_COMBINED, which is
+    // no longer offered — pools already playing it keep playing it).
+    weeklyTiebreaker: DEFAULT_NEW_POOL_TIEBREAKER,
     lockBufferMinutes: 5,
     confidenceMode: false,
+    maxEntriesPerUser: 1,
     payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
   },
   _tosAccepted: false,
@@ -79,17 +139,29 @@ const defaultValues: Record<string, unknown> = {
 
 export function CreateNFLPickemPool(props: { user: User; onComplete: (poolId: string) => void; onCancel: () => void }) {
   const { user, onComplete, onCancel } = props;
+  // Start from the commissioner's own profile: they are already a signed-in
+  // member, so their name, contact email and payout handles are known.
+  //
+  // Read ONCE, at mount. `useForm({ defaultValues })` in WizardShell does not
+  // re-initialise when this object changes, and that is fine here rather than a
+  // latent bug: App.tsx gates this whole route on `user &&`, so the wizard never
+  // mounts with a null user and there is no late-arriving profile to wait for.
+  // It is also the safe direction — the post-create write-back updates the user
+  // doc, and a shell that DID re-initialise would wipe a half-filled form the
+  // moment that landed. The useMemo is for referential stability, nothing more.
+  const seededDefaults = useMemo(() => ({ ...defaultValues, ...prefillFromUser(user) }), [user]);
   const steps: WizardStepDef[] = useMemo(() => [
     { id: 'basics', title: 'Basics', fields: ['name'], Component: StepBasics },
-    { id: 'rules', title: "Pick'em rules", fields: ['season'], Component: StepPickemRules },
+    { id: 'rules', title: "Pick'em rules", Component: StepPickemRules },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="settings.entryFee" /> },
     { id: 'payouts', title: 'Payouts', Component: () => <StepPayouts payoutsField="settings.payouts" /> },
-    { id: 'branding', title: 'Branding', Component: StepBranding },
+    { id: 'branding', title: 'Branding', Component: StepBrandingThemed },
     {
       id: 'launch', title: 'Launch', ownsSubmit: true,
       Component: () => (
         <LaunchStep
           uid={user.id}
+          user={user}
           poolType="NFL_PICKEM"
           feeField="settings.entryFee"
           createPool={createPickemPool}
@@ -97,7 +169,7 @@ export function CreateNFLPickemPool(props: { user: User; onComplete: (poolId: st
         />
       ),
     },
-  ], [user.id, onComplete]);
+  ], [user, onComplete]);
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10">
@@ -108,7 +180,7 @@ export function CreateNFLPickemPool(props: { user: User; onComplete: (poolId: st
         poolType="NFL_PICKEM"
         steps={steps}
         schema={pickemCreateInputSchema}
-        defaultValues={defaultValues}
+        defaultValues={seededDefaults}
         userId={user.id}
         submitLabel="Launch pool"
         onSubmit={async (values) => {

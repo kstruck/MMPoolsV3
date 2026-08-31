@@ -5,6 +5,7 @@ import { createNFLPool, joinNFLPool, executeSurvivorRebuy } from '../../nflPools
 import { setPaidStatus } from '../../setPaidStatus';
 import { reconcilePaymentTruth } from '../../migrations/reconcilePaymentTruth';
 import { calculatePoolPot } from '../../statsTrigger';
+import { voidMemberRecord, reconcileMembership } from '../../lib/memberRecord';
 
 // Verifies the additive Member Record wiring (ADR 0003) against a live Firestore
 // emulator: create seeds the owner's record, join seeds the joiner's, and a survivor
@@ -22,23 +23,34 @@ async function seedUser(uid: string, name: string, role = 'PARTICIPANT') {
   await db.collection('users').doc(uid).set({ role, name, email: `${uid}@example.com` });
 }
 
+/**
+ * 🛑 ENUMERATED, NOT LISTED. This used to carry a HARDCODED array of
+ * subcollection names, and it silently stopped wiping the moment a new one
+ * existed — deleting a pool does NOT delete its subcollections, so anything not
+ * named survived into the next test.
+ *
+ * It cost a real debugging session: `private/dues__{uid}` (PLAN-MULTI-ENTRY-DUES
+ * D1) leaked from one test into the next, so a member seeded UNPAID was
+ * materialized from the PREVIOUS test's paid rows, the PAID mark became a no-op,
+ * and "MARKED_PAID + MARKED_UNPAID" came back with only the un-mark. The
+ * assertion that caught it was a ledger COUNT, which pointed nowhere near the
+ * cause.
+ *
+ * `listCollections()` cannot go stale. Nothing to remember to update.
+ */
+async function wipeDocWithSubcollections(ref: FirebaseFirestore.DocumentReference) {
+  for (const sub of await ref.listCollections()) {
+    const s = await sub.get();
+    await Promise.all(s.docs.map((d) => d.ref.delete()));
+  }
+  await ref.delete();
+}
+
 async function wipe() {
   const pools = await db.collection('pools').get();
-  for (const p of pools.docs) {
-    for (const sub of ['members', 'entries', 'participants', 'payments', 'rosterSummary']) {
-      const s = await p.ref.collection(sub).get();
-      await Promise.all(s.docs.map((d) => d.ref.delete()));
-    }
-    await p.ref.delete();
-  }
+  for (const p of pools.docs) await wipeDocWithSubcollections(p.ref);
   const users = await db.collection('users').get();
-  for (const u of users.docs) {
-    for (const sub of ['managedPools', 'participations', 'activity']) {
-      const s = await u.ref.collection(sub).get();
-      await Promise.all(s.docs.map((d) => d.ref.delete()));
-    }
-    await u.ref.delete();
-  }
+  for (const u of users.docs) await wipeDocWithSubcollections(u.ref);
 }
 
 beforeEach(wipe);
@@ -790,5 +802,493 @@ describe('reconcilePaymentTruth — the divergence one-off (P2)', () => {
     // Claim without the users-doc role is refused too — the two-source gate.
     await expect(wrappedReconcile({ data: { dryRun: true }, auth: { uid: 'p2_pleb', token: { role: 'SUPER_ADMIN' } } } as never))
       .rejects.toThrow(/required role/i);
+  });
+});
+
+// PLAN-CO-COMMISSIONERS D2 / sweeps S8: a departed member must never keep a
+// co-commissioner grant. There is no live removal callable today — these two
+// helpers ARE every removal path — so the invariant is pinned here, on the
+// helpers, and whichever callable is wired later inherits it.
+describe('coManagers — a departed member is dropped from the array (PLAN-CO-COMMISSIONERS T1)', () => {
+  const seed = async (poolId: string) => {
+    await db.collection('pools').doc(poolId).set({
+      type: 'NFL_PICKEM', name: 'co', ownerId: 'cm_boss',
+      participantIds: ['cm_boss', 'cm_x', 'cm_y'], coManagers: ['cm_x', 'cm_y'], status: 'OPEN',
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('cm_x').set({ uid: 'cm_x', role: 'PARTICIPANT' });
+  };
+
+  it('voidMemberRecord removes the uid from participantIds AND coManagers, leaving the others', async () => {
+    await seed('cm_pool_a');
+    await db.runTransaction(async (tx) => { voidMemberRecord(tx, db, 'cm_pool_a', 'cm_x'); });
+    const pool = (await db.collection('pools').doc('cm_pool_a').get()).data()!;
+    expect(pool.participantIds).toEqual(['cm_boss', 'cm_y']);
+    expect(pool.coManagers).toEqual(['cm_y']);
+  });
+
+  it('reconcileMembership with present:false removes the uid from coManagers too', async () => {
+    await seed('cm_pool_b');
+    await db.runTransaction(async (tx) => {
+      reconcileMembership(tx, db, 'cm_pool_b', 'cm_x',
+        { userName: 'X', poolType: 'NFL_PICKEM', present: false }, null, Date.now());
+    });
+    const pool = (await db.collection('pools').doc('cm_pool_b').get()).data()!;
+    expect(pool.participantIds).toEqual(['cm_boss', 'cm_y']);
+    expect(pool.coManagers).toEqual(['cm_y']);
+  });
+
+  it('on a pool with no coManagers field, arrayRemove materialises an EMPTY array — stated, accepted (grants nothing; the clear invariant is nonEmpty === 0)', async () => {
+    await db.collection('pools').doc('cm_pool_c').set({ type: 'NFL_PICKEM', ownerId: 'cm_boss', participantIds: ['cm_boss', 'cm_x'], status: 'OPEN' });
+    await db.runTransaction(async (tx) => { voidMemberRecord(tx, db, 'cm_pool_c', 'cm_x'); });
+    const pool = (await db.collection('pools').doc('cm_pool_c').get()).data()!;
+    expect(pool.participantIds).toEqual(['cm_boss']);
+    expect(pool.coManagers).toEqual([]);
+  });
+});
+
+/**
+ * PLAN-MULTI-ENTRY-DUES P2-T7 — `reconcilePaymentTruth` under per-entry dues.
+ *
+ * 🛑 D1a CALLED THIS "THE WRITER THAT WILL BE MISSED": it runs from the
+ * Operations panel, sits in no hot path, and nothing exercises it in normal
+ * testing. `paidStatus` is now DERIVED from the per-entry map, so a promotion
+ * that writes the summary and not the map is un-paid by the next writer.
+ */
+/** The shape `reconcilePaymentTruth` returns — named so these tests need no `any`. */
+type ReconcileResult = { ok: boolean; membersPromoted: number; staleSummariesRepaired: number; countsStamped: number; ambiguousSkipped: number; alreadyConsistent: number; entriesPaidNotLiable: number };
+
+describe('reconcilePaymentTruth — per-entry dues (DUES T7)', () => {
+  const poolId = 'p2-dues-pool';
+  const BOSS = { uid: 'p2d_boss', token: { role: 'SUPER_ADMIN' } };
+
+  async function seedPool(opts: { entries: Array<{ id: string; picks: Record<string, unknown>; paidStatus?: string }>; dues?: Record<string, unknown> }) {
+    // validated({role}) enforces claim AND users-doc agreement (assertCallerRole).
+    await seedUser('p2d_boss', 'Boss', 'SUPER_ADMIN');
+    const pool = db.collection('pools').doc(poolId);
+    await pool.set({
+      id: poolId, type: 'NFL_PICKEM', name: 'Dues Reconcile', ownerId: 'p2d_boss',
+      participantIds: ['p2d_boss', 'dm1'], status: 'OPEN', settings: { entryFee: 25 },
+    });
+    await pool.collection('members').doc('dm1').set({
+      uid: 'dm1', poolId, userName: 'Dues Member', role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(), feeOwed: 50,
+      playableEntryCount: 2, hasPlayableEntry: true,
+    });
+    for (const e of opts.entries) {
+      await pool.collection('entries').doc(e.id).set({
+        id: e.id, poolId, ownerUid: 'dm1', userName: 'Dues Member',
+        picks: e.picks, ...(e.paidStatus ? { paidStatus: e.paidStatus } : {}),
+      });
+    }
+    if (opts.dues) {
+      await pool.collection('private').doc('dues__dm1').set({ uid: 'dm1', poolId, paidEntries: opts.dues, updatedAt: 1 });
+    }
+  }
+
+  const duesOf = async () =>
+    (await db.collection('pools').doc(poolId).collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+
+  it('records the ENTRY payment in the dues map, not just the member summary', async () => {
+    // Without the map write, the next `setPaidStatus` or delete recomputes the
+    // summary from a map that never heard about this payment — and un-pays it.
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.ok).toBe(true);
+    expect(Object.keys(await duesOf())).toEqual(['dm1']);
+  });
+
+  it('🛑 does NOT promote the member when their OTHER liable entry is unpaid', async () => {
+    // The commissioner marked ONE entry paid pre-P1, and that is all this
+    // knows. Writing a literal PAID would claim two fees were collected on the
+    // evidence of one — the money lie per-entry dues exists to remove.
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('UNPAID');          // one of two — not paid in full
+    expect(Object.keys(await duesOf())).toEqual(['dm1']);   // ...but the payment IS recorded
+  });
+
+  it('DOES promote when every liable entry is accounted for', async () => {
+    // Entry 2 was already settled per-entry; the pre-P1 entry write covers
+    // entry 1. Together that is the whole liability, so the summary is PAID and
+    // the behaviour matches what this migration did before the ticket.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'e2:dm1': { paidAt: 1 } },
+    });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('PAID');
+    expect(Object.keys(await duesOf()).sort()).toEqual(['dm1', 'e2:dm1']);
+  });
+
+  it('a PARTIAL existing dues map is preserved, never replaced', async () => {
+    // The map is the authority; this migration adds one key to it and must not
+    // discard what a commissioner already recorded per entry.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+        { id: 'e3:dm1', picks: {} },
+      ],
+      dues: { 'e2:dm1': { paidAt: 1, method: 'cash' } },
+    });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const dues = await duesOf();
+    expect(Object.keys(dues).sort()).toEqual(['dm1', 'e2:dm1']);
+    expect(dues['e2:dm1'].method).toBe('cash');    // the pre-existing row survives
+  });
+
+  it('🛑 IS IDEMPOTENT on a partial repair — run 2 must not call it AMBIGUOUS', async () => {
+    // The defect this pins (codex r6) was introduced BY this ticket. Before T7
+    // the migration wrote a literal 'PAID', so run 2 saw `entry PAID + member
+    // PAID` and counted `alreadyConsistent`. T7 makes it write the DERIVED
+    // summary — correctly UNPAID for a member with one of two liable entries
+    // paid — so run 2 sees the SAME shape it started with, and now also finds
+    // the MARKED_PAID ledger row run 1 appended. The ambiguity gate keys on
+    // exactly that ledger history, so every partial payment the migration
+    // repaired would be re-reported for manual resolution, forever.
+    //
+    // The dues map is the evidence that tells the two apart, and its check must
+    // run BEFORE the ledger-history check — run 1 wrote both.
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    const r1 = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r1.membersPromoted).toBe(1);
+    // Run 1 left the member UNPAID (only one of two entries paid) and appended
+    // a ledger row — the exact preconditions the gate would misread.
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(1);
+
+    const r2 = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r2.ambiguousSkipped).toBe(0);      // <-- 1 before the fix
+    expect(r2.membersPromoted).toBe(0);       // nothing left to promote
+    expect(r2.alreadyConsistent).toBeGreaterThanOrEqual(1);
+    // ...and run 2 appended nothing.
+    const ledger2 = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger2.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(1);
+  });
+
+  it('🛑 a MALFORMED dues row does NOT suppress the repair', async () => {
+    // `derivePaidStatus` fails malformed money data CLOSED — a `null` value is
+    // not a paid row, it is the mistake D1b forbids (un-marking by writing a
+    // falsy value instead of DELETING the key). The idempotence gate must use
+    // the SAME predicate, or it reports `alreadyConsistent` for an entry that
+    // is PAID while its member is UNPAID — the exact divergence this
+    // migration exists to repair, silently skipped (codex r7).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { dm1: null },                 // present as a KEY, not a valid row
+    });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.membersPromoted).toBe(1);     // repaired, NOT skipped
+    const dues = (await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+    expect(dues.dm1).toEqual({});          // the malformed row is replaced by a real one
+  });
+
+  it('an existing dues row for the entry blocks a duplicate ledger event', async () => {
+    // 🛑 WHAT THIS DOES AND DOES NOT COVER — read before trusting it.
+    //
+    // COVERS: the settled case. A dues row already records this entry as paid,
+    // the member is UNPAID because their OTHER entry is not, and the migration
+    // must neither re-promote nor mint a MARKED_PAID event.
+    //
+    // TWO guards catch this, and the mutation results are exact:
+    //   remove the page gate alone            — GREEN (the tx re-check catches it)
+    //   remove the tx re-check alone          — GREEN (the page gate catches it)
+    //   remove BOTH                           — RED, 'expected 1 to be +0'
+    // So this test pins the BEHAVIOUR, not either guard. The page gate has its
+    // own single-mutation test above (IS IDEMPOTENT), which goes red when only
+    // that gate is removed.
+    //
+    // DOES NOT COVER: the concurrent-commissioner RACE codex r7 raised — a
+    // `setPaidStatus` landing BETWEEN the page read and the transaction. That
+    // is the only case where the tx re-check is load-bearing ALONE, and this
+    // harness cannot stage it without a seam built to pause the migration
+    // mid-run. The guard is kept as defence in depth and the gap is recorded
+    // rather than papered over: an earlier version of this comment claimed the
+    // page-gate mutation failed this test, and the mutation run said otherwise.
+    // This repo has shipped inert guards before (#596, the T6 entry mirror).
+    //
+    // Before T7 the race was unreachable anyway: the concurrent write set the
+    // member PAID and `fm?.paidStatus === 'PAID'` caught it. Deriving the
+    // summary is what re-opened it.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { dm1: { paidAt: 5, method: 'venmo' } },
+    });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.membersPromoted).toBe(0);
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(0);
+    // ...and the commissioner's own row is untouched.
+    const dues = (await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+    expect(dues.dm1.method).toBe('venmo');
+  });
+
+  it('🛑 a STALE fully-paid summary is repaired, not filed as consistent', async () => {
+    // The idempotence gate keys on 'this entry is already in the dues map'.
+    // That is only a reason to skip while the map still DERIVES to UNPAID. If
+    // every liable entry has a valid row, the stored UNPAID is stale and the
+    // member must be promoted — skipping it leaves them unpaid forever and
+    // prints `alreadyConsistent`, which is a false statement about money
+    // (codex r8).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 }, 'e2:dm1': { paidAt: 2 } },   // BOTH liable entries paid
+    });
+    // — LEDGER HISTORY IS PART OF THE SCENARIO, NOT DECORATION —
+    // Whatever filled that dues map (setPaidStatus, or an earlier run of this
+    // migration) ALSO wrote ledger rows, so in production this member ALWAYS
+    // has history here. Without these rows the test passes even when the
+    // ambiguity gate swallows the case, which is exactly how the first version
+    // of this fix shipped inert (self-review, after codex r10 came back clean).
+    await db.collection('pools').doc(poolId).collection('payments').doc().set({
+      type: 'MARKED_PAID', uid: 'dm1', actorUid: 'p2d_boss', at: 1, note: 'prior',
+    });
+
+    const before = (await db.collection('pools').doc(poolId).collection('payments').get()).size;
+    const dues0 = (await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.ambiguousSkipped).toBe(0);   // the map settles it; not the operator's problem
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get())
+      .data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('PAID');
+
+    // 🛑 AND NOT A PENNY OF NEW MONEY (codex round 11 on `6f15ec54`).
+    //
+    // The dues map ALREADY records this payment — that is what makes the
+    // summary stale — so whatever wrote those rows also wrote their ledger
+    // events. Routing this through the promotion transaction appended a SECOND
+    // `MARKED_PAID`, duplicating a participant-visible money event to repair a
+    // flag. The r7 guard a few lines up in the source calls exactly that
+    // "worse than the divergence being repaired."
+    expect((await db.collection('pools').doc(poolId).collection('payments').get()).size).toBe(before);
+    // ...and the stored dues rows are untouched, keeping the ORIGINAL paidAt /
+    // method / note rather than the entry doc's copy of them.
+    expect((await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get()).data()?.paidEntries).toEqual(dues0);
+    // Reported apart from a real promotion, so the operator is not told money
+    // was recorded when a flag was flipped.
+    expect(r.staleSummariesRepaired).toBe(1);
+    expect(r.membersPromoted).toBe(0);
+  });
+
+  it('🛑 D2 BACKFILL — a CONSISTENT member with a dues map still gets paidEntryCount stamped', async () => {
+    // The migration only ever touched members with a DIVERGENCE, so a member
+    // who is already consistent would never gain the mirrored count and the
+    // under-count would persist on every quiet pool forever. D2 = A (Kevin,
+    // 2026-08-27): this job stamps it, because it already carries the
+    // kill-switch, the dryRun default and the per-run cap Rule 1 demands.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 } },        // ONE of two liable entries paid
+    });
+    // Consistent already: one of two paid derives UNPAID, and the record says UNPAID.
+    const mRef = db.collection('pools').doc(poolId).collection('members').doc('dm1');
+    await mRef.set({ paidStatus: 'UNPAID' }, { merge: true });
+    expect((await mRef.get()).data()!.paidEntryCount).toBeUndefined();
+
+    const dry = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    expect(dry.countsStamped).toBe(1);
+    // A dry run writes NOTHING — the field is still absent.
+    expect((await mRef.get()).data()!.paidEntryCount).toBeUndefined();
+
+    const live = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(live.countsStamped).toBe(1);
+    const m = (await mRef.get()).data()!;
+    expect(m.paidEntryCount).toBe(1);
+    // Stamping is NOT a payment repair: no money moved and paidStatus is untouched.
+    expect(m.paidStatus).toBe('UNPAID');
+    expect(live.membersPromoted).toBe(0);
+
+    // IDEMPOTENT — a second live run finds nothing left to stamp.
+    const again = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(again.countsStamped).toBe(0);
+  });
+
+  it('🛑 a count stamp does NOT consume the capped plannedFixes list', async () => {
+    // `plannedFixes` is capped at 50 and is what an operator eyeballs to see WHO
+    // before going live. The stamping pass runs FIRST, so if its rows joined
+    // that list they would TRUNCATE the PROMOTE_MEMBER lines — the money
+    // repairs, the only ones a human needs to look at. Found by self-review
+    // after the codex round could not run (OpenAI at capacity).
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 } },
+    });
+    await db.collection('pools').doc(poolId).collection('members').doc('dm1')
+      .set({ paidStatus: 'UNPAID' }, { merge: true });
+    const r = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as
+      ReconcileResult & { plannedFixes: Array<{ uid: string; fix: string }> };
+    expect(r.countsStamped).toBe(1);
+    // NO row of ANY kind for this member — asserting the absence of one literal
+    // would pass against a stamp pushed under a different label, which is how a
+    // guard like this goes inert. This member has no money divergence, so the
+    // list must be empty of them entirely.
+    expect(r.plannedFixes.filter(f => f.uid === 'dm1')).toHaveLength(0);
+  });
+
+  it('🛑 D2 BACKFILL — a member with NO dues document is NOT stamped', async () => {
+    // A member without a dues document cannot be partially paid:
+    // `collectedBaseDues` gives a PAID one the whole fee and an UNPAID one zero,
+    // with or without the field. Stamping them would write `paidEntryCount: 0`
+    // onto every legacy record on the platform to change nothing.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      // no `dues`
+    });
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.countsStamped).toBe(0);
+  });
+
+  it('🛑 the stale-summary repair reports IDENTICALLY in dry-run and live', async () => {
+    // The dry run is the operator's only preview, so it must reach the same
+    // verdict from the same page-level evidence. Deciding the counter inside
+    // the transaction alone would have made dry say `membersPromoted` and live
+    // say `staleSummariesRepaired` for the same data.
+    await seedPool({
+      entries: [
+        { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+        { id: 'e2:dm1', picks: { g1: 'BUF' } },
+      ],
+      dues: { 'dm1': { paidAt: 1 }, 'e2:dm1': { paidAt: 2 } },
+    });
+    await db.collection('pools').doc(poolId).collection('payments').doc().set({
+      type: 'MARKED_PAID', uid: 'dm1', actorUid: 'p2d_boss', at: 1, note: 'prior',
+    });
+    const dry = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    const live = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(dry.staleSummariesRepaired).toBe(live.staleSummariesRepaired);
+    expect(dry.membersPromoted).toBe(live.membersPromoted);
+    expect(dry.staleSummariesRepaired).toBe(1);
+    expect(dry.membersPromoted).toBe(0);
+  });
+
+  it('🛑 refuses to record money against an entry that never PICKED', async () => {
+    // Liability is 'this entry has committed a pick'. `setPaidStatus` refuses a
+    // non-liable id with ENTRY_NOT_FOUND, so a dues row and a MARKED_PAID event
+    // here would put a payment on the participant-readable ledger that the
+    // authoritative path would have rejected — and it could never make the
+    // member paid, because derivePaidStatus only consults liable ids (codex r8).
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' } },                    // liable, unpaid
+      { id: 'e2:dm1', picks: {}, paidStatus: 'PAID' },       // PAID but NEVER PICKED
+    ] });
+
+    const r = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.entriesPaidNotLiable).toBe(1);
+    expect(r.membersPromoted).toBe(0);
+    // No dues row, and no money event.
+    const duesDoc = await db.collection('pools').doc(poolId)
+      .collection('private').doc('dues__dm1').get();
+    expect(duesDoc.exists).toBe(false);
+    const ledger = await db.collection('pools').doc(poolId).collection('payments').get();
+    expect(ledger.docs.filter(d => d.data().type === 'MARKED_PAID').length).toBe(0);
+  });
+
+  it('🛑 the DRY RUN reaches the same verdict as the live run on a non-liable entry', async () => {
+    // This file's contract is that the dry run IS the divergence count and
+    // lists what a live run would do. Classifying non-liability inside the
+    // transaction broke that: the transaction only runs LIVE, so the dry run
+    // reported PROMOTE_MEMBER for an entry the live run refuses (codex r9).
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' } },                 // liable, unpaid
+      { id: 'e2:dm1', picks: {}, paidStatus: 'PAID' },    // PAID, never picked
+    ] });
+
+    const dry = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    const live = await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never) as ReconcileResult;
+    expect(dry.entriesPaidNotLiable).toBe(live.entriesPaidNotLiable);
+    expect(dry.membersPromoted).toBe(live.membersPromoted);
+    expect(dry.entriesPaidNotLiable).toBe(1);
+    expect(dry.membersPromoted).toBe(0);
+  });
+
+  it('🛑 folds in the LEGACY primary entry when promoting an EXTRA entry', async () => {
+    // `entries/{uid}` predates `ownerUid`, so the `where('ownerUid','==',uid)`
+    // query MISSES it. Folding it in only when it is the TRIGGERING document
+    // is not enough: promoting the paid EXTRA entry would derive liability
+    // from a set that omits the member's unpaid primary pick, and the
+    // derivation would return PAID on the evidence of ONE fee — a paid
+    // status `setPaidStatus` would never have written (codex r9, P1).
+    await seedUser('p2d_boss', 'Boss', 'SUPER_ADMIN');
+    const pool = db.collection('pools').doc(poolId);
+    await pool.set({
+      id: poolId, type: 'NFL_PICKEM', name: 'Legacy Primary', ownerId: 'p2d_boss',
+      participantIds: ['p2d_boss', 'dm1'], status: 'OPEN', settings: { entryFee: 25 },
+    });
+    await pool.collection('members').doc('dm1').set({
+      uid: 'dm1', poolId, userName: 'Dues Member', role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(), feeOwed: 50,
+      playableEntryCount: 1, hasPlayableEntry: true,     // STALE: really 2
+    });
+    // The legacy primary: has a pick, carries NO ownerUid, and is UNPAID.
+    await pool.collection('entries').doc('dm1').set({ id: 'dm1', poolId, userName: 'Dues Member', picks: { g1: 'KC' } });
+    // The extra entry: has a pick, carries ownerUid, and IS marked paid.
+    await pool.collection('entries').doc('e2:dm1').set({
+      id: 'e2:dm1', poolId, ownerUid: 'dm1', userName: 'Dues Member',
+      picks: { g1: 'BUF' }, paidStatus: 'PAID',
+    });
+
+    await wrappedReconcile({ data: { dryRun: false }, auth: BOSS } as never);
+    const m = (await pool.collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('UNPAID');    // TWO liable entries, ONE paid
+    const dues = (await pool.collection('private').doc('dues__dm1').get()).data()?.paidEntries;
+    expect(Object.keys(dues)).toEqual(['e2:dm1']);
+  });
+
+  it('DRY RUN still writes nothing at all, dues document included', async () => {
+    await seedPool({ entries: [
+      { id: 'dm1', picks: { g1: 'KC' }, paidStatus: 'PAID' },
+      { id: 'e2:dm1', picks: { g1: 'BUF' } },
+    ] });
+
+    const r = await wrappedReconcile({ data: { dryRun: true }, auth: BOSS } as never) as ReconcileResult;
+    expect(r.ok).toBe(true);
+    expect(r.membersPromoted).toBe(1);             // it still REPORTS the fix
+    expect(await duesOf()).toBeUndefined();        // ...and performs none of it
+    const m = (await db.collection('pools').doc(poolId).collection('members').doc('dm1').get()).data() as Record<string, unknown>;
+    expect(m.paidStatus).toBe('UNPAID');
   });
 });

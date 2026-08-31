@@ -4,6 +4,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { withHeartbeat, configReadFailedVerdict } from './lib/heartbeat';
 import { readJobGate, HOT_WINDOW_LOOKBACK_MS } from './nflSchedule';
 import { scoreNFLWeekInternal } from './nflPools';
+import { resolveGameSpreads } from './lib/frozenSpreads';
 import { isWeekComplete } from './lib/weekCompletion';
 import { isSimPool, maybeFinalizeNFLPool } from './nflFinalize';
 import { acquireScoringLease, releaseScoringLease } from './lib/scoringLease';
@@ -132,7 +133,10 @@ export async function findActiveSlates(
       .where('seasonType', '==', slot.seasonType)
       .where('week', '==', slot.week)
       .get();
-    const games = slateSnap.docs.map(d => d.data() as NFLGame);
+    // `frozen ?? working` (PLAN-NFL-SPREAD-FREEZE R1). The slate read here feeds
+    // BOTH `computeWeekFingerprint` and `scoreNFLWeekInternal`, so resolving at
+    // the load is what keeps the hash and the grade on the same number.
+    const games = await resolveGameSpreads(db, slateSnap.docs.map(d => d.data() as NFLGame));
     if (games.length > 0) slates.push({ ...slot, games });
   }
   return slates;
@@ -204,7 +208,9 @@ export async function readSlateGames(
     .where('seasonType', '==', slot.seasonType)
     .where('week', '==', slot.week)
     .get();
-  return snap.docs.map(d => d.data() as NFLGame);
+  // Same precedence as `findActiveSlates` — this is the re-read the drain uses,
+  // and the two must not disagree about which number the week is scored on.
+  return resolveGameSpreads(db, snap.docs.map(d => d.data() as NFLGame));
 }
 
 
@@ -643,14 +649,21 @@ async function drainFinalizeRetries(
   }
 }
 
+// FIVE minutes, not ten (2026-08-08, PLAN-AUTOSCORE-GOLIVE §3). Staleness is the
+// SUM of ingestion and grading: syncNFLScoresJob runs its own '*/5', so '*/10'
+// here means 15 minutes worst case, past Kevin's 5–10 minute target. Idle runs
+// are nearly free — an unchanged fingerprint costs one aggregate read and no
+// writes — so the doubling buys freshness, not work.
+//
+// ⚠️ timeoutSeconds MUST stay under the cadence. 540s was not chosen for itself;
+// it was the largest value that fit inside a 10-minute gap so two runs could
+// never overlap. Halving the schedule without halving this drops that invariant
+// silently. 270s is still far more than a real pass needs, and a run that does
+// exhaust its budget is self-healing (per-pool fingerprints, so the next run
+// resumes). SCHEDULED_JOB_EXPECTATIONS must move with this — guarded by
+// heartbeat.test.ts.
 export const nflAutoScoreJob = onSchedule(
-  // timeoutSeconds/memory mirror nflFinalizeSweepJob: a full cap of pools is far
-  // more than the platform's 60s default allows, and a run that dies part-way
-  // would report a throw rather than an honest overflow. 540s also stays inside
-  // the 10-minute cadence, so two runs cannot overlap. A run that does exhaust
-  // the budget is self-healing — fingerprints are written per pool as it goes,
-  // so the next run resumes rather than restarting.
-  { schedule: '*/10 * * * *', timeZone: 'America/New_York', timeoutSeconds: 540, memory: '512MiB' },
+  { schedule: '*/5 * * * *', timeZone: 'America/New_York', timeoutSeconds: 270, memory: '512MiB' },
   withHeartbeat('nflAutoScoreJob', async () => {
     const db = admin.firestore();
 

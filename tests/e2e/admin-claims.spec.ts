@@ -15,8 +15,13 @@ async function reachSuperAdmin(page: Page, email: string): Promise<void> {
     await page.goto('/');
     await page.reload();
     // Confirm the client reflects SUPER_ADMIN before hitting the gated route.
+    // The 2026-08-27 grouped-nav redesign dropped the old "(ROLE)" suffix that
+    // printed beside every name — "(MEMBER)" told nobody anything and was part
+    // of the clutter that redesign answered. The ELEVATED roles kept a signal:
+    // the account trigger carries a gold SUPER_ADMIN / MODERATOR chip, which is
+    // the same fact this wait needs, minus the parentheses.
     const promoted = await page
-      .getByText('(SUPER_ADMIN)')
+      .getByText('SUPER_ADMIN', { exact: true })
       .first()
       .waitFor({ state: 'visible', timeout: 20_000 })
       .then(() => true)
@@ -40,8 +45,10 @@ test('admin_audit is readable after claim sync (no permission error)', async ({ 
   await registerFreshUser(page, email);
   await reachSuperAdmin(page, email);
 
-  // Open the System Status tab, which mounts the AdminAuditViewer.
-  await page.getByRole('button', { name: /System Status/i }).click();
+  // SuperAdmin nav is two-level since the 2026-07 redesign: clicking the
+  // "System" GROUP button auto-selects the system tab and mounts the
+  // AdminAuditViewer directly (no second click).
+  await page.getByRole('button', { name: 'System', exact: true }).click();
 
   // The audit log read must NOT be denied. It's fine (and expected) that it's
   // empty — "No admin actions recorded yet" proves the read succeeded.

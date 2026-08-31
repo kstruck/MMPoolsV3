@@ -8,50 +8,106 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { reduceAwards, type PayoutRecord } from "./shared/payoutRecords";
 import { buildPublicProfile, type ProfilePoolInput, type ProfileNFLPoolType } from "./lib/profileBuild";
 import { validated } from "./lib/validated";
-import { recomputeMyProfileSchema } from "./schemas/userProfile";
+import { recomputeMyProfileSchema, getProfilePoolDetailSchema } from "./schemas/userProfile";
+import { hasConfirmedRole } from "./lib/confirmedRole";
+import { seasonHistoryDocIdFor } from "./shared/multiEntry";
 
 type Firestore = admin.firestore.Firestore;
 
-/** Gather one pool's inputs for the builder. Returns null when the subject has no entry. */
-async function gatherPoolInput(db: Firestore, uid: string, poolId: string): Promise<ProfilePoolInput | null> {
+/**
+ * Gather one pool's inputs for the builder — ONE PER ENTRY THE SUBJECT OWNS
+ * (PLAN-MULTI-ENTRY D9). Returns `[]` when they hold none, or when the pool is
+ * not an NFL season pool.
+ *
+ * 🛑 THE POOL'S MONEY AND ITS PARTICIPATION COUNT ONCE, THE PLAY COUNTS PER
+ * ENTRY. `feeOwed` on the ONE Member Record is ALREADY the multiplied figure
+ * (D2 — `entryFee × playableEntryCount`), and Payout Records are reduced by
+ * uid, so adding either per entry would double a two-entry player's fees and
+ * their winnings. `primaryEntry` marks the single input those totals are taken
+ * from; every other entry contributes its own weeks, picks and finish and
+ * nothing financial. (The values are carried on every input rather than zeroed
+ * on the extras, so this file never states a fee that is not the member's —
+ * `buildPublicProfile` is the one place that decides to count it once.)
+ *
+ * ⚠️ `where('ownerUid','==',uid)` MISSES A PRE-MULTI-ENTRY `entries/{uid}` DOC
+ * THAT WAS NEVER STAMPED WITH ONE, which is why the legacy document is read
+ * directly and merged in — the same defect `resolveOwnedEntry` guards on the
+ * write side. Without it a legacy player's profile would go blank the moment
+ * this shipped.
+ */
+async function gatherPoolInputs(db: Firestore, uid: string, poolId: string): Promise<ProfilePoolInput[]> {
   const poolRef = db.collection('pools').doc(poolId);
-  const [entrySnap, poolSnap, memberSnap, historySnap, awardsSnap] = await Promise.all([
+  const [ownedSnap, legacySnap, poolSnap, memberSnap, awardsSnap] = await Promise.all([
+    poolRef.collection('entries').where('ownerUid', '==', uid).get(),
     poolRef.collection('entries').doc(uid).get(),
     poolRef.get(),
     poolRef.collection('members').doc(uid).get(),
-    db.collection('users').doc(uid).collection('seasonHistory').doc(poolId).get(),
     poolRef.collection('payoutRecords').where('uid', '==', uid).get(),
   ]);
-  if (!entrySnap.exists || !poolSnap.exists) return null;
+  if (!poolSnap.exists) return [];
   const pool: any = poolSnap.data();
-  if (!NFL_SEASON_TYPES.includes(pool.type)) return null;
+  if (!NFL_SEASON_TYPES.includes(pool.type)) return [];
+
+  const owned = ownedSnap.docs.map(d => ({ id: d.id, data: d.data() as Record<string, any> }));
+  if (legacySnap.exists && !owned.some(e => e.id === uid)) {
+    const legacy = legacySnap.data() ?? {};
+    if (legacy.ownerUid === undefined) owned.push({ id: uid, data: legacy });
+  }
+  if (owned.length === 0) return [];
+  // Deterministic: entry #1 first, so `primaryEntry` lands on the same document
+  // every recompute and the public projection does not churn.
+  owned.sort((a, b) => {
+    const ai = typeof a.data.entryIndex === 'number' ? a.data.entryIndex : 1;
+    const bi = typeof b.data.entryIndex === 'number' ? b.data.entryIndex : 1;
+    return ai - bi || a.id.localeCompare(b.id);
+  });
 
   const member: any = memberSnap.exists ? memberSnap.data() : {};
-  const history: any = historySnap.exists ? historySnap.data() : null;
   const awards = awardsSnap.docs.map(d => d.data() as PayoutRecord);
   const { byUid } = reduceAwards(awards);
 
-  return {
-    poolId,
-    poolName: pool.name || 'Pool',
-    poolType: pool.type as ProfileNFLPoolType,
-    ...(pool.type === 'NFL_PICKEM'
-      ? { pickMode: pool.settings?.pickMode === 'ATS' ? 'ATS' as const : 'STRAIGHT' as const }
-      : {}),
-    season: String(pool.season || ''),
-    entry: entrySnap.data() as Record<string, any>,
-    finalRank: history ? { rank: history.finalRank, totalEntries: history.totalEntries } : null,
-    awardsWon: byUid[uid] || 0,
-    feeOwed: (Number(member.feeOwed) || 0) + (Number(member.rebuyOwed) || 0),
-    feeEstimated: member.feeOwedSource === 'BACKFILL_ESTIMATE',
-    finalized: !!pool.finalizedAt,
-    payoutsRecorded: !!pool.payoutsRecordedAt,
-  };
+  // The season-history rows for EXACTLY the entries this member owns —
+  // `getAll` on the derived ids, never a scan of the subcollection. This
+  // function already runs once per pool per recompute and the recompute fires
+  // on every entry write, so a whole-subcollection read here would multiply
+  // reads by the member's pool count on the hottest profile path
+  // (PLAN-COST-CONTROLS). Derived ids are safe because `seasonHistoryDocIdFor`
+  // is the same function the finalizer writes with.
+  const historySnaps = await db.getAll(
+    ...owned.map(e => db.collection('users').doc(uid).collection('seasonHistory')
+      .doc(seasonHistoryDocIdFor(poolId, typeof e.data.entryIndex === 'number' ? e.data.entryIndex : undefined))),
+  );
+
+  return owned.map((e, i) => {
+    const hSnap = historySnaps[i];
+    const history = hSnap?.exists
+      ? (hSnap.data() as { finalRank: number; totalEntries: number })
+      : null;
+    return {
+      poolId,
+      entryId: e.id,
+      ...(typeof e.data.entryName === 'string' && e.data.entryName ? { entryName: e.data.entryName } : {}),
+      primaryEntry: i === 0,
+      poolName: pool.name || 'Pool',
+      poolType: pool.type as ProfileNFLPoolType,
+      ...(pool.type === 'NFL_PICKEM'
+        ? { pickMode: pool.settings?.pickMode === 'ATS' ? 'ATS' as const : 'STRAIGHT' as const }
+        : {}),
+      season: String(pool.season || ''),
+      entry: e.data,
+      finalRank: history ? { rank: history.finalRank, totalEntries: history.totalEntries } : null,
+      awardsWon: byUid[uid] || 0,
+      feeOwed: (Number(member.feeOwed) || 0) + (Number(member.rebuyOwed) || 0),
+      feeEstimated: member.feeOwedSource === 'BACKFILL_ESTIMATE',
+      finalized: !!pool.finalizedAt,
+      payoutsRecorded: !!pool.payoutsRecordedAt,
+    };
+  });
 }
 
 export async function recomputeUserProfile(db: Firestore, uid: string): Promise<any> {
@@ -63,8 +119,7 @@ export async function recomputeUserProfile(db: Firestore, uid: string): Promise<
     .filter(p => NFL_SEASON_TYPES.includes((p.data() as any).type))
     .map(p => (p.data() as any).poolId || p.id);
 
-  const inputs = (await Promise.all(poolIds.map(id => gatherPoolInput(db, uid, id))))
-    .filter((x): x is ProfilePoolInput => x !== null);
+  const inputs = (await Promise.all(poolIds.map(id => gatherPoolInputs(db, uid, id)))).flat();
 
   const profile = {
     ...buildPublicProfile(uid, userName, 'PLAYER', inputs),
@@ -110,7 +165,9 @@ export const recomputeMyProfile = validated(
   async (input, request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required.');
   const target = input.uid || request.auth.uid;
-  if (target !== request.auth.uid && request.auth.token?.role !== 'SUPER_ADMIN') {
+  // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): recomputing SOMEONE ELSE'S
+  // profile is the admin-only path, and it used to accept the JWT claim alone.
+  if (target !== request.auth.uid && !(await hasConfirmedRole(request, 'SUPER_ADMIN'))) {
     throw new HttpsError('permission-denied', 'Can only recompute your own profile.');
   }
   return recomputeUserProfile(admin.firestore(), target);
@@ -123,19 +180,24 @@ export const recomputeMyProfile = validated(
  * THAT pool, or an admin. poolId is REQUIRED and authorization is per pool per
  * call — one shared pool never unlocks the subject's other pools.
  */
-export const getProfilePoolDetail = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Login required.');
-  const caller = request.auth.uid;
-  const { subjectId, poolId } = request.data || {};
-  if (!subjectId || typeof subjectId !== 'string') throw new HttpsError('invalid-argument', 'subjectId is required.');
-  if (!poolId || typeof poolId !== 'string') throw new HttpsError('invalid-argument', 'poolId is required.');
+export const getProfilePoolDetail = validated(
+  { schema: getProfilePoolDetailSchema, label: "getProfilePoolDetail", auth: "required", appCheck: "monitor" },
+  // PLAN-AUDIT-BACKEND-RESIDUE 17f: was a bare onCall whose only input checking
+  // was two hand-rolled `typeof !== 'string'` throws, so every other key on
+  // request.data reached the handler unexamined. The wrapper supplies auth +
+  // a strict schema; the per-pool viewer gate below is unchanged.
+  async ({ subjectId, poolId }, request) => {
+  const caller = request.auth!.uid;
 
   const db = admin.firestore();
   const poolSnap = await db.collection('pools').doc(poolId).get();
   if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found.');
   const pool: any = poolSnap.data();
 
-  const isAdmin = request.auth.token?.role === 'SUPER_ADMIN';
+  // CLAIM+DOC (PLAN-AUDIT-BACKEND-RESIDUE 17d): this flag bypasses the
+  // subject/co-member gate below, so the claim alone was enough to read any
+  // member's per-pool breakdown.
+  const isAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
   const participantIds: string[] = pool.participantIds || [];
   const isSubject = caller === subjectId;
   const isPoolStaff = pool.ownerId === caller || pool.managerUid === caller;
@@ -147,23 +209,41 @@ export const getProfilePoolDetail = onCall(async (request) => {
     throw new HttpsError('permission-denied', 'Profile pool detail is visible to the member themself and co-members of that pool.');
   }
 
-  const input = await gatherPoolInput(db, subjectId, poolId);
-  if (!input) throw new HttpsError('not-found', 'No entry for that member in this pool.');
+  const inputs = await gatherPoolInputs(db, subjectId, poolId);
+  if (inputs.length === 0) throw new HttpsError('not-found', 'No entry for that member in this pool.');
 
-  const wr: Record<string, any> = input.entry?.weeklyResults || {};
-  const weekly = Object.keys(wr).map(wk => {
-    const r = wr[wk];
-    const { games: _g, game: _g2, ...summary } = r;
-    return { week: Number(wk), ...summary };
-  }).sort((a, b) => a.week - b.week);
+  const weeklyFor = (input: ProfilePoolInput) => {
+    const wr: Record<string, any> = input.entry?.weeklyResults || {};
+    return Object.keys(wr).map(wk => {
+      const r = wr[wk];
+      const { games: _g, game: _g2, ...summary } = r;
+      return { week: Number(wk), ...summary };
+    }).sort((a, b) => a.week - b.week);
+  };
 
+  // PLAN-MULTI-ENTRY D9. `entries[]` is ADDITIVE and the top-level fields stay
+  // entry #1's, so every existing client keeps rendering exactly what it did —
+  // a single-entry member's response is unchanged in shape and in value.
+  //
+  // 🛑 `profit` IS THE MEMBER'S, NOT THE ENTRY'S, AND IS NOT REPEATED PER ROW.
+  // `feeOwed` is already the multiplied Member Record figure (D2) and awards
+  // reduce by uid, so a per-entry copy would read as "this much per entry" and
+  // double a two-entry player's money on any client that summed the array.
+  const primary = inputs[0];
   return {
     poolId,
-    poolName: input.poolName,
-    poolType: input.poolType,
-    season: input.season,
-    weekly,
-    finish: input.finalRank,
-    profit: { won: input.awardsWon, feeOwed: input.feeOwed },
+    poolName: primary.poolName,
+    poolType: primary.poolType,
+    season: primary.season,
+    weekly: weeklyFor(primary),
+    finish: primary.finalRank,
+    profit: { won: primary.awardsWon, feeOwed: primary.feeOwed },
+    entries: inputs.map(i => ({
+      entryId: i.entryId,
+      ...(i.entryName ? { entryName: i.entryName } : {}),
+      weekly: weeklyFor(i),
+      finish: i.finalRank,
+    })),
   };
-});
+},
+);

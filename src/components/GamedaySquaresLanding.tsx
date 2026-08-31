@@ -4,7 +4,7 @@ import { Trophy, Zap, Shield, LayoutGrid, CheckCircle2, Heart, Globe, ArrowRight
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { Link } from 'react-router';
-import { canAccessPoolCreation } from '../utils/auth';
+import { canAccessSquaresCreation } from '../utils/auth';
 
 interface GamedaySquaresLandingProps {
     user?: User | null;
@@ -25,7 +25,7 @@ interface GamedaySquaresLandingProps {
 const heroBtn =
     'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
 
-export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, isLoggedIn }) => {
+export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse }) => {
 
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
@@ -56,12 +56,12 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
                         <button
-                            onClick={canAccessPoolCreation(user) ? onCreatePool : undefined}
-                            disabled={!canAccessPoolCreation(user)}
+                            onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
+                            disabled={!canAccessSquaresCreation(user)}
                             className={`${heroBtn} bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0`}
-                            title={canAccessPoolCreation(user) ? "Create a Squares Pool" : "Pool creation is coming soon"}
+                            title={canAccessSquaresCreation(user) ? "Create a Squares Pool" : "Gameday Squares is coming soon"}
                         >
-                            <LayoutGrid size={20} /> Create a Squares Pool
+                            <LayoutGrid size={20} /> {canAccessSquaresCreation(user) ? 'Create a Squares Pool' : 'Squares — Coming Soon'}
                         </button>
                         <button
                             onClick={onBrowse}
@@ -86,9 +86,11 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="rounded-3xl p-2 shadow-panel bg-navy-900 border border-[rgba(230,206,150,0.16)]">
                             <div className="rounded-xl overflow-hidden relative group bg-navy-950">
                                 <img
-                                    src="/hero-ui.png"
+                                    src="/hero-ui.webp"
                                     alt="Interactive 10x10 Super Bowl squares grid with live scoring and player names on March Melee Pools"
                                     loading="lazy"
+                                    width={1024}
+                                    height={591}
                                     className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent opacity-60"></div>
@@ -112,7 +114,10 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-foil rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-live-grid.png"
+                                src="/feature-live-grid.webp"
+                                loading="lazy"
+                                width={1024}
+                                height={591}
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -135,7 +140,10 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-navy-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-scoreboard.png"
+                                src="/feature-scoreboard.webp"
+                                loading="lazy"
+                                width={1024}
+                                height={517}
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -158,7 +166,10 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-gold-500 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-scenarios.png"
+                                src="/feature-scenarios.webp"
+                                loading="lazy"
+                                width={1024}
+                                height={541}
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -181,7 +192,10 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <div className="md:w-1/2 relative group">
                             <div className="absolute -inset-4 bg-brandred-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
                             <img
-                                src="/feature-setup-wizard.png"
+                                src="/feature-setup-wizard.webp"
+                                loading="lazy"
+                                width={996}
+                                height={986}
                                 alt="AI commissioner chat for customizing Super Bowl pool rules"
                                 className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
                             />
@@ -197,12 +211,12 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 Ready to host? Our intuitive Setup Wizard guides you through every step: selecting the game matchup, configuring payout percentages, setting reminder limits, and more. Creating a professional sports pool has never been easier.
                             </p>
                             <button
-                                onClick={canAccessPoolCreation(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
-                                disabled={!canAccessPoolCreation(user)}
+                                onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
+                                disabled={!canAccessSquaresCreation(user)}
                                 className="mt-4 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-white bg-brandred-600 hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                                title={canAccessPoolCreation(user) ? "Create Your Pool" : "Pool creation is coming soon"}
+                                title={canAccessSquaresCreation(user) ? "Create Your Pool" : "Gameday Squares is coming soon"}
                             >
-                                {canAccessPoolCreation(user) ? 'Create Your Pool' : 'Pool Creation Coming Soon'}
+                                {canAccessSquaresCreation(user) ? 'Create Your Pool' : 'Coming Soon'}
                             </button>
                         </div>
                     </div>
@@ -250,12 +264,12 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         </div>
 
                         <button
-                            onClick={canAccessPoolCreation(user) ? (isLoggedIn ? onCreatePool : onSignup) : undefined}
-                            disabled={!canAccessPoolCreation(user)}
+                            onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
+                            disabled={!canAccessSquaresCreation(user)}
                             className="text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl bg-brandred-600 hover:bg-brandred-500 shadow-red-cta transition-all duration-150 hover:-translate-y-px mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                            title={canAccessPoolCreation(user) ? "Create Your Grid Now" : "Pool creation is coming soon"}
+                            title={canAccessSquaresCreation(user) ? "Create Your Grid Now" : "Gameday Squares is coming soon"}
                         >
-                            {canAccessPoolCreation(user) ? 'Create Your Grid Now' : 'Pool Creation Coming Soon'}
+                            {canAccessSquaresCreation(user) ? 'Create Your Grid Now' : 'Coming Soon'}
                         </button>
                     </div>
                 </div>

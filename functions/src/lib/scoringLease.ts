@@ -181,16 +181,25 @@ export async function fencedWrite(
   db: Firestore,
   poolRef: DocumentReference,
   fence: ScoringFence,
-  apply: (tx: Transaction) => void,
+  /**
+   * `poolData` is the pool doc AS READ IN THIS TRANSACTION — a caller that
+   * freezes anything derived from live settings must derive it from THIS, not
+   * from the pre-lease snapshot, or an edit that committed between the two
+   * reads is frozen out (PLAN-WEEKLY-PRIZES §3b-i; codex r2 on the step-4 PR).
+   * A returned object is folded into the pool update like `poolPatch`.
+   */
+  apply: (tx: Transaction, poolData: Record<string, unknown> | undefined) => void | Record<string, unknown> | undefined,
   poolPatch?: Record<string, unknown>,
 ): Promise<void> {
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(poolRef);
     const now = Date.now();
-    checkFence(snap.data() as PoolDoc, fence, now);
-    apply(tx);
+    const poolData = snap.data() as Record<string, unknown> | undefined;
+    checkFence(poolData as PoolDoc, fence, now);
+    const extra = apply(tx, poolData);
     tx.update(poolRef, {
       ...(poolPatch ?? {}),
+      ...(extra ?? {}),
       [`${SCORING_LEASE_PATH}.until`]: now + fence.ttlMs,
     });
   });

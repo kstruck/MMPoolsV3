@@ -7,6 +7,7 @@ import {
   duesRates,
   memberOutstanding,
   unsubmittedRoster,
+  hasCompletePicks,
   type RosterInputs,
 } from './poolRoster';
 
@@ -722,4 +723,140 @@ describe('the pool manager is a player too', () => {
     );
     expect(unsubmittedRoster(roster, PICKEM).map((r) => r.uid)).toEqual(['owner']);
   });
+});
+
+/**
+ * PLAN-COMMISSIONER-BLIND-PICKS D1/T4 — completeness from the server's COUNT.
+ *
+ * The commissioner no longer holds other members' entry documents, so the
+ * entries-derived reading below can only see the viewer's own row and the games
+ * the server revealed. Counting that subset would report the whole pool
+ * incomplete before kickoff and fire every reminder. `getPoolPicks` returns
+ * per-member counts at any time precisely for this reading.
+ */
+describe('unsubmittedRoster — pickCounts (commissioner-blind picks)', () => {
+  const PICKEM = { poolType: 'NFL_PICKEM', week: 1, weeklyGameIds: ['g1', 'g2'] };
+  const rosterOf = (uids: string[], entries: any[] = []) =>
+    buildPoolRoster(
+      inputs({
+        pool: pool({ participantIds: uids }),
+        members: uids.map((uid) => ({ uid, userName: uid })),
+        entries,
+      }),
+    );
+
+  it('uses the count instead of the (now absent) picks map', () => {
+    // Entry rows carry NO picks — exactly the post-T3 shape. Without pickCounts
+    // both members read as pending; with it, only the partial one does.
+    const roster = rosterOf(['a', 'b'], [
+      { id: 'a', ownerUid: 'a' },
+      { id: 'b', ownerUid: 'b' },
+    ]);
+    expect(unsubmittedRoster(roster, { ...PICKEM, pickCounts: { a: 2, b: 1 } }).map((r) => r.uid))
+      .toEqual(['b']);
+  });
+
+  it('survivor/margin needs exactly one pick', () => {
+    const roster = rosterOf(['a', 'b'], [
+      { id: 'a', ownerUid: 'a' },
+      { id: 'b', ownerUid: 'b' },
+    ]);
+    const opts = { poolType: 'NFL_SURVIVOR', week: 1, weeklyGameIds: ['g1', 'g2'], pickCounts: { a: 1 } };
+    expect(unsubmittedRoster(roster, opts).map((r) => r.uid)).toEqual(['b']);
+  });
+
+  it('a member with no entry is pending whatever the counts say', () => {
+    const roster = rosterOf(['a', 'b'], [{ id: 'a', ownerUid: 'a' }]);
+    expect(unsubmittedRoster(roster, { ...PICKEM, pickCounts: { a: 2 } }).map((r) => r.uid))
+      .toEqual(['b']);
+  });
+
+  it('falls back to the picks map when no counts have arrived yet', () => {
+    // The callable is in flight on first render. The old reading is still the
+    // right answer for the rows that do carry picks.
+    const roster = rosterOf(['a'], [{ id: 'a', ownerUid: 'a', picks: { g1: 'KC', g2: 'SF' } }]);
+    expect(unsubmittedRoster(roster, PICKEM)).toEqual([]);
+  });
+
+  /**
+   * ⚠️ The empty-slate answer, and the reason `hasCompletePicks` exists at all.
+   * `NFLManagerView` used to carry its own copy of this rule that said the
+   * opposite — every entry holder pending on a week with no games — so the same
+   * page offered "Remind all unpicked" for games that did not exist while the
+   * Bento readiness card beside it read 100%. codex r1 on the
+   * commissioner-blind-picks PR. One definition now; this is it.
+   */
+  it('a week with no games leaves entry holders COMPLETE, on both paths', () => {
+    const roster = rosterOf(['a'], [{ id: 'a', ownerUid: 'a' }]);
+    const empty = { ...PICKEM, weeklyGameIds: [] };
+    expect(unsubmittedRoster(roster, { ...empty, pickCounts: { a: 0 } })).toEqual([]);
+    expect(unsubmittedRoster(roster, empty)).toEqual([]);
+    expect(hasCompletePicks(roster[0], { ...empty, pickCounts: { a: 0 } })).toBe(true);
+  });
+
+  it('hasCompletePicks is the predicate unsubmittedRoster filters on', () => {
+    const roster = rosterOf(['a', 'b'], [{ id: 'a', ownerUid: 'a' }, { id: 'b', ownerUid: 'b' }]);
+    const opts = { ...PICKEM, pickCounts: { a: 2, b: 1 } };
+    expect(roster.filter((r) => !hasCompletePicks(r, opts))).toEqual(unsubmittedRoster(roster, opts));
+  });
+});
+
+/**
+ * PLAN-MULTI-ENTRY — what a MULTI-ENTRY member owes.
+ *
+ * Kevin, 2026-08-25, on the first live multi-entry pool: *"A multi-entry pool
+ * requires payment for each entry. The payments page shows I owe $25 for a pool
+ * that I have two entries in. It should show that I owe $50."*
+ *
+ * `memberOutstanding` was already right — it reads the Member Record's
+ * `feeOwed`, which the server has stamped as `entryFee × entries` since T2. The
+ * defect was that `PaymentsPanel` computed its OWN total from
+ * `settings.entryFee`, so the commissioner's ledger and the member's own page
+ * disagreed about the same debt. The fix deleted that second definition; these
+ * cases pin the behaviour it now shares.
+ */
+describe('memberOutstanding — multi-entry dues (PLAN-MULTI-ENTRY D2)', () => {
+    const rates = { entryFee: 25, rebuyCost: 25 };
+
+    it('a two-entry member owes TWICE the entry fee, from feeOwed', () => {
+        expect(memberOutstanding({ feeOwed: 50, paidStatus: 'UNPAID' } as never, rates)).toBe(50);
+    });
+
+    it('...and three entries owe three times it', () => {
+        expect(memberOutstanding({ feeOwed: 75, paidStatus: 'UNPAID' } as never, rates)).toBe(75);
+    });
+
+    it('🛑 never falls back to the per-entry price when feeOwed is present', () => {
+        // The exact defect: reading `rates.entryFee` here reports $25 for a
+        // member the commissioner is chasing for $50.
+        expect(memberOutstanding({ feeOwed: 50, paidStatus: 'UNPAID' } as never, rates)).not.toBe(rates.entryFee);
+    });
+
+    it('a legacy record with NO feeOwed still owes one entry fee', () => {
+        // Pre-ADR-0005 records carry no `feeOwed`, and such a pool predates
+        // multi-entry — every member holds exactly one entry, so the per-entry
+        // price IS the right answer there.
+        expect(memberOutstanding({ paidStatus: 'UNPAID' } as never, rates)).toBe(25);
+    });
+
+    it('feeOwed: 0 is a REAL value and must not fall through to the fee', () => {
+        // The seeded commissioner owes nothing until their first playable
+        // entry. `??` (not `||`) is what makes this work, and a regression here
+        // would invoice the host for a pool they only host.
+        expect(memberOutstanding({ feeOwed: 0, paidStatus: 'UNPAID' } as never, rates)).toBe(0);
+    });
+
+    it('PAID clears the multiplied base, not just one entry of it', () => {
+        expect(memberOutstanding({ feeOwed: 50, paidStatus: 'PAID' } as never, rates)).toBe(0);
+    });
+
+    it('rebuy dues ride ON TOP of the multiplied base', () => {
+        // D3 — each entry has its own life, so a two-entry member can rebuy on
+        // one of them while owing base dues on both.
+        expect(memberOutstanding({ feeOwed: 50, paidStatus: 'UNPAID', rebuyOwed: 10 } as never, rates)).toBe(60);
+    });
+
+    it('a PAID two-entry member still owes an unsettled rebuy', () => {
+        expect(memberOutstanding({ feeOwed: 50, paidStatus: 'PAID', rebuyOwed: 10, rebuyPaid: 0 } as never, rates)).toBe(10);
+    });
 });
