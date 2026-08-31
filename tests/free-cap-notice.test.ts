@@ -64,6 +64,29 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     expect(billing).toContain('count >= FREE_PLAN_PARTICIPANT_CAP');
   });
 
+  /**
+   * EVERY SURFACE THAT NAMES THE CAP READS IT (codex r3).
+   *
+   * Centralising only the ENFORCEMENT left the commissioner's banner and the
+   * warning emails on literal 8/10 — so raising the constant would have made
+   * the gate and the guidance disagree, which is the exact failure this file
+   * was opened to fix, one layer out.
+   */
+  it('the commissioner banner and the warning emails read the constants too', () => {
+    const gate = read('src/components/billing/BillingGate.tsx');
+    expect(gate).toContain('count >= FREE_PLAN_PARTICIPANT_CAP');
+    expect(gate).toContain('count >= FREE_PLAN_WARNING_AT');
+    expect(gate).toContain('${count}/${FREE_PLAN_PARTICIPANT_CAP}');
+    // No literal ceiling left in the copy it renders.
+    expect(gate).not.toMatch(/more than 10 participants/);
+    expect(gate).not.toMatch(/\(10\/10 reached\)/);
+    expect(gate).not.toMatch(/10-player limit/);
+
+    const billing = read('functions/src/billing.ts');
+    expect(billing).toContain('<strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong>');
+    expect(billing).not.toContain('<strong>10 participants</strong>');
+  });
+
   it('the two numbers are declared once, together, and documented as distinct', () => {
     const shared = read('shared/freePlanCap.ts');
     expect(shared).toContain('export const FREE_PLAN_PARTICIPANT_CAP = 10;');
