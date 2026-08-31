@@ -131,9 +131,22 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     expect(src).toContain('if (quote.addonLines.length > 0) return null;');
   });
 
-  it('says how the commissioner finds out, and how to fix it', () => {
+  /**
+   * THE REMEDY HAS TO WORK (codex r4) — the same rule G9 applied to the member
+   * refusal, applied to the commissioner's instructions.
+   *
+   * The first cut sent them to "Commissioner → Settings", which carries no
+   * upgrade flow. The control that does is the participants banner in
+   * `BillingGate`, and it links to `/pricing?poolId=…`.
+   */
+  it('points at the control that actually upgrades, not a dead end', () => {
     expect(src).toContain('We email you when your pool reaches');
-    expect(src).toContain('Commissioner &rarr; Settings');
+    expect(src).toContain('participants banner');
+    expect(src).not.toContain('Commissioner &rarr; Settings');
+    // ...and that banner really is the thing that routes to pricing.
+    const gate = read('src/components/billing/BillingGate.tsx');
+    expect(gate).toContain("const pricingHref = poolId ? `/pricing?poolId=${encodeURIComponent(poolId)}` : '/pricing';");
+    expect(gate).toContain('href={pricingHref}');
   });
 
   /**

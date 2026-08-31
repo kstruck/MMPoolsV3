@@ -439,9 +439,10 @@ export function LaunchStep(props: LaunchStepProps) {
           </p>
           <p className="mt-1">
             We email you when your pool reaches {FREE_PLAN_WARNING_AT} players and again at {freeCapNotice},
-            so the wall should never be a surprise. To raise it, open your pool, go to
-            <strong> Commissioner &rarr; Settings</strong> and upgrade — or set the number above to your real
-            headcount now and launch on the right plan from the start.
+            so the wall should never be a surprise. To raise it, open your pool and use the
+            <strong> Upgrade</strong> button on the participants banner — it takes you straight to the
+            pricing page for that pool. Or set the number above to your real headcount now and launch on
+            the right plan from the start, which is the cheaper move.
           </p>
         </div>
       )}
