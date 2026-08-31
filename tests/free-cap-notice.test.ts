@@ -32,7 +32,10 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     // cap is what the join gate enforces. Quoting the pricing one here promised
     // a 25-player free pool the moment an admin raised the config.
     expect(src).toContain('return FREE_PLAN_PARTICIPANT_CAP;');
-    expect(src).not.toContain('Number(quote.freePlayerThreshold)');
+    // The pricing threshold may be COMPARED (the r9 divergence guard) but must
+    // never be the value shown — that was the original defect.
+    expect(src).not.toContain('return Number(quote.freePlayerThreshold);');
+    expect(src).toContain('if (Number(quote.freePlayerThreshold) !== FREE_PLAN_PARTICIPANT_CAP) return null;');
     expect(src).not.toMatch(/A free pool holds 10 players/);
     expect(src).toContain('A free pool holds {freeCapNotice} {capUnit}');
   });
@@ -186,6 +189,19 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
    * Creation for the type is closed today, so the notice cannot render anyway;
    * this keeps reopening it from quietly reintroducing the lie.
    */
+  /**
+   * SILENT WHEN THE PRICING THRESHOLD AND THE ENFORCED CAP DIVERGE (codex r9).
+   *
+   * The block leans on the two being equal in several places — most sharply in
+   * "set your real headcount and launch on the right plan", which only avoids
+   * the wall while a headcount above the cap actually buys you out of the free
+   * tier. They are both 10 today. If an admin ever raises the config, the
+   * notice disappears rather than telling a half-truth.
+   */
+  it('is suppressed when the pricing threshold no longer equals the enforced cap', () => {
+    expect(src).toContain('if (Number(quote.freePlayerThreshold) !== FREE_PLAN_PARTICIPANT_CAP) return null;');
+  });
+
   it('is suppressed for SQUARES, whose join path does not enforce the cap', () => {
     expect(src).toContain("if (String(poolType).toUpperCase() === 'SQUARES') return null;");
     // The claim behind the suppression, measured: no cap in the squares path.

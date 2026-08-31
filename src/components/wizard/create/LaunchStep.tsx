@@ -275,6 +275,18 @@ export function LaunchStep(props: LaunchStepProps) {
     // render; it is here so reopening creation cannot quietly reintroduce the
     // lie. Delete it when S3 is fixed, not before.
     if (String(poolType).toUpperCase() === 'SQUARES') return null;
+    // ⚠️ EVERY SENTENCE IN THIS NOTICE ASSUMES THE TWO NUMBERS AGREE (codex r9).
+    //
+    // `freePlayerThreshold` (config, PRICING) and FREE_PLAN_PARTICIPANT_CAP
+    // (code, ENFORCEMENT) are both 10 today, and the block below leans on that
+    // in more than one place — most sharply in "set your real headcount and
+    // launch on the right plan", which only avoids the wall while a headcount
+    // above the cap actually buys you out of the free tier. Raise the config to
+    // 25 and an estimate of 11 still launches free, and still hits the wall.
+    //
+    // Rather than qualify each sentence, the notice SAYS NOTHING when they
+    // diverge. Silence is honest; a partially-true wall is not.
+    if (Number(quote.freePlayerThreshold) !== FREE_PLAN_PARTICIPANT_CAP) return null;
     return FREE_PLAN_PARTICIPANT_CAP;
   }, [quote, resolvedKey, quoteInputsKey, quoteLoading, poolType]);
 
