@@ -3,110 +3,167 @@
  *
  * Two invariants, both of which the docs cleanup must keep true:
  *
- *   1. No kept doc names an ARCHIVED file without its `docs/archive/` prefix —
- *      otherwise an operator following a cited runbook lands on a missing file.
- *   2. No kept doc — including the archived ones — names a DELETED file at all;
- *      a deleted doc is only safe to delete because nothing cites it.
+ *   1. LINKS RESOLVE. No kept markdown doc names an ARCHIVED file by a path
+ *      that does not land in `docs/archive/` — otherwise an operator following
+ *      a cited runbook opens a missing file. Checked against markdown only,
+ *      because this is a statement about link resolution.
  *
- * Run from the repo root:  node scripts/verifyArchiveRefs.mjs
- * Compare against a different base with:  --base <ref>   (default origin/main)
+ *   2. NOTHING CITES A DELETED DOC. A doc is only safe to delete because no
+ *      file references it. Checked across EVERY tracked text file — code,
+ *      tests, skills, workflows, docs — and matched with OR WITHOUT the `.md`
+ *      suffix, because the citation this repo actually missed was
+ *      `NOTES-WAVE2` (no suffix) in ~10 `functions/src/` comments.
  *
- * FAILS CLOSED. If the base ref cannot be read, invariant 2 is unverifiable and
- * the script exits non-zero rather than reporting success — a guard that cannot
- * check its own invariant must not look like a guard that passed.
+ * Run from the repo root:
+ *   node scripts/verifyArchiveRefs.mjs [--base <ref>]
+ *
+ * FAILS CLOSED. If the base ref is unreadable or the argument is malformed the
+ * script exits non-zero rather than reporting success — a guard that cannot
+ * check its own invariant must never look like a guard that passed.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ARCHIVE_DIR = 'docs/archive';
-const MD_NAME = /[A-Za-z0-9_][A-Za-z0-9_.-]*\.md/g;
-const PATH_SEP = /[/\\]$/;
 
-/** Directories that are never part of the citation graph. */
-const SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'coverage', '.next', 'out',
-  'playwright-report', 'test-results', '.firebase', '.claude',
+/** Extensions worth scanning for a citation. Anything else is binary or generated. */
+const TEXT_EXT = new Set([
+  '.md', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json',
+  '.yml', '.yaml', '.rules', '.txt', '.html', '.css', '.sh', '.py',
 ]);
 
-const baseArg = process.argv.indexOf('--base');
-const BASE = baseArg !== -1 ? process.argv[baseArg + 1] : 'origin/main';
+function fail(message) {
+  console.error(`FAIL: ${message}`);
+  process.exit(1);
+}
+
+// --- arguments -------------------------------------------------------------
+
+function parseBase(argv) {
+  const i = argv.indexOf('--base');
+  if (i === -1) return 'origin/main';
+  const value = argv[i + 1];
+  if (!value || value.startsWith('-')) {
+    fail('--base requires a ref, e.g. --base origin/main');
+  }
+  return value;
+}
+
+const BASE = parseBase(process.argv);
+
+// --- inputs ----------------------------------------------------------------
 
 const archived = new Set(
   fs.readdirSync(ARCHIVE_DIR).filter((f) => f.endsWith('.md') && f !== 'README.md'),
 );
 
-/** Every markdown doc a reader could follow a citation from, at any depth. */
-function keptDocs(dir = '.', out = []) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') && entry.name !== '.github') continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      keptDocs(full, out);
-    } else if (entry.name.endsWith('.md')) {
-      out.push(full);
-    }
-  }
-  return out;
+function git(args) {
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+function lines(out) {
+  return out.split('\n').map((s) => s.trim()).filter(Boolean);
 }
 
 /**
- * Files the working tree deletes relative to BASE.
- * Throws rather than returning empty — see FAILS CLOSED above.
+ * Docs deleted relative to BASE, including deletions that are only staged or
+ * only in the working tree — the README tells contributors to run this after a
+ * move, which is exactly when the deletion is not committed yet.
  */
 function deletedDocs() {
-  execFileSync('git', ['rev-parse', '--verify', `${BASE}^{commit}`], { stdio: 'pipe' });
-  const raw = execFileSync(
-    'git',
-    ['diff', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md'],
-    { encoding: 'utf8' },
+  try {
+    git(['rev-parse', '--verify', `${BASE}^{commit}`]);
+  } catch {
+    fail(
+      `cannot read base ref '${BASE}', so the deleted-reference invariant cannot be checked.\n` +
+      `      Run 'git fetch origin', or pass --base <ref> naming a ref that exists.`,
+    );
+  }
+  const committed = lines(
+    git(['diff', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md']),
   );
-  return raw.split('\n').map((s) => s.trim()).filter(Boolean).map((f) => path.basename(f));
+  const uncommitted = lines(
+    git(['diff', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
+  );
+  // A doc that left the root but now lives in docs/archive/ was MOVED, not
+  // deleted — git reports the old path as a deletion either way, so subtract
+  // the archive or every archived file would be reported as dangling.
+  return new Set(
+    [...committed, ...uncommitted]
+      .map((f) => path.basename(f))
+      .filter((name) => !archived.has(name)),
+  );
 }
 
-let deleted;
-try {
-  deleted = new Set(deletedDocs());
-} catch {
-  console.error(
-    `FAIL: cannot read base ref '${BASE}', so the deleted-reference invariant ` +
-    `cannot be checked.\n` +
-    `      Run 'git fetch origin', or pass --base <ref> naming a ref that exists.`,
-  );
-  process.exit(1);
+/** Every tracked text file, so a citation in code or a skill cannot hide. */
+function trackedTextFiles() {
+  return lines(git(['ls-files'])).filter((f) => TEXT_EXT.has(path.extname(f).toLowerCase()));
 }
 
-let unprefixed = 0;
+// --- checks ----------------------------------------------------------------
+
+const deleted = deletedDocs();
+const deletedStems = new Map(); // stem -> original filename
+for (const name of deleted) deletedStems.set(name.replace(/\.md$/, ''), name);
+
+/**
+ * Markdown LINK targets only — `](path/to/doc.md)`. Invariant 1 is about link
+ * resolution, so a prose mention of a repo-root-relative path (common in the
+ * skills, which describe paths rather than link to them) is not a subject of it.
+ */
+const MD_LINK = /\]\(\s*((?:[A-Za-z0-9_.-]+\/)*)([A-Za-z0-9_][A-Za-z0-9_.-]*\.md)\s*[)#]/g;
+
+let unresolved = 0;
 let dangling = 0;
 
-for (const file of keptDocs()) {
-  const text = fs.readFileSync(file, 'utf8');
-  const rel = file.replace(/\\/g, '/').replace(/^\.\//, '');
-  const inArchive = rel.startsWith(ARCHIVE_DIR);
+for (const file of trackedTextFiles()) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    continue; // unreadable or vanished mid-run; nothing to check
+  }
+  const isMarkdown = path.extname(file).toLowerCase() === '.md';
+  const inArchive = file.startsWith(`${ARCHIVE_DIR}/`);
 
-  for (const m of text.matchAll(MD_NAME)) {
-    const name = m[0];
-    const precededByPath = PATH_SEP.test(text.slice(Math.max(0, m.index - 20), m.index));
-
-    // Invariant 1 — archived files must be cited by path. Archived docs
-    // themselves link to siblings by bare name, which resolves correctly.
-    if (archived.has(name) && !precededByPath && !inArchive) {
-      console.log(`UNPREFIXED  ${rel} -> ${name}`);
-      unprefixed++;
+  // Invariant 1 — an archived doc must be cited by a path that resolves to it.
+  if (isMarkdown && !inArchive) {
+    for (const m of text.matchAll(MD_LINK)) {
+      const [, dir, name] = m;
+      if (!archived.has(name)) continue;
+      // Resolve the citation the way a reader's browser would, then require it
+      // to land on the real file. A bare name or a wrong directory both fail.
+      const resolved = path.posix.normalize(
+        path.posix.join(path.posix.dirname(file.replace(/\\/g, '/')), dir, name),
+      );
+      if (resolved !== `${ARCHIVE_DIR}/${name}`) {
+        console.log(`UNRESOLVED  ${file} -> ${dir}${name}  (resolves to ${resolved})`);
+        unresolved++;
+      }
     }
+  }
 
-    // Invariant 2 — nothing may cite a deleted file.
-    if (deleted.has(name)) {
-      console.log(`DANGLING    ${rel} -> ${name}`);
+  // Invariant 2 — a deleted doc may not be named anywhere, suffix or not.
+  for (const [stem, original] of deletedStems) {
+    // Word-boundary match so `NOTES-WAVE2` is caught but `NOTES-WAVE20` is not.
+    const re = new RegExp(`(?<![A-Za-z0-9_-])${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_-])`);
+    if (re.test(text)) {
+      console.log(`DANGLING    ${file} -> ${original}`);
       dangling++;
     }
   }
 }
 
-console.log(`\nbase ref:                         ${BASE}`);
-console.log(`unprefixed refs to archived docs: ${unprefixed}`);
-console.log(`refs to deleted docs:             ${dangling}`);
+// --- report ----------------------------------------------------------------
 
-if (unprefixed || dangling) process.exit(1);
+console.log(`\nbase ref:                          ${BASE}`);
+console.log(`archived docs:                     ${archived.size}`);
+console.log(`deleted docs:                      ${deleted.size}`);
+console.log(`markdown files scanned for links:  ${trackedTextFiles().filter((f) => f.endsWith('.md')).length}`);
+console.log(`tracked text files scanned:        ${trackedTextFiles().length}`);
+console.log(`citations that do not resolve:     ${unresolved}`);
+console.log(`references to deleted docs:        ${dangling}`);
+
+if (unresolved || dangling) process.exit(1);
 console.log('\nOK — archive citation graph is closed.');
