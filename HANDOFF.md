@@ -1449,7 +1449,7 @@
 > (auth, K1–K18, one codex finding open at cap: K18 webhook race),
 > `PLAN-POOL-TYPE-ICONS.md` (K1–K13), `PLAN-HELP-SYSTEM.md` (K1–K13, ported from
 > spectrum-price-intel's HelpTooltip/HelpPanel), each with review log + sweeps, +
-> `BOARD-MEMO-2026-08-16-transfer-icons-help.md` — **board says build none during
+> `docs/archive/BOARD-MEMO-2026-08-16-transfer-icons-help.md` — **board says build none during
 > the live weeks; ship the two ICONS mislabels + the `createCheckoutSession`
 > ownership gate (`stripe.ts:189-193`) standalone; measure 3–4 weeks.** Kevin's §6
 > calls on all three.
@@ -1791,7 +1791,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > it does and that was never verified.
 >
 > ❓ **One question outstanding:** which file is the new email logo?
-> `LAUNCH-READINESS.md` row E5. Two consumers, one asset — decide before the
+> `docs/archive/LAUNCH-READINESS.md` row E5. Two consumers, one asset — decide before the
 > invites go out.
 
 > ## ⚠️ SUPERSEDED — 🚀 STOP POINT 2026-08-11 (evening) — **everything merged and deployed; the spreads mystery is solved and it was not the flag**
@@ -1881,7 +1881,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > | PR | What | Deploy owed on merge |
 > |---|---|---|
 > | [#408](https://github.com/kstruck/MMPoolsV3/pull/408) **MERGED `39d5702`** | default week from the loaded slate; entry `userName` falls back to `users/{uid}.name` and heals a stored "Participant" | ✅ **DEPLOYED AND VERIFIED IN PROD 2026-08-11.** Functions deployed (`Deploy complete!`, `submitNFLPicks` among the updates; four 429s mid-run all recovered inside the same run), Coolify rebuilt. Verified live: the dashboard opens on **Preseason Week 1** with `HOF ×` behind it — old calendar math would have said HOF Weekend on Aug 11 (`ceil(5/7)` = 1) — and a re-submit healed a stored "Participant" row to the member's profile name. **Nothing owed.** |
-> | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `LAUNCH-READINESS.md` corrections | none |
+> | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `docs/archive/LAUNCH-READINESS.md` corrections | none |
 > | [#410](https://github.com/kstruck/MMPoolsV3/pull/410) | `PLAN-COMMISSIONER-BLIND-PICKS` + sweeps + review log — **PLAN ONLY, needs Kevin's sign-off on §5 before any code** | none |
 >
 > All four: CI green, codex clean on the final diff, qodo reported and every
@@ -1940,7 +1940,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 >   (owed, low urgency)**. Majors: #401 blocked upstream (vite-8 peer conflict),
 >   #402 gates-green but wants a visual smoke, #403 really broken (brand icons
 >   removed) — verdicts on each PR and in the morning doc.
-> - **`LAUNCH-READINESS.md`** (NEW) is the measured launch audit — headline
+> - **`docs/archive/LAUNCH-READINESS.md`** (NEW) is the measured launch audit — headline
 >   wins measured tonight: **PITR is ENABLED** (7-day window, on since
 >   ~2026-08-04; `PLAN-BACKUPS-PHASE3.md` corrected), and the SA key **file is
 >   gone from `C:\keys`** (console-side revocation still to confirm — morning

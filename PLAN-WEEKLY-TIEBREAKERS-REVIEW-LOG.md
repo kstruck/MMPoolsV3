@@ -306,7 +306,7 @@ decision**, and the cheap-looking version of it is exactly the one that would
 reintroduce the entry read #414 removed.
 
 **Absorbed** into `MORNING-2026-08-14.md` §4c as a correction box, and the G2
-row's classification changed from *frontend* to *backend*. `LAUNCH-READINESS.md`
+row's classification changed from *frontend* to *backend*. `docs/archive/LAUNCH-READINESS.md`
 §I's summary paragraph corrected to match — it carried the same wrong claim.
 
 **It strengthens the audit's recommendation rather than weakening it.** "G1 only
