@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@jest/types": "^30.3.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.4.0",
     "firebase-functions-test": "^3.1.1",
     "typescript": "^5.0.0",
     "vitest": "^4.1.10"
