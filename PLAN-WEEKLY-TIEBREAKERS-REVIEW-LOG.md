@@ -277,7 +277,7 @@ cross-model reviewer catches and self-review does not.
 
 ## Appendix — round 7, on the audit document rather than the plan
 
-The same review pass covers `MORNING-2026-08-14.md`, since both ride the same
+The same review pass covers `docs/archive/MORNING-2026-08-14.md`, since both ride the same
 branch. Recorded here because there is nowhere better and a rejected-or-absorbed
 finding must live somewhere.
 
@@ -305,7 +305,7 @@ afternoon of UI work. It is a server projection change plus a **new reveal-polic
 decision**, and the cheap-looking version of it is exactly the one that would
 reintroduce the entry read #414 removed.
 
-**Absorbed** into `MORNING-2026-08-14.md` §4c as a correction box, and the G2
+**Absorbed** into `docs/archive/MORNING-2026-08-14.md` §4c as a correction box, and the G2
 row's classification changed from *frontend* to *backend*. `docs/archive/LAUNCH-READINESS.md`
 §I's summary paragraph corrected to match — it carried the same wrong claim.
 

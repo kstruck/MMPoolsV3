@@ -163,7 +163,7 @@ parser does not recognise, so a new schedule shape cannot become a silent hole.
 
 ## 4. The flip sequence — Kevin's steps, in order
 
-Numbered, copy-paste steps are in `MORNING-2026-08-08.md`. The shape and its
+Numbered, copy-paste steps are in `docs/archive/MORNING-2026-08-08.md`. The shape and its
 gates:
 
 **Stage 0 — deploy this PR's functions.** `'*/5'` and the timeout change do not
@@ -221,7 +221,7 @@ this flag today — `nflAutoScore` appears nowhere under `src/`.
 
 ## 5. ⛔ The one open prerequisite
 
-`MORNING-2026-07-25-PART2.md` §5 listed four things that had to land before
+`docs/archive/MORNING-2026-07-25-PART2.md` §5 listed four things that had to land before
 arming. Three have:
 
 | prerequisite | state |

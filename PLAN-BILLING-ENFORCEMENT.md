@@ -17,7 +17,7 @@ so ungated.**
 
 **Related:** `PLAN-BILLING-INDEX-DEPLOY.md` (the missing composite indexes, PR
 #365, **merged 2026-08-04 but NOT successfully deployed** — see
-`MORNING-2026-08-04.md` §B0) carries the population figures and the blast-radius
+`docs/archive/MORNING-2026-08-04.md` §B0) carries the population figures and the blast-radius
 reasoning this plan builds on.
 
 ---
@@ -56,7 +56,7 @@ missing its `Job` suffix. Every name in the column above is now the exported
 symbol, with the line it is exported on, because the point of the table is that
 a reader can go find these.
 
-This is the same fix that landed in `MORNING-2026-08-04.md` §B2 by self-review,
+This is the same fix that landed in `docs/archive/MORNING-2026-08-04.md` §B2 by self-review,
 and it did not get applied here at the time — the third instance tonight of
 correcting one document and leaving its twin standing.
 
@@ -78,7 +78,7 @@ kill-switch.
 PR #365 declared those indexes, and an earlier revision of this paragraph said
 it had deployed them. ❌ **It had not.** The 23:00 ET run on 2026-08-04 threw the
 same `FAILED_PRECONDITION` (measured 2026-08-05 03:43 UTC —
-`MORNING-2026-08-04.md` §B0), so the job STILL has never completed a run.
+`docs/archive/MORNING-2026-08-04.md` §B0), so the job STILL has never completed a run.
 
 That does not weaken the case for this plan; it sharpens the timing.
 
@@ -287,7 +287,7 @@ is what this plan proposes.
   (`src/components/SuperAdmin.tsx:2980`), `maintenanceMode` (`:3002`),
   `tickerDurationSec` (`:3027`), `autoClose` (`:3045`) and `poolTypeFlags`
   (`:3083`). **`billingEnforce` would not be among them**, which is why the NFL
-  gates in `MORNING-2026-08-04.md` §B2 are armed from the Firebase console.
+  gates in `docs/archive/MORNING-2026-08-04.md` §B2 are armed from the Firebase console.
   (An intermediate draft said "exactly three things" and was wrong about the
   list — qodo caught that one. The negative claim is what carries the argument.)
 
