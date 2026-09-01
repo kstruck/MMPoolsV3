@@ -1439,6 +1439,7 @@ export function clampLookbackDays(raw: unknown): number {
 }
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { rethrowOrInternal } from "./lib/safeError";
 
 /**
  * Read the {enabled, dryRun} gate for a scheduled job out of system/config.
@@ -1489,9 +1490,8 @@ export const importNFLSchedule = validated(
     // Surfaced, not swallowed: the caller asked for N weeks and may have got fewer.
     return { success: true, importedCount: res.importedCount, leaseBusyWeeks: res.leaseBusyWeeks };
   } catch (err: any) {
-    console.error("importNFLSchedule Failure:", err);
-    // No 3rd arg: HttpsError's `details` is serialized to the client, and a raw
-    // error object can carry stack traces and internal paths.
-    throw new HttpsError('internal', `Failed to import NFL schedule: ${err.message || 'Unknown error'}`);
+    // Expected HttpsErrors keep their code; the generic replaces err.message
+    // in the client copy (Phase 1, PLAN-API-TRUST-BOUNDARY).
+    rethrowOrInternal('importNFLSchedule', err);
   }
 });

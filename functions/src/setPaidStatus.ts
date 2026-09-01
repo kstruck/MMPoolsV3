@@ -11,6 +11,7 @@ import { isProvableMember, membersCol } from "./lib/memberRecord";
 import { isCanonicalMemberRecord, derivePaidStatus, liableEntryIds, paidEntryCountOf, type MemberRecord, type PaidEntryMap } from "./shared/memberRecord";
 import { readPoolDues, writePoolDues } from "./lib/poolDues";
 import { entryHasPick } from "./lib/multiEntry";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 import { refreshProjectionsBestEffort } from "./lib/refreshProjections";
 
 /** Every entry doc this member owns (PLAN-MULTI-ENTRY D1: readers never parse ids). */
@@ -110,7 +111,10 @@ export const setPaidStatus = validated(
   // PLAN-CO-COMMISSIONERS C6 (K3 = Yes): a co-commissioner may mark members
   // paid — one helper, same principal set as every other NFL commissioner
   // callable, so the ledger and the tab agree on who is a commissioner.
-  const isOwner = isPoolCommissioner(pool, uid) || request.auth!.token?.role === 'SUPER_ADMIN';
+  // CLAIM+DOC (PLAN-API-TRUST-BOUNDARY Phase 3): the admin bypass beside the
+  // commissioner check no longer trusts the bare claim; a real commissioner
+  // pays no extra read (hasConfirmedRole short-circuits on the claim).
+  const isOwner = isPoolCommissioner(pool, uid) || await hasConfirmedRole(request, 'SUPER_ADMIN');
   if (!isOwner) throw new HttpsError("permission-denied", "Only the commissioner can set paid status.");
 
   // --- Rebuy settlement (PLAN-PAYMENT-TRUTH P3, Q2 = option B) ---

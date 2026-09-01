@@ -1,5 +1,12 @@
 # TOMORROW-TASKS.md — Kevin's morning checklist (2026-07-18 → 2026-07-19)
 
+> **2026-09-01 — carried forward (Kevin's Q2 ruling on
+> PLAN-API-TRUST-BOUNDARY-REMEDIATION):** `fixPoolScores` with no `poolId`
+> still fixes EVERY in/post pool (documented-dangerous default in
+> `functions/src/schemas/scoreUpdates.ts`). Needs its own plan-gated change —
+> likely an explicit `{ global: true }` opt-in so an accidental no-arg call
+> targets nothing.
+
 > ## 📍 THIS FILE HAS TWO HALVES — read this map first
 >
 > | Half | Sections | From | Status |

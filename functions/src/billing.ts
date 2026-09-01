@@ -563,7 +563,11 @@ export const getPoolQuote = validated(
             coupon,
         });
     } catch (e: any) {
-        throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
+        // Same code, stable text: computeQuote's plain-Error messages name
+        // internals (formatTierMap). Real reason logged server-side (Phase 1).
+        if (e instanceof HttpsError) throw e;
+        console.error("[getPoolQuote] quote failed:", e);
+        throw new HttpsError("invalid-argument", "Unable to price this pool format.");
     }
     },
 );

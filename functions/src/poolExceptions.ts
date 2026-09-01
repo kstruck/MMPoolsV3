@@ -29,6 +29,7 @@ import {
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from "./lib/entryRevision";
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shared/survivorReuse";
 import { extensionRefusal } from "./lib/publishedWeeks";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -128,7 +129,7 @@ export const extendWeekDeadline = validated(
     const db = admin.firestore();
     const { poolId, week: weekNum, extraMinutes: extraMin, reason } = input;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, await confirmedAdminClaim(request));
 
     // Survivor/Margin run a HARD weekly deadline before the first kickoff (Kevin's
     // ruling 2026-07-25). An extension there could push the deadline past a game
@@ -237,7 +238,7 @@ export const proxyPick = validated(
     // PLAN-MULTI-ENTRY T2: which of the target's entries (default 1 = entries/{uid}).
     const entryIndex = input.entryIndex ?? 1;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, await confirmedAdminClaim(request));
     const type = pool.type;
     if (type !== "NFL_PICKEM" && type !== "NFL_SURVIVOR" && type !== "NFL_MARGIN") {
         throw new HttpsError("failed-precondition", "Proxy picks are only supported for NFL pools.");
@@ -552,7 +553,7 @@ export const cancelPool = validated(
     const db = admin.firestore();
     const { poolId, reason } = input;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined, assertPoolOwnerOrManagerNoCo);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, await confirmedAdminClaim(request), assertPoolOwnerOrManagerNoCo);
 
     if (pool.status === "CANCELED") {
         throw new HttpsError("failed-precondition", "This pool has already been canceled.");
@@ -611,7 +612,7 @@ export const closePool = validated(
     const db = admin.firestore();
     const { poolId } = input;
 
-    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, request.auth!.token.role as string | undefined, assertPoolOwnerOrManagerNoCo);
+    const { poolRef, pool } = await loadPoolAndAssertManager(db, poolId, uid, await confirmedAdminClaim(request), assertPoolOwnerOrManagerNoCo);
 
     // CANCELED (and an already-COMPLETED close) are terminal — never overwrite.
     if (isTerminalStatus(pool.status as string | undefined)) {

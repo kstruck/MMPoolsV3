@@ -7,11 +7,12 @@ import * as admin from "firebase-admin";
 import { GameState, AxisNumbers, Winner } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { validated } from "./lib/validated";
-import { fixPoolScoresSchema } from "./schemas/scoreUpdates";
+import { fixPoolScoresSchema, simulateGameUpdateSchema } from "./schemas/scoreUpdates";
 import { withHeartbeat } from "./lib/heartbeat";
 import { isDeadSyncPool } from "./lib/scanBounds";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { hasConfirmedRole } from "./lib/confirmedRole";
+import { rethrowOrInternal } from "./lib/safeError";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -1299,10 +1300,16 @@ export const simulateGameUpdate = onCall({
         throw new HttpsError('permission-denied', 'Authentication required');
     }
 
-    const { poolId, scores } = request.data;
-    if (!poolId || !scores) {
-        throw new HttpsError('invalid-argument', 'Missing poolId or scores');
+    // NAMED schema parse BEFORE any use of request.data (Phase 2,
+    // PLAN-API-TRUST-BOUNDARY): a null/primitive/array payload used to crash
+    // the destructure into a generic `internal`. Mirrors runGate's error shape.
+    const parsed = simulateGameUpdateSchema.safeParse(request.data);
+    if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const path = issue?.path?.join('.') || '(root)';
+        throw new HttpsError('invalid-argument', `Invalid request: ${path} — ${issue?.message ?? 'validation failed'}`);
     }
+    const { poolId, scores } = parsed.data;
 
     const uid = request.auth.uid;
 
@@ -1386,8 +1393,11 @@ export const simulateGameUpdate = onCall({
 
         return { success: true, message: 'Simulation Applied' };
     } catch (error: any) {
-        console.error('Simulation Transaction Failed:', error);
-        throw new HttpsError('internal', `Simulation failed: ${error.message}`);
+        // Expected HttpsErrors (not-found / permission-denied thrown inside the
+        // transaction) pass through with their real code — this catch used to
+        // re-wrap them as `internal` AND leak the raw error.message to the
+        // client (PLAN-API-TRUST-BOUNDARY-REMEDIATION Phase 1).
+        rethrowOrInternal('simulateGameUpdate', error);
     }
 });
 
@@ -1505,7 +1515,9 @@ export const fixPoolScores = validated(
 
         } catch (error: any) {
             console.error(`Error processing pool ${doc.id}: `, error);
-            results.push({ id: doc.id, status: 'error', reason: error.message });
+            // Stable code, not error.message — even a SUPER_ADMIN response must
+            // not carry raw internals; the line above keeps the real diagnostic.
+            results.push({ id: doc.id, status: 'error', reason: 'processing-error' });
         }
     }
 

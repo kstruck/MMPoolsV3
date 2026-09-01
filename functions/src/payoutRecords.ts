@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { writeLedgerEvent } from "./paymentLedger";
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
 import { assertNotBannedLive } from "./lib/systemGuards";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { recomputeUserProfile } from "./userProfile";
 import { PAYOUT_SCHEMA_VERSION, weeklyAwardId, type PayoutKind } from "./shared/payoutRecords";
 import type { WeeklyPlace, WeeklyPrizeSnapshot } from "./shared/weeklyPrizes";
@@ -214,7 +215,10 @@ export const recordPoolPayouts = onCall(async (request) => {
   const poolSnap = await poolRef.get();
   if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found.');
   const pool = poolSnap.data() as any;
-  await assertPayoutAuthority(pool, actorUid, request.auth.token.role as string | undefined);
+  // confirmedAdminClaim strips an UNCONFIRMED SUPER_ADMIN claim (Phase 3,
+  // PLAN-API-TRUST-BOUNDARY): owners/co-commissioners are byte-identical, a
+  // stale-token admin falls to the ownership check instead of the money ledger.
+  await assertPayoutAuthority(pool, actorUid, await confirmedAdminClaim(request));
 
   const participantIds: string[] = pool.participantIds || [];
   const validated: AwardInput[] = awards.map((a: any, i: number) => {
@@ -435,7 +439,8 @@ export const setPayoutSettled = onCall(async (request) => {
   const poolRef = db.collection('pools').doc(poolId);
   const poolSnap = await poolRef.get();
   if (!poolSnap.exists) throw new HttpsError('not-found', 'Pool not found.');
-  await assertPayoutAuthority(poolSnap.data(), actorUid, request.auth.token.role as string | undefined);
+  // Same claim+doc treatment as recordPoolPayouts above (Phase 3).
+  await assertPayoutAuthority(poolSnap.data(), actorUid, await confirmedAdminClaim(request));
 
   const pubRef = poolRef.collection('payoutRecords').doc(awardId);
   const privRef = poolRef.collection('payoutRecordsPrivate').doc(awardId);

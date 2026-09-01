@@ -7,6 +7,7 @@ import { sendPoolInvitesSchema } from "./schemas/poolEngagement";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { User } from "./types";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 // Bulk email invites (UX overhaul Phase 3.7). Lets a commissioner paste a list
 // of addresses and invite them to the pool without leaving the app. Mirrors the
@@ -70,7 +71,8 @@ export const sendPoolInvites = validated(
         throw new HttpsError("not-found", "Pool not found.");
     }
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
-    assertPoolOwnerOrSuperAdmin(pool, uid, request.auth!.token.role as string | undefined);
+    // Unconfirmed SUPER_ADMIN claims are stripped (Phase 3, PLAN-API-TRUST-BOUNDARY).
+    assertPoolOwnerOrSuperAdmin(pool, uid, await confirmedAdminClaim(request));
 
     // 4. Resolve sender display name for the subject line
     const managerDoc = await db.collection("users").doc(uid).get();

@@ -164,7 +164,9 @@ function genEntriesFor(
 const SEED = 20260710;
 let season: GeneratedSeason;
 
-beforeAll(() => {
+beforeAll(async () => {
+    // Claim+doc (Phase 3): back the SUPER_ADMIN claim with a users doc.
+    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN' }, { merge: true });
     season = generateNFLSeason({ seed: SEED, weeks: 4, entryCount: 6 });
     const ties = season.games.filter(g => g.homeScore === g.awayScore);
     expect(ties).toHaveLength(0);

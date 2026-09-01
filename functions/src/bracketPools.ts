@@ -14,6 +14,7 @@ import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { validLaunchCouponCode } from "./lib/launchCoupon";
 import {
     validateCreateInput,
+    assertCreatePayloadIsObject,
     assertNotBanned,
     billingForLaunch,
     writePoolCreationSideEffects,
@@ -32,7 +33,22 @@ export const createBracketPool = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "User must be logged in.");
     }
 
-    const { name, settings: rawSettings, seasonYear, gender, tournamentType } = request.data;
+    // Shape guard BEFORE the destructure (PLAN-API-TRUST-BOUNDARY Phase 2): a
+    // null / primitive / array payload used to crash here into a generic
+    // `internal`. The FULL schema gate (validateCreateInput → the shared
+    // bracketCreateInputSchema) still runs below, deliberately AFTER
+    // assertPoolCreationAllowed so the maintenance gate's error wins (codex r4
+    // on the earlier hardening). Top-level unknown keys stay accepted by
+    // documented design — launch fields ride at top level and the document is
+    // built field-by-field, so nothing unknown is ever persisted.
+    assertCreatePayloadIsObject(request.data);
+
+    // Cast to the payload's nominal shape — the runtime gates below
+    // (validateCreateInput + strict settings parse) are the real validation.
+    const { name, settings: rawSettings, seasonYear, gender, tournamentType } = request.data as {
+        name?: string; settings?: unknown; seasonYear?: number;
+        gender?: 'mens' | 'womens'; tournamentType?: string;
+    };
     const uid = request.auth.uid;
 
     // Debug log. The FULL `request.data` dump that used to sit on the next line

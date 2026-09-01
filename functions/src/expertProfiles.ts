@@ -18,6 +18,7 @@ import { buildPublicProfile, type ProfilePoolInput } from "./lib/profileBuild";
 import type { PickSide } from "./expertPicks";
 import { withHeartbeat } from "./lib/heartbeat";
 import { assertCallerRole } from "./lib/assertRole";
+import { z } from "zod";
 
 type Firestore = admin.firestore.Firestore;
 
@@ -158,7 +159,23 @@ export const gradeExpertProfilesJob = onSchedule(
 /** On-demand (SUPER_ADMIN — claim+doc agreement, PLAN-AUDIT-AUTH-HARDENING A1): grade a specific season now. */
 export const refreshExpertProfiles = onCall(async (request) => {
   await assertCallerRole(request, 'SUPER_ADMIN');
-  const { season, seasonType } = request.data || {};
-  if (!season) throw new HttpsError('invalid-argument', 'season is required.');
-  return recomputeExpertProfiles(admin.firestore(), String(season), Number(seasonType || 2));
+  // Typed parse (PLAN-API-TRUST-BOUNDARY Phase 2): the old
+  // `Number(seasonType || 2)` accepted NaN into the recompute's query.
+  const parsed = refreshExpertProfilesSchema.safeParse(request.data ?? {});
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new HttpsError('invalid-argument', `Invalid request: ${issue?.path?.join('.') || '(root)'} — ${issue?.message ?? 'validation failed'}`);
+  }
+  return recomputeExpertProfiles(admin.firestore(), parsed.data.season, parsed.data.seasonType);
+});
+
+/**
+ * season: year-ish string ("2026"); seasonType: 1 (pre) | 2 (regular) | 3
+ * (post), default 2 — matching the scheduled job's activeSeasonPairs shapes.
+ * Number-or-string season accepted (both transports exist). PURE zod, local:
+ * the module already mixes schedule + callable concerns.
+ */
+export const refreshExpertProfilesSchema = z.object({
+  season: z.union([z.string().trim().min(1).max(16), z.number().int()]).transform(String),
+  seasonType: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional().default(2),
 });

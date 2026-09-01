@@ -60,6 +60,7 @@ import { deleteNFLEntrySchema } from './schemas/poolCore';
 import { isPoolCommissioner } from './poolOps';
 import { legacyPublishedWeeks } from './lib/publishedWeeks';
 import { writeAuditEvent } from './audit';
+import { confirmedAdminClaim } from './lib/confirmedRole';
 
 /** The NFL pool types that have entries at all. */
 const NFL_ENTRY_POOL_TYPES = new Set(['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']);
@@ -424,7 +425,10 @@ export const deleteNFLEntry = validated(
     await assertNotBannedLive(uid);
     return deleteNFLEntryInternal(
       admin.firestore(),
-      { actorUid: uid, actorRole: request.auth!.token?.role },
+      // Unconfirmed SUPER_ADMIN claims stripped BEFORE the transaction
+      // (Phase 3, PLAN-API-TRUST-BOUNDARY) — the in-tx bypass at the
+      // commissioner check now sees a resolved role.
+      { actorUid: uid, actorRole: await confirmedAdminClaim(request) },
       input,
     );
   },

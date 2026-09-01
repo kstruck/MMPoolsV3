@@ -71,6 +71,7 @@ import { createPoolPermissiveSchema, submitNFLPicksSchema } from "./schemas/pool
 import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } from "./schemas/nflPools";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
+import { rethrowOrInternal } from "./lib/safeError";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -114,7 +115,11 @@ export const createNFLPool = validated(
     // on transient payload fields a handler might drop (codex r1,
     // PLAN-SIM-CREATION-BYPASS). simRunIdForCreate fails closed for non-admins
     // and malformed run ids.
-    const claimRole = request.auth!.token.role as string | undefined;
+    // Resolved claim (Phase 3, PLAN-API-TRUST-BOUNDARY): an unconfirmed
+    // SUPER_ADMIN claim is stripped to undefined, so it can no longer mint a
+    // sim pool past the creation kill-switch. Every other claim (incl. BANNED,
+    // which assertNotBanned below reads) passes through untouched, no read.
+    const claimRole = await confirmedAdminClaim(request);
     const simRunId = simRunIdForCreate((request.data || {}) as Record<string, any>, claimRole);
     // Feature-flag + maintenance guard (server-authoritative).
     await assertPoolCreationAllowed(type, { simBypass: simRunId !== undefined });
@@ -232,10 +237,10 @@ export const createNFLPool = validated(
 
     return { success: true, poolId };
   } catch (error: any) {
-    console.error("createNFLPool Failure:", error);
-    if (error instanceof HttpsError) throw error;
-    // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
-    throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
+    // Expected HttpsErrors keep their code/message; anything else is logged
+    // server-side and the client gets the stable generic — the message no
+    // longer carries error.message (Phase 1, PLAN-API-TRUST-BOUNDARY).
+    rethrowOrInternal('createNFLPool', error);
   }
   },
 );
@@ -1030,7 +1035,10 @@ export const submitNFLPicks = validated(
       admin.firestore(),
       {
         actorUid: request.auth!.uid,
-        actorRole: token?.role,
+        // Unconfirmed SUPER_ADMIN claims stripped (Phase 3) — feeds
+        // assertNFLPickMembership's admin bypass. Ordinary members pay no
+        // extra read (confirmedAdminClaim short-circuits on the claim).
+        actorRole: await confirmedAdminClaim(request),
         subjectUid: request.auth!.uid,
         subjectName: token?.name,
         requestId: input.requestId,
@@ -1170,7 +1178,10 @@ export const executeSurvivorRebuy = validated(
       admin.firestore(),
       {
         actorUid: request.auth!.uid,
-        actorRole: token?.role,
+        // The rebuy internal does not consult actorRole today; resolved anyway
+        // (Phase 3) so no MemberActionContext ever carries an unconfirmed
+        // SUPER_ADMIN into a helper that might grow a bypass.
+        actorRole: await confirmedAdminClaim(request),
         subjectUid: request.auth!.uid,
         subjectName: token?.name,
       },

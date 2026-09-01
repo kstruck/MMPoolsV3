@@ -35,6 +35,9 @@ beforeEach(async () => {
     }
     const games = await db.collection('nfl_games').get();
     await Promise.all(games.docs.map(d => d.ref.delete()));
+    // Claim+doc (PLAN-API-TRUST-BOUNDARY Phase 3): the harness gate now
+    // requires users/{uid}.role to agree with the SUPER_ADMIN claim.
+    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN' }, { merge: true });
 });
 
 describe('sim harness — refusal paths', () => {

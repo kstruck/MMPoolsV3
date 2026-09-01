@@ -27,6 +27,7 @@ import { isPoolOwnerOrManager } from './poolOps';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAdminAudit, capMetadata } from './lib/adminAudit';
 import { assertNotBannedLive } from './lib/systemGuards';
+import { hasConfirmedRole } from './lib/confirmedRole';
 
 const TOURNAMENT_ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
@@ -67,7 +68,9 @@ export const simSetTournament = onCall(async (request) => {
     };
 
     try {
-        if (role !== 'SUPER_ADMIN') {
+        // CLAIM+DOC (PLAN-API-TRUST-BOUNDARY Phase 3): claim short-circuits,
+        // users/{uid}.role must agree, read failure denies.
+        if (role !== 'SUPER_ADMIN' || !(await hasConfirmedRole(request, 'SUPER_ADMIN'))) {
             throw new HttpsError('permission-denied', 'Tournament test writes are SUPER_ADMIN only.');
         }
         if (typeof tournamentId !== 'string' || !TOURNAMENT_ID_RE.test(tournamentId)) {
@@ -98,7 +101,8 @@ export const simDeleteTournament = onCall(async (request) => {
     const { tournamentId } = (request.data ?? {}) as { tournamentId?: string };
 
     try {
-        if (role !== 'SUPER_ADMIN') {
+        // CLAIM+DOC (Phase 3) — same contract as simSetTournament above.
+        if (role !== 'SUPER_ADMIN' || !(await hasConfirmedRole(request, 'SUPER_ADMIN'))) {
             throw new HttpsError('permission-denied', 'Tournament test writes are SUPER_ADMIN only.');
         }
         if (typeof tournamentId !== 'string' || !TOURNAMENT_ID_RE.test(tournamentId)) {
@@ -140,7 +144,9 @@ export const simFillSquares = onCall(async (request) => {
         if (!snap.exists) throw new HttpsError('not-found', 'Pool not found.');
         const pool = snap.data() as Record<string, any>;
 
-        const isSuper = role === 'SUPER_ADMIN';
+        // CLAIM+DOC (Phase 3): the claim is only a hint; a non-claimant pays no
+        // read (hasConfirmedRole short-circuits) and falls to the ownership path.
+        const isSuper = role === 'SUPER_ADMIN' && (await hasConfirmedRole(request, 'SUPER_ADMIN'));
         // `coManagers` is NOT consulted here (PLAN-CO-COMMISSIONERS D3 — see
         // simulateGameUpdate for why).
         const owns = isPoolOwnerOrManager(pool, uid);
