@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import {
@@ -38,6 +38,13 @@ const wPublicSubmit = test.wrap(submitNFLPicks);
 const wUpdateSettings = test.wrap(updatePoolSettings);
 
 const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN' } } as any;
+
+// Claim+doc (PLAN-API-TRUST-BOUNDARY Phase 3): every SUPER_ADMIN claim must be
+// backed by a users/{uid}.role doc; suites share one emulator DB and another
+// file's wipe can delete it, so re-seed per test.
+beforeEach(async () => {
+    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN' }, { merge: true });
+});
 
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 const HOUR = 60 * 60 * 1000;

@@ -6,6 +6,7 @@ import { scoreBracketEntriesSchema, finalizeTournamentPayoutsSchema } from "./sc
 import { Tournament, BracketPool, BracketEntry } from "./types";
 import { sendEmail } from "./reminders";
 import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
+import { rethrowOrInternal } from "./lib/safeError";
 
 
 // Scoring Constants — must match ROUND_CONFIG in BracketWizard.tsx
@@ -370,9 +371,10 @@ export const scoreBracketEntries = validated(
         logger.info(`Total scored: ${totalScored} entries.`);
         return { success: true, scored: totalScored, message: `Scoring complete! (${totalScored} entries)` };
     } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Unknown error';
         logger.error('Error scoring bracket entries:', e);
-        throw new HttpsError('internal', msg || 'An unknown error occurred during scoring.');
+        // Stable generic to the client; the log line above keeps the message
+        // (Phase 1, PLAN-API-TRUST-BOUNDARY — this was an alias-shape leak).
+        rethrowOrInternal('scoreBracketEntries', e);
     }
     },
 );

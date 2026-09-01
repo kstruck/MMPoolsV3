@@ -24,3 +24,24 @@ import { z } from "zod";
 export const fixPoolScoresSchema = z.strictObject({
     poolId: z.string().trim().min(1).max(200).optional(),
 });
+
+/**
+ * simulateGameUpdate — the sim tools' score-injection callable
+ * (PLAN-API-TRUST-BOUNDARY Phase 2). Deliberately SHALLOW on `scores`: the
+ * payload is an ESPN-feed-shaped object consumed by processGameUpdate, which
+ * owns its own field handling, and the callable is reachable only by the
+ * pool's owner/manager or a confirmed SUPER_ADMIN. What this schema exists to
+ * kill is the crash class — null / primitive / array payloads reaching a
+ * destructure — plus unbounded ids. It is applied by a NAMED parse helper in
+ * the handler (the callable stays a raw onCall on purpose: its unauthenticated
+ * error code and hoisted claim+doc check are pinned behavior).
+ */
+export const simulateGameUpdateSchema = z.object({
+    poolId: z.string().trim().min(1).max(200),
+    scores: z.record(z.string().max(200), z.unknown()).refine(
+        (v) => !Array.isArray(v),
+        { message: "scores must be a plain object" },
+    ),
+});
+
+export type SimulateGameUpdateInput = z.infer<typeof simulateGameUpdateSchema>;

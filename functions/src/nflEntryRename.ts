@@ -43,6 +43,7 @@ import { assertEntryNameFree, entryHasPick, ownerStateAfter, resolveOwnedEntry }
 import { validated } from './lib/validated';
 import { renameNFLEntrySchema } from './schemas/poolCore';
 import { assertNFLPickMembership, type MemberActionContext } from './nflPools';
+import { confirmedAdminClaim } from './lib/confirmedRole';
 
 /** The NFL pool types that have entries at all — a rename is meaningless elsewhere. */
 const NFL_ENTRY_POOL_TYPES = new Set(['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN']);
@@ -197,7 +198,9 @@ export const renameNFLEntry = validated(
       admin.firestore(),
       {
         actorUid: request.auth!.uid,
-        actorRole: token?.role,
+        // Unconfirmed SUPER_ADMIN claims stripped (Phase 3) — this value feeds
+        // assertNFLPickMembership's admin bypass.
+        actorRole: await confirmedAdminClaim(request),
         // 🛑 THE SUBJECT IS THE CALLER, ALWAYS. There is no payload uid and
         // there must never be one — the entry id is derived from this value.
         subjectUid: request.auth!.uid,

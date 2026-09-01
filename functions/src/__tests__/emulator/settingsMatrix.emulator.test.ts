@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { simStartRun, simWriteEntries, simSeedNFLGames, cleanupSimPool } from '../../simHarness';
@@ -29,6 +29,13 @@ const wCleanup = test.wrap(cleanupSimPool);
 const wScore = test.wrap(scoreNFLWeek);
 
 const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN' } } as any;
+
+// Claim+doc (PLAN-API-TRUST-BOUNDARY Phase 3): every SUPER_ADMIN claim must be
+// backed by a users/{uid}.role doc; suites share one emulator DB and another
+// file's wipe can delete it, so re-seed per test.
+beforeEach(async () => {
+    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN' }, { merge: true });
+});
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 
 const WEEKS = 3;

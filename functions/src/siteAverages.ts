@@ -47,15 +47,47 @@ export function computeSiteAverages(
     .sort((a, b) => (a.season === b.season ? a.week - b.week : a.season.localeCompare(b.season)));
 }
 
+/** Page size × page cap = the scan bound (PLAN-API-TRUST-BOUNDARY Phase 4). */
+export const SITE_AVERAGES_PAGE_SIZE = 1000;
+export const SITE_AVERAGES_MAX_PAGES = 50;
+
 export async function recomputeSiteAverages(db: admin.firestore.Firestore): Promise<{ rows: number; profiles: number }> {
   // Field projection: profiles carry sizable arrays (pickHistory, teamByTeam) the
-  // average never reads — fetch only the two fields the fold consumes. If the user
-  // base ever makes even this heavy, page with orderBy(documentId()).startAfter()
-  // and fold incrementally (computeSiteAverages is a pure fold either way).
-  const snap = await db.collection('publicProfiles').select('weekly', 'subjectKind').get();
-  const profiles = snap.docs
-    .filter(d => !isReservedSubjectId(d.id) && d.id !== '_siteAverages')
-    .map(d => d.data() as any);
+  // average never reads — fetch only the two fields the fold consumes.
+  //
+  // PAGED (Phase 4): orderBy(documentId()) + startAfter in PAGE_SIZE chunks,
+  // hard page cap. Hitting the cap ABORTS WITHOUT WRITING — `_siteAverages` is
+  // world-readable and the profile chart renders its rows unchecked, so a
+  // truncated aggregate must never replace a complete one. The throw reaches
+  // the scheduled job's catch (→ {ok:false}, heartbeat unhealthy) and the
+  // callable's framework-generic internal.
+  const profiles: Array<{ subjectKind?: string; weekly?: Array<{ season: string; week: number; correct: number; total: number }> }> = [];
+  let lastDocId: string | undefined;
+  let pages = 0;
+  for (;;) {
+    // PAGE_SIZE + 1 sentinel row: an exactly-cap-sized collection must still
+    // publish; only a collection that PROVABLY has more docs aborts (codex
+    // review of the diff — the pre-check threw at exactly 50k).
+    let q = db.collection('publicProfiles')
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .select('weekly', 'subjectKind')
+      .limit(SITE_AVERAGES_PAGE_SIZE + 1);
+    if (lastDocId) q = q.startAfter(lastDocId);
+    const snap = await q.get();
+    pages++;
+    const page = snap.docs.slice(0, SITE_AVERAGES_PAGE_SIZE);
+    for (const d of page) {
+      if (!isReservedSubjectId(d.id) && d.id !== '_siteAverages') profiles.push(d.data() as (typeof profiles)[number]);
+    }
+    const hasMore = snap.docs.length > SITE_AVERAGES_PAGE_SIZE;
+    if (!hasMore) break;
+    if (pages >= SITE_AVERAGES_MAX_PAGES) {
+      throw new Error(
+        `[siteAverages] publicProfiles exceeds ${SITE_AVERAGES_MAX_PAGES * SITE_AVERAGES_PAGE_SIZE} docs — aborting WITHOUT writing (the last complete aggregate stays published). Raise SITE_AVERAGES_MAX_PAGES deliberately.`,
+      );
+    }
+    lastDocId = page[page.length - 1].id;
+  }
   const weekly = computeSiteAverages(profiles);
   await db.collection('publicProfiles').doc('_siteAverages').set({
     kind: 'SITE_AVERAGES',

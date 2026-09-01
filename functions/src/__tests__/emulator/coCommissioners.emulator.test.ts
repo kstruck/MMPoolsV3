@@ -48,6 +48,9 @@ async function seed(type = 'NFL_PICKEM') {
     await db.collection('users').doc(uid).set({ name: uid, role: 'COMMISSIONER' });
   }
   await db.collection('users').doc(GHOST).set({ name: GHOST });
+  // Claim+doc (PLAN-API-TRUST-BOUNDARY Phase 3): the SUPER_ADMIN caller's
+  // claim must be backed by their users doc.
+  await db.collection('users').doc('cc-sa').set({ role: 'SUPER_ADMIN' });
   await db.collection('nfl_games').doc('cc-g1').set({
     id: 'cc-g1', espnGameId: 'cc-g1', season: SEASON, seasonType: 1, week: 1,
     startTime: Date.now() + 4 * HOUR, status: 'SCHEDULED', isMonday: false,

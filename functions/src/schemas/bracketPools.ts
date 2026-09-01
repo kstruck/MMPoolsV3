@@ -1,12 +1,15 @@
 /**
  * Input schemas for the bracket-pool lifecycle callables publishBracketPool
  * and joinBracketPool (bracketPools.ts). createBracketPool is deliberately
- * NOT here — it takes a rich nested `settings` object with a `...settings`
- * passthrough spread (stores arbitrary client-supplied settings fields),
- * spiritually the same migration/heterogeneous shape as the ADR-0001
- * PERMISSIVE creates (createPool/createNFLPool); a flat .strict() schema would
- * reject fields it currently stores, so it needs a passthrough envelope or a
- * client cutover — deferred to its own batch. PURE: zod + zodHelpers only.
+ * NOT here — it is gated by the SHARED `bracketCreateInputSchema`
+ * (shared/schemas/bracket.ts) via validateCreateInput, plus a strict
+ * `bracketSettingsSchema` re-parse of `settings`, plus a pre-destructure
+ * shape guard (`assertCreatePayloadIsObject`). The old note about a
+ * `...settings` passthrough spread is STALE: the spread was removed by
+ * PLAN-AUDIT-AUTH-HARDENING A2 and every accepted settings field is now
+ * enumerated in the handler. Top-level non-strictness remains deliberate
+ * (launch fields ride at top level; ADR-0001 permissive-create shape).
+ * PURE: zod + zodHelpers only.
  */
 
 import { z } from "zod";

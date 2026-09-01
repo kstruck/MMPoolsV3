@@ -5,6 +5,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 
 import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 
 export const lockPool = validated(
@@ -24,7 +25,8 @@ export const lockPool = validated(
 
 
     // 2. Permission Check - Owner or Super Admin
-    assertPoolOwnerOrSuperAdmin(poolData, request.auth!.uid, request.auth!.token.role);
+    // Unconfirmed SUPER_ADMIN claims are stripped (Phase 3, PLAN-API-TRUST-BOUNDARY).
+    assertPoolOwnerOrSuperAdmin(poolData, request.auth!.uid, await confirmedAdminClaim(request));
 
     // 3. Generate Digits (Random or Fixed for Testing) - ONLY FOR SQUARES
     let axisNumbers;

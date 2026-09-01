@@ -8,6 +8,23 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { geminiApiKey, generateAIResponse } from "./gemini";
 import { assertCallerRole } from "./lib/assertRole";
 import { Type } from "@google/genai";
+import { z } from "zod";
+import {
+    generateTestScenarioSchema,
+    validateTestResultsSchema,
+    generateTestReportSchema,
+} from "./schemas/aiTesting";
+
+/** runGate-shaped parse: throws invalid-argument, never a raw ZodError. */
+function parseAiTestingInput<S extends z.ZodType>(schema: S, data: unknown): z.infer<S> {
+    const r = schema.safeParse(data);
+    if (!r.success) {
+        const issue = r.error.issues[0];
+        const path = issue?.path?.join(".") || "(root)";
+        throw new HttpsError("invalid-argument", `Invalid request: ${path} — ${issue?.message ?? "validation failed"}`);
+    }
+    return r.data;
+}
 
 // ===== SCENARIO GENERATION =====
 
@@ -103,8 +120,10 @@ export const generateTestScenario = onCall(
         // passed. assertCallerRole requires users/{uid}.role to agree — the same
         // edit PLAN-AUDIT-AUTH-HARDENING A1 made to siteAverages/expertProfiles.
         await assertCallerRole(request, "SUPER_ADMIN");
+        // Parse BEFORE the try (Phase 2, PLAN-API-TRUST-BOUNDARY): a bad
+        // payload is invalid-argument, not a swallowed internal.
+        const { poolType, userRequest } = parseAiTestingInput(generateTestScenarioSchema, request.data);
         try {
-            const { poolType, userRequest } = request.data;
 
             const systemPrompt = buildScenarioPrompt(poolType);
             const facts = {
@@ -157,10 +176,10 @@ export const validateTestResults = onCall(
         // passed. assertCallerRole requires users/{uid}.role to agree — the same
         // edit PLAN-AUDIT-AUTH-HARDENING A1 made to siteAverages/expertProfiles.
         await assertCallerRole(request, "SUPER_ADMIN");
+        // Parse BEFORE the try — same contract as generateTestScenario.
+        const { scenario, testResult } = parseAiTestingInput(validateTestResultsSchema, request.data);
         try {
-            const { scenario, testResult } = request.data;
-
-            const systemPrompt = buildValidationPrompt(scenario.poolType);
+            const systemPrompt = buildValidationPrompt(String(scenario.poolType));
             const facts = {
                 scenario,
                 testResult,
@@ -211,8 +230,9 @@ export const generateTestReport = onCall(
         // passed. assertCallerRole requires users/{uid}.role to agree — the same
         // edit PLAN-AUDIT-AUTH-HARDENING A1 made to siteAverages/expertProfiles.
         await assertCallerRole(request, "SUPER_ADMIN");
+        // Parse BEFORE the try — same contract as generateTestScenario.
+        const { scenario, testResult, validation } = parseAiTestingInput(generateTestReportSchema, request.data);
         try {
-            const { scenario, testResult, validation } = request.data;
 
             const systemPrompt = buildReportPrompt();
             const facts = {

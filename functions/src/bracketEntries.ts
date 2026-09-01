@@ -8,6 +8,7 @@ import { sendEmail } from "./reminders";
 import { renderEmailHtml, BASE_URL } from "./emailStyles";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { validated } from "./lib/validated";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
 import {
     submitBracketEntrySchema,
@@ -431,13 +432,18 @@ export const updateEntryPayment = validated(
     const poolRef = db.collection("pools").doc(poolId);
     const entryRef = poolRef.collection("entries").doc(entryId);
 
+    // CLAIM+DOC, resolved OUTSIDE the transaction (the simulateGameUpdate
+    // pattern — a plain get() inside runTransaction re-runs on every retry).
+    // Phase 3, PLAN-API-TRUST-BOUNDARY: the in-tx bypass trusted the bare claim.
+    const isConfirmedAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
+
     await db.runTransaction(async (transaction) => {
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
         const pool = poolDoc.data() as Record<string, unknown>;
 
         const isOwner = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid ||
-            request.auth?.token?.role === 'SUPER_ADMIN';
+            isConfirmedAdmin;
         if (!isOwner) {
             throw new HttpsError("permission-denied", "Only the commissioner can update entry payment status.");
         }

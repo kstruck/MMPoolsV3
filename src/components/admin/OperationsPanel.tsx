@@ -86,6 +86,59 @@ const backfillResume = new Map<string, { cursor: string; partial: ResumableRepor
  * 160-char limit even with every count at zero — the dry-run card instructed the
  * operator to read a number the UI could not display (codex r1).
  */
+/**
+ * Sequential pager for the two Phase-4 paged repair callables
+ * (PLAN-API-TRUST-BOUNDARY): backfillPools and fixParticipantIds. Mirrors
+ * runBackfill below — pages until `hasMore` is false, aggregates the numeric
+ * counters, stops on the first error WITHOUT retrying, and parks the cursor
+ * KEYED BY (operation, mode) so a live run can never continue a dry-run
+ * cursor (resuming across modes would silently skip already-scanned pools).
+ * A clean finish drops the checkpoint. Client safety stop: 100 pages —
+ * reported as INCOMPLETE with the resume cursor, never as done.
+ */
+const pagedOpResume = new Map<string, { cursor: string; partial: Record<string, unknown> }>();
+const runPagedPoolsOp = async (name: 'backfillPools' | 'fixParticipantIds', dryRun: boolean) => {
+  const resumeKey = `${name}:${dryRun}`;
+  const parked = pagedOpResume.get(resumeKey);
+  let cursor: string | undefined = parked?.cursor;
+  let pages = 0;
+  const agg: Record<string, unknown> & { ok: boolean; pages: number; oversizedPools: string[] } = {
+    ok: true, dryRun, pages: 0, oversizedPools: [] as string[],
+    resumedFrom: parked?.cursor ?? null, resumeFrom: null as string | null, error: null as string | null,
+    ...(parked?.partial ?? {}),
+  };
+  do {
+    let r: Record<string, unknown>;
+    try {
+      // Conditional spread (not `afterPoolId: cursor`): the JS SDK serializes
+      // explicit undefined as null on the wire; the schema accepts null too (belt).
+      r = (await call(name, { dryRun, ...(cursor ? { afterPoolId: cursor } : {}) }, BACKFILL_TIMEOUT_MS)) as Record<string, unknown>;
+    } catch (e) {
+      agg.ok = false;
+      agg.resumeFrom = cursor ?? null;
+      agg.error = e instanceof Error ? e.message : String(e);
+      if (cursor) pagedOpResume.set(resumeKey, { cursor, partial: { ...agg } });
+      return agg;
+    }
+    for (const [k, v] of Object.entries(r)) {
+      if (typeof v === 'number') agg[k] = ((agg[k] as number | undefined) ?? 0) + v;
+    }
+    if (Array.isArray(r.oversizedPools)) agg.oversizedPools.push(...(r.oversizedPools as string[]));
+    cursor = (r.nextCursor as string | undefined) || undefined;
+    pages++;
+    agg.pages = pages;
+  } while (cursor && pages < 100);
+  if (cursor) {
+    agg.ok = false;
+    agg.resumeFrom = cursor;
+    agg.error = `INCOMPLETE: stopped at the ${pages}-page safety cap with pools remaining. Run again (same mode) to continue from resumeFrom.`;
+    pagedOpResume.set(resumeKey, { cursor, partial: { ...agg } });
+  } else {
+    pagedOpResume.delete(resumeKey);
+  }
+  return agg;
+};
+
 const runBackfill = async (dryRun: boolean, includeFinished = false) => {
   const resumeKey = `${dryRun}:${includeFinished}`;
   const parked = backfillResume.get(resumeKey);
@@ -265,16 +318,16 @@ const ACTIONS: OpAction[] = [
     blastRadius: 'Read-only — no writes. Reports plannedWrites.',
     destructive: false,
     icon: CheckCircle2,
-    run: () => call('backfillPools', { dryRun: true }),
+    run: () => runPagedPoolsOp('backfillPools', true),
   },
   {
     id: 'backfillPools',
     label: 'Backfill Pools',
-    description: 'Backfill missing base fields + managed-pool indexes across all pools. NOT idempotent — the historical-stats leg increments user totals, so a second run double-counts. Dry-run first.',
+    description: 'Backfill missing base fields + managed-pool indexes across all pools (paged; auto-continues until done). Live runs require system/config.backfillPools.enabled = true. The historical-stats leg is marker-guarded per entry; dry-run first and read plannedWrites.',
     blastRadius: 'Batched writes across every pool + user (thousands of docs). Increments users/{uid}.historicalStats — re-running double-counts.',
     destructive: true,
     icon: Database,
-    run: () => call('backfillPools', { dryRun: false }),
+    run: () => runPagedPoolsOp('backfillPools', false),
   },
   {
     id: 'syncPlayoffPools',
@@ -418,7 +471,7 @@ const ACTIONS: OpAction[] = [
     blastRadius: 'Read-only — no writes.',
     destructive: false,
     icon: CheckCircle2,
-    run: () => call('fixParticipantIds', { dryRun: true }),
+    run: () => runPagedPoolsOp('fixParticipantIds', true),
   },
   {
     id: 'fixParticipantIds',
@@ -427,7 +480,7 @@ const ACTIONS: OpAction[] = [
     blastRadius: 'Writes corrected participant indexes.',
     destructive: true,
     icon: Wrench,
-    run: () => call('fixParticipantIds', { dryRun: false }),
+    run: () => runPagedPoolsOp('fixParticipantIds', false),
   },
   {
     id: 'clearLegacyCoManagers:dry',

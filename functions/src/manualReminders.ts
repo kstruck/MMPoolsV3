@@ -8,6 +8,7 @@ import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { NotificationLog, User } from "./types";
 import type { MemberRecord } from "./shared/memberRecord";
 import { resolveReminderTargets, outstandingDuesByUid, rebuyPortionByUid } from "./lib/reminderTargets";
+import { confirmedAdminClaim } from "./lib/confirmedRole";
 
 type ReminderKind = "PICKS" | "PAYMENT";
 
@@ -59,7 +60,8 @@ export const sendManualReminder = validated(
         throw new HttpsError("not-found", "Pool not found.");
     }
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
-    assertPoolOwnerOrSuperAdmin(pool, uid, request.auth!.token.role as string | undefined);
+    // Unconfirmed SUPER_ADMIN claims are stripped (Phase 3, PLAN-API-TRUST-BOUNDARY).
+    assertPoolOwnerOrSuperAdmin(pool, uid, await confirmedAdminClaim(request));
 
     // 4. Resolve targets from the ROSTER, not the entries collection.
     //

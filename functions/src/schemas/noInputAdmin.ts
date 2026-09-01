@@ -34,6 +34,13 @@ export const backfillPoolsSchema = z.preprocess(
     (v) => v ?? {},
     z.strictObject({
         dryRun: z.boolean().optional().default(true),
+        // Resume cursor (PLAN-API-TRUST-BOUNDARY Phase 4): the run is paged now
+        // (deterministic documentId order). null→undefined mirrors
+        // backfillProfileDataSchema — the JS SDK encodes an omitted arg as null.
+        // NOT trimmed: compared against a document id verbatim.
+        afterPoolId: z.union([z.string().min(1).max(1500), z.null()])
+            .optional()
+            .transform((v) => (v === null ? undefined : v)),
     }),
 );
 

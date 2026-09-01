@@ -63,6 +63,7 @@ import {
     MAX_CREDITS_PER_BUNDLE,
     type ProductSnapshot,
 } from "./shared/schemas/bundle";
+import { rethrowOrInternal } from "./lib/safeError";
 
 const db = admin.firestore();
 
@@ -513,7 +514,11 @@ export const createCheckoutSession = validated(
                 coupon: resolvedCoupon?.coupon,
             });
     } catch (e: any) {
-        throw new HttpsError("invalid-argument", e?.message || "Unable to price this pool format.");
+        // Same code, stable text; computeQuote's plain-Error messages name
+        // internals. Logged server-side (Phase 1, PLAN-API-TRUST-BOUNDARY).
+        if (e instanceof HttpsError) throw e;
+        console.error("[Stripe] checkout quote failed:", e);
+        throw new HttpsError("invalid-argument", "Unable to price this pool format.");
     }
     const serverPrice = quote.total;
 
@@ -881,7 +886,9 @@ export const createCheckoutSession = validated(
         await releaseReservationBestEffort(reservationId, poolId, appliedCouponCode).catch((e) =>
             console.error("[Stripe] Failed to release reservation after session error:", e)
         );
-        throw new HttpsError("internal", `Failed to create checkout session: ${err?.message}`);
+        // Provider messages stay in the log; the client gets the stable generic
+        // (Phase 1, PLAN-API-TRUST-BOUNDARY).
+        rethrowOrInternal("createCheckoutSession", err);
     }
     },
 );
@@ -955,7 +962,7 @@ async function createBundleCheckout(
         return { sessionUrl: session.url };
     } catch (err: any) {
         console.error("[Stripe] Bundle Checkout Error:", err);
-        throw new HttpsError("internal", `Failed to create bundle checkout session: ${err?.message}`);
+        rethrowOrInternal("createBundleCheckout", err);
     }
 }
 
