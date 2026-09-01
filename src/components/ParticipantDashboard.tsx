@@ -288,6 +288,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         let totalSquares = 0;
         let totalWinnings = 0;
         let totalWins = 0;
+        // Wins carrying a real payout date, for the Paid Winnings Trend. Built
+        // in THIS loop rather than a second one so that "is this my win" is
+        // decided exactly once — a separate walk could drift from the total
+        // shown on the Net Winnings card and the chart would quietly disagree
+        // with the number printed above it.
+        const paidWins: PaidWin[] = [];
 
         myPools.forEach(pool => {
             if (pool.type === 'SQUARES') {
@@ -301,6 +307,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     if (isMyWin) {
                         totalWins++;
                         totalWinnings += winner.amount || 0;
+                        if (typeof winner.paidAt === 'number' && winner.paidAt > 0) {
+                            paidWins.push({ amount: winner.amount || 0, paidAt: winner.paidAt });
+                        }
                     }
                 });
 
@@ -322,7 +331,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             totalPools: myPools.length,
             totalSquares,
             totalWins,
-            totalWinnings
+            totalWinnings,
+            paidWins
         };
     }, [myPools, poolWinners, user.id, bracketEntryCounts]);
 
@@ -357,28 +367,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     // when a commissioner marks a payout cleared) is the only date a win
     // carries, so the series is built from those and the card says so. Wins with
     // no payout date contribute nothing rather than an invented month.
-    const myPaidWins = useMemo<PaidWin[]>(() => {
-        const wins: PaidWin[] = [];
-
-        myPools.forEach(pool => {
-            if (pool.type !== 'SQUARES') return;
-            const sPool = pool as GameState;
-            const userSquares = sPool.squares.filter(s => s.reservedByUid === user.id);
-            const winners = poolWinners[pool.id] || [];
-
-            winners.forEach(winner => {
-                if (!userSquares.some(s => s.id === winner.squareId)) return;
-                if (typeof winner.paidAt !== 'number' || !(winner.paidAt > 0)) return;
-                wins.push({ amount: winner.amount || 0, paidAt: winner.paidAt });
-            });
-        });
-
-        return wins;
-    }, [myPools, poolWinners, user.id]);
-
     const cumulativeEarningsData = useMemo(
-        () => buildCumulativePaidWinnings(myPaidWins),
-        [myPaidWins]
+        () => buildCumulativePaidWinnings(lifetimeStats.paidWins),
+        [lifetimeStats.paidWins]
     );
 
     const earningsEmpty = useMemo(

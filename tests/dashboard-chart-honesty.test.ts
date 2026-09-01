@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { buildPoolTypeSplit } from '../src/utils/dashboardCharts';
 
 /**
  * THE PARTICIPANT DASHBOARD MUST NOT INVENT DATA IT DOES NOT HAVE.
@@ -36,7 +37,19 @@ import { resolve } from 'node:path';
  */
 
 const DASHBOARD_PATH = resolve(__dirname, '../src/components/ParticipantDashboard.tsx');
+const TYPES_PATH = resolve(__dirname, '../src/types/index.ts');
 const source = readFileSync(DASHBOARD_PATH, 'utf8');
+
+/**
+ * Every member of the `PoolType` union, read out of the source of truth rather
+ * than restated here — a restated list would go stale exactly when it matters.
+ */
+function declaredPoolTypes(): string[] {
+    const types = readFileSync(TYPES_PATH, 'utf8');
+    const match = types.match(/export type PoolType\s*=\s*([^;]+);/);
+    if (!match) throw new Error('Could not find the PoolType union in src/types/index.ts');
+    return [...match[1].matchAll(/'([A-Z_]+)'/g)].map(m => m[1]);
+}
 
 describe('ParticipantDashboard charts — no fabricated data', () => {
     it('the placeholder pie slices are gone', () => {
@@ -77,6 +90,27 @@ describe('ParticipantDashboard charts — no fabricated data', () => {
     it('the empty pool-mix state routes users somewhere real', () => {
         expect(source).toContain("navigate('/browse')");
         expect(source).toContain("navigate('/create-pool')");
+    });
+
+    it('the PoolType union is actually being read — the coverage guard below is not vacuous', () => {
+        // Without this, a `PoolType` line the regex stops matching would make
+        // the coverage test pass over an empty list rather than fail.
+        const types = declaredPoolTypes();
+        expect(types.length).toBeGreaterThanOrEqual(7);
+        expect(types).toContain('SQUARES');
+        expect(types).toContain('PROPS');
+        expect(types).toContain('NFL_MARGIN');
+    });
+
+    it('every PoolType lands in a pie category, so an empty pie really means zero pools', () => {
+        // THE DEFECT THIS PINS. The pie's empty state tells the user "No pools
+        // yet". That sentence is only true if a pool of EVERY type produces a
+        // slice. The first draft of this fix omitted PROPS — a user whose only
+        // pool was a Props pool would have been told they had none, which is
+        // the same class of lie as the fabricated slices being removed here.
+        const uncategorised = declaredPoolTypes()
+            .filter(type => buildPoolTypeSplit([{ type }]).length === 0);
+        expect(uncategorised).toEqual([]);
     });
 
     it('the trend card no longer claims to cover every win', () => {

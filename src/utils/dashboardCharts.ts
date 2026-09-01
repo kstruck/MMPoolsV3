@@ -66,6 +66,14 @@ function monthLabel(date: Date): string {
 /**
  * Count the caller's pools by category. Returns `[]` when no category has a
  * member — never a placeholder slice.
+ *
+ * EVERY `PoolType` MUST LAND IN A CATEGORY. The caller renders a "no pools yet"
+ * empty state when this returns `[]`, and that message is only true if an empty
+ * result really does mean zero pools. The version this replaced omitted
+ * `PROPS` — so a user whose only pool was a Props pool would have been told
+ * they had none. `dashboard-chart-honesty.test.ts` reads the `PoolType` union
+ * out of `src/types/index.ts` and fails if a new member is added without a
+ * category here.
  */
 export function buildPoolTypeSplit(
     pools: ReadonlyArray<{ type?: string | null }>
@@ -74,12 +82,14 @@ export function buildPoolTypeSplit(
     let brackets = 0;
     let playoffs = 0;
     let nflSeason = 0;
+    let props = 0;
 
     pools.forEach(pool => {
         const type = pool.type;
         if (type === 'SQUARES') squares++;
         else if (type === 'BRACKET') brackets++;
         else if (type === 'NFL_PLAYOFFS') playoffs++;
+        else if (type === 'PROPS') props++;
         else if (type?.startsWith('NFL_')) nflSeason++;
     });
 
@@ -87,7 +97,8 @@ export function buildPoolTypeSplit(
         { name: 'Squares', value: squares, color: '#C9A867' },
         { name: 'Brackets', value: brackets, color: '#24507F' },
         { name: 'NFL Playoffs', value: playoffs, color: '#8C6D33' },
-        { name: 'NFL Pickem/Margin', value: nflSeason, color: '#1A3B62' }
+        { name: 'NFL Pickem/Margin', value: nflSeason, color: '#1A3B62' },
+        { name: 'Props', value: props, color: '#0F7B4A' }
     ].filter(slice => slice.value > 0);
 }
 

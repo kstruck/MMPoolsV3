@@ -16,9 +16,17 @@ describe('buildPoolTypeSplit', () => {
 
     it('never invents a slice for a user with no pools, whatever the input shape', () => {
         // The defect: the old code returned [{Active Squares: 2}, {NFL Pools: 1}]
-        // whenever the real split came out empty. Pool objects that match no
-        // category must still yield nothing.
-        expect(buildPoolTypeSplit([{ type: 'PROPS' }, { type: undefined }, { type: null }])).toEqual([]);
+        // whenever the real split came out empty. Pools with no usable type must
+        // still yield nothing rather than a placeholder.
+        expect(buildPoolTypeSplit([{ type: undefined }, { type: null }, { type: '' }])).toEqual([]);
+    });
+
+    it('a Props-only user gets a slice, not the "no pools yet" empty state', () => {
+        // The caller renders "No pools yet" on an empty result, so every real
+        // PoolType has to produce a slice or that message becomes a lie.
+        expect(buildPoolTypeSplit([{ type: 'PROPS' }])).toEqual([
+            { name: 'Props', value: 1, color: '#0F7B4A' }
+        ]);
     });
 
     it('counts each category from real pools', () => {
@@ -28,13 +36,15 @@ describe('buildPoolTypeSplit', () => {
             { type: 'BRACKET' },
             { type: 'NFL_PLAYOFFS' },
             { type: 'NFL_PICKEM' },
-            { type: 'NFL_SURVIVOR' }
+            { type: 'NFL_SURVIVOR' },
+            { type: 'PROPS' }
         ]);
         expect(split).toEqual([
             { name: 'Squares', value: 2, color: '#C9A867' },
             { name: 'Brackets', value: 1, color: '#24507F' },
             { name: 'NFL Playoffs', value: 1, color: '#8C6D33' },
-            { name: 'NFL Pickem/Margin', value: 2, color: '#1A3B62' }
+            { name: 'NFL Pickem/Margin', value: 2, color: '#1A3B62' },
+            { name: 'Props', value: 1, color: '#0F7B4A' }
         ]);
     });
 
@@ -47,10 +57,18 @@ describe('buildPoolTypeSplit', () => {
         expect(buildPoolTypeSplit([{ type: 'BRACKET' }]).map(s => s.name)).toEqual(['Brackets']);
     });
 
-    it('the slice total always equals the number of categorised pools', () => {
+    it('the slice total equals the pool count — every real type is charted', () => {
         const pools = [{ type: 'SQUARES' }, { type: 'BRACKET' }, { type: 'PROPS' }];
         const total = buildPoolTypeSplit(pools).reduce((sum, s) => sum + s.value, 0);
-        expect(total).toBe(2); // PROPS is not a charted category
+        expect(total).toBe(pools.length);
+    });
+
+    it('gives every category a distinct colour, so the legend is readable', () => {
+        const all = buildPoolTypeSplit([
+            { type: 'SQUARES' }, { type: 'BRACKET' }, { type: 'NFL_PLAYOFFS' },
+            { type: 'NFL_PICKEM' }, { type: 'PROPS' }
+        ]);
+        expect(new Set(all.map(s => s.color)).size).toBe(all.length);
     });
 });
 
