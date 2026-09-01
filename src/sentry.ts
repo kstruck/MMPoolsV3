@@ -64,6 +64,11 @@ export async function initSentry(): Promise<void> {
     Sentry.init({
         dsn: import.meta.env.VITE_SENTRY_DSN,
         environment: isDev ? 'development' : 'production',
+        // Firestore's persistent cache setup rejects un-catchably when Safari
+        // has evicted IndexedDB (user cleared site data, or ITP's 7-day purge).
+        // The SDK falls back to memory cache and the app keeps working, so the
+        // event is pure noise — known firebase-js-sdk issue with no upstream fix.
+        ignoreErrors: [/IndexedDbTransactionError/],
         integrations: [
             Sentry.browserTracingIntegration(),
             Sentry.replayIntegration({
