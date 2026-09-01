@@ -9,55 +9,81 @@
  *      a deleted doc is only safe to delete because nothing cites it.
  *
  * Run from the repo root:  node scripts/verifyArchiveRefs.mjs
- * Exits non-zero if either invariant is broken.
+ * Compare against a different base with:  --base <ref>   (default origin/main)
+ *
+ * FAILS CLOSED. If the base ref cannot be read, invariant 2 is unverifiable and
+ * the script exits non-zero rather than reporting success — a guard that cannot
+ * check its own invariant must not look like a guard that passed.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ARCHIVE_DIR = 'docs/archive';
-const SCAN_DIRS = ['docs', 'docs/adr', 'docs/wizard-unification'];
 const MD_NAME = /[A-Za-z0-9_][A-Za-z0-9_.-]*\.md/g;
 const PATH_SEP = /[/\\]$/;
+
+/** Directories that are never part of the citation graph. */
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', 'coverage', '.next', 'out',
+  'playwright-report', 'test-results', '.firebase', '.claude',
+]);
+
+const baseArg = process.argv.indexOf('--base');
+const BASE = baseArg !== -1 ? process.argv[baseArg + 1] : 'origin/main';
 
 const archived = new Set(
   fs.readdirSync(ARCHIVE_DIR).filter((f) => f.endsWith('.md') && f !== 'README.md'),
 );
 
-/** Every markdown doc that a reader could follow a citation from. */
-function keptDocs() {
-  const out = fs.readdirSync('.').filter((f) => f.endsWith('.md'));
-  for (const dir of [...SCAN_DIRS, ARCHIVE_DIR]) {
-    if (!fs.existsSync(dir)) continue;
-    for (const f of fs.readdirSync(dir)) {
-      if (f.endsWith('.md')) out.push(path.join(dir, f));
+/** Every markdown doc a reader could follow a citation from, at any depth. */
+function keptDocs(dir = '.', out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.') && entry.name !== '.github') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      keptDocs(full, out);
+    } else if (entry.name.endsWith('.md')) {
+      out.push(full);
     }
   }
   return out;
 }
 
-/** Files this branch deletes, relative to origin/main. */
+/**
+ * Files the working tree deletes relative to BASE.
+ * Throws rather than returning empty — see FAILS CLOSED above.
+ */
 function deletedDocs() {
-  try {
-    const raw = execFileSync(
-      'git',
-      ['diff', 'origin/main...HEAD', '--diff-filter=D', '--name-only', '--', '*.md'],
-      { encoding: 'utf8' },
-    );
-    return raw.split('\n').map((s) => s.trim()).filter(Boolean).map((f) => path.basename(f));
-  } catch {
-    console.warn('warning: could not read the deleted-file list (is origin/main fetched?)');
-    return [];
-  }
+  execFileSync('git', ['rev-parse', '--verify', `${BASE}^{commit}`], { stdio: 'pipe' });
+  const raw = execFileSync(
+    'git',
+    ['diff', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md'],
+    { encoding: 'utf8' },
+  );
+  return raw.split('\n').map((s) => s.trim()).filter(Boolean).map((f) => path.basename(f));
 }
 
-const deleted = new Set(deletedDocs());
+let deleted;
+try {
+  deleted = new Set(deletedDocs());
+} catch {
+  console.error(
+    `FAIL: cannot read base ref '${BASE}', so the deleted-reference invariant ` +
+    `cannot be checked.\n` +
+    `      Run 'git fetch origin', or pass --base <ref> naming a ref that exists.`,
+  );
+  process.exit(1);
+}
+
 let unprefixed = 0;
 let dangling = 0;
 
 for (const file of keptDocs()) {
   const text = fs.readFileSync(file, 'utf8');
-  const inArchive = file.replace(/\\/g, '/').startsWith(ARCHIVE_DIR);
+  const rel = file.replace(/\\/g, '/').replace(/^\.\//, '');
+  const inArchive = rel.startsWith(ARCHIVE_DIR);
 
   for (const m of text.matchAll(MD_NAME)) {
     const name = m[0];
@@ -66,19 +92,20 @@ for (const file of keptDocs()) {
     // Invariant 1 — archived files must be cited by path. Archived docs
     // themselves link to siblings by bare name, which resolves correctly.
     if (archived.has(name) && !precededByPath && !inArchive) {
-      console.log(`UNPREFIXED  ${file} -> ${name}`);
+      console.log(`UNPREFIXED  ${rel} -> ${name}`);
       unprefixed++;
     }
 
     // Invariant 2 — nothing may cite a deleted file.
     if (deleted.has(name)) {
-      console.log(`DANGLING    ${file} -> ${name}`);
+      console.log(`DANGLING    ${rel} -> ${name}`);
       dangling++;
     }
   }
 }
 
-console.log(`\nunprefixed refs to archived docs: ${unprefixed}`);
+console.log(`\nbase ref:                         ${BASE}`);
+console.log(`unprefixed refs to archived docs: ${unprefixed}`);
 console.log(`refs to deleted docs:             ${dangling}`);
 
 if (unprefixed || dangling) process.exit(1);
