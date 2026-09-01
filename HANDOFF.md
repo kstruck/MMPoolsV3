@@ -1,5 +1,56 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-09-01 — **API TRUST-BOUNDARY REMEDIATION IS CODE-COMPLETE AND UNCOMMITTED IN THE MAIN CHECKOUT. NOT COMMITTED, NOT DEPLOYED, NO PROD DATA TOUCHED.**
+>
+> The codex API audit's four remaining failures are fixed on the working tree
+> (47 files, +768/−202) under the full Rule-3 gate:
+> [PLAN-API-TRUST-BOUNDARY-REMEDIATION.md](PLAN-API-TRUST-BOUNDARY-REMEDIATION.md)
+> (+ -REVIEW-LOG: plan APPROVED codex round 8 of 10, 23 findings, 1 reasoned
+> rejection; implementation diff clean at codex round 2; + -SWEEPS: complete
+> grep-derived instance lists).
+>
+> **What changed, one line each:**
+> 1. **Safe errors** — new `lib/safeError.ts`; 13 sites no longer send a caught
+>    `error.message` to clients (incl. Stripe checkout, getPoolQuote,
+>    simulateGameUpdate — which also now passes expected HttpsErrors through
+>    instead of re-wrapping them as `internal`). Source invariant in
+>    `__tests__/apiTrustBoundary.test.ts`.
+> 2. **Input validation** — named schemas kill the null-payload crash class
+>    (simulateGameUpdate, createBracketPool, aiTesting ×3,
+>    refreshExpertProfiles); `rawCallableExceptions.test.ts` enforces the
+>    26-entry reviewed raw-`onCall` allowlist.
+> 3. **Authorization** — every remaining claim-only/doc-only SUPER_ADMIN
+>    decision now resolves claim+`users/{uid}.role`: simHarness (11),
+>    simLegacy (3), setPaidStatus, bracketEntries, payoutRecords ×2,
+>    squares ×3, coCommissioners, nflEntryDelete/Rename, submitNFLPicks +
+>    rebuy contexts, both sim-mint gates, 8 helper call sites
+>    (invites/manualReminders/poolParams/updatePoolSettings/poolExceptions ×4
+>    incl. closePool), and the two privileged HTTP endpoints
+>    (`inspectPoolState`, `testSmsHttp` via new `confirmedSuperAdminHttp`).
+> 4. **Bounded reads** — backfillPools + fixParticipantIds are paged
+>    (25/run, 10k inner cap, 5k write budget, mode-bound cursors,
+>    OperationsPanel auto-continues); **backfillPools live runs now require
+>    `system/config.backfillPools.enabled === true`** (dry runs unaffected);
+>    siteAverages pages with abort-on-cap; getPoolPicks gets a 2k-entry +
+>    8MB-UTF-8 loud-overflow ceiling (reveal privacy boundary untouched).
+>
+> **Gate evidence (all run 2026-09-01):** root 3076/3076 · functions
+> 2195/2195 (134 files) · emulator 607 passed / 2 expected fail / 10 skipped /
+> 0 failed (9 fixture files updated to seed `users/{uid}` docs — claim+doc now
+> applies to sim tooling) · rules 13/13 files · both typechecks + both builds
+> exit 0 · lint 1871 (baseline 1872 — delta ≤ 0).
+>
+> ✅ **KEVIN RULED Q1–Q3 (2026-09-01), all as recommended:** Q1 kill-switch
+> KEPT (live backfillPools runs need `system/config.backfillPools.enabled =
+> true` — flip in the Firebase console when a live run is wanted), Q2
+> fixPoolScores global-default deferred to its own future plan (tracked in
+> TOMORROW-TASKS.md), Q3 reveal/repair ceilings APPROVED. No code change
+> needed — the implementation already matches all three.
+>
+> 🛑 **DELIBERATELY NOT DONE:** no commit, no PR, no deploy, no rules change,
+> no backfill run. Deploy, when authorized, is functions-only + a Coolify
+> rebuild (OperationsPanel changed).
+
 > ## 🟡 2026-08-27 (later) — **TWO PRs OPEN AND GREEN: #611 (tiebreaker) AND #612 (a duplicate money event). NEITHER MERGED. ONE PLAN NEEDS KEVIN'S SIGN-OFF (#613).**
 >
 > **#609 MERGED** as `a85c6fbf`, and the **functions deploy landed** —

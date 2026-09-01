@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import * as fs from 'fs';
@@ -40,6 +40,12 @@ const wCreate = test.wrap(createNFLPool);
 const wPayouts = test.wrap(recordPoolPayouts);
 
 const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN', name: 'Admin' } } as any;
+
+// Claim+doc (PLAN-API-TRUST-BOUNDARY Phase 3): every SUPER_ADMIN claim must be
+// backed by users/{uid}.role — wStart is the first call and now checks it.
+beforeEach(async () => {
+    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN', name: 'Admin', email: 'admin@example.com' }, { merge: true });
+});
 
 const FIXTURE_DIR = path.resolve(__dirname, '../../../../src/utils/testing/scenarios');
 const FIXTURES: any[] = fs.readdirSync(FIXTURE_DIR)

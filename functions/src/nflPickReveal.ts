@@ -53,6 +53,23 @@ import type { NFLGame } from "./nflPoolTypes";
 
 const NFL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
 
+/**
+ * Documented product ceilings (PLAN-API-TRUST-BOUNDARY Phase 4, Q3).
+ *
+ * REVEAL_ENTRY_CAP is the per-request WORK bound on the entries scan. It is
+ * NOT claimed unreachable (entitlements permit 9,999 players × 10 entries);
+ * it is the ceiling the reveal surface supports, and overflow fails LOUD —
+ * a silently truncated reveal would corrupt counts/progress for everyone.
+ *
+ * REVEAL_RESPONSE_BYTE_BUDGET is the TRANSPORT bound, measured on the
+ * serialized response in UTF-8 BYTES (not UTF-16 code units — a multibyte
+ * entry name must not slip past it). Worst legal Pick'em entry ≈ 25 KB of
+ * maps (≤50 picks + ≤50 confidence, 100-char strings), so a below-cap pool
+ * can still exceed the ~10 MB callable limit; 8 MB keeps margin.
+ */
+export const REVEAL_ENTRY_CAP = 2_000;
+export const REVEAL_RESPONSE_BYTE_BUDGET = 8_000_000;
+
 export interface PoolPicksResponse {
     week: number;
     mode: 'WEEK' | 'PER_GAME';
@@ -334,9 +351,16 @@ export const getPoolPicks = validated(
         const [entriesSnap, summarySnap] = await Promise.all([
             db.collection('pools').doc(poolId).collection('entries')
                 .select(...(fields as string[]))
+                .limit(REVEAL_ENTRY_CAP + 1)
                 .get(),
             rosterSummaryRef(db, poolId).get(),
         ]);
+        if (entriesSnap.docs.length > REVEAL_ENTRY_CAP) {
+            // Fail LOUD, never truncate: a partial scan would hand every
+            // caller wrong counts/progress and quietly hide entries.
+            console.error(`[getPoolPicks] pool ${poolId} exceeds REVEAL_ENTRY_CAP (${REVEAL_ENTRY_CAP}).`);
+            throw new HttpsError('failed-precondition', 'ENTRY_SCAN_OVERFLOW: this pool has more entries than the reveal surface supports.');
+        }
 
         // ⚠️ COMPUTED OFF THE RAW SNAPSHOT, OUTSIDE THE LOOP BELOW, ON PURPOSE.
         // That loop `continue`s past a departed member's entry FOR PARTICIPANTS
@@ -437,7 +461,7 @@ export const getPoolPicks = validated(
             }
         }
 
-        return {
+        const response: PoolPicksResponse = {
             week,
             mode: reveal.mode,
             revealedGameIds: reveal.revealedGameIds,
@@ -453,5 +477,15 @@ export const getPoolPicks = validated(
             ...(!isParticipant || reveal.weekRevealed ? { entries } : {}),
             progress,
         };
+
+        // Transport bound (Phase 4): the doc-count cap alone is not
+        // demonstrably transport-safe (worst legal entry ≈ 25 KB of maps).
+        // UTF-8 bytes, not string length. Same loud-overflow contract.
+        const responseBytes = Buffer.byteLength(JSON.stringify(response), 'utf8');
+        if (responseBytes > REVEAL_RESPONSE_BYTE_BUDGET) {
+            console.error(`[getPoolPicks] pool ${poolId} response ${responseBytes}B exceeds REVEAL_RESPONSE_BYTE_BUDGET.`);
+            throw new HttpsError('failed-precondition', 'ENTRY_SCAN_OVERFLOW: this pool\'s reveal response is larger than the surface supports.');
+        }
+        return response;
     },
 );

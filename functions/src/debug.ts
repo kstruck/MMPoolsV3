@@ -1,6 +1,7 @@
 
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { confirmedSuperAdminHttp } from "./lib/confirmedRole";
 
 export const inspectPoolState = onRequest(async (req, res) => {
     // Read-only inspector — GET/HEAD only.
@@ -14,17 +15,21 @@ export const inspectPoolState = onRequest(async (req, res) => {
         res.status(401).send("Unauthorized: Missing Bearer token");
         return;
     }
+    // Token verification stays its own 401 boundary; role confirmation is the
+    // separate 403 below. The old comment argued claim-ONLY was safer than the
+    // doc; the codebase standard is claim AND doc AGREEMENT (assertCallerRole /
+    // hasConfirmedRole), which keeps the tamper-proof claim requirement AND
+    // closes the demoted-admin stale-token window (Phase 3).
+    let decoded: { uid: string; role?: unknown };
     try {
         const token = authHeader.split('Bearer ')[1];
-        const decoded = await admin.auth().verifyIdToken(token);
-        // Use the tamper-proof JWT custom claim, not the mutable Firestore
-        // users/{uid}.role field (which a compromised user doc could forge).
-        if (decoded.role !== 'SUPER_ADMIN') {
-            res.status(403).send("Forbidden: Super Admin access required");
-            return;
-        }
+        decoded = await admin.auth().verifyIdToken(token);
     } catch {
         res.status(401).send("Unauthorized: Invalid token");
+        return;
+    }
+    if (!(await confirmedSuperAdminHttp(decoded))) {
+        res.status(403).send("Forbidden: Super Admin access required");
         return;
     }
 

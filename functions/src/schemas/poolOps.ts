@@ -27,6 +27,12 @@ export const toggleWinnerPaidSchema = z.strictObject({
  */
 export const fixParticipantIdsSchema = z.strictObject({
     dryRun: z.boolean().optional().default(true),
+    // Resume cursor (PLAN-API-TRUST-BOUNDARY Phase 4) — paged run,
+    // deterministic documentId order; null→undefined (JS SDK null encoding),
+    // NOT trimmed (compared against a document id verbatim).
+    afterPoolId: z.union([z.string().min(1).max(1500), z.null()])
+        .optional()
+        .transform((v) => (v === null ? undefined : v)),
 });
 
 /**
