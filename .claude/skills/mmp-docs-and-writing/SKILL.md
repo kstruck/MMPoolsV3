@@ -50,7 +50,7 @@ Repo: `D:\march-melee-pools` (March Melee Pools / Gridiron Gamble). This skill t
 | `docs/bracket-pool-architecture.md` | Bracket subsystem reference. Contains a known-stale seed-parsing section (see stale list). |
 | `docs/annual-bracket-setup-runbook.md` | Annual NCAA import runbook (ESPN field mapping, "never break" rules, debug decision tree, yearly drift watchlist). |
 | `docs/UI-REVAMP-GUIDE.md` | UI style recipe — constrains UI copy and visual work (see House style). |
-| `docs/plans/2026-02-10-phase1-design.md` | Historical dated design doc — the only file there; the `docs/plans/` convention is superseded by root `PLAN-*.md`. Put new plans at root. |
+| `docs/archive/2026-02-10-phase1-design.md` | Historical dated design doc (moved from `docs/plans/` 2026-09-01; that convention is superseded by root `PLAN-*.md`). Put new plans at root. |
 | `docs/wizard-unification/PHASE-A-INVENTORY.md` | Workstream evidence doc: pre-change audit with file:line cites and "RESOLVED (date)" decision stamps. |
 
 ### Where does a new document go? (decision table)
