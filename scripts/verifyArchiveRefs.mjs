@@ -112,7 +112,8 @@ for (const name of deleted) deletedStems.set(name.replace(/\.md$/, ''), name);
  * resolution, so a prose mention of a repo-root-relative path (common in the
  * skills, which describe paths rather than link to them) is not a subject of it.
  */
-const MD_LINK = /\]\(\s*((?:[A-Za-z0-9_.-]+\/)*)([A-Za-z0-9_][A-Za-z0-9_.-]*\.md)\s*[)#]/g;
+const MD_LINK =
+  /\]\(\s*<?((?:[A-Za-z0-9_.-]+\/)*)([A-Za-z0-9_][A-Za-z0-9_.-]*\.md)>?\s*(?:[)#]|"|')/g;
 
 let unresolved = 0;
 let dangling = 0;
@@ -121,14 +122,17 @@ for (const file of trackedTextFiles()) {
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
-  } catch {
-    continue; // unreadable or vanished mid-run; nothing to check
+  } catch (err) {
+    // FAILS CLOSED: a tracked file we cannot read is a file whose citations we
+    // cannot check, which is not the same as a file with none.
+    fail(`cannot read tracked file '${file}': ${err.message}`);
   }
   const isMarkdown = path.extname(file).toLowerCase() === '.md';
-  const inArchive = file.startsWith(`${ARCHIVE_DIR}/`);
 
   // Invariant 1 — an archived doc must be cited by a path that resolves to it.
-  if (isMarkdown && !inArchive) {
+  // Archived docs are checked too: they link to root plans with ../../ paths,
+  // and a regression there is exactly as broken as one in a root doc.
+  if (isMarkdown) {
     for (const m of text.matchAll(MD_LINK)) {
       const [, dir, name] = m;
       if (!archived.has(name)) continue;
