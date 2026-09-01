@@ -26,47 +26,31 @@ Each skill carries a "When NOT to use this skill" routing table to its
 siblings and provenance/re-verify commands — trust the commands over the
 prose if they disagree; skills are point-in-time snapshots.
 
-## 2b. qodo — DORMANT. DO NOT WAIT FOR IT (Kevin, 2026-08-19 ET)
+## 2b. qodo — LIVE (Kevin, 2026-09-01: "Qodo back on, go ahead and start using for each PR going forward")
 
 <!-- Dates in this repo are ET (#259). Commits from a late-evening session stamp
      the PREVIOUS day in local MT (-0600) — e.g. 07-24 22:24 MT is 07-25 00:24 ET.
      A git date one day behind a doc date is expected, not a defect. -->
 
-🛑 **TURNED OFF 2026-08-19: "Turn off the Qodo reviews for now."** The workspace
-ran out of credits overnight on 2026-08-18 — qodo reviewed #482 normally at
-03:33Z and by 05:04Z was answering every new PR with *"Qodo reviews are paused
-because your workspace is out of credits."* That is a FAILED check rather than a
-clean one, so it blocked three finished PRs (#483, #484, #485) until Kevin ruled.
+🟢 **RESTORED 2026-09-01.** Credits are topped up — qodo posted a full real
+review on #653 (4 bug findings, 5 skill insights) before Kevin's ruling landed,
+and its first two class-instance findings there were both valid. The 2026-08-19
+pause (credits exhausted; billing notices blocking #483–#485) is over. With the
+restore:
 
-**While this section says DORMANT:**
+- **The stopping rule is THREE conditions again** — qodo clean AND a codex round
+  clean AND your own read of the diff agrees.
+- **The §2c over-cap exception is live again** — a §2b-forced round may go up to
+  5 past the 10-round cap, recorded in the PR body, per the 2026-08-18 ruling.
+- **`mmp-qodo-cycle` is LIVE** — arm the watcher, pull all three surfaces,
+  verdict every finding before fixing.
 
-- **qodo is NOT part of the stopping rule.** §2c's rule reads: stop when a codex
-  round comes back clean AND your own read of the diff agrees. Two conditions,
-  not three.
-- **Do not arm the watcher, do not wait, do not open `mmp-qodo-cycle`.** A PR is
-  not held for a review that cannot arrive.
-- **The §2c cap is 10, flat.** The "up to 5 past the cap for a §2b-forced round"
-  exception exists only to serve a qodo finding; with no qodo findings there is
-  nothing to force one, so 15 is not available. Past 10, ask Kevin as usual.
-- **Spend the codex rounds you saved.** qodo was the second independent
-  reviewer, and its absence is the reason §2c says a clean round 1 is not the
-  review. Self-review of the diff carries more weight now, not less.
-- **If the bot posts anyway** — a billing notice, or a real review because
-  credits were topped up — read it. A real finding is still a real finding, and
-  its defect findings were 5 for 5 valid across #480–#482. It is simply not
-  something to *wait* for.
-
-**This is a pause, not a deletion.** Everything below is the live procedure the
-moment Kevin says the subscription is back, exactly as it was on 2026-07-25 →
-2026-07-30. `.claude/skills/mmp-qodo-cycle/SKILL.md` is DORMANT for the same
-reason and by the same ruling.
+Dormancy history, kept for the record: paused 2026-07-25 → 2026-07-30, and
+again 2026-08-19 → 2026-09-01.
 
 ---
 
-<details>
-<summary><strong>The full procedure, held for the restore (click to expand)</strong></summary>
-
-### Historical: RESTORED 2026-07-30, DORMANT again 2026-08-19
+### The full procedure (LIVE)
 
 **Run it on every PR.** A single report spreads across **three** surfaces and any
 one of them can be empty, so a report is not absent until all three are:
@@ -158,16 +142,12 @@ the bar in **fewer codex rounds** than the §2c cap allows — spend the cap onl
 when the reviewers disagree, when findings keep landing, or on a plan-gated
 change. The cap is a ceiling, never a target.
 
-`gh pr checks <n>` (CI) is required and gates independently of both. **CI is
-unaffected by the pause — it was never part of the qodo gate.**
+`gh pr checks <n>` (CI) is required and gates independently of both.
 
 `.claude/skills/mmp-qodo-cycle/SKILL.md` carries the absorption loop — watch the
 PR, pull all three surfaces, make a validity call on every finding BEFORE fixing,
-rerun the full gate set, report a per-finding verdict table. It was marked DORMANT
-on 2026-07-25, was live again from 2026-07-30, and is **DORMANT again from
-2026-08-19**.
-
-</details>
+rerun the full gate set, report a per-finding verdict table. It is **LIVE again
+from 2026-09-01** (dormant 2026-07-25 → 2026-07-30 and 2026-08-19 → 2026-09-01).
 
 ## 2c. Cross-model review is REQUIRED before opening a PR
 
@@ -272,10 +252,8 @@ unresolved on #311, and resolving them turned out to need six more rounds — th
 new code written to close a finding has never been reviewed, so it earns its own
 round. Codex runs are paid, so do not burn rounds on trivial diffs.
 
-🛑 **THE EXCEPTION BELOW IS INERT WHILE §2b IS DORMANT (Kevin, 2026-08-19).**
-It exists only to serve a qodo finding, and with qodo turned off nothing can
-force a round past the cap. **The cap is 10, flat.** Everything from here to the
-end of this paragraph block returns the moment §2b is restored.
+🟢 **THE EXCEPTION BELOW IS LIVE AGAIN (§2b restored 2026-09-01).** It was
+inert 2026-08-19 → 2026-09-01 while qodo was off.
 
 ⚠️ **EXCEPTION — a §2b-forced round may go up to 5 PAST the cap, no ask needed
 (Kevin, 2026-08-18).** §2b requires a codex round on any code written to close a
@@ -301,11 +279,11 @@ unreachable, and `buildRegistry` accepted it. Do not treat the extra rounds as
 a formality to skip; the overage exists because the code most likely to be
 wrong is the code written last, to close somebody else's finding.
 
-**The stopping rule is evidence, not the counter**: stop when a codex round comes
-back clean **AND your own read of the diff agrees**. **TWO conditions while §2b is
-DORMANT (Kevin, 2026-08-19)** — the qodo condition is suspended, not merely
-unavailable, so a PR is never held waiting for it. It returns as a third
-condition when §2b is restored. If you stop with findings still open, write them into the PR body as named, unresolved
+**The stopping rule is evidence, not the counter**: stop when **qodo is clean
+AND a codex round comes back clean AND your own read of the diff agrees** —
+THREE conditions again since §2b's 2026-09-01 restore ("qodo is clean" is
+defined in §2b: reported, every finding fixed or rejected with written
+reasoning). If you stop with findings still open, write them into the PR body as named, unresolved
 findings, say plainly that the PR carries them, and let Kevin decide. Never report
 a PR as done while silently holding findings.
 
@@ -315,8 +293,7 @@ worth knowing in advance — **round 1 finds defects in the code, and rounds 2+
 find defects in the fixes**, including in the guards written to prove the fixes.
 Three separate times it holed a test that looked like it guarded and did not. So
 do not treat a clean round 1 as the review: **self-review the diff yourself**.
-That is the ONLY other opinion again while §2b is dormant, which is why it
-matters more now than it did on 2026-07-30, not less. It earns its keep: on 2026-07-30 codex came back
+It earns its keep: on 2026-07-30 codex came back
 clean on #322 round 3 and self-review immediately found a reachable error path
 with copy that blamed the wrong subsystem.
 
