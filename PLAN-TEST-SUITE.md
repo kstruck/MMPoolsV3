@@ -89,7 +89,7 @@ re-runs the in-app suite to confirm the 5 errors are gone (expected: ~6 pass)._
 0.4. Deploy ritual: `npm --prefix functions ci` (NOT `install`), then
    `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`.
    **A functions deploy now ships the buy-flow functions too** — coordinate
-   with MORNING-CHECKLIST-BUYFLOW.md (its deploy order includes
+   with docs/archive/MORNING-CHECKLIST-BUYFLOW.md (its deploy order includes
    `firestore:rules` and `firestore:indexes` for the new monetization
    collections; functions before rules, per the ritual). Do not deploy
    functions in isolation if the checklist's rules/indexes steps are still
