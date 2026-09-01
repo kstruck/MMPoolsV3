@@ -46,6 +46,12 @@ import { GlobalStandingsCard } from './Dashboards/GlobalStandingsCard';
 import { GlobalCommissionerDashboard } from './Dashboards/GlobalCommissionerDashboard';
 import { Badge, Button } from './ui';
 import { poolTypeLabel, poolOptionLabels } from '../utils/poolTypeLabel';
+import {
+    buildPoolTypeSplit,
+    buildCumulativePaidWinnings,
+    earningsEmptyState,
+    type PaidWin
+} from '../utils/dashboardCharts';
 
 const BRAND = {
   emeraldGlow: 'rgba(201, 168, 103, 0.15)',
@@ -320,35 +326,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         };
     }, [myPools, poolWinners, user.id, bracketEntryCounts]);
 
-    // Data aggregation for Participation Split (Recharts PieChart)
-    const poolTypeSplitData = useMemo(() => {
-        let squares = 0;
-        let MMbrackets = 0;
-        let playoffs = 0;
-        let nfl = 0;
-
-        myPools.forEach(p => {
-            if (p.type === 'SQUARES') squares++;
-            else if (p.type === 'BRACKET') MMbrackets++;
-            else if (p.type === 'NFL_PLAYOFFS') playoffs++;
-            else if (p.type?.startsWith('NFL_')) nfl++;
-        });
-
-        const data = [
-            { name: 'Squares', value: squares, color: '#C9A867' },
-            { name: 'Brackets', value: MMbrackets, color: '#24507F' },
-            { name: 'NFL Playoffs', value: playoffs, color: '#8C6D33' },
-            { name: 'NFL Pickem/Margin', value: nfl, color: '#1A3B62' }
-        ].filter(item => item.value > 0);
-
-        if (data.length === 0) {
-            return [
-                { name: 'Active Squares', value: 2, color: '#C9A867' },
-                { name: 'NFL Pools', value: 1, color: '#1A3B62' }
-            ];
-        }
-        return data;
-    }, [myPools]);
+    // Data aggregation for Participation Split (Recharts PieChart).
+    // Empty when the user has no pools — the chart is replaced with guidance
+    // rather than the placeholder slices this used to fabricate.
+    const poolTypeSplitData = useMemo(() => buildPoolTypeSplit(myPools), [myPools]);
 
     // Earliest upcoming lock deadline (Countdown alerts)
     const earliestLock = useMemo<any>(() => {
@@ -370,18 +351,40 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return earliestPool ? { pool: earliestPool, time: earliest } : null;
     }, [myPools]);
 
-    // Cumulative earnings trend (Recharts AreaChart)
-    const cumulativeEarningsData = useMemo(() => {
-        const totalW = lifetimeStats.totalWinnings;
-        return [
-            { month: 'Sep', Earnings: 0 },
-            { month: 'Oct', Earnings: Math.round(totalW * 0.15) },
-            { month: 'Nov', Earnings: Math.round(totalW * 0.35) },
-            { month: 'Dec', Earnings: Math.round(totalW * 0.5) },
-            { month: 'Jan', Earnings: Math.round(totalW * 0.7) },
-            { month: 'Feb', Earnings: totalW || 120 }
-        ];
-    }, [lifetimeStats.totalWinnings]);
+    // Cumulative earnings trend (Recharts AreaChart).
+    //
+    // Real payouts only. `Winner` has no "won at" timestamp — `paidAt` (stamped
+    // when a commissioner marks a payout cleared) is the only date a win
+    // carries, so the series is built from those and the card says so. Wins with
+    // no payout date contribute nothing rather than an invented month.
+    const myPaidWins = useMemo<PaidWin[]>(() => {
+        const wins: PaidWin[] = [];
+
+        myPools.forEach(pool => {
+            if (pool.type !== 'SQUARES') return;
+            const sPool = pool as GameState;
+            const userSquares = sPool.squares.filter(s => s.reservedByUid === user.id);
+            const winners = poolWinners[pool.id] || [];
+
+            winners.forEach(winner => {
+                if (!userSquares.some(s => s.id === winner.squareId)) return;
+                if (typeof winner.paidAt !== 'number' || !(winner.paidAt > 0)) return;
+                wins.push({ amount: winner.amount || 0, paidAt: winner.paidAt });
+            });
+        });
+
+        return wins;
+    }, [myPools, poolWinners, user.id]);
+
+    const cumulativeEarningsData = useMemo(
+        () => buildCumulativePaidWinnings(myPaidWins),
+        [myPaidWins]
+    );
+
+    const earningsEmpty = useMemo(
+        () => earningsEmptyState(lifetimeStats.totalWinnings),
+        [lifetimeStats.totalWinnings]
+    );
 
     // Financial Metrics
     const projectedPotEarnings = useMemo(() => {
@@ -620,30 +623,39 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             {/* Cumulative Earnings AreaChart */}
                             <div className="lg:col-span-3 bg-card border border-line rounded-3xl p-6 shadow-card relative flex flex-col justify-between">
                                 <div>
-                                    <h3 className="text-sm font-display font-bold text-muted uppercase tracking-[0.16em] mb-1">Lifetime Winnings Trend</h3>
-                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Cumulative payout progression by month</p>
+                                    <h3 className="text-sm font-display font-bold text-muted uppercase tracking-[0.16em] mb-1">Paid Winnings Trend</h3>
+                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Cumulative payouts marked cleared by your commissioners</p>
                                 </div>
 
-                                <div className="h-56 w-full mt-6">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={cumulativeEarningsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
-                                                    <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
-                                                </linearGradient>
-                                            </defs>
-                                            <XAxis dataKey="month" stroke="#7C8698" fontSize={9} fontWeight="bold" />
-                                            <YAxis stroke="#7C8698" fontSize={9} fontWeight="bold" />
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' }}
-                                                itemStyle={{ fontSize: '11px', fontWeight: 'black', color: '#D9BC80' }}
-                                                labelStyle={{ fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' }}
-                                            />
-                                            <Area type="monotone" dataKey="Earnings" stroke="#C9A867" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                {cumulativeEarningsData.length > 0 ? (
+                                    <div className="h-56 w-full mt-6">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={cumulativeEarningsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                <defs>
+                                                    <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
+                                                        <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <XAxis dataKey="month" stroke="#7C8698" fontSize={9} fontWeight="bold" />
+                                                <YAxis stroke="#7C8698" fontSize={9} fontWeight="bold" />
+                                                <Tooltip
+                                                    contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' }}
+                                                    itemStyle={{ fontSize: '11px', fontWeight: 'black', color: '#D9BC80' }}
+                                                    labelStyle={{ fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' }}
+                                                />
+                                                <Area type="monotone" dataKey="Earnings" stroke="#C9A867" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                ) : (
+                                    /* No fabricated curve. Real payouts or nothing. */
+                                    <div className="h-56 w-full mt-6 flex flex-col items-center justify-center text-center px-4">
+                                        <TrendingUp className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
+                                        <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">{earningsEmpty.headline}</p>
+                                        <p className="text-xs text-muted font-body max-w-xs leading-relaxed">{earningsEmpty.detail}</p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Participation Split Pie Chart */}
@@ -653,40 +665,61 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Active participation by pool category</p>
                                 </div>
 
-                                <div className="h-48 w-full mt-6 relative flex items-center justify-center">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={poolTypeSplitData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={45}
-                                                outerRadius={65}
-                                                paddingAngle={4}
-                                                dataKey="value"
-                                            >
-                                                {poolTypeSplitData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' }} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
+                                {poolTypeSplitData.length > 0 ? (
+                                    <>
+                                        <div className="h-48 w-full mt-6 relative flex items-center justify-center">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={poolTypeSplitData}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={45}
+                                                        outerRadius={65}
+                                                        paddingAngle={4}
+                                                        dataKey="value"
+                                                    >
+                                                        {poolTypeSplitData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' }} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
 
-                                    <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                                        <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{myPools.length}</span>
-                                        <span className="text-[7px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Total Pools</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4 text-[9px] font-display font-bold uppercase tracking-[0.08em]">
-                                    {poolTypeSplitData.map((entry, idx) => (
-                                        <div key={idx} className="flex items-center gap-1.5" style={{ color: entry.color }}>
-                                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-                                            {entry.name} (<span className="num">{entry.value}</span>)
+                                            <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
+                                                <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{myPools.length}</span>
+                                                <span className="text-[7px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Total Pools</span>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+
+                                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4 text-[9px] font-display font-bold uppercase tracking-[0.08em]">
+                                            {poolTypeSplitData.map((entry, idx) => (
+                                                <div key={idx} className="flex items-center gap-1.5" style={{ color: entry.color }}>
+                                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
+                                                    {entry.name} (<span className="num">{entry.value}</span>)
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    /* No pools, no slices. This used to draw two invented ones. */
+                                    <div className="mt-6 flex flex-col items-center justify-center text-center px-2">
+                                        <Trophy className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
+                                        <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">No pools yet</p>
+                                        <p className="text-xs text-muted font-body leading-relaxed mb-5">
+                                            Join a pool with an invite link from a friend, browse public pools, or start your own.
+                                        </p>
+                                        <div className="flex flex-col sm:flex-row gap-2 justify-center w-full">
+                                            <Button variant="primary" size="sm" onClick={() => navigate('/browse')}>
+                                                Browse Public Pools
+                                            </Button>
+                                            <Button variant="secondary" size="sm" onClick={() => navigate('/create-pool')}>
+                                                Create a Pool
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                         </div>
