@@ -414,10 +414,28 @@
 > the rule was **unsatisfiable and deadlocked every PR in the repo**, with all
 > 9 checks green. Kevin added Repository admin to the bypass list on
 > 2026-08-25 and bypass-merged #585/#583/#584. **Any future ruleset edit that
-> drops that bypass entry recreates the deadlock.** The required status checks
-> (secrets-scan, build-and-test, e2e-playwright, emulator-tests, lint) are the
-> hard gates; the review rule is a speed bump whose sign-off is Kevin's own
-> bypass-merge click.
+> drops that bypass entry recreates the deadlock.**
+>
+> 🛑 **IT RECURRED — 2026-09-01, on PR #655.** `bypass_actors` was EMPTY again
+> (how it got dropped is unknown; nothing in this repo edits rulesets).
+> Restored via
+> `gh api -X PUT repos/kstruck/MMPoolsV3/rulesets/11714546` with
+> `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]}`
+> — verify anytime with
+> `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.bypass_actors'`
+> (empty array = the deadlock is back).
+>
+> ⚠️ **THE REQUIRED-CHECK LIST BELOW WAS STALE — corrected 2026-09-01 by
+> reading the ruleset, not the docs.** The ruleset's required status checks
+> are SIX: **build-and-test, emulator-tests, nginx-validate, lint,
+> secrets-scan, security-audit** (e2e-playwright runs but is NOT required;
+> security-audit IS — a fresh npm advisory can therefore block every PR
+> repo-wide overnight with no code change anywhere, which is exactly what
+> happened 2026-09-01 and what PR #655 fixed). The ruleset also enforces
+> **strict up-to-date-with-main** before merge and **required review-thread
+> resolution** (an unresolved qodo thread blocks the button even with all
+> checks green). The review rule itself stays a speed bump whose sign-off is
+> Kevin's own bypass-merge click.
 
 > ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED. POOL-PASSWORD HASHING IS BUILT BUT EXISTING POOLS ARE STILL PLAINTEXT UNTIL THE SWEEP RUNS. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
 >
