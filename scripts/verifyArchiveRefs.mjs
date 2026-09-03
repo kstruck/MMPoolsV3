@@ -210,12 +210,23 @@ function manifestDocs() {
   return parseManifest(fs.readFileSync(DELETED_MANIFEST, 'utf8'));
 }
 
-/** The same list as of `ref`. Absent there (or unreadable) means it had none. */
+/**
+ * The same list as of `ref`. A manifest that simply did not exist at that ref
+ * is the legitimate first-cleanup case and means "no entries". ANY OTHER git
+ * failure is not: swallowing it would make an unreadable history look like an
+ * empty one, and the append-only check would then pass by knowing nothing.
+ */
 function manifestDocsAt(ref) {
   try {
     return parseManifest(git(['show', `${ref}:${DELETED_MANIFEST}`])).map((f) => path.basename(f));
-  } catch {
-    return [];
+  } catch (err) {
+    const stderr = String(err?.stderr ?? '');
+    const absent = /does not exist|exists on disk, but not in|invalid object name/i.test(stderr);
+    if (absent) return [];
+    fail(
+      `cannot read ${DELETED_MANIFEST} at '${ref}', so the append-only check on it\n` +
+      `      cannot run: ${stderr.trim() || err?.message || 'unknown git failure'}`,
+    );
   }
 }
 

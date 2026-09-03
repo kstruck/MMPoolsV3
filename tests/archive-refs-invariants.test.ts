@@ -219,6 +219,25 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('accepts a manifest that did not exist at the base ref — the first cleanup', () => {
+    // The legitimate absent case. It must stay distinguishable from a git
+    // failure, which fails closed rather than reading as "no entries".
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, 'DOOMED.md'), 'content\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base with no manifest at all');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.rmSync(path.join(dir, 'DOOMED.md'));
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nDOOMED.md\n');
+      run('add', '-A');
+      run('commit', '-qm', 'first cleanup: delete and start the manifest');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+    });
+  }, TEST_TIMEOUT);
+
   it('fails when an existing manifest entry is removed — the record is append-only', () => {
     fixture((dir, run) => {
       fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nOLD-DELETION.md\n');
