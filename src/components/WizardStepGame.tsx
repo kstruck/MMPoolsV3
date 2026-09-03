@@ -251,7 +251,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                                 <span className="text-sm text-[color:var(--text)] font-display font-bold">{home.abbreviation}</span>
                                             </div>
                                         </div>
-                                        <span className="text-xs text-gold-600 opacity-0 group-hover:opacity-100 font-display font-bold uppercase tracking-[0.05em] transition-opacity">Select</span>
+                                        <span className="text-xs text-gold-600 hover-reveal font-display font-bold uppercase tracking-[0.05em] transition-opacity">Select</span>
                                     </div>
                                 );
                             })}

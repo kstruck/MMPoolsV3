@@ -149,7 +149,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                                                 <span className="text-sm text-muted font-bold">{home.abbreviation}</span>
                                             </div>
                                         </div>
-                                        <span className="text-xs text-navy-600 dark:text-gold-400 opacity-0 group-hover:opacity-100 font-display font-bold uppercase transition-opacity">Select</span>
+                                        <span className="text-xs text-navy-600 dark:text-gold-400 hover-reveal font-display font-bold uppercase transition-opacity">Select</span>
                                     </div>
                                 );
                             })}

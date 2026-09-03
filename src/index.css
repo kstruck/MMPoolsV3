@@ -93,21 +93,34 @@ body {
 /* ============================================
    HOVER-REVEALED CONTROLS ON TOUCH + KEYBOARD
    tailwind.config.js sets `future.hoverOnlyWhenSupported`, so every `hover:`
-   / `group-hover:` utility is inert on devices that cannot hover. Controls
-   that are `opacity-0` until hovered (row edit/delete, reorder, wizard edit
-   buttons) would become unreachable there, and were already unreachable by
-   keyboard. On no-hover devices they are always visible; on every device
-   focusing into the group reveals them.
+   / `group-hover:` utility is inert on devices that cannot hover. Anything
+   ACTIONABLE that is hidden until its `.group` row is hovered (row edit /
+   delete, prop reorder, wizard edit buttons) must use `.hover-reveal` instead
+   of `opacity-0 group-hover:opacity-100`: same hover behaviour, plus always
+   visible where hover is impossible, plus visible while keyboard focus is
+   inside the row.
+
+   Tooltips and decorative glows keep the raw utilities on purpose — they are
+   hover-only by design, and pinning them open on touch would overlap the UI
+   (codex r3 on #669: PoolRoute's rule-description tooltips).
    ============================================ */
-@media (hover: none) {
-  .group-hover\:opacity-100,
-  .hover\:opacity-100 {
+.hover-reveal {
+  opacity: 0;
+}
+
+@media (hover: hover) {
+  .group:hover .hover-reveal {
     opacity: 1;
   }
 }
 
-.group:focus-within .group-hover\:opacity-100,
-.hover\:opacity-100:focus-visible {
+@media (hover: none) {
+  .hover-reveal {
+    opacity: 1;
+  }
+}
+
+.group:focus-within .hover-reveal {
   opacity: 1;
 }
 

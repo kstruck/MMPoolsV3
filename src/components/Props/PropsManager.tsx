@@ -354,7 +354,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                         <div key={q.id} className="group bg-card border border-line hover:border-navy-600 rounded-lg p-4 transition duration-150 flex items-start gap-4">
                                             {/* Drag Handles (Actually Up/Down Buttons) */}
                                             {selectedCategory === 'All' && !questionSearch && (
-                                                <div className="flex flex-col gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex flex-col gap-1 pt-1 hover-reveal transition-opacity">
                                                     <button
                                                         onClick={() => moveQuestion(actualIndex, 'up')}
                                                         disabled={actualIndex === 0}
@@ -395,7 +395,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex flex-col gap-2 hover-reveal transition-opacity">
                                                 <button onClick={() => startEditing(q)} className="p-2 rounded bg-surface border border-line text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 transition-colors duration-150">
                                                     <Edit2 size={16} />
                                                 </button>

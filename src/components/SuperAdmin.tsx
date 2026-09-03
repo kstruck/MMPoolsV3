@@ -3159,7 +3159,7 @@ export const SuperAdmin: React.FC = () => {
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex gap-2 hover-reveal transition-opacity">
                                                 <button onClick={() => handleEditSeed(seed)} className="text-navy-700 dark:text-gold-400 hover:bg-navy-600/10 p-2 bg-surface border border-line rounded">
                                                     <Settings size={16} />
                                                 </button>

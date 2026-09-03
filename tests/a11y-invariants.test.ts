@@ -319,12 +319,32 @@ describe('motion a11y invariants', () => {
         expect(cfg).toMatch(/future:\s*\{[^}]*hoverOnlyWhenSupported:\s*true/);
     });
 
-    it('hover-revealed controls have a no-hover and a keyboard path', () => {
+    it('the .hover-reveal utility has hover, no-hover and keyboard paths', () => {
         const css = stripComments(read('src/index.css'));
-        // The CSS source spells the Tailwind class as `.group-hover\:opacity-100`
-        // (escaped colon), so the pattern needs a literal backslash before the colon.
-        expect(css).toMatch(/@media \(hover: none\)\s*\{[\s\S]*?\.group-hover\\:opacity-100[\s\S]*?opacity:\s*1/);
-        expect(css).toMatch(/\.group:focus-within \.group-hover\\:opacity-100/);
+        expect(css).toMatch(/\.hover-reveal\s*\{\s*opacity:\s*0/);
+        expect(css).toMatch(/@media \(hover: hover\)\s*\{[\s\S]*?\.group:hover \.hover-reveal\s*\{\s*opacity:\s*1/);
+        expect(css).toMatch(/@media \(hover: none\)\s*\{[\s\S]*?\.hover-reveal\s*\{\s*opacity:\s*1/);
+        expect(css).toMatch(/\.group:focus-within \.hover-reveal\s*\{\s*opacity:\s*1/);
+    });
+
+    it('every hover-hidden actionable control uses .hover-reveal, not raw group-hover', () => {
+        // The six sites qodo #669 finding 8 named. A control that goes back to
+        // `opacity-0 group-hover:opacity-100` is unreachable on touch (the
+        // Tailwind future flag makes group-hover inert there) and by keyboard.
+        // Tooltips/decorative glows are deliberately NOT in this list — they stay
+        // hover-only (codex r3 on #669).
+        for (const f of [
+            'src/components/admin/WizardStepMatchup.tsx',
+            'src/components/admin/WizardStepSummary.tsx',
+            'src/components/Props/PropsManager.tsx',
+            'src/components/SuperAdmin.tsx',
+            'src/components/WizardStepGame.tsx',
+        ]) {
+            const src = stripComments(read(f));
+            expect(src, `${f} should use .hover-reveal`).toMatch(/\bhover-reveal\b/);
+            expect(src, `${f} still has a raw opacity-0 + group-hover:opacity-100 control`)
+                .not.toMatch(/opacity-0[^"'`]*group-hover:opacity-100|group-hover:opacity-100[^"'`]*opacity-0/);
+        }
     });
 
     it('no source file uses transition-all (Tailwind `transition` excludes layout properties)', () => {
