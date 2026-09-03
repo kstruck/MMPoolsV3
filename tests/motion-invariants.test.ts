@@ -177,9 +177,28 @@ describe('motion invariants', () => {
   });
 
   it('`transition-ui` never sits on a max-h collapser — it excludes height, so the panel would jump (codex round 6)', () => {
-    // A collapser that toggles `max-h-*` needs an explicit
-    // `transition-[max-height,...]`; `transition-ui` only fades it.
-    expect(offenders(/\btransition-ui\b[^"'`]*\bmax-h-|\bmax-h-[^"'`]*\btransition-ui\b/)).toEqual([]);
+    // A collapser that toggles `max-h-*` uses the named `transition-collapse`
+    // token; `transition-ui` only fades it. Matched across lines within one
+    // string/template literal (qodo: the line-based version missed multiline
+    // class expressions).
+    const hits: string[] = [];
+    for (const { rel, text } of files) {
+      for (const m of text.matchAll(/\btransition-ui\b[^"'`]*\bmax-h-|\bmax-h-[^"'`]*\btransition-ui\b/g)) {
+        hits.push(`${rel}:${text.slice(0, m.index).split('\n').length}`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it('layout transitions use the named tokens (transition-collapse / transition-width), never an arbitrary transition-[..]', () => {
+    // Named tokens are the only way the reduced-motion stylesheet can find
+    // and snap them; an arbitrary `transition-[max-height,...]` animated
+    // layout for reduced-motion users (qodo on #667).
+    expect(offenders(/\btransition-\[/)).toEqual([]);
+    const css = fs.readFileSync(path.join(ROOT, 'src', 'index.css'), 'utf8');
+    const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toContain('.transition-collapse');
+    expect(reduced).toContain('.transition-width');
   });
 
   it('tx() never wraps a sizing transform — under reduced motion it returns none, and a w-full bar at none reads as 100%', () => {

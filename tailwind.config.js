@@ -53,6 +53,11 @@ export default {
           'color', 'background-color', 'border-color', 'text-decoration-color',
           'fill', 'stroke', 'opacity', 'box-shadow', 'transform', 'filter', 'backdrop-filter',
         ].join(', '),
+        // The two sanctioned layout transitions, named so they can be found and
+        // so reduced-motion CSS can target them: a max-height collapser, and the
+        // stacked split bar whose side-by-side segments cannot use scaleX.
+        collapse: 'max-height, margin-bottom, opacity',
+        width: 'width',
       },
       // Built-in CSS easings are too weak for entrances. Strong ease-out for
       // anything entering/exiting; drawer curve for slide-in panels.

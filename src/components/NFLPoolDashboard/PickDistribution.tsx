@@ -210,15 +210,15 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
                   {/* Split distribution bar */}
                   <div className="h-2 w-full bg-line rounded-full overflow-hidden flex">
                     <div
-                      className="bg-navy-600 transition-[width] duration-300 ease-out"
+                      className="bg-navy-600 transition-width duration-300 ease-out"
                       style={{ width: `${awayPct}%` }}
                     />
                     <div
-                      className="bg-transparent transition-[width] duration-300 ease-out"
+                      className="bg-transparent transition-width duration-300 ease-out"
                       style={{ width: `${100 - awayPct - homePct}%` }}
                     />
                     <div
-                      className="bg-gold-foil transition-[width] duration-300 ease-out"
+                      className="bg-gold-foil transition-width duration-300 ease-out"
                       style={{ width: `${homePct}%` }}
                     />
                   </div>

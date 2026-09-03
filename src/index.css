@@ -113,8 +113,13 @@ h1, h2, h3, h4, .display {
      feedback (`active:scale-95`) and knob slides are not, so `transition-ui`
      drops `transform` from its property list here rather than being zeroed
      outright — codex round 5 on the animation-review PR. */
-  .transition-transform {
+  .transition-transform,
+  .transition-width {
     transition-duration: 0.01ms !important;
+  }
+  /* The collapser keeps its fade and snaps its height (qodo on #667). */
+  .transition-collapse {
+    transition-property: opacity !important;
   }
   /* `after:transition-ui` compiles to `.after\:transition-ui::after`, which the
      bare class selector above does not match (codex round 6 — the Switch knob). */

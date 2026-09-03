@@ -1098,7 +1098,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   {/* --- SECTION 3: THE GRID --- */}
                   <div id="printable-grid" className="relative bg-navy-950 p-2 sm:p-4 rounded-b-xl shadow-panel overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-[rgba(230,206,150,0.16)]">
                      {/* Zoom works by widening the layout width; the parent overflow-x-auto container scrolls when zoomed in */}
-                     <div className="transition-[width] duration-200" style={{ width: `${zoomLevel * 100}%` }}>
+                     <div className="transition-width duration-200" style={{ width: `${zoomLevel * 100}%` }}>
                         {/* Grid Layout: BACK TO STANDARD 11x11 ALWAYS */}
                         <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
