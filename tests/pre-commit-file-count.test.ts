@@ -58,12 +58,12 @@ function git(...args: string[]): string {
 
 /** Run the real hook in the throwaway repo; return its stdout+stderr and exit code. */
 function runHook(): { out: string; status: number | null } {
-  const r = spawnSync(SH, [HOOK], {
+  const hookResult = spawnSync(SH, [HOOK], {
     cwd: repo,
     encoding: 'utf8',
     env: { ...process.env, PATH: `${stubBin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}` },
   });
-  return { out: `${r.stdout ?? ''}${r.stderr ?? ''}`, status: r.status };
+  return { out: `${hookResult.stdout ?? ''}${hookResult.stderr ?? ''}`, status: hookResult.status };
 }
 
 function resetRepo(): void {
@@ -154,12 +154,12 @@ describe('.husky/pre-commit staged-path warning', () => {
     const stub = '#!/bin/sh\necho "SECRET FOUND"\nexit 3\n';
     writeFileSync(join(failBin, 'python'), stub, { mode: 0o755 });
     writeFileSync(join(failBin, 'python.exe'), stub, { mode: 0o755 });
-    const r = spawnSync(SH, ['-e', HOOK], {
+    const hookResult = spawnSync(SH, ['-e', HOOK], {
       cwd: repo,
       encoding: 'utf8',
       env: { ...process.env, PATH: `${failBin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}` },
     });
-    expect(r.status).toBe(3);
-    expect(`${r.stdout}${r.stderr}`).not.toContain('WARNING');
+    expect(hookResult.status).toBe(3);
+    expect(`${hookResult.stdout}${hookResult.stderr}`).not.toContain('WARNING');
   });
 });
