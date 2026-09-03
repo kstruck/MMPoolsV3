@@ -40,14 +40,34 @@ function fail(message) {
 
 // --- arguments -------------------------------------------------------------
 
+const USAGE = 'usage: node scripts/verifyArchiveRefs.mjs [--base <ref>]';
+
+/**
+ * Parse argv strictly. Anything unrecognized — a mistyped flag, a stray
+ * positional, `--base=<ref>` — exits non-zero rather than falling back to the
+ * default, because a silent fallback would compare the wrong base and then
+ * print OK. That is the failure mode this whole script exists to prevent.
+ */
 function parseBase(argv) {
-  const i = argv.indexOf('--base');
-  if (i === -1) return 'origin/main';
-  const value = argv[i + 1];
-  if (!value || value.startsWith('-')) {
-    fail('--base requires a ref, e.g. --base origin/main');
+  const args = argv.slice(2);
+  let base = 'origin/main';
+  let seen = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg !== '--base') {
+      fail(`unrecognized argument '${arg}'.\n      ${USAGE}`);
+    }
+    if (seen) fail(`--base given more than once.\n      ${USAGE}`);
+    const value = args[i + 1];
+    if (!value || value.startsWith('-')) {
+      fail(`--base requires a ref, e.g. --base origin/main.\n      ${USAGE}`);
+    }
+    base = value;
+    seen = true;
+    i++; // consume the value
   }
-  return value;
+  return base;
 }
 
 const BASE = parseBase(process.argv);
