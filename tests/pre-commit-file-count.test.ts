@@ -56,14 +56,27 @@ function git(...args: string[]): string {
   });
 }
 
-/** Run the real hook in the throwaway repo; return its stdout+stderr and exit code. */
-function runHook(): { out: string; status: number | null } {
-  const hookResult = spawnSync(SH, [HOOK], {
+/**
+ * Launch `sh` on the real hook inside the throwaway repo. `spawnSync` does not
+ * throw on a launch failure (missing shell, EACCES): it returns `error` with a
+ * null `status`, which would surface below as "expected null to be 0". Turn it
+ * into a descriptive failure instead (qodo on #668).
+ */
+function launchHook(shArgs: string[], pathPrefix: string): { out: string; status: number | null } {
+  const hookResult = spawnSync(SH, shArgs, {
     cwd: repo,
     encoding: 'utf8',
-    env: { ...process.env, PATH: `${stubBin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}` },
+    env: { ...process.env, PATH: `${pathPrefix}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}` },
   });
+  if (hookResult.error) {
+    throw new Error(`could not launch ${SH} ${shArgs.join(' ')}: ${hookResult.error.message}`);
+  }
   return { out: `${hookResult.stdout ?? ''}${hookResult.stderr ?? ''}`, status: hookResult.status };
+}
+
+/** Run the real hook with the passing stub scanner on PATH. */
+function runHook(): { out: string; status: number | null } {
+  return launchHook([HOOK], stubBin);
 }
 
 function resetRepo(): void {
@@ -154,12 +167,8 @@ describe('.husky/pre-commit staged-path warning', () => {
     const stub = '#!/bin/sh\necho "SECRET FOUND"\nexit 3\n';
     writeFileSync(join(failBin, 'python'), stub, { mode: 0o755 });
     writeFileSync(join(failBin, 'python.exe'), stub, { mode: 0o755 });
-    const hookResult = spawnSync(SH, ['-e', HOOK], {
-      cwd: repo,
-      encoding: 'utf8',
-      env: { ...process.env, PATH: `${failBin}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH ?? ''}` },
-    });
-    expect(hookResult.status).toBe(3);
-    expect(`${hookResult.stdout}${hookResult.stderr}`).not.toContain('WARNING');
+    const { out, status } = launchHook(['-e', HOOK], failBin);
+    expect(status).toBe(3);
+    expect(out).not.toContain('WARNING');
   });
 });
