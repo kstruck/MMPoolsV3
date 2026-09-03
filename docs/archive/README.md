@@ -19,6 +19,12 @@ archive. Both halves were verified by command, not by reading.
 `scripts/verifyArchiveRefs.mjs` checks both halves and exits non-zero if either
 breaks. Run it from the repo root after any doc move:
 
+**When you delete a doc, add its filename to `deleted-docs.txt` in this
+directory.** That file is the durable half of the check: the verifier learns
+about deletions from `git diff <base>...HEAD`, which is empty once a cleanup
+merges, so without the manifest invariant 2 would quietly become a no-op on
+`main` and a re-added reference to a long-deleted doc would pass.
+
 ```bash
 node scripts/verifyArchiveRefs.mjs
 ```

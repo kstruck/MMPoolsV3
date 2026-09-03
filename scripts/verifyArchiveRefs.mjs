@@ -26,6 +26,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const ARCHIVE_DIR = 'docs/archive';
+const DELETED_MANIFEST = 'docs/archive/deleted-docs.txt';
 
 /** Extensions worth scanning for a citation. Anything else is binary or generated. */
 const TEXT_EXT = new Set([
@@ -90,6 +91,12 @@ function lines(out) {
  * Docs deleted relative to BASE, including deletions that are only staged or
  * only in the working tree — the README tells contributors to run this after a
  * move, which is exactly when the deletion is not committed yet.
+ *
+ * UNIONED WITH A TRACKED MANIFEST, and that half is the durable one. A diff
+ * against BASE is empty once the cleanup merges, which would leave invariant 2
+ * a permanent no-op on main: re-adding a reference to a long-deleted doc would
+ * pass with `references to deleted docs: 0`. DELETED_MANIFEST outlives the
+ * branch, so the guard keeps working after the diff stops carrying it.
  */
 function deletedDocs() {
   try {
@@ -110,10 +117,20 @@ function deletedDocs() {
   // deleted — git reports the old path as a deletion either way, so subtract
   // the archive or every archived file would be reported as dangling.
   return new Set(
-    [...committed, ...uncommitted]
+    [...committed, ...uncommitted, ...manifestDocs()]
       .map((f) => path.basename(f))
       .filter((name) => !archived.has(name)),
   );
+}
+
+/** The tracked list of docs previous cleanups deleted. */
+function manifestDocs() {
+  if (!fs.existsSync(DELETED_MANIFEST)) return [];
+  return fs
+    .readFileSync(DELETED_MANIFEST, 'utf8')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s && !s.startsWith('#'));
 }
 
 /** Every tracked text file, so a citation in code or a skill cannot hide. */
