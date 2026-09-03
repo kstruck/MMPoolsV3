@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UI_EASE, UI_TRANSITION } from '../ui/motion';
+import { UI_EASE, UI_TRANSITION, useMotionTransform } from '../ui/motion';
 import type { PoolBilling, BillingStatus } from '../../types';
 import { isHostingBannerDismissed, dismissHostingBanner } from './hostingBannerDismissal';
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from '@shared/freePlanCap';
@@ -37,6 +37,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   isCommissioner,
   children,
 }) => {
+  const { reduce, tx } = useMotionTransform();
   const billing = pool.billing;
   const status: BillingStatus = billing?.status ?? 'free';
 
@@ -146,8 +147,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, transform: 'translateY(-12px)' }}
-          animate={{ opacity: 1, transform: 'translateY(0px)' }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
           transition={UI_TRANSITION}
           style={{
             background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
@@ -313,8 +314,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, transform: 'translateY(-12px)' }}
-          animate={{ opacity: 1, transform: 'translateY(0px)' }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
           transition={UI_TRANSITION}
           style={{
             background: bannerBg,
@@ -422,8 +423,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, transform: 'translateY(-12px)' }}
-          animate={{ opacity: 1, transform: 'translateY(0px)' }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
           transition={UI_TRANSITION}
           style={{
             background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(139,92,246,0.12) 100%)',
@@ -533,8 +534,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, transform: 'translateY(-12px)' }}
-          animate={{ opacity: 1, transform: 'translateY(0px)' }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
           transition={UI_TRANSITION}
           style={{
             background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(239,68,68,0.08) 100%)',
@@ -552,7 +553,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <motion.div
-              animate={{ transform: ['scale(1)', 'scale(1.15)', 'scale(1)'] }}
+              animate={{ transform: reduce ? 'scale(1)' : ['scale(1)', 'scale(1.15)', 'scale(1)'] }}
               transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
               style={{
                 padding: '10px',
@@ -663,8 +664,8 @@ export const BillingGate: React.FC<BillingGateProps> = ({
           }}
         >
           <motion.div
-            initial={{ opacity: 0, transform: 'translateY(20px) scale(0.92)' }}
-            animate={{ opacity: 1, transform: 'translateY(0px) scale(1)' }}
+            initial={{ opacity: 0, transform: tx('translateY(20px) scale(0.92)') }}
+            animate={{ opacity: 1, transform: tx('translateY(0px) scale(1)') }}
             transition={{ duration: 0.25, ease: UI_EASE }}
             style={{
               pointerEvents: 'auto',

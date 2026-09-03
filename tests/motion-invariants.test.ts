@@ -140,6 +140,23 @@ describe('motion invariants', () => {
     expect(hits).toEqual([]);
   });
 
+  it('every Framer transform string goes through useMotionTransform (MotionConfig reducedMotion does NOT strip raw transform strings)', () => {
+    // codex round 2: `<MotionConfig reducedMotion="user">` disables x/y/scale
+    // props under prefers-reduced-motion but leaves a raw `transform` string
+    // animating. So each such value must be `tx(...)` or a `reduce ?` branch,
+    // and the file must call the hook.
+    const hits: string[] = [];
+    for (const { rel, text } of files) {
+      if (!text.includes('framer-motion') || rel.endsWith('/ui/motion.ts')) continue;
+      const transformSites = [...text.matchAll(/\btransform:\s*(?!tx\(|reduce \?)[`'"[]/g)];
+      for (const m of transformSites) hits.push(`${rel}:${text.slice(0, m.index).split('\n').length}: unwrapped transform`);
+      if (/\btransform:\s*(?:tx\(|reduce \?)/.test(text) && !/useMotionTransform\(\)/.test(text)) {
+        hits.push(`${rel}: uses tx()/reduce without calling useMotionTransform()`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
   it('no `ease-in` on UI entrances (delays the moment the user is watching)', () => {
     expect(offenders(/\banimate-in\b[^"'`]*\bease-in\b(?!-out)/)).toEqual([]);
     expect(offenders(/ease:\s*['"]easeIn['"]/)).toEqual([]);

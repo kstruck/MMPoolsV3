@@ -107,8 +107,10 @@ h1, h2, h3, h4, .display {
   .ticker-inner {
     animation: none !important;
   }
-  .transition-transform,
-  .transition-ui {
+  /* Hover transforms are gated by the `fine:` variant, which already
+     excludes reduced-motion, so `transition-ui` (colors, opacity, shadow)
+     is left alone here on purpose: those fades aid comprehension. */
+  .transition-transform {
     transition-duration: 0.01ms !important;
   }
 }

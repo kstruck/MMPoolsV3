@@ -1345,7 +1345,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
 
                   {/* --- COLOR LEGEND --- */}
-                  <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in delay-100 print:hidden">
+                  <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in print:hidden">
                      <div className="bg-card rounded-xl p-4 border border-line flex flex-wrap justify-center items-center gap-6 md:gap-8">
                         <div className="flex items-center gap-3">
                            <div className="w-6 h-6 rounded bg-navy-700 border border-navy-600 shadow-sm flex items-center justify-center">

@@ -21,6 +21,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // ─────────────────────────────────────────────────────────────────────────────
 
 vi.mock('framer-motion', () => ({
+    useReducedMotion: () => false,
   motion: {
     div: ({ children, style, ...props }: any) => (
       <div style={style} {...props}>{children}</div>

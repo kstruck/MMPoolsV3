@@ -1,4 +1,4 @@
-import type { Transition } from 'framer-motion';
+import { useReducedMotion, type Transition } from 'framer-motion';
 
 /**
  * Shared Framer Motion timing. One place, so every JS-driven entrance in the
@@ -20,3 +20,19 @@ export const TOAST_TRANSITION: Transition = { duration: 0.28, ease: UI_EASE };
 
 /** Modals: centered, so scale from 0.95 — never from 0. */
 export const MODAL_TRANSITION: Transition = { duration: 0.2, ease: UI_EASE };
+
+/**
+ * Reduced-motion for transform-string animations.
+ *
+ * `<MotionConfig reducedMotion="user">` at the root strips Framer's positional
+ * shorthands (`x`, `y`, `scale`) when the OS asks for reduced motion — but it
+ * does NOT touch a raw `transform` string, and the strings above are what we
+ * animate for compositor performance. So every transform-string site goes
+ * through `tx()`: it returns 'none' under reduced motion, which leaves the
+ * opacity fade in place (gentler, not zero) and removes the movement.
+ * Found by codex round 2 on the animation-review PR.
+ */
+export function useMotionTransform(): { reduce: boolean; tx: (transform: string) => string } {
+  const reduce = useReducedMotion() === true;
+  return { reduce, tx: (transform) => (reduce ? 'none' : transform) };
+}

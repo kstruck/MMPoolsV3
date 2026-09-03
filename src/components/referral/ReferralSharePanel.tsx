@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { UI_EASE, UI_TRANSITION } from '../ui/motion';
+import { UI_EASE, UI_TRANSITION, useMotionTransform } from '../ui/motion';
 import { Copy, Share2, CheckCircle, Gift, Users, Mail, MessageCircle } from 'lucide-react';
 import { referralService } from '../../services/referralService';
 import { db } from '../../firebase';
@@ -24,6 +24,7 @@ const DEFAULT_CONFIG: ReferralConfig = {
 };
 
 export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, userName }) => {
+  const { tx } = useMotionTransform();
   const [copied, setCopied] = useState(false);
   const [config, setConfig] = useState<ReferralConfig>(DEFAULT_CONFIG);
   const [stats, setStats] = useState({
@@ -92,8 +93,8 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
 
   return (
     <motion.div
-      initial={{ opacity: 0, transform: 'translateY(20px)' }}
-      animate={{ opacity: 1, transform: 'translateY(0px)' }}
+      initial={{ opacity: 0, transform: tx('translateY(20px)') }}
+      animate={{ opacity: 1, transform: tx('translateY(0px)') }}
       transition={UI_TRANSITION}
       className="bg-card border border-line rounded-2xl p-6 md:p-8 space-y-6"
     >
@@ -233,8 +234,8 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
           </div>
           <div className="w-full bg-surface border border-line rounded-full h-2.5 overflow-hidden">
             <motion.div
-              initial={{ transform: 'scaleX(0)' }}
-              animate={{ transform: `scaleX(${Math.min(progressPercent, 100) / 100})` }}
+              initial={{ transform: tx('scaleX(0)') }}
+              animate={{ transform: tx(`scaleX(${Math.min(progressPercent, 100) / 100})`) }}
               transition={{ duration: 0.4, ease: UI_EASE, delay: 0.1 }}
               className="h-full w-full origin-left rounded-full bg-gold-foil"
             />

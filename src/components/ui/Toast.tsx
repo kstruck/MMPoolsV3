@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { MODAL_TRANSITION, TOAST_TRANSITION } from './motion';
+import { MODAL_TRANSITION, TOAST_TRANSITION, useMotionTransform } from './motion';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
 import { useOverlayOwner } from './overlayStack';
 
@@ -48,6 +48,7 @@ const KIND_STYLES: Record<ToastKind, { box: string; Icon: typeof Info }> = {
 let nextId = 1;
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { tx } = useMotionTransform();
     const [toasts, setToasts] = useState<ToastItem[]>([]);
     const [confirmState, setConfirmState] = useState<(ConfirmOptions & { resolve: (ok: boolean) => void }) | null>(null);
     const confirmButtonRef = useRef<HTMLButtonElement>(null);
@@ -118,9 +119,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         return (
                             <motion.div
                                 key={t.id}
-                                initial={{ opacity: 0, transform: 'translateY(16px)' }}
-                                animate={{ opacity: 1, transform: 'translateY(0px)' }}
-                                exit={{ opacity: 0, transform: 'translateY(8px)' }}
+                                initial={{ opacity: 0, transform: tx('translateY(16px)') }}
+                                animate={{ opacity: 1, transform: tx('translateY(0px)') }}
+                                exit={{ opacity: 0, transform: tx('translateY(8px)') }}
                                 transition={TOAST_TRANSITION}
                                 role={t.kind === 'error' ? 'alert' : 'status'}
                                 className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${box}`}
@@ -152,9 +153,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         onClick={() => resolveConfirm(false)}
                     >
                         <motion.div
-                            initial={{ opacity: 0, transform: 'scale(0.95)' }}
-                            animate={{ opacity: 1, transform: 'scale(1)' }}
-                            exit={{ opacity: 0, transform: 'scale(0.95)' }}
+                            initial={{ opacity: 0, transform: tx('scale(0.95)') }}
+                            animate={{ opacity: 1, transform: tx('scale(1)') }}
+                            exit={{ opacity: 0, transform: tx('scale(0.95)') }}
                             transition={MODAL_TRANSITION}
                             role="dialog"
                             aria-modal="true"
