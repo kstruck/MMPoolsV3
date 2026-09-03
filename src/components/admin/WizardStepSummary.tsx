@@ -34,6 +34,7 @@ const SummaryCard = ({ title, icon: Icon, children, step, onEditStep }: {
                 onClick={() => onEditStep(step)}
                 className="hover-reveal transition-opacity p-1.5 hover:bg-card rounded text-muted hover:text-[color:var(--text)]"
                 title={`Edit ${title}`}
+                aria-label={`Edit ${title}`}
             >
                 <Edit3 size={14} />
             </button>
