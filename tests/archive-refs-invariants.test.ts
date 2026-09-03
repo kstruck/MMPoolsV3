@@ -24,6 +24,8 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,6 +66,103 @@ function runVerifier(base: string): { status: number; output: string } {
     return { status: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
   }
 }
+
+/**
+ * A throwaway git repo containing only what the verifier reads: the script, an
+ * archive dir, a manifest, and whatever docs the scenario needs. Hermetic, so
+ * the invariant-3 FAILURE paths can be exercised without touching this repo's
+ * real history — and so removing invariant 3 from the script makes these tests
+ * go red, which the happy-path test alone does not.
+ */
+function fixture(build: (dir: string, run: (...args: string[]) => void) => void) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-refs-'));
+  const run = (...args: string[]) =>
+    execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
+  try {
+    run('init', '-q');
+    run('config', 'user.email', 'test@example.com');
+    run('config', 'user.name', 'test');
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'docs', 'archive'), { recursive: true });
+    fs.copyFileSync(path.join(REPO_ROOT, SCRIPT), path.join(dir, SCRIPT));
+    build(dir, run);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function runIn(dir: string, base: string): { status: number; output: string } {
+  try {
+    const output = execFileSync('node', [SCRIPT, '--base', base], {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { status: 0, output };
+  } catch (err) {
+    const e = err as { status?: number; stdout?: string; stderr?: string };
+    return { status: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+  }
+}
+
+const MANIFEST = path.join('docs', 'archive', 'deleted-docs.txt');
+
+describe('invariant 3 — deletions must be recorded, and stay recorded', () => {
+  it('fails when a deleted doc is missing from the manifest', () => {
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'DOOMED.md'), 'content\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.rmSync(path.join(dir, 'DOOMED.md'));
+      run('add', '-A');
+      run('commit', '-qm', 'delete it, without recording it');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('missing from');
+      expect(output).toContain('DOOMED.md');
+    });
+  });
+
+  it('passes once that deletion is recorded', () => {
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'DOOMED.md'), 'content\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.rmSync(path.join(dir, 'DOOMED.md'));
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nDOOMED.md\n');
+      run('add', '-A');
+      run('commit', '-qm', 'delete it and record it');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+    });
+  });
+
+  it('fails when an existing manifest entry is removed — the record is append-only', () => {
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nOLD-DELETION.md\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base with a recorded deletion');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      run('add', '-A');
+      run('commit', '-qm', 'quietly drop the record');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('REMOVED from');
+      expect(output).toContain('OLD-DELETION.md');
+    });
+  });
+});
 
 describe('docs/archive citation graph', () => {
   it('is closed — no unresolved archive links, no references to deleted docs', () => {

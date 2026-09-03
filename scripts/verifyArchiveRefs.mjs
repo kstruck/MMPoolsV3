@@ -172,17 +172,45 @@ function deletedDocs() {
     );
   }
 
+  // The manifest is APPEND-ONLY. Recording a deletion is worthless if the
+  // record can be quietly dropped later: removing a line (or the whole file)
+  // takes that document straight out of the checked set, and references to it
+  // start passing again. Deletions are permanent, so their record is too.
+  const wasRecorded = manifestDocsAt(BASE);
+  const dropped = wasRecorded.filter((name) => !recorded.has(name));
+  if (dropped.length > 0) {
+    fail(
+      `${dropped.length} entr(y/ies) were REMOVED from ${DELETED_MANIFEST}.\n` +
+      `      That file is append-only: dropping a line stops anything from catching\n` +
+      `      a reference to that deleted doc. Restore these lines:\n` +
+      dropped.map((n) => `        ${n}`).join('\n'),
+    );
+  }
+
   return new Set([...fromDiff, ...recorded]);
 }
 
-/** The tracked list of docs previous cleanups deleted. */
-function manifestDocs() {
-  if (!fs.existsSync(DELETED_MANIFEST)) return [];
-  return fs
-    .readFileSync(DELETED_MANIFEST, 'utf8')
+/** Entries in a manifest's text: one filename per line, `#` comments ignored. */
+function parseManifest(text) {
+  return text
     .split('\n')
     .map((s) => s.trim())
     .filter((s) => s && !s.startsWith('#'));
+}
+
+/** The tracked list of docs previous cleanups deleted, as it stands now. */
+function manifestDocs() {
+  if (!fs.existsSync(DELETED_MANIFEST)) return [];
+  return parseManifest(fs.readFileSync(DELETED_MANIFEST, 'utf8'));
+}
+
+/** The same list as of `ref`. Absent there (or unreadable) means it had none. */
+function manifestDocsAt(ref) {
+  try {
+    return parseManifest(git(['show', `${ref}:${DELETED_MANIFEST}`])).map((f) => path.basename(f));
+  } catch {
+    return [];
+  }
 }
 
 /**
