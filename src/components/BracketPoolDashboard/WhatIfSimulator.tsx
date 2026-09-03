@@ -97,7 +97,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
                                 <div key={game.id} className="flex items-center gap-2">
                                     <button
                                         onClick={() => toggleWinner(game.id, game.homeTeamId)}
-                                        className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold border transition-all duration-150 ${homeSelected
+                                        className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold border transition duration-150 ${homeSelected
                                             ? 'bg-gold-400 border-gold-500 text-navy-900'
                                             : 'bg-surface border-line text-[color:var(--text)] hover:border-gold-500'
                                             }`}
@@ -108,7 +108,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({ entries, tourn
                                     <span className="text-faint text-xs font-display font-bold uppercase">vs</span>
                                     <button
                                         onClick={() => toggleWinner(game.id, game.awayTeamId)}
-                                        className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold border transition-all duration-150 ${awaySelected
+                                        className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-bold border transition duration-150 ${awaySelected
                                             ? 'bg-gold-400 border-gold-500 text-navy-900'
                                             : 'bg-surface border-line text-[color:var(--text)] hover:border-gold-500'
                                             }`}

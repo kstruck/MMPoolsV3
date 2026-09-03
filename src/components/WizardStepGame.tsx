@@ -152,7 +152,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 setWeek('1');
                             }
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex items-center gap-2 ${showSchedule ? 'bg-surface text-muted border border-line' : 'bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500 hover:-translate-y-px'}`}
+                        className={`px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition duration-150 flex items-center gap-2 ${showSchedule ? 'bg-surface text-muted border border-line' : 'bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500 hover:-translate-y-px'}`}
                     >
                         <Calendar size={16} />
                         {showSchedule ? 'Hide Finder' : 'Find Game'}
@@ -238,7 +238,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                 if (!home || !away) return null;
                                 const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                                 return (
-                                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-card cursor-pointer border border-transparent hover:border-navy-600/30 group transition-all">
+                                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-card cursor-pointer border border-transparent hover:border-navy-600/30 group transition">
                                         <div className="flex items-center gap-3">
                                             <span className="text-xs text-muted num w-28">{dateStr}</span>
                                             <div className="flex items-center gap-2">
@@ -251,7 +251,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                                                 <span className="text-sm text-[color:var(--text)] font-display font-bold">{home.abbreviation}</span>
                                             </div>
                                         </div>
-                                        <span className="text-xs text-gold-600 opacity-0 group-hover:opacity-100 font-display font-bold uppercase tracking-[0.05em] transition-opacity">Select</span>
+                                        <span className="text-xs text-gold-600 hover-reveal font-display font-bold uppercase tracking-[0.05em] transition-opacity">Select</span>
                                     </div>
                                 );
                             })}
@@ -263,7 +263,7 @@ export const WizardStepGame: React.FC<WizardStepGameProps> = ({ gameState, updat
                 <div className="space-y-4">
                     {/* TEAM LOGO PREVIEWS (Optional visual flair) */}
                     {(homeLogo || awayLogo) && (
-                        <div className="flex justify-center items-center gap-8 py-4 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+                        <div className="flex justify-center items-center gap-8 py-4 opacity-50 grayscale hover:grayscale-0 transition duration-500">
                             {awayLogo && <img src={awayLogo} className="w-16 h-16 object-contain" alt="Away" />}
                             <span className="text-2xl font-display font-extrabold uppercase text-faint">VS</span>
                             {homeLogo && <img src={homeLogo} className="w-16 h-16 object-contain" alt="Home" />}

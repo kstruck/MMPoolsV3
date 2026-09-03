@@ -1,5 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Wrap every `hover:` variant in `@media (hover: hover)` so touch devices
+  // (which fire :hover on tap and leave it stuck) never see hover-only
+  // scale/colour states.
+  future: { hoverOnlyWhenSupported: true },
   darkMode: 'class',
   content: [
     "./index.html",

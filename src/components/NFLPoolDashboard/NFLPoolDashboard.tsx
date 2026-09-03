@@ -966,7 +966,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
                       <a
                         href={`mailto:${pool.contactEmail}`}
-                        className="p-1 bg-navy-800/5 hover:bg-navy-800/10 text-navy-700 dark:bg-gold-400/10 dark:hover:bg-gold-400/20 dark:text-gold-400 border border-line rounded-sm transition-all duration-150 hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-800/5 hover:bg-navy-800/10 text-navy-700 dark:bg-gold-400/10 dark:hover:bg-gold-400/20 dark:text-gold-400 border border-line rounded-sm transition duration-150 hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Email Host: ${pool.contactEmail}`}
                       >
                         <Mail size={12} />
@@ -975,7 +975,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                     {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
                       <a
                         href={`tel:${castPool.contactPhone}`}
-                        className="p-1 bg-navy-800/5 hover:bg-navy-800/10 text-navy-700 dark:bg-gold-400/10 dark:hover:bg-gold-400/20 dark:text-gold-400 border border-line rounded-sm transition-all duration-150 hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-800/5 hover:bg-navy-800/10 text-navy-700 dark:bg-gold-400/10 dark:hover:bg-gold-400/20 dark:text-gold-400 border border-line rounded-sm transition duration-150 hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Call/SMS Host: ${castPool.contactPhone}`}
                       >
                         <Phone size={12} />
@@ -1080,7 +1080,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
               key={tab}
               onClick={() => setActiveTab(tab)}
               aria-current={activeTab === tab ? 'page' : undefined}
-              className={`py-3 px-4 md:px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition-all duration-150 border-b-2 ${
+              className={`py-3 px-4 md:px-6 font-display font-bold uppercase text-[13px] tracking-[0.08em] transition duration-150 border-b-2 ${
                 activeTab === tab
                   ? 'text-[color:var(--text)] border-navy-600 dark:border-gold-500'
                   : 'text-muted hover:text-[color:var(--text)] border-transparent'

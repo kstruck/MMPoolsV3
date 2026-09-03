@@ -160,7 +160,7 @@ export const ProductionWatchdogCard: React.FC = () => {
     .join(' and ');
 
   return (
-    <div className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition-all duration-150 hover:shadow-card-hover xl:col-span-2">
+    <div className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition duration-150 hover:shadow-card-hover xl:col-span-2">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h3 className="text-xs font-display font-bold text-muted uppercase tracking-[0.16em] flex items-center gap-1.5">
@@ -175,7 +175,7 @@ export const ProductionWatchdogCard: React.FC = () => {
         <button
           onClick={refresh}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-card border border-line rounded-xl transition-all duration-150 text-muted hover:text-[color:var(--text)] active:scale-95 disabled:opacity-50 text-[10px] font-display font-bold uppercase tracking-[0.08em]"
+          className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-card border border-line rounded-xl transition duration-150 text-muted hover:text-[color:var(--text)] active:scale-95 disabled:opacity-50 text-[10px] font-display font-bold uppercase tracking-[0.08em]"
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh

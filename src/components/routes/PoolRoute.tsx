@@ -558,7 +558,10 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     </button>
                 </div>
 
-                <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showPoolInfo ? 'max-h-[1000px] opacity-100 mb-6' : 'max-h-0 opacity-0 mb-0'}`}>
+                {/* Collapse: grid-template-rows 1fr/0fr SNAPS (content-sized, no max-h guess, and no
+                    layout-property transition); only opacity animates. Open = snap + 200ms fade in. */}
+                <div className={`grid transition-opacity duration-200 ease-out ${showPoolInfo ? 'grid-rows-[1fr] opacity-100 mb-6' : 'grid-rows-[0fr] opacity-0 mb-0'}`}>
+                    <div className="min-h-0 overflow-hidden">
                     <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${(squaresPool as GameState).charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
 
                         {/* 1. Status Card (Tabbed) */}
@@ -692,6 +695,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
                 </div>
 

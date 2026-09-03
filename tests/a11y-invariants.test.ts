@@ -267,3 +267,114 @@ describe('a11y source invariants', () => {
         }
     });
 });
+
+/**
+ * 2026-09-03 motion audit (PR #669) — source pins for the three rules the
+ * audit enforced: prefers-reduced-motion is honoured app-wide, hover states are
+ * gated to hover-capable pointers, and no transition runs on a layout property.
+ *
+ * These are static invariants on purpose. A behavioral test would need a
+ * browser that honours media queries; jsdom does not, so a render-and-assert
+ * test here would pass with the rules deleted. What CAN regress silently is
+ * the source: someone re-adds `transition-all` (350 sites were removed), drops
+ * the Tailwind `future` flag, or un-wraps `MotionConfig` — and each of those is
+ * exactly one grep away from being caught.
+ */
+const walkSrc = (pred: (name: string) => boolean): string[] => {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+        for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+            const rel = `${dir}/${e.name}`;
+            if (e.isDirectory()) { walk(rel); continue; }
+            if (pred(e.name)) out.push(rel);
+        }
+    };
+    walk('src');
+    return out.sort();
+};
+const isUiSource = (n: string) =>
+    (n.endsWith('.tsx') || n.endsWith('.ts') || n.endsWith('.css')) && !/\.test\.tsx?$/.test(n);
+
+describe('motion a11y invariants', () => {
+    it('index.css carries a reduced-motion block that neuters animation and transform on every element', () => {
+        const css = stripComments(read('src/index.css'));
+        const block = css.match(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/);
+        expect(block, 'no @media (prefers-reduced-motion: reduce) block in src/index.css').not.toBeNull();
+        const body = block![1];
+        // The allowlist must sit on `*`, not on named Tailwind classes — codex r1
+        // on #669: arbitrary `transition-[…]` utilities escaped a class-scoped rule.
+        expect(body).toMatch(/\*,\s*::before,\s*::after\s*\{[^}]*animation-duration:\s*0\.01ms\s*!important/);
+        expect(body).toMatch(/\*,\s*::before,\s*::after\s*\{[^}]*transition-property:[^;]*opacity[^;]*!important/);
+        expect(body, 'transform must NOT be in the reduced-motion transition allowlist').not.toMatch(/transition-property:[^;]*\btransform\b/);
+    });
+
+    it('framer-motion is wrapped in MotionConfig reducedMotion="user" at the root', () => {
+        const main = stripComments(read('src/main.tsx'));
+        expect(main).toMatch(/import \{ MotionConfig \} from 'framer-motion'/);
+        expect(main).toMatch(/<MotionConfig reducedMotion="user">[\s\S]*<App \/>[\s\S]*<\/MotionConfig>/);
+    });
+
+    it('Tailwind gates every hover: variant behind @media (hover: hover)', () => {
+        const cfg = stripComments(read('tailwind.config.js'));
+        expect(cfg).toMatch(/future:\s*\{[^}]*hoverOnlyWhenSupported:\s*true/);
+    });
+
+    it('the .hover-reveal utility has hover, no-hover and keyboard paths', () => {
+        const css = stripComments(read('src/index.css'));
+        expect(css).toMatch(/\.hover-reveal\s*\{\s*opacity:\s*0/);
+        expect(css).toMatch(/@media \(hover: hover\)\s*\{[\s\S]*?\.group:hover \.hover-reveal\s*\{\s*opacity:\s*1/);
+        expect(css).toMatch(/@media \(hover: none\)\s*\{[\s\S]*?\.hover-reveal\s*\{\s*opacity:\s*1/);
+        expect(css).toMatch(/\.group:focus-within \.hover-reveal\s*\{\s*opacity:\s*1/);
+    });
+
+    it('every hover-hidden actionable control uses .hover-reveal, not raw group-hover', () => {
+        // The six sites qodo #669 finding 8 named. A control that goes back to
+        // `opacity-0 group-hover:opacity-100` is unreachable on touch (the
+        // Tailwind future flag makes group-hover inert there) and by keyboard.
+        // Tooltips/decorative glows are deliberately NOT in this list — they stay
+        // hover-only (codex r3 on #669).
+        for (const f of [
+            'src/components/admin/WizardStepMatchup.tsx',
+            'src/components/admin/WizardStepSummary.tsx',
+            'src/components/Props/PropsManager.tsx',
+            'src/components/SuperAdmin.tsx',
+            'src/components/WizardStepGame.tsx',
+        ]) {
+            const src = stripComments(read(f));
+            expect(src, `${f} should use .hover-reveal`).toMatch(/\bhover-reveal\b/);
+            expect(src, `${f} still has a raw opacity-0 + group-hover:opacity-100 control`)
+                .not.toMatch(/opacity-0[^"'`]*group-hover:opacity-100|group-hover:opacity-100[^"'`]*opacity-0/);
+        }
+    });
+
+    it('no source file uses transition-all (Tailwind `transition` excludes layout properties)', () => {
+        const offenders = walkSrc(isUiSource).filter(f => /\btransition-all\b/.test(stripComments(read(f))));
+        expect(offenders, 'transition-all animates width/height/margin/padding — use `transition` or a specific utility').toEqual([]);
+    });
+
+    it('no arbitrary transition utility names a layout property', () => {
+        const LAYOUT = /transition-\[[^\]]*\b(width|height|max-height|max-width|min-height|min-width|top|left|right|bottom|inset|margin|padding|gap|grid-template-rows|grid-template-columns)\b/;
+        const offenders = walkSrc(isUiSource).filter(f => LAYOUT.test(stripComments(read(f))));
+        expect(offenders).toEqual([]);
+    });
+
+    it('no progress bar animates an inline width — fills use scaleX + origin-left', () => {
+        // qodo #669 finding 10: bars that kept `style={{ width }}` and swapped
+        // transition-all → transition silently STOPPED animating (width is not in
+        // the default list). Either transform the fill or do not transition it.
+        const offenders: string[] = [];
+        for (const f of walkSrc(n => n.endsWith('.tsx') && !/\.test\.tsx$/.test(n))) {
+            const src = stripComments(read(f));
+            const re = /style=\{\{\s*width:/g;
+            let m: RegExpExecArray | null;
+            while ((m = re.exec(src))) {
+                const tagStart = src.lastIndexOf('<', m.index);
+                const opening = src.slice(tagStart, m.index);
+                if (/\btransition\b(?!-)/.test(opening) || /transition-\[width/.test(opening)) {
+                    offenders.push(`${f}@${src.slice(0, m.index).split('\n').length}`);
+                }
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
+});

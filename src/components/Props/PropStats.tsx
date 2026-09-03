@@ -66,8 +66,8 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
                                             </div>
                                             <div className="h-2 bg-line rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full rounded-full transition-all duration-1000 ${isCorrect ? 'bg-[#0F7B4A]' : 'bg-navy-600/60 dark:bg-gold-500/60'}`}
-                                                    style={{ width: `${percentage}%` }}
+                                                    className={`h-full w-full origin-left rounded-full transition-transform duration-300 ${isCorrect ? 'bg-[#0F7B4A]' : 'bg-navy-600/60 dark:bg-gold-500/60'}`}
+                                                    style={{ transform: `scaleX(${percentage / 100})` }}
                                                 />
                                             </div>
                                         </div>

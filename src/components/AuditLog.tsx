@@ -183,7 +183,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
                     {!loading && deduplicatedEvents.length === 0 && <div className="text-muted text-center py-10">No events found matching this filter.</div>}
 
                     {deduplicatedEvents.map((event) => (
-                        <div key={event.id} className={`bg-card border rounded-lg p-4 transition-all ${event.severity === 'CRITICAL' ? 'border-brandred-600/40 bg-brandred-600/5' : 'border-line'}`}>
+                        <div key={event.id} className={`bg-card border rounded-lg p-4 transition ${event.severity === 'CRITICAL' ? 'border-brandred-600/40 bg-brandred-600/5' : 'border-line'}`}>
                             <div className="flex items-start gap-4">
                                 <div className={`mt-1 p-2 rounded-full bg-surface border border-line`}>
                                     {getIcon(event.type)}

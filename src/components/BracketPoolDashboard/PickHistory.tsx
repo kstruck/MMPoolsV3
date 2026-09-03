@@ -91,8 +91,8 @@ export const PickHistory: React.FC<PickHistoryProps> = ({ entry, entries, tourna
                             {hasPicks && (
                                 <div className="w-full bg-line rounded-full h-1.5">
                                     <div
-                                        className={`h-full rounded-full transition-all ${accuracy >= 70 ? 'bg-[#0F7B4A]' : accuracy >= 40 ? 'bg-gold-500' : 'bg-brandred-500'}`}
-                                        style={{ width: `${accuracy}%` }}
+                                        className={`h-full w-full origin-left rounded-full transition-transform duration-300 ${accuracy >= 70 ? 'bg-[#0F7B4A]' : accuracy >= 40 ? 'bg-gold-500' : 'bg-brandred-500'}`}
+                                        style={{ transform: `scaleX(${Number(accuracy) / 100})` }}
                                     />
                                 </div>
                             )}

@@ -103,7 +103,7 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
                         <div className="flex gap-4">
                             <button
                                 onClick={() => setIsLocked(false)}
-                                className={`flex-1 py-3 px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] border transition-all flex items-center justify-center gap-2
+                                className={`flex-1 py-3 px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] border transition flex items-center justify-center gap-2
                                     ${!isLocked
                                         ? 'bg-[#E4F5EC] border-[#0F7B4A] text-[#0F7B4A]'
                                         : 'bg-page border-line text-muted hover:border-navy-600'}`}
@@ -112,7 +112,7 @@ export const PlayoffSettingsModal: React.FC<PlayoffSettingsModalProps> = ({ isOp
                             </button>
                             <button
                                 onClick={() => setIsLocked(true)}
-                                className={`flex-1 py-3 px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] border transition-all flex items-center justify-center gap-2
+                                className={`flex-1 py-3 px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] border transition flex items-center justify-center gap-2
                                     ${isLocked
                                         ? 'bg-cream border-line text-muted'
                                         : 'bg-page border-line text-muted hover:border-navy-600'}`}

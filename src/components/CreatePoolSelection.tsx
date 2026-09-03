@@ -85,7 +85,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                             <button
                                 onClick={canCreate ? () => navigate('/create/pickem') : undefined}
                                 disabled={!canCreate}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-navy-600/10 dark:bg-navy-600/30 p-2.5 rounded-xl group-hover:bg-navy-700 transition-colors">
                                     <Trophy size={20} className="text-navy-700 dark:text-[#9FB0CC] group-hover:text-white" />
@@ -106,7 +106,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                             <button
                                 onClick={canCreate ? () => navigate('/create/survivor') : undefined}
                                 disabled={!canCreate}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-navy-950/10 dark:bg-navy-950/60 p-2.5 rounded-xl group-hover:bg-navy-950 transition-colors">
                                     <Trophy size={20} className="text-navy-800 dark:text-[#9FB0CC] group-hover:text-white" />
@@ -127,7 +127,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                             <button
                                 onClick={canCreate ? () => navigate('/create/margin') : undefined}
                                 disabled={!canCreate}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-gold-500/15 p-2.5 rounded-xl group-hover:bg-gold-foil transition-colors">
                                     <Trophy size={20} className="text-gold-700 dark:text-gold-400 group-hover:text-navy-950" />
@@ -149,7 +149,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                                 onClick={canCreateSquares ? onSelectSquares : undefined}
                                 disabled={!canCreateSquares}
                                 title={canCreateSquares ? undefined : 'Gameday Squares is coming soon'}
-                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
+                                className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-6 text-left transition duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover flex flex-col disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                             >
                                 <div className="absolute top-4 right-4 bg-brandred-600/10 p-2.5 rounded-xl group-hover:bg-brandred-600 transition-colors">
                                     <Grid3X3 size={20} className="text-brandred-600 group-hover:text-white" />
@@ -180,7 +180,7 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
                         <button
                             onClick={canCreate ? onSelectProps : undefined}
                             disabled={!canCreate}
-                            className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-8 text-left transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
+                            className="group relative bg-card border border-line hover:border-gold-500 rounded-2xl p-8 text-left transition duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line disabled:hover:shadow-card"
                         >
                             <div className="absolute top-4 right-4 bg-gold-500/15 p-3 rounded-xl group-hover:bg-gold-foil transition-colors">
                                 <Grid3X3 size={32} className="text-gold-700 dark:text-gold-400 group-hover:text-navy-950" />

@@ -147,7 +147,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                             />
                             <button
                                 onClick={handleCopy}
-                                className={`px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition-all ${copied
+                                className={`px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 transition ${copied
                                         ? 'bg-[#0F7B4A] text-white'
                                         : 'bg-brandred-600 hover:bg-brandred-500 text-white'
                                     }`}
@@ -167,7 +167,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                                 <button
                                     key={platform.name}
                                     onClick={() => handlePlatformShare(platform)}
-                                    className={`${platform.color} ${platform.hoverColor} text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2.5 transition-all active:scale-95`}
+                                    className={`${platform.color} ${platform.hoverColor} text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2.5 transition active:scale-95`}
                                     title={
                                         platform.name === 'Instagram'
                                             ? 'Copies link — paste it into your Instagram Story or bio'
@@ -185,7 +185,7 @@ export const PoolShareModal: React.FC<PoolShareModalProps> = ({ poolId, poolName
                                     const body = encodeURIComponent(`${shareText}\n\n${poolUrl}`);
                                     window.location.href = `mailto:?subject=${subject}&body=${body}`;
                                 }}
-                                className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2.5 transition-all active:scale-95"
+                                className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2.5 transition active:scale-95"
                             >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />

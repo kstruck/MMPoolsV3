@@ -194,7 +194,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                 <button
                                     key={idx}
                                     onClick={() => setStep(idx)}
-                                    className={`flex items-center gap-2 transition-all hover:opacity-100 ${idx === step ? 'opacity-100' : 'opacity-40 cursor-pointer'}`}
+                                    className={`flex items-center gap-2 transition hover:opacity-100 ${idx === step ? 'opacity-100' : 'opacity-40 cursor-pointer'}`}
                                 >
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-sm num transition-colors duration-150 ${idx === step ? 'bg-navy-800 text-white dark:bg-gold-500 dark:text-navy-900' : idx < step ? 'bg-gold-foil text-navy-900' : 'bg-surface border border-line text-muted'}`}>
                                         {idx < step ? <Check size={14} /> : idx + 1}

@@ -42,7 +42,7 @@ export const PoolCard: React.FC<PoolCardProps> = ({
     <div
         className={cn(
             'rounded-2xl border border-line bg-card shadow-card overflow-hidden',
-            'transition-all duration-150 hover:-translate-y-1 hover:shadow-card-hover',
+            'transition duration-150 hover:-translate-y-1 hover:shadow-card-hover',
             className
         )}
         {...props}

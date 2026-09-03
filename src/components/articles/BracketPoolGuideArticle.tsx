@@ -316,7 +316,7 @@ export const BracketPoolGuideArticle: React.FC = () => {
                     </p>
                     <Link
                         to="/create-pool"
-                        className="relative z-10 inline-flex items-center gap-2 bg-gold-foil text-navy-900 hover:brightness-105 px-8 py-4 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-lg transition-all transform hover:scale-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
+                        className="relative z-10 inline-flex items-center gap-2 bg-gold-foil text-navy-900 hover:brightness-105 px-8 py-4 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-lg transition transform hover:scale-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
                     >
                         Create Your Bracket Pool Now
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-right"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>

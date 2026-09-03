@@ -275,7 +275,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
             </div>
 
             {/* Commissioner Settings Section */}
-            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-gold-500/40 shadow-card">
+            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition hover:border-gold-500/40 shadow-card">
                 <div className="flex items-start gap-3">
                     <div className="p-3 bg-gold-500/10 rounded-xl text-gold-600 mt-0.5 animate-pulse">
                         <AlertCircle size={22} />

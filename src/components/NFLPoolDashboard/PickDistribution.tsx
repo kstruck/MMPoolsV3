@@ -208,18 +208,16 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
                   </div>
 
                   {/* Split distribution bar */}
-                  <div className="h-2 w-full bg-line rounded-full overflow-hidden flex">
+                  {/* Away fills from the left edge, home from the right; the track shows through the gap.
+                      scaleX instead of width so the bar animates on the compositor. */}
+                  <div className="h-2 w-full bg-line rounded-full overflow-hidden relative">
                     <div
-                      className="bg-navy-600 transition-all duration-500"
-                      style={{ width: `${awayPct}%` }}
+                      className="absolute inset-y-0 left-0 w-full origin-left bg-navy-600 transition-transform duration-300"
+                      style={{ transform: `scaleX(${awayPct / 100})` }}
                     />
                     <div
-                      className="bg-transparent transition-all duration-500"
-                      style={{ width: `${100 - awayPct - homePct}%` }}
-                    />
-                    <div
-                      className="bg-gold-foil transition-all duration-500"
-                      style={{ width: `${homePct}%` }}
+                      className="absolute inset-y-0 right-0 w-full origin-right bg-gold-foil transition-transform duration-300"
+                      style={{ transform: `scaleX(${homePct / 100})` }}
                     />
                   </div>
                 </div>

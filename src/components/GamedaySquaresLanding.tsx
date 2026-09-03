@@ -23,7 +23,7 @@ interface GamedaySquaresLandingProps {
    between them flip cream <-> navy via CSS-var surfaces (bg-page/surface/card). */
 
 const heroBtn =
-    'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
+    'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition duration-150 hover:-translate-y-px cursor-pointer';
 
 export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse }) => {
 
@@ -213,7 +213,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             <button
                                 onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
                                 disabled={!canAccessSquaresCreation(user)}
-                                className="mt-4 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-white bg-brandred-600 hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                className="mt-4 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-white bg-brandred-600 hover:bg-brandred-500 transition duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                 title={canAccessSquaresCreation(user) ? "Create Your Pool" : "Gameday Squares is coming soon"}
                             >
                                 {canAccessSquaresCreation(user) ? 'Create Your Pool' : 'Coming Soon'}
@@ -266,7 +266,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <button
                             onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
                             disabled={!canAccessSquaresCreation(user)}
-                            className="text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl bg-brandred-600 hover:bg-brandred-500 shadow-red-cta transition-all duration-150 hover:-translate-y-px mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                            className="text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl bg-brandred-600 hover:bg-brandred-500 shadow-red-cta transition duration-150 hover:-translate-y-px mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                             title={canAccessSquaresCreation(user) ? "Create Your Grid Now" : "Gameday Squares is coming soon"}
                         >
                             {canAccessSquaresCreation(user) ? 'Create Your Grid Now' : 'Coming Soon'}

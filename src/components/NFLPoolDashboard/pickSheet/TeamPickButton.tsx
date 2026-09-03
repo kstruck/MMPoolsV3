@@ -84,7 +84,7 @@ export const TeamPickButton: React.FC<TeamPickButtonProps> = ({
   // colour when we know it; when we do not, the app's own selection styling is
   // the fallback — a card with no visible selected state would be worse than an
   // off-brand one.
-  const base = 'relative flex-1 min-w-0 flex flex-col items-center justify-center gap-1 p-3 rounded-lg border text-center transition-all duration-150 overflow-hidden';
+  const base = 'relative flex-1 min-w-0 flex flex-col items-center justify-center gap-1 p-3 rounded-lg border text-center transition duration-150 overflow-hidden';
   const state = selected
     ? (colour ? 'border-transparent shadow-card-hover' : 'bg-gold-400/15 border-gold-500 shadow-card-hover')
     : disabled

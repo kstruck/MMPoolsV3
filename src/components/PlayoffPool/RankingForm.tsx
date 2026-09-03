@@ -241,7 +241,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                     onDragOver={(e) => handleDragOver(e, index)}
                                     onDragEnd={handleDragEnd}
                                     className={`
-                                        flex items-center gap-3 p-3 md:p-4 rounded-lg border transition-all duration-150 select-none
+                                        flex items-center gap-3 p-3 md:p-4 rounded-lg border transition duration-150 select-none
                                         ${pool.isLocked ? 'bg-surface border-line cursor-default opacity-75' : 'bg-card border-line hover:border-navy-600 cursor-grab active:cursor-grabbing hover:bg-surface'}
                                         ${draggedIndex === index ? 'opacity-50 ring-2 ring-navy-600 dark:ring-gold-500' : ''}
                                     `}
@@ -417,7 +417,7 @@ export const RankingForm: React.FC<RankingFormProps> = ({ pool, user, entryId, o
                                         type="checkbox"
                                         checked={liabilityAccepted}
                                         onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
+                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                                     />
                                     <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                                 </div>

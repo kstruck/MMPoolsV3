@@ -108,7 +108,7 @@ const TeamRow: React.FC<TeamRowProps> = ({
             onClick={onClick}
             disabled={disabled}
             className={`
-                w-full flex items-center h-[34px] px-1.5 gap-1.5 text-left transition-all relative
+                w-full flex items-center h-[34px] px-1.5 gap-1.5 text-left transition relative
                 ${bg}
                 ${disabled ? 'cursor-default' : 'cursor-pointer'}
                 ${isEliminatedUnpicked ? 'opacity-35' : ''}
@@ -250,7 +250,7 @@ const MatchupCard: React.FC<MatchupCardProps> = ({
 
     return (
         <div
-            className={`flex flex-col border rounded-sm bg-card overflow-hidden flex-shrink-0 transition-all relative ${cardBorder}`}
+            className={`flex flex-col border rounded-sm bg-card overflow-hidden flex-shrink-0 transition relative ${cardBorder}`}
             style={style}
         >
             {/* Green glow overlay for correct picks */}
@@ -771,17 +771,17 @@ export const StatsHeader: React.FC<StatsHeaderProps> = ({
                             <span>{totalPicks > 0 ? Math.round((pickCount / totalPicks) * 100) : 0}%</span>
                         </div>
                         <div className="h-2 bg-card rounded-full overflow-hidden">
-                            <div className="h-full bg-gold-foil rounded-full transition-all duration-500"
-                                style={{ width: `${totalPicks > 0 ? (pickCount / totalPicks) * 100 : 0}%` }} />
+                            <div className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300"
+                                style={{ transform: `scaleX(${totalPicks > 0 ? pickCount / totalPicks : 0})` }} />
                         </div>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={copyLink}
-                            className="flex items-center gap-1.5 px-4 py-2 border-[1.5px] border-line rounded-lg text-[12px] font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] hover:border-navy-600 hover:bg-card transition-all duration-150 hover:-translate-y-px">
+                            className="flex items-center gap-1.5 px-4 py-2 border-[1.5px] border-line rounded-lg text-[12px] font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] hover:border-navy-600 hover:bg-card transition duration-150 hover:-translate-y-px">
                             <Link className="w-3.5 h-3.5" /> Copy Link
                         </button>
                         <button onClick={printBracket}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-navy-800 rounded-lg text-[12px] font-display font-bold uppercase tracking-[0.05em] text-white hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px">
+                            className="flex items-center gap-1.5 px-4 py-2 bg-navy-800 rounded-lg text-[12px] font-display font-bold uppercase tracking-[0.05em] text-white hover:bg-navy-700 transition duration-150 hover:-translate-y-px">
                             <Printer className="w-3.5 h-3.5" /> Print Bracket
                         </button>
                     </div>

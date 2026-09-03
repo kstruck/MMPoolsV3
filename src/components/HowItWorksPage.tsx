@@ -344,7 +344,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                     <button
                                         key={type.id}
                                         onClick={() => handleSportChange(type.id)}
-                                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left font-display font-bold uppercase tracking-[0.05em] text-sm transition-all group ${
+                                        className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left font-display font-bold uppercase tracking-[0.05em] text-sm transition group ${
                                             isSelected
                                                 ? 'bg-surface text-[color:var(--text)] border-l-4 border-gold-500 shadow-md'
                                                 : 'text-muted hover:text-[color:var(--text)] hover:bg-surface'
@@ -374,7 +374,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                     <button
                                         key={tab.id}
                                         onClick={() => handleViewChange(tab.id)}
-                                        className={`flex-grow md:flex-grow-0 inline-flex items-center justify-center gap-1.5 px-4 md:px-6 py-3 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xs md:text-sm text-center transition-all ${
+                                        className={`flex-grow md:flex-grow-0 inline-flex items-center justify-center gap-1.5 px-4 md:px-6 py-3 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xs md:text-sm text-center transition ${
                                             isViewSelected
                                                 ? 'bg-gold-foil text-navy-900 shadow-[0_6px_16px_rgba(140,109,51,0.28)]'
                                                 : 'text-muted hover:text-[color:var(--text)] hover:bg-surface'
@@ -398,7 +398,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                     <h3 className="font-display font-bold uppercase text-lg tracking-[0.08em] text-[color:var(--text)]">{activeData.stepsTitle}</h3>
                                     <div className="space-y-4">
                                         {activeData.steps.map((step, idx) => (
-                                            <div key={idx} className={`flex gap-4 items-start p-5 rounded-2xl ${contentCard} hover:border-gold-500/40 transition-all`}>
+                                            <div key={idx} className={`flex gap-4 items-start p-5 rounded-2xl ${contentCard} hover:border-gold-500/40 transition`}>
                                                 <div className="bg-gold-500/15 text-gold-600 dark:text-gold-400 font-display font-extrabold text-lg w-10 h-10 rounded-full flex items-center justify-center shrink-0 border border-gold-500/25 num">
                                                     {idx + 1}
                                                 </div>
@@ -466,7 +466,7 @@ Sent via March Melee Pools Central FAQ Support Form
 
                                 <div className="grid gap-4">
                                     {activeData.faqs.map((faq, i) => (
-                                        <details key={i} className={`group ${contentCard} rounded-xl overflow-hidden transition-all`}>
+                                        <details key={i} className={`group ${contentCard} rounded-xl overflow-hidden transition`}>
                                             <summary className="flex justify-between items-center p-6 cursor-pointer font-display font-bold uppercase text-[color:var(--text)] hover:bg-surface transition-colors list-none">
                                                 {faq.q}
                                                 <span className="text-gold-600 dark:text-gold-400 group-open:rotate-180 transition-transform">▼</span>
@@ -485,7 +485,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                     </div>
                                     <button
                                         onClick={() => handleViewChange('contact')}
-                                        className="font-display font-bold uppercase tracking-[0.05em] text-xs text-white bg-brandred-600 hover:bg-brandred-500 px-4 py-2.5 rounded-md transition-all duration-150 hover:-translate-y-px shadow-red-cta"
+                                        className="font-display font-bold uppercase tracking-[0.05em] text-xs text-white bg-brandred-600 hover:bg-brandred-500 px-4 py-2.5 rounded-md transition duration-150 hover:-translate-y-px shadow-red-cta"
                                     >
                                         Open Support Ticket
                                     </button>
@@ -622,7 +622,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                         <button
                                             onClick={canCreate ? props.onCreatePool : undefined}
                                             disabled={!canCreate}
-                                            className="inline-flex items-center justify-center gap-2 bg-brandred-600 text-white hover:bg-brandred-500 px-8 py-3.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                            className="inline-flex items-center justify-center gap-2 bg-brandred-600 text-white hover:bg-brandred-500 px-8 py-3.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm transition duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                             title={canCreate ? `Create a ${activeData.title}` : "Pool creation is coming soon"}
                                         >
                                             {canCreate ? activeData.ctaText : 'Pool Creation Coming Soon'}
@@ -630,7 +630,7 @@ Sent via March Melee Pools Central FAQ Support Form
                                         </button>
                                         <button
                                             onClick={() => window.location.href = '/browse'}
-                                            className="px-8 py-3.5 bg-surface hover:bg-card border border-line text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] text-sm rounded-md transition-all"
+                                            className="px-8 py-3.5 bg-surface hover:bg-card border border-line text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] text-sm rounded-md transition"
                                         >
                                             Join a Public Pool
                                         </button>

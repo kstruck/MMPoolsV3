@@ -134,7 +134,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                 <p className="text-muted font-body text-sm mb-6">Automatically lock the {isProps ? 'pool' : 'grid and reveal numbers'}.</p>
 
                 <div className="space-y-4">
-                    <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-surface rounded mb-2 border border-transparent hover:border-line transition-all">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-surface rounded mb-2 border border-transparent hover:border-line transition">
                         <input
                             type="checkbox"
                             checked={safeReminders.lock.enabled}

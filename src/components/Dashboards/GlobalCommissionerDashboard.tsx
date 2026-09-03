@@ -24,8 +24,8 @@ const typeLabel = (t: string) => POOL_TYPE_LABEL[t] || t.replace(/_/g, ' ');
 
 // Hoisted: react-hooks/static-components forbids component types created during render.
 const StatCard = ({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) => (
-  <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-    <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-105 transition-all ${accent ? 'bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400' : 'bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC]'}`}>
+  <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition duration-150">
+    <div className={`w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-105 transition ${accent ? 'bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400' : 'bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC]'}`}>
       {icon}
     </div>
     <div className="min-w-0">

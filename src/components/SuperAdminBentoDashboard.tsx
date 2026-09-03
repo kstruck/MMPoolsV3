@@ -168,7 +168,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
 
       {/* 1. Global Platform Statistics — live via parent subscription. */}
       <div
-        className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition-all duration-150 hover:shadow-card-hover flex flex-col justify-between"
+        className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition duration-150 hover:shadow-card-hover flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -283,7 +283,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
 
       {/* 2. Service Integration & API Health Monitor — real on-demand probe. */}
       <div
-        className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition-all duration-150 hover:shadow-card-hover flex flex-col justify-between"
+        className="bg-card border border-line rounded-3xl p-6 shadow-card relative overflow-hidden transition duration-150 hover:shadow-card-hover flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -296,7 +296,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
             <button
               onClick={runHealthCheck}
               disabled={isProbing}
-              className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-card border border-line rounded-xl transition-all duration-150 text-muted hover:text-[color:var(--text)] active:scale-95 disabled:opacity-50 text-[10px] font-display font-bold uppercase tracking-[0.08em]"
+              className="flex items-center gap-2 px-3 py-2 bg-surface hover:bg-card border border-line rounded-xl transition duration-150 text-muted hover:text-[color:var(--text)] active:scale-95 disabled:opacity-50 text-[10px] font-display font-bold uppercase tracking-[0.08em]"
             >
               <RefreshCw size={14} className={isProbing ? 'animate-spin' : ''} />
               {isProbing ? 'Probing' : 'Run Check'}
@@ -324,7 +324,7 @@ export const SuperAdminBentoDashboard: React.FC<SuperAdminBentoDashboardProps> =
                 return (
                   <div
                     key={key}
-                    className="flex justify-between items-center p-3.5 bg-surface border border-line rounded-2xl transition-all duration-150 hover:border-gold-500/40"
+                    className="flex justify-between items-center p-3.5 bg-surface border border-line rounded-2xl transition duration-150 hover:border-gold-500/40"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl bg-card border border-line flex items-center justify-center text-muted">

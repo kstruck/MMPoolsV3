@@ -107,7 +107,7 @@ export const PaymentSuccess: React.FC = () => {
                         >
                             <Link
                                 to={isBundle ? '/' : poolId ? `/pool/${poolId}` : '/'}
-                                className="inline-flex items-center gap-2 px-8 py-3.5 text-white font-display font-bold uppercase tracking-[0.05em] rounded-md text-sm transition-all duration-150 hover:-translate-y-px bg-brandred-600 hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
+                                className="inline-flex items-center gap-2 px-8 py-3.5 text-white font-display font-bold uppercase tracking-[0.05em] rounded-md text-sm transition duration-150 hover:-translate-y-px bg-brandred-600 hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
                             >
                                 {isBundle ? 'Go to My Dashboard' : 'Go to Pool Dashboard'}
                                 <ArrowRight size={16} />
