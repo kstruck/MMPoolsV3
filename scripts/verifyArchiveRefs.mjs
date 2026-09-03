@@ -182,7 +182,11 @@ function deletedDocs() {
   // record can be quietly dropped later: removing a line (or the whole file)
   // takes that document straight out of the checked set, and references to it
   // start passing again. Deletions are permanent, so their record is too.
-  const wasRecorded = manifestDocsAt(BASE);
+  // At the MERGE BASE, not at BASE's tip — matching the three-dot diffs above.
+  // Reading the tip would flag an entry another PR appended after this branch
+  // was cut as "removed by this branch", which it plainly was not. That is the
+  // two-dot-versus-three-dot trap CLAUDE.md §2c records, in a new costume.
+  const wasRecorded = manifestDocsAt(mergeBase(BASE));
   const dropped = wasRecorded.filter((name) => !recorded.has(name));
   if (dropped.length > 0) {
     fail(
@@ -208,6 +212,15 @@ function parseManifest(text) {
 function manifestDocs() {
   if (!fs.existsSync(DELETED_MANIFEST)) return [];
   return parseManifest(fs.readFileSync(DELETED_MANIFEST, 'utf8'));
+}
+
+/** Where `ref` and HEAD diverged — the point the three-dot diffs compare from. */
+function mergeBase(ref) {
+  try {
+    return git(['merge-base', ref, 'HEAD']).trim();
+  } catch {
+    return ref; // no common ancestor (a fixture repo, say); ref is the honest base
+  }
 }
 
 /**

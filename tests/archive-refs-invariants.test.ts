@@ -238,6 +238,33 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('does not blame a branch for an entry appended to the base after it was cut', () => {
+    // The append-only check must read the manifest at the MERGE BASE, not at
+    // the base branch's tip. A stale branch that never touched the manifest
+    // would otherwise be told it removed an entry another PR had added.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nORIGINAL.md\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      run('branch', 'mainline');
+
+      // A later commit on mainline appends an entry this branch never sees.
+      run('checkout', '-q', 'mainline');
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nORIGINAL.md\nLATER.md\n');
+      run('add', '-A');
+      run('commit', '-qm', 'another PR appends an entry');
+
+      // Our branch, cut before that, changes something unrelated.
+      run('checkout', '-q', '-');
+      fs.writeFileSync(path.join(dir, 'UNRELATED.md'), 'x\n');
+      run('add', '-A');
+      run('commit', '-qm', 'unrelated work');
+
+      const { status, output } = runIn(dir, 'mainline');
+      expect(status, output).toBe(0);
+    });
+  }, TEST_TIMEOUT);
+
   it('fails when an existing manifest entry is removed — the record is append-only', () => {
     fixture((dir, run) => {
       fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nOLD-DELETION.md\n');
