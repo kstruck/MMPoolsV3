@@ -2,8 +2,18 @@ import { describe, it, expect } from 'vitest';
 import {
     buildPoolTypeSplit,
     buildCumulativePaidWinnings,
-    earningsEmptyState
+    earningsEmptyState,
+    toEpochMillis
 } from './dashboardCharts';
+
+/** Stands in for a live Firestore `Timestamp`, which is what the client holds. */
+function firestoreTimestamp(date: Date) {
+    return {
+        seconds: Math.floor(date.getTime() / 1000),
+        nanoseconds: 0,
+        toMillis: () => date.getTime()
+    };
+}
 
 // The 2026-09-01 external audit found ParticipantDashboard's two Insights
 // charts fabricating data for users who had none. These tests pin the
@@ -72,7 +82,76 @@ describe('buildPoolTypeSplit', () => {
     });
 });
 
+describe('toEpochMillis', () => {
+    // THE DEFECT THIS PINS (codex, round 1). `Winner.paidAt` was DECLARED
+    // `number` but the server writes FieldValue.serverTimestamp() and
+    // subscribeToWinners forwards it unconverted, so the client holds a
+    // Firestore Timestamp. The first draft guarded with `typeof === 'number'`,
+    // which type-checked, compiled, and would have discarded every real payout
+    // — leaving the chart's empty state showing forever.
+    const when = new Date(2026, 2, 14, 9, 30);
+
+    it('converts a live Firestore Timestamp via toMillis', () => {
+        expect(toEpochMillis(firestoreTimestamp(when))).toBe(when.getTime());
+    });
+
+    it('converts a degraded { seconds, nanoseconds } Timestamp', () => {
+        expect(toEpochMillis({ seconds: 1_770_000_000, nanoseconds: 0 })).toBe(1_770_000_000_000);
+    });
+
+    it('accepts a Date', () => {
+        expect(toEpochMillis(when)).toBe(when.getTime());
+    });
+
+    it('accepts a raw number, for rows written before the callable existed', () => {
+        expect(toEpochMillis(when.getTime())).toBe(when.getTime());
+    });
+
+    it('returns null for an un-marked payout and for junk', () => {
+        for (const value of [null, undefined, 0, -1, Number.NaN, '', 'yesterday', {}, [], { seconds: 'x' }]) {
+            expect(toEpochMillis(value)).toBeNull();
+        }
+    });
+
+    it('returns null when toMillis exists but does not return a usable number', () => {
+        expect(toEpochMillis({ toMillis: () => Number.NaN })).toBeNull();
+        expect(toEpochMillis({ toMillis: () => 'nope' })).toBeNull();
+    });
+});
+
 describe('buildCumulativePaidWinnings', () => {
+    it('plots payouts that arrive as Firestore Timestamps — the shape production actually sends', () => {
+        // The regression test for codex round 1: with the old numeric guard this
+        // returned [] and the chart claimed the user had no dated payouts.
+        const series = buildCumulativePaidWinnings([
+            { amount: 60, paidAt: firestoreTimestamp(new Date(2026, 0, 10)) },
+            { amount: 40, paidAt: firestoreTimestamp(new Date(2026, 1, 5)) }
+        ]);
+        expect(series).toEqual([
+            { month: "Jan '26", Earnings: 60 },
+            { month: "Feb '26", Earnings: 100 }
+        ]);
+    });
+
+    it('mixes Timestamp and legacy numeric rows in one correctly ordered series', () => {
+        const series = buildCumulativePaidWinnings([
+            { amount: 10, paidAt: new Date(2026, 3, 1).getTime() },
+            { amount: 20, paidAt: firestoreTimestamp(new Date(2026, 2, 1)) }
+        ]);
+        expect(series).toEqual([
+            { month: "Mar '26", Earnings: 20 },
+            { month: "Apr '26", Earnings: 30 }
+        ]);
+    });
+
+    it('drops an un-marked payout (paidAt null) without dropping the rest', () => {
+        const series = buildCumulativePaidWinnings([
+            { amount: 999, paidAt: null },
+            { amount: 25, paidAt: firestoreTimestamp(new Date(2026, 4, 2)) }
+        ]);
+        expect(series).toEqual([{ month: "May '26", Earnings: 25 }]);
+    });
+
     it('no wins → empty series, NOT the old six-month 0/0.15/0.35/0.5/0.7 curve', () => {
         expect(buildCumulativePaidWinnings([])).toEqual([]);
     });

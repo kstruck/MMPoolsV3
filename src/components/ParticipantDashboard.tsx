@@ -288,11 +288,15 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         let totalSquares = 0;
         let totalWinnings = 0;
         let totalWins = 0;
-        // Wins carrying a real payout date, for the Paid Winnings Trend. Built
-        // in THIS loop rather than a second one so that "is this my win" is
-        // decided exactly once — a separate walk could drift from the total
-        // shown on the Net Winnings card and the chart would quietly disagree
-        // with the number printed above it.
+        // My wins, for the Paid Winnings Trend. Collected in THIS loop rather
+        // than a second one so that "is this my win" is decided exactly once —
+        // a separate walk could drift from the total on the Net Winnings card
+        // and the chart would quietly disagree with the number above it.
+        //
+        // `paidAt` is passed through RAW. It is a Firestore Timestamp on the
+        // client, not epoch millis, and `buildCumulativePaidWinnings` owns that
+        // normalisation (and the dropping of undated wins) so the shape
+        // handling sits behind unit tests instead of in this render path.
         const paidWins: PaidWin[] = [];
 
         myPools.forEach(pool => {
@@ -307,9 +311,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     if (isMyWin) {
                         totalWins++;
                         totalWinnings += winner.amount || 0;
-                        if (typeof winner.paidAt === 'number' && winner.paidAt > 0) {
-                            paidWins.push({ amount: winner.amount || 0, paidAt: winner.paidAt });
-                        }
+                        paidWins.push({ amount: winner.amount || 0, paidAt: winner.paidAt });
                     }
                 });
 

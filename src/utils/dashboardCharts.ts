@@ -31,10 +31,16 @@ export interface PoolTypeSlice {
     color: string;
 }
 
-/** A win that carries a real payout date. `paidAt` is epoch milliseconds. */
+/**
+ * One of the caller's wins. `paidAt` is deliberately `unknown`: on the client
+ * it arrives as a Firestore `Timestamp`, but older rows hold epoch millis and
+ * an un-marked payout holds `null`. {@link toEpochMillis} sorts that out inside
+ * this module so no caller has to know the shape — and so the handling is
+ * covered by these functions' own tests rather than by a component test.
+ */
 export interface PaidWin {
     amount: number;
-    paidAt: number;
+    paidAt: unknown;
 }
 
 /** One point on the cumulative paid-winnings area chart. */
@@ -103,6 +109,54 @@ export function buildPoolTypeSplit(
 }
 
 /**
+ * Normalise whatever a payout date arrives as into epoch milliseconds, or
+ * `null` when there is no usable date.
+ *
+ * THE DEFECT THIS PINS (codex, round 1 of this branch). The first draft guarded
+ * with `typeof winner.paidAt === 'number'`, because `Winner.paidAt` was
+ * DECLARED `number`. It is not one. `toggleWinnerPaid`
+ * (functions/src/poolOps.ts) writes `FieldValue.serverTimestamp()` and
+ * `dbService.subscribeToWinners` forwards `doc.data()` unconverted, so the
+ * browser holds a Firestore `Timestamp` object. The numeric guard therefore
+ * discarded EVERY payout recorded through the normal commissioner flow, and the
+ * chart would have shown its empty state permanently — a bug the type system
+ * actively hid, and one that would have looked exactly like "no payouts yet".
+ *
+ * Four shapes are accepted because four shapes reach this code: a live
+ * `Timestamp` (has `toMillis`), a plain `{ seconds, nanoseconds }` object (what
+ * a Timestamp degrades to across some serialisation paths), a `Date`, and a
+ * raw number for rows written before the callable existed.
+ */
+export function toEpochMillis(value: unknown): number | null {
+    if (typeof value === 'number') {
+        return Number.isFinite(value) && value > 0 ? value : null;
+    }
+
+    if (value instanceof Date) {
+        const millis = value.getTime();
+        return Number.isFinite(millis) && millis > 0 ? millis : null;
+    }
+
+    if (typeof value === 'object' && value !== null) {
+        const candidate = value as { toMillis?: unknown; seconds?: unknown };
+
+        if (typeof candidate.toMillis === 'function') {
+            const millis = (candidate as { toMillis(): unknown }).toMillis();
+            return typeof millis === 'number' && Number.isFinite(millis) && millis > 0
+                ? millis
+                : null;
+        }
+
+        if (typeof candidate.seconds === 'number' && Number.isFinite(candidate.seconds)) {
+            const millis = candidate.seconds * 1000;
+            return millis > 0 ? millis : null;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Cumulative paid winnings, one point per month that actually had a payout.
  *
  * Months with no payout are NOT emitted — a flat carried-forward point is true
@@ -116,11 +170,10 @@ export function buildCumulativePaidWinnings(
     wins: ReadonlyArray<PaidWin>
 ): EarningsPoint[] {
     const dated = wins
-        .filter(win =>
-            Number.isFinite(win.paidAt) && win.paidAt > 0 &&
-            Number.isFinite(win.amount)
+        .map(win => ({ amount: win.amount, paidAt: toEpochMillis(win.paidAt) }))
+        .filter((win): win is { amount: number; paidAt: number } =>
+            win.paidAt !== null && Number.isFinite(win.amount)
         )
-        .slice()
         .sort((a, b) => a.paidAt - b.paidAt);
 
     const points: EarningsPoint[] = [];
