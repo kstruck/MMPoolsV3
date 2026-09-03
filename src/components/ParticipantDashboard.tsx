@@ -98,6 +98,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     // not load this" instead of "you have none" after a failure — the same class
     // of untrue statement this PR removes. (qodo #19 and #20 on PR #670.)
     const [poolsFailed, setPoolsFailed] = useState(false);
+    // Every pool feed has RESPONDED. `mergeAndUpdate` runs on the first feed's
+    // callback and `processPools` clears `isLoading` there, so an empty roster
+    // mid-load is indistinguishable from a real one — and a partial merge would
+    // be drawn as a complete distribution. The charts wait for all of them.
+    // (qodo re-review #4 on PR #670.)
+    const [poolsSettled, setPoolsSettled] = useState(false);
     // PER POOL, not one global flag. `processPools` re-subscribes to winners on
     // every pool-feed snapshot and never unsubscribes the previous listeners, so
     // a listener for a pool the user has since LEFT stays alive and can still
@@ -164,6 +170,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     useEffect(() => {
         setIsLoading(true);
         setPoolsFailed(false);
+        setPoolsSettled(false);
         setWinnerErrors({});
         let unsubParticipating: () => void = () => { };
         let unsubOwned: () => void = () => { };
@@ -230,6 +237,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         if (isSuperAdmin(user)) {
             unsubAll = dbService.subscribeToAllPools((pools) => {
                 processPools(pools);
+                setPoolsSettled(true);
             }, (error) => {
                 logger.error("SuperAdmin Pool Fetch Error", error);
                 setPoolsFailed(true);
@@ -241,6 +249,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             let ownedPools: Pool[] = [];
             let coCommissionedPools: Pool[] = [];
 
+            // Which of the three feeds have answered at least once. A feed that
+            // ERRORS never sets its flag, so the roster stays "not known" and the
+            // charts say "Roster unavailable" rather than "No pools yet".
+            const responded = { participating: false, owned: false, coCommissioned: false };
+            const noteResponded = (feed: keyof typeof responded) => {
+                responded[feed] = true;
+                if (responded.participating && responded.owned && responded.coCommissioned) {
+                    setPoolsSettled(true);
+                }
+            };
+
             const mergeAndUpdate = () => {
                 const merged = [...participatingPools, ...ownedPools, ...coCommissionedPools];
                 // Unique by ID
@@ -251,6 +270,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unsubParticipating = dbService.subscribeToParticipatingPools(user.id, (pools) => {
                 participatingPools = pools;
                 mergeAndUpdate();
+                noteResponded('participating');
             }, (err) => {
                 logger.error("Participating Pools Error", err);
                 setPoolsFailed(true);
@@ -260,6 +280,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unsubOwned = dbService.subscribeToPools((pools) => {
                 ownedPools = pools;
                 mergeAndUpdate();
+                noteResponded('owned');
             }, (err) => {
                 logger.error("Owned Pools Error", err);
                 setPoolsFailed(true);
@@ -272,6 +293,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unsubCoCommissioned = dbService.subscribeToCoCommissionedPools(user.id, (pools) => {
                 coCommissionedPools = pools;
                 mergeAndUpdate();
+                noteResponded('coCommissioned');
             }, (err) => {
                 logger.error("Co-commissioned Pools Error", err);
                 setPoolsFailed(true);
@@ -420,11 +442,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     // The winners feed has ANSWERED only when every Squares pool has reported.
     // Winner listeners are attached after the pool feeds resolve, so before that
     // `poolWinners` is `{}` and a zero total is ignorance, not a fact.
+    // The roster is KNOWN only when every feed answered and none failed.
+    const poolsKnown = !poolsFailed && poolsSettled;
+
+    // ...and the winnings are known only when the roster is, first. `.every()`
+    // over `myPools` is vacuously true when a failed feed never delivered the
+    // user's Squares pool at all, so without `poolsKnown` a broken roster read
+    // would still assert "No winnings yet". (qodo re-review #6, High.)
     const winningsKnown = useMemo(
-        () => myPools
+        () => poolsKnown && myPools
             .filter(p => p.type === 'SQUARES')
             .every(p => poolWinners[p.id] !== undefined && !winnerErrors[p.id]),
-        [myPools, poolWinners, winnerErrors]
+        [poolsKnown, myPools, poolWinners, winnerErrors]
     );
 
     const earningsEmpty = useMemo(
@@ -432,7 +461,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         [lifetimeStats.totalWinnings, winningsKnown]
     );
 
-    const poolMixEmpty = useMemo(() => poolMixEmptyState(!poolsFailed), [poolsFailed]);
+    const poolMixEmpty = useMemo(() => poolMixEmptyState(poolsKnown), [poolsKnown]);
 
     // Financial Metrics
     const projectedPotEarnings = useMemo(() => {
@@ -675,7 +704,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Cumulative payouts marked cleared by your commissioners</p>
                                 </div>
 
-                                {cumulativeEarningsData.length > 0 ? (
+                                {/*
+                                  * `winningsKnown` gates the CHART, not just the empty
+                                  * state. A series that loaded and then lost a listener
+                                  * is a PARTIAL trend, and drawing it unlabelled presents
+                                  * incomplete data as complete — the defect this PR is
+                                  * about. (qodo re-review #5.)
+                                  */}
+                                {cumulativeEarningsData.length > 0 && winningsKnown ? (
                                     <div className="h-56 w-full mt-6">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={cumulativeEarningsData} margin={CHART_MARGIN}>
@@ -714,7 +750,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Active participation by pool category</p>
                                 </div>
 
-                                {poolTypeSplitData.length > 0 ? (
+                                {/* Same rule as the trend: a partial merge is not a distribution. */}
+                                {poolTypeSplitData.length > 0 && poolsKnown ? (
                                     <>
                                         <div className="h-48 w-full mt-6 relative flex items-center justify-center">
                                             <ResponsiveContainer width="100%" height="100%">

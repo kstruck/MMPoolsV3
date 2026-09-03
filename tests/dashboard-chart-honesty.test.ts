@@ -82,9 +82,14 @@ describe('ParticipantDashboard charts — no fabricated data', () => {
         expect(source).toContain('buildCumulativePaidWinnings(');
     });
 
-    it('each chart is guarded by an emptiness check rather than rendered unconditionally', () => {
-        expect(source).toContain('poolTypeSplitData.length > 0');
-        expect(source).toContain('cumulativeEarningsData.length > 0');
+    it('each chart is guarded by emptiness AND by knowing, not rendered unconditionally', () => {
+        // Emptiness alone is not enough. A series that loaded and then lost a
+        // listener, or a pool merge that only some feeds have answered, is
+        // PARTIAL — and drawing it unlabelled presents incomplete data as
+        // complete, which is the defect this whole PR is about. (qodo
+        // re-review #4 and #5.)
+        expect(source).toContain('poolTypeSplitData.length > 0 && poolsKnown');
+        expect(source).toContain('cumulativeEarningsData.length > 0 && winningsKnown');
     });
 
     it('the empty pool-mix state routes users somewhere real', () => {
@@ -119,7 +124,13 @@ describe('ParticipantDashboard charts — no fabricated data', () => {
         // `subscribeToWinners` collapsed errors into `[]`. A component that
         // renders the copy unconditionally states "you have none" after a failed
         // read. The claim must be gated on knowing.
-        expect(source).toContain('poolMixEmptyState(!poolsFailed)');
+        expect(source).toContain('poolMixEmptyState(poolsKnown)');
+        // The roster is known only when NO feed failed AND every feed answered.
+        expect(source).toContain('const poolsKnown = !poolsFailed && poolsSettled;');
+        // And winnings are known only when the roster is: `.every()` over
+        // myPools is vacuously true when a failed feed never delivered the
+        // user's Squares pool at all. (qodo re-review #6, High.)
+        expect(source).toContain('() => poolsKnown && myPools');
         expect(source).toContain('earningsEmptyState(lifetimeStats.totalWinnings, winningsKnown)');
         expect(source).toContain('setPoolsFailed(true)');
         // Winner failures are keyed BY POOL, never one global boolean: stale
