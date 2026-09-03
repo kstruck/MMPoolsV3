@@ -1,7 +1,7 @@
 /**
  * Verify the docs/archive/ criterion (PR #653, 2026-09-01).
  *
- * Two invariants, both of which the docs cleanup must keep true:
+ * Three invariants, all of which the docs cleanup must keep true:
  *
  *   1. LINKS RESOLVE. No kept markdown doc names an ARCHIVED file by a path
  *      that does not land in `docs/archive/` — otherwise an operator following
@@ -13,6 +13,12 @@
  *      tests, skills, workflows, docs — and matched with OR WITHOUT the `.md`
  *      suffix, because the citation this repo actually missed was
  *      `NOTES-WAVE2` (no suffix) in ~10 `functions/src/` comments.
+ *
+ *   3. EVERY DELETION IS RECORDED in docs/archive/deleted-docs.txt. Invariant 2
+ *      learns about deletions from the branch diff, which empties the moment
+ *      the branch merges — so without a manifest entry a deletion is enforced
+ *      today and silently unenforced tomorrow. The manifest is the only half
+ *      that outlives the branch.
  *
  * Run from the repo root:
  *   node scripts/verifyArchiveRefs.mjs [--base <ref>]
@@ -116,10 +122,10 @@ function deletedDocs() {
     );
   }
   const committed = lines(
-    git(['diff', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md']),
+    git(['diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md']),
   );
   const uncommitted = lines(
-    git(['diff', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
+    git(['diff', '--no-renames', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
   );
   // A doc that left the root and ARRIVED in docs/archive/ in this same change
   // was MOVED, not deleted — git reports the old path as a deletion either
@@ -136,29 +142,118 @@ function deletedDocs() {
   const movedIn = new Set(
     [
       ...lines(git([
-        'diff', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+        'diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
       ])),
       ...lines(git([
-        'diff', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+        'diff', '--no-renames', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
       ])),
     ].map((f) => path.basename(f)),
   );
 
-  return new Set(
-    [...committed, ...uncommitted, ...manifestDocs()]
-      .map((f) => path.basename(f))
-      .filter((name) => !movedIn.has(name)),
-  );
+  // What matters is the FINAL state, not every intermediate commit. A doc
+  // deleted in one commit and restored at the same path in a later one (an
+  // amend, a revert, a change of mind mid-branch) is not deleted, and demanding
+  // a manifest entry for a file that plainly still exists would block an
+  // ordinary workflow.
+  const fromDiff = [...committed, ...uncommitted]
+    .filter((f) => !fs.existsSync(f))
+    .map((f) => path.basename(f))
+    .filter((name) => !movedIn.has(name));
+
+  // INVARIANT 3 — every genuine deletion must be RECORDED in the manifest.
+  // Without this the guard has an expiry date: a deletion is enforced today
+  // because the branch diff carries it, and stops being enforced the moment
+  // the branch merges and that diff empties. The manifest is the only half
+  // that outlives the branch, so a deletion missing from it is a reference
+  // check that silently switches itself off later.
+  const recorded = new Set(manifestDocs().map((f) => path.basename(f)));
+  const unrecorded = [...new Set(fromDiff)].filter((name) => !recorded.has(name));
+  if (unrecorded.length > 0) {
+    fail(
+      `${unrecorded.length} deleted doc(s) are missing from ${DELETED_MANIFEST}.\n` +
+      `      Without an entry there, nothing catches a reference to them once this\n` +
+      `      branch merges and the diff that currently carries them goes empty.\n` +
+      `      Add these lines:\n` +
+      unrecorded.map((n) => `        ${n}`).join('\n'),
+    );
+  }
+
+  // The manifest is APPEND-ONLY. Recording a deletion is worthless if the
+  // record can be quietly dropped later: removing a line (or the whole file)
+  // takes that document straight out of the checked set, and references to it
+  // start passing again. Deletions are permanent, so their record is too.
+  // At the MERGE BASE, not at BASE's tip — matching the three-dot diffs above.
+  // Reading the tip would flag an entry another PR appended after this branch
+  // was cut as "removed by this branch", which it plainly was not. That is the
+  // two-dot-versus-three-dot trap CLAUDE.md §2c records, in a new costume.
+  const wasRecorded = manifestDocsAt(mergeBase(BASE));
+  const dropped = wasRecorded.filter((name) => !recorded.has(name));
+  if (dropped.length > 0) {
+    fail(
+      `${dropped.length} entr(y/ies) were REMOVED from ${DELETED_MANIFEST}.\n` +
+      `      That file is append-only: dropping a line stops anything from catching\n` +
+      `      a reference to that deleted doc. Restore these lines:\n` +
+      dropped.map((n) => `        ${n}`).join('\n'),
+    );
+  }
+
+  return new Set([...fromDiff, ...recorded]);
 }
 
-/** The tracked list of docs previous cleanups deleted. */
-function manifestDocs() {
-  if (!fs.existsSync(DELETED_MANIFEST)) return [];
-  return fs
-    .readFileSync(DELETED_MANIFEST, 'utf8')
+/** Entries in a manifest's text: one filename per line, `#` comments ignored. */
+function parseManifest(text) {
+  return text
     .split('\n')
     .map((s) => s.trim())
     .filter((s) => s && !s.startsWith('#'));
+}
+
+/** The tracked list of docs previous cleanups deleted, as it stands now. */
+function manifestDocs() {
+  if (!fs.existsSync(DELETED_MANIFEST)) return [];
+  return parseManifest(fs.readFileSync(DELETED_MANIFEST, 'utf8'));
+}
+
+/**
+ * Where `ref` and HEAD diverged — the point the three-dot diffs compare from.
+ *
+ * `merge-base` exits 1 with no output when the histories are genuinely
+ * unrelated, which is a real state (a fixture repo, an orphan branch) and means
+ * "compare against ref itself". Any OTHER failure is a broken repository, and
+ * treating it the same would quietly change what this check compares.
+ */
+function mergeBase(ref) {
+  try {
+    return git(['merge-base', ref, 'HEAD']).trim();
+  } catch (err) {
+    const status = err?.status;
+    const stderr = String(err?.stderr ?? '').trim();
+    if (status === 1 && !stderr) return ref; // no common ancestor
+    fail(
+      `cannot resolve the merge base of '${ref}' and HEAD, so the append-only\n` +
+      `      manifest check cannot run: ${stderr || err?.message || 'unknown git failure'}`,
+    );
+  }
+}
+
+/**
+ * The same list as of `ref`. A manifest that simply did not exist at that ref
+ * is the legitimate first-cleanup case and means "no entries". ANY OTHER git
+ * failure is not: swallowing it would make an unreadable history look like an
+ * empty one, and the append-only check would then pass by knowing nothing.
+ */
+function manifestDocsAt(ref) {
+  try {
+    return parseManifest(git(['show', `${ref}:${DELETED_MANIFEST}`])).map((f) => path.basename(f));
+  } catch (err) {
+    const stderr = String(err?.stderr ?? '');
+    const absent = /does not exist|exists on disk, but not in|invalid object name/i.test(stderr);
+    if (absent) return [];
+    fail(
+      `cannot read ${DELETED_MANIFEST} at '${ref}', so the append-only check on it\n` +
+      `      cannot run: ${stderr.trim() || err?.message || 'unknown git failure'}`,
+    );
+  }
 }
 
 /**
