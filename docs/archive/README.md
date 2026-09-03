@@ -22,8 +22,14 @@ breaks. Run it from the repo root after any doc move:
 **When you delete a doc, add its filename to `deleted-docs.txt` in this
 directory.** That file is the durable half of the check: the verifier learns
 about deletions from `git diff <base>...HEAD`, which is empty once a cleanup
-merges, so without the manifest invariant 2 would quietly become a no-op on
-`main` and a re-added reference to a long-deleted doc would pass.
+merges, so without the manifest a re-added reference to a long-deleted doc
+would pass on `main`. You will not forget silently — the verifier **fails and
+prints the missing lines** if a deletion in the diff has no manifest entry.
+
+The verifier runs in CI as part of the suite
+(`tests/archive-refs-invariants.test.ts`, inside the required `build-and-test`
+check), so a broken archive link or a re-cited deleted doc fails the PR rather
+than relying on someone remembering to run it.
 
 ```bash
 node scripts/verifyArchiveRefs.mjs
