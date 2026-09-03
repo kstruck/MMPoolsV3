@@ -117,11 +117,10 @@ jobs:
       - name: nginx -t
         run: docker run --rm -v "${{ github.workspace }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine nginx -t
 
-  # Advisory only — surfaces the ~540 lint findings (mostly no-explicit-any)
-  # without blocking merges. Promote to a required check as the debt is paid down.
+  # Required on every pull request. Any lint failure blocks the merge via the
+  # repository ruleset's `lint` required status check.
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -138,21 +137,19 @@ jobs:
   # developer's machine.
   #
   # WHY IT DOES NOT BLOCK, AND HOW IT IS MADE NOT TO BLOCK:
-  #   The repo's required-status-checks ruleset (id 11714546, main-scoped) lists
-  #   exactly four contexts: build-and-test, emulator-tests, security-audit,
-  #   nginx-validate. `e2e-playwright` is deliberately NOT one of them, so a red
+  #   `e2e-playwright` is deliberately not a required context, so a red
   #   run here cannot block a merge.
   #
-  #   It deliberately does NOT use `continue-on-error: true` (the mechanism the
-  #   `lint` job above uses). continue-on-error stops a failing job from failing
+  #   It deliberately does NOT use `continue-on-error: true`. continue-on-error stops
+  #   a failing job from failing
   #   the workflow RUN — which would also erase the exact signal this job exists
   #   to produce. The flip criterion below needs a truthful red/green per PR, so
   #   non-blocking is achieved by ruleset EXCLUSION, not by masking the result.
   #
   # FLIP TO REQUIRED AFTER ~A WEEK OF GREEN: once this job has run green across a
   # week of PRs with no flakes, add the context `e2e-playwright` to the
-  # "Required Checks" ruleset (GitHub → Settings → Rules), i.e. a fifth context
-  # alongside the four above. Nothing in this file changes on the flip. If it
+  # "Required Checks" ruleset (GitHub → Settings → Rules). Nothing in this file
+  # changes on the flip. If it
   # flakes instead, fix the flake (or delete the job) — do not paper over it with
   # continue-on-error or retries.
   # ---------------------------------------------------------------------------
