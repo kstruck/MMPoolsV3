@@ -108,11 +108,16 @@ h1, h2, h3, h4, .display {
   .ticker-inner {
     animation: none !important;
   }
-  /* Hover transforms are gated by the `fine:` variant, which already
-     excludes reduced-motion, so `transition-ui` (colors, opacity, shadow)
-     is left alone here on purpose: those fades aid comprehension. */
+  /* Movement snaps; colour/opacity/shadow fades stay (they aid comprehension).
+     Hover transforms are already gated by the `fine:` variant, but press
+     feedback (`active:scale-95`) and knob slides are not, so `transition-ui`
+     drops `transform` from its property list here rather than being zeroed
+     outright — codex round 5 on the animation-review PR. */
   .transition-transform {
     transition-duration: 0.01ms !important;
+  }
+  .transition-ui {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
   }
 }
 
