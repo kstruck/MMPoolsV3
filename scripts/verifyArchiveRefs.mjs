@@ -133,18 +133,23 @@ for (const name of deleted) deletedStems.set(name.replace(/\.md$/, ''), name);
  * skills, which describe paths rather than link to them) is not a subject of it.
  */
 const MD_LINK =
-  /\]\(\s*<?((?:[A-Za-z0-9_.-]+\/)*)([A-Za-z0-9_][A-Za-z0-9_.-]*\.md)>?\s*(?:[)#]|"|')/g;
+  /\]\(\s*<?((?:[A-Za-z0-9_.-]+\/)*)([A-Za-z0-9_][A-Za-z0-9_.-]*\.md)>?\s*(?:[)#?]|"|')/g;
 
 let unresolved = 0;
 let dangling = 0;
 
 for (const file of trackedTextFiles()) {
+  // A file git still tracks but that is gone from the working tree — the normal
+  // state mid-move, which is exactly when the README says to run this — has no
+  // content to check. That is not the same as a file we failed to read.
+  if (!fs.existsSync(file)) continue;
+
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (err) {
-    // FAILS CLOSED: a tracked file we cannot read is a file whose citations we
-    // cannot check, which is not the same as a file with none.
+    // FAILS CLOSED: a tracked file that exists but cannot be read is a file
+    // whose citations we cannot check, which is not the same as one with none.
     fail(`cannot read tracked file '${file}': ${err.message}`);
   }
   const isMarkdown = path.extname(file).toLowerCase() === '.md';
