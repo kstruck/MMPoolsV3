@@ -32,7 +32,7 @@ export default defineConfig([
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
       // a11y audit 2026-08-23: nothing caught missing labels/alt/roles before
-      // they shipped. Recommended set at WARN (lint is non-blocking; the point
+      // they shipped. Recommended set at WARN (CI lint blocks on ERRORS only; the point
       // is that new violations are VISIBLE in the report).
       jsxA11y.flatConfigs.recommended,
     ],
