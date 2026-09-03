@@ -16,7 +16,7 @@ _These did not stop the build; I picked a safe default and flagged it here. Chan
 
 4. **"Redeem a Pool Credit" in the wizard needs the bundles rules deployed** — the launch step only shows the Redeem option when it can read the user's bundles, which requires the Wave-5 `bundles` read rule (in this branch, deploys with the rest). Until rules deploy, the option just stays hidden (no crash). No action beyond deploying rules; noted so it's not mistaken for a bug during UAT before deploy.
 
-5. **[OPEN — you asked me to remind you] Should NFL Playoff pools offer the What-If Simulator add-on?** Today the What-If Simulator (+$9) is gated to `BRACKET` format only, in both the estimator and the checkout ([BillingInvoiceCard.tsx:556](src/components/billing/BillingInvoiceCard.tsx), [PricingPage.tsx:450](src/components/PricingPage.tsx)). NFL Playoff pools are bracket-style but currently excluded. _Default: Bracket-only (unchanged)._ Decision: add `PLAYOFF` to the gate too? It's a one-line change in both files. **Kevin: decide this.**
+5. **[OPEN — you asked me to remind you] Should NFL Playoff pools offer the What-If Simulator add-on?** Today the What-If Simulator (+$9) is gated to `BRACKET` format only, in both the estimator and the checkout ([BillingInvoiceCard.tsx:556](../../src/components/billing/BillingInvoiceCard.tsx), [PricingPage.tsx:450](../../src/components/PricingPage.tsx)). NFL Playoff pools are bracket-style but currently excluded. _Default: Bracket-only (unchanged)._ Decision: add `PLAYOFF` to the gate too? It's a one-line change in both files. **Kevin: decide this.**
 
 _(complete — see sections B–D)_
 

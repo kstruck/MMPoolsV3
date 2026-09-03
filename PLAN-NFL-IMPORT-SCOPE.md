@@ -163,7 +163,7 @@ This is a `functions/` change with **no `shared/` change**, so it owes a functio
 deploy and **no rules deploy and no Coolify rebuild**.
 
 It can ship in the same deploy as [#384](https://github.com/kstruck/MMPoolsV3/pull/384).
-Steps are in `MORNING-2026-08-06.md` §3 — `npm --prefix functions ci` (**`ci`, not
+Steps are in `docs/archive/MORNING-2026-08-06.md` §3 — `npm --prefix functions ci` (**`ci`, not
 `install`**), then `npx firebase deploy --only functions`, certified by a second
 all-`Skipped` run.
 

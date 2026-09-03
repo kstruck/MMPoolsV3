@@ -237,7 +237,7 @@ coupon reservation, entitlements, ledger, alerts) with its own tests; #141
 schema fixes verified to have survived the merge. Plan updates:
 - Phase 0: deploy state now UNCERTAIN (live-UAT implies possible deploy) —
   verify with functions:list before deploying; a functions deploy now ships
-  buy-flow functions, coordinate with MORNING-CHECKLIST-BUYFLOW.md
+  buy-flow functions, coordinate with docs/archive/MORNING-CHECKLIST-BUYFLOW.md
   (rules + indexes pending); Phase 0 steps renumbered 0.1-0.5.
 - Item 10: sim pools pin launch mode 'free' (no paid addons, no oversized
   estimate); sim runs never write monetization collections; ≤10 users when

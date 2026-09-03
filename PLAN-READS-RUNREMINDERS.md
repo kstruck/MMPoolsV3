@@ -1,6 +1,6 @@
 # PLAN — the 1.4M/day Firestore reads: cause, fix, verification
 
-Written 2026-07-23. Supersedes the premise of `MORNING-2026-07-23.md` §4.
+Written 2026-07-23. Supersedes the premise of `docs/archive/MORNING-2026-07-23.md` §4.
 
 ## 0. Classification (mmp-change-control §1)
 
@@ -15,7 +15,7 @@ identical**, and §4 states how that is proven rather than asserted.
 
 ## 1. What the docs claimed, and why it was wrong
 
-`MORNING-2026-07-23.md` §4 said the ~1.4M/day driver was "provably dead" after
+`docs/archive/MORNING-2026-07-23.md` §4 said the ~1.4M/day driver was "provably dead" after
 the bracket-sync fix (#239), and that anything above ~200K/day would be a
 *second* cause.
 

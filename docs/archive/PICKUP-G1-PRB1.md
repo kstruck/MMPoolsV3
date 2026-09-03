@@ -1,7 +1,7 @@
 # PICKUP — G1 PR-B1: `nflAutoScoreJob` (the LIVE tier)
 
 Entry point for a fresh session building **PR-B1** of
-[PLAN-REALTIME-SCORING.md](PLAN-REALTIME-SCORING.md). Written 2026-07-25 ET at
+[PLAN-REALTIME-SCORING.md](../../PLAN-REALTIME-SCORING.md). Written 2026-07-25 ET at
 the end of the session that shipped PR-A.
 
 Read this, then plan §4 (the `provisional` contract), §5 (the job), and §7

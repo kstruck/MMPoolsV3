@@ -102,7 +102,7 @@ npx firebase functions:log --only importNFLSchedule
 
 ## 4. Also corrected: a doc claim about the import UI
 
-`MORNING-2026-08-07.md` was corrected in #394 to say the importer "takes ONE week
+`docs/archive/MORNING-2026-08-07.md` was corrected in #394 to say the importer "takes ONE week
 at a time". **That is not right either**, and it is the same
 quote-from-memory mistake it was correcting.
 

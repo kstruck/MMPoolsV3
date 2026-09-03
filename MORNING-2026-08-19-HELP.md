@@ -190,7 +190,7 @@ breakage from these PRs.
    the checkout had not run `npm ci` since T2 added those devDependencies.
    **Fixed tonight**: `npm ci` was run there and jsdom is present.
 2. **`tests/docs-state-invariants.test.ts` fails on
-   `MORNING-2026-08-13-PART2.md + MORNING-2026-08-13.md`.** That PART2 file is
+   `MORNING-2026-08-13-PART2.md + docs/archive/MORNING-2026-08-13.md`.** That PART2 file is
    **untracked** — a local scratch file that never got committed. The guard
    reads the working directory with `fs.readdirSync`, so any untracked
    `MORNING-*.md` breaks the suite locally while CI stays green. **Not touched**
