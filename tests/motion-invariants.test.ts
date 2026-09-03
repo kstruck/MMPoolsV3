@@ -176,6 +176,14 @@ describe('motion invariants', () => {
     expect(hits).toEqual([]);
   });
 
+  it('tx() never wraps a sizing transform — under reduced motion it returns none, and a w-full bar at none reads as 100%', () => {
+    // qodo on PR #667: the referral progress bar's only sizing transform went
+    // through tx(), so every reduced-motion user saw a full bar. Entrance
+    // transforms rest at `none`; sizing transforms (scaleX/scaleY of a bar)
+    // must keep their final value and skip interpolation instead.
+    expect(offenders(/\btx\(\s*[`'"]scale[XY]\(/)).toEqual([]);
+  });
+
   it('no `ease-in` on UI entrances (delays the moment the user is watching)', () => {
     expect(offenders(/\banimate-in\b[^"'`]*\bease-in\b(?!-out)/)).toEqual([]);
     expect(offenders(/ease:\s*['"]easeIn['"]/)).toEqual([]);
