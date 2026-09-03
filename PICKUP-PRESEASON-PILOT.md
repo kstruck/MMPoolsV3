@@ -135,14 +135,14 @@ box.
 (Historical, 2026-07-25: everything through #279 (G1 PR-B′) shipped — functions,
 then `firestore:rules`, then the Coolify rebuild — and both queues were empty
 then. #262 removed the ~966K-reads/day `runReminders` amplification; verify the
-drop via Query Insights, KEVIN-TASKS-2026-07-23.md §4.)
+drop via Query Insights, docs/archive/KEVIN-TASKS-2026-07-23.md §4.)
 
 ✅ **The `publishedWeeks` backfill is CLOSED (2026-07-27) and never needs
 running.** The prod dry run returned `poolsScanned: 15, poolsChanged: 0,
 weeksMarked: 0, failures: []` — no legacy manually-scored weeks exist to stamp,
 across the whole NFL pool population (the migration applies no season filter).
 **Do not click the destructive button; it is a no-op.** See HANDOFF's STOP POINT
-box. `MORNING-2026-07-26.md` §2c describes it as owed — that doc is a dated
+box. `docs/archive/MORNING-2026-07-26.md` §2c describes it as owed — that doc is a dated
 morning note and is now historical on this point.
 
 ⚠️ **#279 did not reach a clean codex round** (3 rounds, 8 findings all absorbed;
@@ -164,7 +164,7 @@ spent on codex, not qodo.
 
 The overnight-of-2026-07-22 effort took on four product items Kevin queued —
 profile header/footer, SuperAdmin Overview stats, a filterable Stats tab, and a
-Sentry triage. If **MORNING-2026-07-23.md** exists, read it for what got built
+Sentry triage. If **docs/archive/MORNING-2026-07-23.md** exists, read it for what got built
 and what needs Kevin.
 
 ### The 2026-07-21 deploy, for context
@@ -432,7 +432,7 @@ that function `Skipped (No changes detected)`, so the update HAD landed and the
 CLI had merely lost its operation poll. **Re-run before concluding anything from
 a 429.** On Windows set `$env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"` first.
 Record: HANDOFF's 2026-08-09 DEPLOY STATE box and
-`MORNING-2026-08-09-SURVIVOR-PARITY.md`.)
+`docs/archive/MORNING-2026-08-09-SURVIVOR-PARITY.md`.)
 
 (HISTORICAL — the deploy before it, 2026-08-08 for **#392 + #384**, the importer
 hardening and the `TEAM_ALREADY_USED` resubmit guard / week-label change. Full
@@ -446,7 +446,7 @@ the THIRD run: 175 all `Skipped (No changes detected)`, 0 updates,
 `✔ Deploy complete!` — fleet grew 173 → 175 with `onSystemConfigWritten` and
 `getProdWatchdog`. Run 1 ended after 144 updates with no completion line; run
 2 completed the fleet, 155 skipped + 20 updated. Full night's record:
-`MORNING-2026-08-04.md` and HANDOFF's STOP POINT box.)
+`docs/archive/MORNING-2026-08-04.md` and HANDOFF's STOP POINT box.)
 
 📊 **Measured 2026-08-03, read-only: production holds ZERO forged Member
 Records.** All **156** of them carry `joinedAt`. The
@@ -626,7 +626,7 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
 > the current queue is the paragraph below this block.** #279 deployed functions → rules → Coolify
 > frontend, in that order, and the settings save was smoke-tested in prod. The
 > recipe below is kept because it is the one that has worked every time — see
-> also `MORNING-2026-07-26.md` §2b, which is PowerShell-correct and carries the
+> also `docs/archive/MORNING-2026-07-26.md` §2b, which is PowerShell-correct and carries the
 > functions-before-rules-before-Coolify ordering constraint this deploy proved
 > matters.
 >
@@ -726,7 +726,7 @@ Always confirm the change is in the file on disk before deploying — not that
    that guard is deliberate. Full steps: `TOMORROW-TASKS.md` → NFL-6.
 2. **Deploy — the FUNCTIONS queue is EMPTY as of 2026-07-27** (#311 deployed;
    see HANDOFF's STOP POINT box for the verification). Next deploy recipe (with
-   the ordering constraint): `MORNING-2026-07-26.md` §2b. **The `publishedWeeks`
+   the ordering constraint): `docs/archive/MORNING-2026-07-26.md` §2b. **The `publishedWeeks`
    backfill is closed** (§0) — but TWO actions remain before `nflAutoScore` can go
    live, and both are yours: (a) **PR-B2 must be watched in dry run, and the
    watch only counts if it SAW something** — arm `{ enabled: true, dryRun: true }`

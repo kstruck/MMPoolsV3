@@ -1464,7 +1464,7 @@
 
 > ## 🛑 2026-08-17 (late 08-16) — LEDGER UX FIX IN PR #460 (Coolify-only); the six-PR ledger stack #451→#456 + docs #457/#458 are MERGED AND DEPLOYED (functions + rules + indexes + Coolify)
 >
-> **Read `MORNING-2026-08-17-LEDGER-UX.md` first** — merge/deploy/verify runbook
+> **Read `docs/archive/MORNING-2026-08-17-LEDGER-UX.md` first** — merge/deploy/verify runbook
 > for #460 and the next-PR order. Kevin's feedback with screenshots (2026-08-16
 > late): three surfaces were called "ledger" and their doors did not line up.
 > #460 makes Manager → Members & Payments ONE **Payment Ledger** spreadsheet
@@ -1482,7 +1482,7 @@
 
 > ## 🛑 2026-08-17 (overnight 08-16) — THE PAYMENT LEDGER: SIX STACKED PRs OPEN (#451→#456), NOTHING MERGED OR DEPLOYED; three new PLANs + board memo in #457 — **SUPERSEDED: all merged + deployed 2026-08-16 late (Kevin)**
 >
-> **Read `MORNING-2026-08-17-LEDGER.md` first** — it is the merge-order + deploy
+> **Read `docs/archive/MORNING-2026-08-17-LEDGER.md` first** — it is the merge-order + deploy
 > runbook (functions → rules → indexes → Coolify) and lists the decisions/deviations.
 > **State before this:** #438/#449/#450 (multi-entry T0/T1/T2) and #444/#446/#447
 > (co-commissioners) merged AND deployed; `MULTI_ENTRY_WIZARD_ENABLED` still
@@ -1518,7 +1518,7 @@
 > (auth, K1–K18, one codex finding open at cap: K18 webhook race),
 > `PLAN-POOL-TYPE-ICONS.md` (K1–K13), `PLAN-HELP-SYSTEM.md` (K1–K13, ported from
 > spectrum-price-intel's HelpTooltip/HelpPanel), each with review log + sweeps, +
-> `BOARD-MEMO-2026-08-16-transfer-icons-help.md` — **board says build none during
+> `docs/archive/BOARD-MEMO-2026-08-16-transfer-icons-help.md` — **board says build none during
 > the live weeks; ship the two ICONS mislabels + the `createCheckoutSession`
 > ownership gate (`stripe.ts:189-193`) standalone; measure 3–4 weeks.** Kevin's §6
 > calls on all three.
@@ -1534,7 +1534,7 @@
 > **State before this PR:** T0 (row-identity invariant), K9 (#445), T1 (#449 —
 > `settings.maxEntriesPerUser`, rules callable-only key, raise-only gate, wizard
 > toggle HIDDEN) and co-commissioners PR-A/PR-B (#446/#447) are all merged and
-> deployed (functions + rules + Coolify). Read `MORNING-2026-08-17.md` for the
+> deployed (functions + rules + Coolify). Read `docs/archive/MORNING-2026-08-17.md` for the
 > T2 merge + deploy runbook — **this one needs all three surfaces: functions →
 > rules (unchanged, but redeploy is harmless) → Coolify** (it touches
 > `shared/`, `functions/`, `src/`).
@@ -1567,7 +1567,7 @@
 > and the manager raise control is gated on it too. **Everything server-side
 > is live and tested regardless** (`entryIndex` honoured, dues ×, entryCount).
 > One line flips it (`shared/multiEntry.ts`) if Kevin disagrees; the T3/T4/T5
-> PR flips it otherwise. Named in the PR body and `MORNING-2026-08-17.md` §3.
+> PR flips it otherwise. Named in the PR body and `docs/archive/MORNING-2026-08-17.md` §3.
 >
 > **Deploy state:** unchanged from #449 until this merges. Nothing else on any queue.
 
@@ -1589,7 +1589,7 @@
 > URL now builds from `functions/src/lib/espnHost.ts` (`site.web.api.espn.com`),
 > guarded by `functions/src/__tests__/espnHost.test.ts`. **Functions deploy only.**
 > Verify: the next `syncnflscoresjob` log line says `Resolved Week …`, not `403`.
-> Read `MORNING-2026-08-15.md` §3 for the decision tables; state below.
+> Read `docs/archive/MORNING-2026-08-15.md` §3 for the decision tables; state below.
 >
 > **Sign-off:** Kevin answered "all recommendations" on PLAN-CO-COMMISSIONERS
 > K1–K8, PLAN-EMPTY-SUBMISSION-FEE Q1–Q4, PLAN-MULTI-ENTRY K1–K11,
@@ -1746,9 +1746,9 @@
 > records. All product rulings already given by Kevin; plan-gated.
 
 *(Previous top box, 2026-08-13 morning — its frontend and functions claims are
-SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417's REBUILD IS DEPLOYED AND VERIFIED IN THE SHIPPED BUNDLE.** The live frontend bundle was **BUILT FROM** `d6bae3f4` — that is a deploy fact and it stays true as `main` advances. ⚠️ It is NOT a claim about where `main` points: `main` moved to `0572babc` when #419 merged, and it moves again with every merge. Read the branch head with `git fetch origin` then `git log --oneline -1 origin/main`; never from this line. (qodo, on #421: the old phrasing said "`main` is at `d6bae3f4`", which reads as a branch invariant and would have an operator diagnosing deploy drift against the wrong revision.) **ALL QUEUES ARE EMPTY.** The frontend is rebuilt from `d6bae3f4` — live bundle moved `index-Dv5RBrGq.js` → **`index-BB2oOzrg.js`**. **Functions and rules are UNCHANGED and remain deployed from `c37bbd37`**; #417 touched no `functions/`, no `shared/`, no `firestore.rules`, no `firestore.indexes.json`, so no functions or rules deploy was owed or run. 🛑 **A money bug is LIVE and has a plan awaiting sign-off** — `PLAN-EMPTY-SUBMISSION-FEE.md`: an empty pick'em submission latches `hasPlayableEntry` and upgrades a seeded manager's `feeOwed` from 0 to the entry fee. No code written; §6 needs Kevin's four answers. ⚠️ **Nothing from #414/#415/#417 has EVER been looked at in a browser** — `MORNING-2026-08-13.md` §2 is the whole substitute, and it is the largest open item. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. Runbook: **`MORNING-2026-08-14.md`** *(supersedes `MORNING-2026-08-13.md`, whose §2 browser checks and §4 launch checklist are carried forward into it unticked)*. ⬇️ The 2026-08-12 paragraph below is retained because its FUNCTIONS and RULES facts are still the live ones — its frontend claim is superseded by this line.
+SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417's REBUILD IS DEPLOYED AND VERIFIED IN THE SHIPPED BUNDLE.** The live frontend bundle was **BUILT FROM** `d6bae3f4` — that is a deploy fact and it stays true as `main` advances. ⚠️ It is NOT a claim about where `main` points: `main` moved to `0572babc` when #419 merged, and it moves again with every merge. Read the branch head with `git fetch origin` then `git log --oneline -1 origin/main`; never from this line. (qodo, on #421: the old phrasing said "`main` is at `d6bae3f4`", which reads as a branch invariant and would have an operator diagnosing deploy drift against the wrong revision.) **ALL QUEUES ARE EMPTY.** The frontend is rebuilt from `d6bae3f4` — live bundle moved `index-Dv5RBrGq.js` → **`index-BB2oOzrg.js`**. **Functions and rules are UNCHANGED and remain deployed from `c37bbd37`**; #417 touched no `functions/`, no `shared/`, no `firestore.rules`, no `firestore.indexes.json`, so no functions or rules deploy was owed or run. 🛑 **A money bug is LIVE and has a plan awaiting sign-off** — `PLAN-EMPTY-SUBMISSION-FEE.md`: an empty pick'em submission latches `hasPlayableEntry` and upgrades a seeded manager's `feeOwed` from 0 to the entry fee. No code written; §6 needs Kevin's four answers. ⚠️ **Nothing from #414/#415/#417 has EVER been looked at in a browser** — `docs/archive/MORNING-2026-08-13.md` §2 is the whole substitute, and it is the largest open item. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`. Runbook: **`docs/archive/MORNING-2026-08-14.md`** *(supersedes `docs/archive/MORNING-2026-08-13.md`, whose §2 browser checks and §4 launch checklist are carried forward into it unticked)*. ⬇️ The 2026-08-12 paragraph below is retained because its FUNCTIONS and RULES facts are still the live ones — its frontend claim is superseded by this line.
 
-⚠️ SUPERSEDED by the top box (that "one PR" was #420; all of #420–#423 have since merged and deployed, and the plan's scope ruling landed as Option B): **one PR open, one plan awaiting sign-off, one audit answered.** [#420](https://github.com/kstruck/MMPoolsV3/pull/420) (confidence weights gray out, `LAUNCH-READINESS` I1) is gate-complete — codex clean, qodo 0 findings, CI 7/7 — and owes **merge + one Coolify rebuild, no functions or rules deploy**. `PLAN-WEEKLY-TIEBREAKERS.md` (+ review log, + sweeps) is written and **blocked on Kevin's scope ruling**; no code exists. And the live-scoring audit is answered in `MORNING-2026-08-14.md` §4 — headline: **Pick'em already grades per game as each game ends and colours the member's own sheet green/red client-side with no scorer involved**, Survivor and Margin do not (gap I3), and **no surface anywhere shows a per-pick ✓/✗ for other players**.)
+⚠️ SUPERSEDED by the top box (that "one PR" was #420; all of #420–#423 have since merged and deployed, and the plan's scope ruling landed as Option B): **one PR open, one plan awaiting sign-off, one audit answered.** [#420](https://github.com/kstruck/MMPoolsV3/pull/420) (confidence weights gray out, `LAUNCH-READINESS` I1) is gate-complete — codex clean, qodo 0 findings, CI 7/7 — and owes **merge + one Coolify rebuild, no functions or rules deploy**. `PLAN-WEEKLY-TIEBREAKERS.md` (+ review log, + sweeps) is written and **blocked on Kevin's scope ruling**; no code exists. And the live-scoring audit is answered in `docs/archive/MORNING-2026-08-14.md` §4 — headline: **Pick'em already grades per game as each game ends and colours the member's own sheet green/red client-side with no scorer involved**, Survivor and Margin do not (gap I3), and **no surface anywhere shows a per-pick ✓/✗ for other players**.)
 
 > ## ✅ FRONTEND DEPLOY 2026-08-13 — **#417 verified INSIDE the shipped JavaScript, not inferred from a moved hash**
 >
@@ -1788,7 +1788,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > is empty across #416, #418 and #417 — all three are docs or `src/**`.
 
 
-*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules were live from <!-- deploy-state:ignore --> `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
+*(2026-08-12 — **functions and rules facts still current; its frontend claim is SUPERSEDED — the frontend moved to `d6bae3f4` on 2026-08-13, see the box above**: ✅ **#414 AND #415 ARE MERGED AND DEPLOYED.** Functions and rules were live from <!-- deploy-state:ignore --> `main` @ `c37bbd37` (the frontend was too, when this was written) — deployed in the required order (functions → Coolify → rules) on the morning of 2026-08-12 and each surface verified independently, not inferred from a deploy log. **Commissioner-blind picks are LIVE in production**: a pool's owner/manager can no longer read raw entries, and pick content comes from the `getPoolPicks` callable past each game's own lock. **Nothing is owed on any deploy queue.** The one thing still open is the launch checklist (invites, `nflDeepSweep`, NFL-6, backups, SA key) — `docs/archive/MORNING-2026-08-12.md` §3–§4. 🛑 **AUTOMATED SCORING IS LIVE** — `system/config.nflAutoScore` `{enabled:true, dryRun:false}`, `nflAutoScoreJob` `*/5` *(**UNVERIFIED** — carried from 2026-08-09, not re-measured; re-read `system/config` in the console before relying on it)*. App Check remains OFF — do NOT set `VITE_RECAPTCHA_SITE_KEY`.)
 
 > ## ✅ DEPLOY STATE 2026-08-12 — **HISTORY. functions + rules were at <!-- deploy-state:ignore --> `main` @ `c37bbd37`; SUPERSEDED — functions moved to `809384d4` on 2026-08-25 and again to `e6882d21` on 2026-08-26 (top box), and the frontend to `d6bae3f4` on 2026-08-13**
 >
@@ -1852,7 +1852,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > invite walkthrough, SENDING the invites, the A8 price, the `nflDeepSweep`
 > two-stage arm, NFL-6 (`nflFinalize` `liveSeasonTypes: [1]`), the two remaining
 > backups, and confirming the SA key is revoked in the console. All Kevin-only.
-> `MORNING-2026-08-12.md` §3 (§4 is the email-logo question, §2f the browser checks).
+> `docs/archive/MORNING-2026-08-12.md` §3 (§4 is the email-logo question, §2f the browser checks).
 >
 > 🛑 **T-C (auto-pick) and T-D (margin missed-pick penalty) were NOT started.**
 > Both are plan-gated and neither plan exists. ⚠️ T-D's plan must FIRST measure
@@ -1860,7 +1860,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > it does and that was never verified.
 >
 > ❓ **One question outstanding:** which file is the new email logo?
-> `LAUNCH-READINESS.md` row E5. Two consumers, one asset — decide before the
+> `docs/archive/LAUNCH-READINESS.md` row E5. Two consumers, one asset — decide before the
 > invites go out.
 
 > ## ⚠️ SUPERSEDED — 🚀 STOP POINT 2026-08-11 (evening) — **everything merged and deployed; the spreads mystery is solved and it was not the flag**
@@ -1950,7 +1950,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > | PR | What | Deploy owed on merge |
 > |---|---|---|
 > | [#408](https://github.com/kstruck/MMPoolsV3/pull/408) **MERGED `39d5702`** | default week from the loaded slate; entry `userName` falls back to `users/{uid}.name` and heals a stored "Participant" | ✅ **DEPLOYED AND VERIFIED IN PROD 2026-08-11.** Functions deployed (`Deploy complete!`, `submitNFLPicks` among the updates; four 429s mid-run all recovered inside the same run), Coolify rebuilt. Verified live: the dashboard opens on **Preseason Week 1** with `HOF ×` behind it — old calendar math would have said HOF Weekend on Aug 11 (`ceil(5/7)` = 1) — and a re-submit healed a stored "Participant" row to the member's profile name. **Nothing owed.** |
-> | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `LAUNCH-READINESS.md` corrections | none |
+> | [#409](https://github.com/kstruck/MMPoolsV3/pull/409) | `docs/nfl-spreads-runbook.md` + two `docs/archive/LAUNCH-READINESS.md` corrections | none |
 > | [#410](https://github.com/kstruck/MMPoolsV3/pull/410) | `PLAN-COMMISSIONER-BLIND-PICKS` + sweeps + review log — **PLAN ONLY, needs Kevin's sign-off on §5 before any code** | none |
 >
 > All four: CI green, codex clean on the final diff, qodo reported and every
@@ -2009,7 +2009,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 >   (owed, low urgency)**. Majors: #401 blocked upstream (vite-8 peer conflict),
 >   #402 gates-green but wants a visual smoke, #403 really broken (brand icons
 >   removed) — verdicts on each PR and in the morning doc.
-> - **`LAUNCH-READINESS.md`** (NEW) is the measured launch audit — headline
+> - **`docs/archive/LAUNCH-READINESS.md`** (NEW) is the measured launch audit — headline
 >   wins measured tonight: **PITR is ENABLED** (7-day window, on since
 >   ~2026-08-04; `PLAN-BACKUPS-PHASE3.md` corrected), and the SA key **file is
 >   gone from `C:\keys`** (console-side revocation still to confirm — morning
@@ -2106,7 +2106,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > document was written by the old code and holds no content fields, which is why
 > the card renders empty. Scoring is idempotent and the scorer REPLACES the recap
 > document, so one press of `Score & Recap HOF Weekend` on pool
-> `2mv4pKI734hHeQHzQVTP` regenerates it. Steps in `MORNING-2026-08-08.md` Task 4.
+> `2mv4pKI734hHeQHzQVTP` regenerates it. Steps in `docs/archive/MORNING-2026-08-08.md` Task 4.
 >
 > ⛔ **`system/config.nflDeepSweep` is still unset**, and it is the one remaining
 > item from the 2026-07-25 arming prerequisites. With it off, a game that reaches
@@ -2149,10 +2149,10 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > `{enabled:true, dryRun:true}`; `nflDeepSweep` unset. `syncNFLScoresJob` (5-min,
 > no kill switch) IS live, so score **ingestion** is automatic and **grading** is
 > not. `nflAutoScoreJob` exists and is deployed but has never run live. The flip
-> is Kevin's, and the numbered sequence is in `MORNING-2026-08-08.md`.
+> is Kevin's, and the numbered sequence is in `docs/archive/MORNING-2026-08-08.md`.
 >
 > 🔐 **The service-account key `C:\keys\gridiron-admin.json` is still ACTIVE.**
-> Revoke steps are at the end of `MORNING-2026-08-08.md`.
+> Revoke steps are at the end of `docs/archive/MORNING-2026-08-08.md`.
 >
 > 🟢 **Dependency audit is clean at `--audit-level=high` in BOTH trees.** The
 > nanoid advisory GHSA-2v37-7h3g-55p8 (HIGH, dev-only in both trees) is closed by
@@ -2189,7 +2189,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > 1 and 16 — six games that kick off Aug 13/14 are filed under the HOF week.
 > ⛔ **Do NOT re-import against the currently-deployed importer**: it deletes all
 > 49 preseason games and wipes the HOF game's locked spread. Steps in
-> `MORNING-2026-08-07.md` Task 2.
+> `docs/archive/MORNING-2026-08-07.md` Task 2.
 >
 > ✅ **Member picks are NOT at risk from that repair — measured, exposure ZERO**
 > across 134 pools / 7 NFL preseason pools / 4 confidence entries. Evidence and
@@ -2206,7 +2206,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 >
 > ✅ **THE FRONTEND REBUILD HAS RUN, and #381 / #382 / #383 are each verified
 > INSIDE the shipped JavaScript — not inferred from a moved hash.** Kevin ran the
-> chunk-graph crawl from `MORNING-2026-08-06.md` §1 step 7 and it scanned **104
+> chunk-graph crawl from `docs/archive/MORNING-2026-08-06.md` §1 step 7 and it scanned **104
 > assets**, returning:
 >
 > ```
@@ -2250,7 +2250,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > stale deploy and tell you nothing about the change you just pushed. Replace them
 > with one marker unique to that change (a string it introduces, or a COUNT it
 > changes — the `$gate` pattern, which is the only way to detect a change that
-> *removes* code). `MORNING-2026-08-06.md` §1 carries the reuse note.
+> *removes* code). `docs/archive/MORNING-2026-08-06.md` §1 carries the reuse note.
 >
 > ⚠️ **Do NOT shortcut it to grepping `index-*.js`.** Those strings live in
 > lazily-imported route chunks, so the entry bundle alone reports ABSENT on a
@@ -2268,7 +2268,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > `functions/` **and** `shared/`. Merging it would put undeployed backend code on
 > `main` during game day, where a deploy triggered for any other reason would
 > ship it. It waits on Kevin and on the game being final. It carries
-> `PLAN-NFL-RESUBMIT-GUARD.md`; deploy steps are in `MORNING-2026-08-06.md` §3.
+> `PLAN-NFL-RESUBMIT-GUARD.md`; deploy steps are in `docs/archive/MORNING-2026-08-06.md` §3.
 > ⚠️ It owes **no** Coolify rebuild — measured, both branches emit byte-identical
 > assets.
 >
@@ -2399,7 +2399,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > state. This reading was Fetch-then-nothing: no toggle, no Lock All, no Save.
 > (An earlier revision of this box cited `:53` as the provenance; `:53` is inside
 > the local edit handler and proves nothing. qodo's finding on #375.)
-> **`MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
+> **`docs/archive/MORNING-2026-08-04.md` §2 item 1 still tells Kevin to do this; it is stale.**
 >
 > ⚠️ **HISTORICAL QUEUE STATE — read it as a record, not as an instruction.**
 > Queues as recorded here: functions EMPTY, rules EMPTY, indexes EMPTY, Coolify
@@ -2419,7 +2419,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > 45/45 against the pool-creation kill-switch; three NFL flags were temporarily
 > enabled via the SuperAdmin UI and restored to `false` after, verified by
 > read-back — #363 exists so no future run needs that. Full detail:
-> `MORNING-2026-08-04.md`.
+> `docs/archive/MORNING-2026-08-04.md`.
 > ⬇️ **EVERYTHING BELOW THIS LINE IS THE HISTORICAL DEPLOY RECORD.** `1105392`
 > above is the current state.
 >
@@ -3398,7 +3398,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 > before this release — no worse than before it shipped, but run it before the
 > auto-scorer is ever armed. **SuperAdmin → Operations → "Backfill Published
 > Weeks (dry run)"** first, review `plannedWrites`, then the live button. Steps in
-> `MORNING-2026-07-26.md` §2c.
+> `docs/archive/MORNING-2026-07-26.md` §2c.
 
 > ## ✅ STOP POINT 2026-07-24 — #265 functions deployed (SUPERSEDED by the box above)
 >
@@ -3460,7 +3460,7 @@ SUPERSEDED by the box above:* ✅ **#416, #418 AND #417 ARE ALL MERGED, AND #417
 >
 > Kevin queued four product items — profile-page header/footer, SuperAdmin
 > Overview stats (reset + exclude test pools), a filterable Stats tab, and a
-> Sentry error triage. See **MORNING-2026-07-23.md** (if present) for what got
+> Sentry error triage. See **docs/archive/MORNING-2026-07-23.md** (if present) for what got
 > built and what needs Kevin.
 >
 > ---
@@ -4089,7 +4089,7 @@ Below this: prior narrative (sim harness — still COMPLETE, deployed, prod-veri
 Core (0/1/2/3/4-core/6) 2026-07-10 via PR #156 + qodo PRs #157-159. **Phase 4
 (matrix, items 25-27) + Phase 5 (legacy migration + rules-backdoor removal, items
 28-30) shipped 2026-07-11 via PRs #161/#162**, expectations human-verified
-(PHASE4-EXPECTATIONS.md, signed-margin rule confirmed), qodo cycle absorbed (3
+(docs/archive/PHASE4-EXPECTATIONS.md, signed-margin rule confirmed), qodo cycle absorbed (3
 findings: 4 surviving raw entry writes migrated onto new `updateEntryPayment`/
 `adminUpdateEntryOverrides`/`adminDeleteEntry` callables; slug fix; audit-comment
 honesty). Functions (7 new) + **firestore.rules (both backdoors DROPPED)** +
@@ -4188,9 +4188,9 @@ Remaining optional items (SLO objects, cosmetic chunk-splitting) listed in the
 |---|---|
 | `HANDOFF.md` | THIS FILE — session entry point |
 | `PLAN-NFL-SIM-HARNESS.md` + `-REVIEW-LOG.md` | Locked harness plan + Codex trail |
-| `TAKEOVER-NFL-SIM-HARNESS.md` | Overnight-build narrative + deploy runbook (historical) |
+| `docs/archive/TAKEOVER-NFL-SIM-HARNESS.md` | Overnight-build narrative + deploy runbook (historical) |
 | `PLAN-SECURITY-OBSERVABILITY.md` + `-SWEEPS.md` + `-REVIEW-LOG.md` | Security/observability plan — Phase 1 + Phase 2 both shipped+deployed (PR #171, #173); Phase 3 not started |
-| `PROMPT-GRILL-PLAYER-PROFILES.md` | Consumed — profiles shipped via PR #153 |
+| `docs/archive/PROMPT-GRILL-PLAYER-PROFILES.md` | Consumed — profiles shipped via PR #153 |
 | `CONTEXT.md` | Glossary (Sim Run, Test Pool, Scenario, Golden Scenario, Scenario Oracle, …) |
 | `docs/adr/0006-*.md` | Real-path fidelity via extracted internals |
 

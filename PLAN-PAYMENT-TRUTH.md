@@ -2,7 +2,7 @@
 
 **Status: DRAFT, awaiting Kevin's sign-off. NO CODE WRITTEN — deliberately.**
 Written 2026-07-26, after the overnight stats run. Covers **D13, D12, D25** from
-`MORNING-2026-07-26-OVERNIGHT.md` §3.
+`docs/archive/MORNING-2026-07-26-OVERNIGHT.md` §3.
 
 > ## ⛔ Read §0 first — it corrects the morning report
 >
@@ -327,7 +327,7 @@ they produce *complete*.
 P1 shipped (#294) carrying one named transitional residual: **`NFLManagerView`'s
 roster toggle kept a fallback to `updateBracketEntryPayment` →
 `updateEntryPayment` when `setPaidStatus` threw.** It was named in
-`MORNING-2026-07-27.md` §5 as "correct until the backfill runs everywhere, then
+`docs/archive/MORNING-2026-07-27.md` §5 as "correct until the backfill runs everywhere, then
 it should be removed (not this PR)".
 
 **That condition is now met and the fallback is removed.** No new plan gate: the

@@ -3,7 +3,7 @@
 **Overnight result in one line:** the survivor-exemption fix is built, reviewed
 and gated ([PR #405](https://github.com/kstruck/MMPoolsV3/pull/405)); the invite
 path is proven end to end in the emulator ([PR #406](https://github.com/kstruck/MMPoolsV3/pull/406),
-test-only); `LAUNCH-READINESS.md` is the measured audit — its bottom line:
+test-only); `docs/archive/LAUNCH-READINESS.md` is the measured audit — its bottom line:
 **nothing blocks a stranger joining a pool and playing once #405 is deployed.**
 
 Tasks are ordered by what unblocks invite sends soonest. Tasks 1–3 get you to
@@ -253,7 +253,7 @@ rebase because they are about the packages, not the diffs.
 |---|---|
 | PR #405 — survivor exemption fix | OPEN, fully gated (CI 7/7, codex clean, qodo settled: 1 fixed / 2 rejected with reasoning). Awaits Task 1 |
 | PR #406 — invite-path emulator test | OPEN, gated (5/5 new tests, full emulator 353 green, codex clean). Test-only. Awaits Task 2 |
-| `LAUNCH-READINESS.md` | NEW — the measured audit; read top to bottom in 5 min |
+| `docs/archive/LAUNCH-READINESS.md` | NEW — the measured audit; read top to bottom in 5 min |
 | `PLAN-BACKUPS-PHASE3.md` | corrected: PITR is ON (measured), stale "No PITR" claim replaced |
 | `docs/NFL_POOLS_README.md` | survivor exemption bullet now states the strictly-before rule (qodo finding on #405) |
 | Plan/review-log/sweeps for the exemption fix | rounds 9 (plan, clean) and 10 (code, clean) logged; sweeps re-run 2026-08-10 with shape-proofs |

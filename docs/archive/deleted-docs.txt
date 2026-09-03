@@ -1,0 +1,24 @@
+# Docs deleted by the 2026-09-01 cleanup (PR #653), one filename per line.
+#
+# WHY THIS FILE EXISTS. scripts/verifyArchiveRefs.mjs derives its deleted-doc
+# set from `git diff <base>...HEAD`. That works while the cleanup is an open
+# PR and stops working the moment it merges: on main the diff is empty, the
+# set is empty, and invariant 2 silently becomes a no-op forever. This
+# manifest is the durable half, so a reference to one of these files is still
+# caught long after the branch is gone.
+#
+# Each of these had ZERO citations anywhere in the repo when it was removed.
+# Git history is their archive; docs that were still cited went to
+# docs/archive/ instead. Add a line here when you delete another doc.
+# Blank lines and #-comments are ignored.
+
+MORNING-2026-07-22.md
+MORNING-2026-07-24.md
+MORNING-2026-08-01-LATE.md
+MORNING-2026-08-01.md
+MORNING-2026-08-03.md
+MORNING-2026-08-14-PAGES.md
+NOTES-COMMISSIONER-DASH.md
+NOTES-POOL-HOMEPAGE.md
+NOTES-WAVE4A.md
+NOTES-WAVE4B.md

@@ -13,7 +13,7 @@ workspace clock reads 08-12 (ET). §8 is now a
 specification rather than a sketch, and implementation is under way. §2 is kept
 verbatim as the record of what the choice was between; my recommendation there
 was A, Kevin's ruling is B, and B is what gets built.
-**Trigger:** `LAUNCH-READINESS.md` §I row **I2**, Kevin 2026-08-13.
+**Trigger:** `docs/archive/LAUNCH-READINESS.md` §I row **I2**, Kevin 2026-08-13.
 **Gate:** `mmp-change-control` §1 — **scoring**. PLAN → adversarial review log →
 sweeps → sign-off → code.
 **Deploys into a LIVE scorer.** `nflAutoScoreJob` runs `*/5` with

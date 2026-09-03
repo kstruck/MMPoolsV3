@@ -1,42 +1,32 @@
 ---
 name: mmp-qodo-cycle
 description: >
-  DORMANT as of 2026-08-19 — Kevin: "Turn off the Qodo reviews for now."
-  **DO NOT LOAD THIS ON A PR.** The workspace ran out of credits and qodo now
-  answers every PR with a billing notice, which is a FAILED check rather than
-  a clean one; CLAUDE.md §2b says DORMANT and §2c's stopping rule is a clean
-  codex round plus your own read of the diff, TWO conditions rather than
-  three. Do not arm the watcher and never hold a PR for a qodo report. This
-  is the second pause (the first was 2026-07-25 to 2026-07-30) and the whole
-  procedure is kept intact inside for the day it is restored — arming the
-  watcher, pulling all three comment surfaces, making a validity call on
-  every finding BEFORE fixing, and reporting a per-finding verdict table.
-  Load it ONLY when Kevin says qodo is back on.
+  LIVE again as of 2026-09-01 — Kevin: "Qodo back on, go ahead and start
+  using for each PR going forward." Load on EVERY PR: arm the watcher, pull
+  all three comment surfaces (issue comments, inline PR comments, reviews —
+  REST + --paginate, never gh pr view --json), make a validity call on every
+  finding BEFORE fixing, rerun the full gate set, and report a per-finding
+  verdict table. The stopping rule is three conditions again (qodo clean +
+  codex clean + own read of the diff, CLAUDE.md §2b/§2c). Dormant history:
+  2026-07-25 → 2026-07-30 and 2026-08-19 → 2026-09-01 (credits exhausted);
+  the watcher now rejects `qodo:billing-blocked` bodies so a billing notice
+  can never count as a report.
 ---
 
 # mmp-qodo-cycle — absorb a qodo.ai PR review autonomously
 
-> 🛑 **DORMANT as of 2026-08-19. DO NOT LOAD THIS ON A PR.** Kevin: "Turn off
-> the Qodo reviews for now." The workspace ran out of credits overnight on
-> 2026-08-18 and qodo now answers every PR with a billing notice, which is a
-> FAILED check rather than a clean one — it blocked three finished PRs before
-> the ruling. **Do not arm the watcher and do not wait for a report**;
-> `CLAUDE.md` §2c's stopping rule is codex-clean plus your own read of the diff,
-> two conditions rather than three.
+> 🟢 **LIVE as of 2026-09-01.** Kevin: "Qodo back on, go ahead and start using
+> for each PR going forward." Run this on every PR; the stopping rule is three
+> conditions again (qodo clean + codex clean + own read — `CLAUDE.md` §2b/§2c).
+> Dormant history: 2026-07-25 → 2026-07-30 and 2026-08-19 → 2026-09-01, both
+> for exhausted credits.
 >
-> This is the second pause, not a deletion: the skill was DORMANT 2026-07-25 →
-> 2026-07-30 for the same reason and came back unchanged. Everything below is
-> the live procedure for the day it is restored. If qodo posts a REAL review
-> anyway, read it — its defect findings were 5 for 5 valid across #480–#482 —
-> but never hold a PR for one.
->
-> ⚠️ **One defect to fix before the restore.** qodo's billing notice carries no
-> `<h3>` heading, and §1's `summary()` matches `NOISE` against the heading — so
-> an empty heading passes the filter and the notice is counted as a genuine
-> artifact. Measured on #483: the watcher reported `QODO PARTIAL` where it
-> should have reported `TIMEOUT`. PARTIAL is not a pass, so nothing was
-> mis-gated, but the filter should also reject a body containing
-> `<!-- qodo:billing-blocked -->`.
+> ✅ **The pre-restore defect is FIXED (2026-09-01).** qodo's billing notice
+> carries no `<h3>` heading, and §1's `summary()` used to match `NOISE` against
+> the heading only — an empty heading passed the filter and the notice counted
+> as a genuine artifact (measured on #483: `QODO PARTIAL` where the truth was
+> `TIMEOUT`). `summary()` now also rejects any body containing
+> `qodo:billing-blocked`.
 
 Repo: `D:\march-melee-pools`. qodo.ai reviews PRs on this GitHub repo
 (kstruck/MMPoolsV3). Standing authorization from Kevin (2026-07-11, and the
@@ -180,7 +170,7 @@ reviewbody() { _count $R/pulls/<N>/reviews \
 # this PR is about exactly that. Anchor on the heading and the content cannot
 # eat its own report.
 summary() { _count $R/issues/<N>/comments \
-    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .id"; }
+    -q ".[] | select(.user.login == \"$QB\") | select(.created_at > \"$SINCE\") | select((.body | test(\"qodo:billing-blocked\")) | not) | select((.body | capture(\"<h3>(?<h>[^<]*)</h3>\").h // \"\") | test(\"$NOISE\"; \"i\") | not) | .id"; }
 # THE REVIEW ITSELF. qodo posts TWO substantive issue comments, in this order and
 # far apart: `<h3>PR Summary by Qodo</h3>` first, `<h3>Code Review by Qodo</h3>`
 # later — and the inline findings land in the SAME SECOND as the Code Review

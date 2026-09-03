@@ -1,7 +1,7 @@
 # Plan Review Log: Importer Safety
 
 Plan drafted 2026-08-03 from code reading at `0f548bf` (no grill session — the
-defects were already confirmed and recorded in `MORNING-2026-07-31.md` item 5;
+defects were already confirmed and recorded in `docs/archive/MORNING-2026-07-31.md` item 5;
 this plan is the write-up that item deferred). MAX_ROUNDS=10 (CLAUDE.md §2c —
 ask Kevin with a reason past 10; stop on evidence, not the counter).
 PLAN_FILE=PLAN-IMPORTER-SAFETY.md.

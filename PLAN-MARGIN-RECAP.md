@@ -130,4 +130,4 @@ watching a real week, it is an additive follow-up.
 
 Functions only; then a Coolify rebuild for the client change. Re-score HOF
 Weekend afterwards to regenerate the recap document — steps are in
-`MORNING-2026-08-08.md`.
+`docs/archive/MORNING-2026-08-08.md`.

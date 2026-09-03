@@ -24,7 +24,7 @@ generated picks; `#` = ineligible for the season prize.
 Measured:
 
 - **T-C — auto-pick for members who miss the deadline — was never started.** It
-  is plan-gated and has no plan (`HANDOFF.md:133`, `MORNING-2026-08-12.md` §5:
+  is plan-gated and has no plan (`HANDOFF.md:133`, `docs/archive/MORNING-2026-08-12.md` §5:
   "Not started. No plan"). **Nothing in this codebase generates a pick
   ALGORITHMICALLY on a member's behalf.**
 

@@ -195,7 +195,7 @@ section is rewritten before implementation.
 ## 8. Provenance
 
 - Found: 2026-08-12, during #414 (commissioner-blind picks), recorded in that
-  PR's body and in `MORNING-2026-08-12.md` §6 as "found and deliberately NOT
+  PR's body and in `docs/archive/MORNING-2026-08-12.md` §6 as "found and deliberately NOT
   fixed — it moves money, so it is plan-gated and was out of #414's bounds".
 - This plan: written 2026-08-13 overnight, against `43c00f09`, from the source
   rather than from the earlier write-up. Every line reference in §1 was read.
