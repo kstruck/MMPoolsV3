@@ -1549,7 +1549,17 @@ export const dbService = {
         });
     },
 
-    subscribeToWinners: (poolId: string, callback: (winners: Winner[]) => void) => {
+    /**
+     * `onError` is OPTIONAL and callers that omit it keep the previous
+     * behaviour exactly: a subscription failure logs and delivers `[]`.
+     *
+     * It exists because `[]` is not honestly distinguishable from "this pool
+     * has no winners", and a caller that draws a conclusion from emptiness —
+     * the participant dashboard says "No winnings yet" — would state that as
+     * fact after a permission or network failure. A caller that wants to tell
+     * those apart now can. (qodo #20 on PR #670.)
+     */
+    subscribeToWinners: (poolId: string, callback: (winners: Winner[]) => void, onError?: (error: unknown) => void) => {
         const q = query(collection(db, "pools", poolId, "winners"));
         return onSnapshot(q, (snapshot) => {
             const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
@@ -1575,7 +1585,7 @@ export const dbService = {
             callback(sorted);
         }, (error) => {
             logger.error("Error subscribing to winners:", error);
-            callback([]);
+            if (onError) onError(error); else callback([]);
         });
     },
 

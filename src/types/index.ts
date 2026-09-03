@@ -599,6 +599,16 @@ export interface User {
   };
 }
 
+/**
+ * A Firestore `Timestamp` as it arrives on the client, described structurally
+ * so this types-only module need not import the firebase SDK.
+ */
+export interface FirestoreTimestampLike {
+  toMillis(): number;
+  seconds: number;
+  nanoseconds: number;
+}
+
 export interface Winner {
   id?: string; // Firestore document ID
   period: string; // 'Q1', 'Half', 'Q3', 'Final', 'Event'
@@ -612,7 +622,19 @@ export interface Winner {
   description?: string;
   // Payout tracking
   isPaid?: boolean;
-  paidAt?: number; // Timestamp
+  /**
+   * When the payout was marked cleared, or `null` once it is un-marked.
+   *
+   * NOT a number on the client. `toggleWinnerPaid` (functions/src/poolOps.ts)
+   * writes `FieldValue.serverTimestamp()`, and `dbService.subscribeToWinners`
+   * spreads `doc.data()` straight into this shape without converting — so a
+   * reader receives a Firestore `Timestamp`, not epoch millis. This field was
+   * declared `number` and that declaration was simply wrong: a numeric guard
+   * against it type-checks, compiles, and silently discards every real payout.
+   * Codex caught exactly that on the Paid Winnings Trend chart. Normalise with
+   * `toEpochMillis` (src/utils/dashboardCharts.ts) before doing arithmetic.
+   */
+  paidAt?: number | FirestoreTimestampLike | null;
   paidByUid?: string; // Who marked it paid
 }
 
