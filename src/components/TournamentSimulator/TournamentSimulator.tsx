@@ -927,8 +927,8 @@ const BracketPhase: React.FC<{
                 </div>
                 <div className="flex-1 max-w-xs bg-navy-800 rounded-full h-2 overflow-hidden">
                     <div
-                        className="h-full bg-gold-foil rounded-full transition duration-300"
-                        style={{ width: `${(pickCount / totalPicks) * 100}%` }}
+                        className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300"
+                        style={{ transform: `scaleX(${totalPicks > 0 ? pickCount / totalPicks : 0})` }}
                     />
                 </div>
                 {pickCount === totalPicks && (

@@ -90,6 +90,27 @@ body {
   }
 }
 
+/* ============================================
+   HOVER-REVEALED CONTROLS ON TOUCH + KEYBOARD
+   tailwind.config.js sets `future.hoverOnlyWhenSupported`, so every `hover:`
+   / `group-hover:` utility is inert on devices that cannot hover. Controls
+   that are `opacity-0` until hovered (row edit/delete, reorder, wizard edit
+   buttons) would become unreachable there, and were already unreachable by
+   keyboard. On no-hover devices they are always visible; on every device
+   focusing into the group reveals them.
+   ============================================ */
+@media (hover: none) {
+  .group-hover\:opacity-100,
+  .hover\:opacity-100 {
+    opacity: 1;
+  }
+}
+
+.group:focus-within .group-hover\:opacity-100,
+.hover\:opacity-100:focus-visible {
+  opacity: 1;
+}
+
 h1, h2, h3, h4, .display {
   font-family: var(--font-display);
   text-transform: uppercase;

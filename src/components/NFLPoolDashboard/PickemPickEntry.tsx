@@ -613,8 +613,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         <div className="flex items-center gap-3">
           <div className="flex-1 h-2 bg-line rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition duration-150 ${pickedCount === games.length ? 'bg-gold-foil' : 'bg-navy-600 dark:bg-gold-500'}`}
-              style={{ width: `${(pickedCount / games.length) * 100}%` }}
+              className={`h-full w-full origin-left rounded-full transition-transform duration-150 ${pickedCount === games.length ? 'bg-gold-foil' : 'bg-navy-600 dark:bg-gold-500'}`}
+              style={{ transform: `scaleX(${games.length > 0 ? pickedCount / games.length : 0})` }}
             />
           </div>
           <span className="text-xs font-display font-bold uppercase tracking-[0.05em] text-muted num whitespace-nowrap">

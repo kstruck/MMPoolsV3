@@ -767,7 +767,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                         <div className="flex items-center gap-1.5">
                                                             {(isBracket || pool.type === 'SQUARES') && (
                                                                 <div className="w-20 h-1.5 bg-line rounded-full overflow-hidden">
-                                                                    <div className="h-full bg-gold-foil rounded-full transition" style={{ width: `${pct}%` }}></div>
+                                                                    <div className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300" style={{ transform: `scaleX(${Number(pct) / 100})` }}></div>
                                                                 </div>
                                                             )}
                                                             <span className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] num">{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
