@@ -28,6 +28,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * These tests spawn git and node subprocesses — several per case, and the
+ * fixtures run `git init` plus commits. That is comfortably past vitest's 5s
+ * default on a cold or loaded Windows runner, where it showed up as flaky
+ * timeouts rather than real failures.
+ */
+const TEST_TIMEOUT = 60_000;
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join('scripts', 'verifyArchiveRefs.mjs');
 
@@ -125,7 +133,7 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
       expect(output).toContain('missing from');
       expect(output).toContain('DOOMED.md');
     });
-  });
+  }, TEST_TIMEOUT);
 
   it('passes once that deletion is recorded', () => {
     fixture((dir, run) => {
@@ -143,7 +151,7 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
       const { status, output } = runIn(dir, base);
       expect(status, output).toBe(0);
     });
-  });
+  }, TEST_TIMEOUT);
 
   it('sees a RENAMED-away doc as a deletion', () => {
     // git reports `git mv a.md b.md` as R, not D, so a rename would slip past
@@ -163,7 +171,7 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
       expect(status, output).toBe(1);
       expect(output).toContain('OLD-NAME.md');
     });
-  });
+  }, TEST_TIMEOUT);
 
   it('still treats a move INTO the archive as a move, not a deletion', () => {
     // The mirror of the case above: --no-renames makes `git mv x docs/archive/x`
@@ -182,7 +190,34 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
       const { status, output } = runIn(dir, base);
       expect(status, output).toBe(0);
     });
-  });
+  }, TEST_TIMEOUT);
+
+  it('does not treat a delete-then-restore as a deletion', () => {
+    // Only the FINAL state matters. A doc removed in one commit and put back at
+    // the same path in a later one still exists, and demanding a manifest entry
+    // for a file plainly sitting in the tree would block an ordinary amend or
+    // revert mid-branch.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'KEPT.md'), 'content\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.rmSync(path.join(dir, 'KEPT.md'));
+      run('add', '-A');
+      run('commit', '-qm', 'delete it');
+
+      // Restored in the WORKING TREE and not committed — this is the case that
+      // matters. HEAD still records the deletion, so the base..HEAD diff names
+      // it, while the file plainly sits in the tree. Committing the restore
+      // instead would make the net diff clean and exercise nothing.
+      fs.writeFileSync(path.join(dir, 'KEPT.md'), 'content, revised\n');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+    });
+  }, TEST_TIMEOUT);
 
   it('fails when an existing manifest entry is removed — the record is append-only', () => {
     fixture((dir, run) => {
@@ -200,7 +235,7 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
       expect(output).toContain('REMOVED from');
       expect(output).toContain('OLD-DELETION.md');
     });
-  });
+  }, TEST_TIMEOUT);
 });
 
 describe('docs/archive citation graph', () => {
@@ -218,7 +253,7 @@ describe('docs/archive citation graph', () => {
       /UNRESOLVED|DANGLING|^FAIL:/m,
     );
     expect(status, `verifyArchiveRefs.mjs exited ${status}:\n${output}`).toBe(0);
-  });
+  }, TEST_TIMEOUT);
 
   it('fails closed on an unreadable base ref rather than reporting success', () => {
     // The guard's own contract. If this ever passes, the verifier has started
@@ -227,5 +262,5 @@ describe('docs/archive citation graph', () => {
     const { status, output } = runVerifier('definitely/not/a/ref');
     expect(status).toBe(1);
     expect(output).toContain('cannot read base ref');
-  });
+  }, TEST_TIMEOUT);
 });

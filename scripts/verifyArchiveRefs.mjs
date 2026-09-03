@@ -150,7 +150,13 @@ function deletedDocs() {
     ].map((f) => path.basename(f)),
   );
 
+  // What matters is the FINAL state, not every intermediate commit. A doc
+  // deleted in one commit and restored at the same path in a later one (an
+  // amend, a revert, a change of mind mid-branch) is not deleted, and demanding
+  // a manifest entry for a file that plainly still exists would block an
+  // ordinary workflow.
   const fromDiff = [...committed, ...uncommitted]
+    .filter((f) => !fs.existsSync(f))
     .map((f) => path.basename(f))
     .filter((name) => !movedIn.has(name));
 
