@@ -55,6 +55,40 @@ export interface EarningsEmptyState {
     detail: string;
 }
 
+/** Copy shown in place of the pool-mix pie when it has no slices. */
+export interface PoolMixEmptyState {
+    headline: string;
+    detail: string;
+    /** Whether to offer the browse / create buttons. Pointless on a failure. */
+    showActions: boolean;
+}
+
+/**
+ * What to say when {@link buildPoolTypeSplit} is empty.
+ *
+ * `poolsKnown` is false when a pool subscription errored. The dashboard's pool
+ * feeds log their failures and leave `myPools` empty while clearing the loading
+ * flag, so a failed roster is indistinguishable from an empty one — and telling
+ * a user with eight pools "No pools yet, go create one" is exactly the sort of
+ * confident false statement this module was written to stop. (qodo #19 on
+ * PR #670.)
+ */
+export function poolMixEmptyState(poolsKnown: boolean = true): PoolMixEmptyState {
+    if (!poolsKnown) {
+        return {
+            headline: 'Roster unavailable',
+            detail: 'We could not load your pools just now. Reload the page — nothing has been lost.',
+            showActions: false
+        };
+    }
+
+    return {
+        headline: 'No pools yet',
+        detail: 'Join a pool with an invite link from a friend, browse public pools, or start your own.',
+        showActions: true
+    };
+}
+
 const MONTH_ABBREVIATIONS = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -128,28 +162,37 @@ export function buildPoolTypeSplit(
  * raw number for rows written before the callable existed.
  */
 export function toEpochMillis(value: unknown): number | null {
-    if (typeof value === 'number') {
-        return Number.isFinite(value) && value > 0 ? value : null;
-    }
+    /**
+     * The one definition of "a usable payout date". Every conversion path below
+     * ends here, so the accepted contract — a finite, positive number of
+     * milliseconds — is stated once instead of re-spelled as a three-condition
+     * boolean at each return. (qodo #14 on PR #670.)
+     */
+    const usableMillis = (millis: unknown): number | null =>
+        typeof millis === 'number' && Number.isFinite(millis) && millis > 0 ? millis : null;
 
-    if (value instanceof Date) {
-        const millis = value.getTime();
-        return Number.isFinite(millis) && millis > 0 ? millis : null;
-    }
+    if (typeof value === 'number') return usableMillis(value);
+
+    if (value instanceof Date) return usableMillis(value.getTime());
 
     if (typeof value === 'object' && value !== null) {
         const candidate = value as { toMillis?: unknown; seconds?: unknown };
 
         if (typeof candidate.toMillis === 'function') {
-            const millis = (candidate as { toMillis(): unknown }).toMillis();
-            return typeof millis === 'number' && Number.isFinite(millis) && millis > 0
-                ? millis
-                : null;
+            // `value` is `unknown`, so `toMillis` is somebody else's code and may
+            // throw. This function's whole contract is that an unusable date
+            // becomes `null`, so letting an exception escape would break the
+            // promise and take the dashboard's render down with it — over a
+            // corrupt payout row. (qodo #8 on PR #670.)
+            try {
+                return usableMillis((candidate as { toMillis(): unknown }).toMillis());
+            } catch {
+                return null;
+            }
         }
 
         if (typeof candidate.seconds === 'number' && Number.isFinite(candidate.seconds)) {
-            const millis = candidate.seconds * 1000;
-            return millis > 0 ? millis : null;
+            return usableMillis(candidate.seconds * 1000);
         }
     }
 
@@ -197,8 +240,24 @@ export function buildCumulativePaidWinnings(
  * winnings: $X" stat card, so telling a user with $340 in wins that they have
  * "no winnings yet" would contradict the number directly above the chart.
  */
-export function earningsEmptyState(totalWinnings: number): EarningsEmptyState {
+export function earningsEmptyState(
+    totalWinnings: number,
+    winningsKnown: boolean = true
+): EarningsEmptyState {
     const total = Number.isFinite(totalWinnings) ? totalWinnings : 0;
+
+    // "You have won nothing" is a CLAIM, and it needs the winners feed to have
+    // actually answered. `subscribeToWinners` used to collapse a failure into
+    // `[]`, and winner listeners start only after the pool feeds resolve — so
+    // both a still-loading and a failed ledger looked exactly like a clean zero.
+    // Saying "No winnings yet" in either case is the same kind of false
+    // statement this module exists to remove. (qodo #20 on PR #670.)
+    if (!winningsKnown) {
+        return {
+            headline: 'Winnings unavailable',
+            detail: 'We could not load your payout history just now. Reload the page — your winnings are safe either way.'
+        };
+    }
 
     if (total > 0) {
         return {

@@ -50,6 +50,7 @@ import {
     buildPoolTypeSplit,
     buildCumulativePaidWinnings,
     earningsEmptyState,
+    poolMixEmptyState,
     type PaidWin
 } from '../utils/dashboardCharts';
 
@@ -58,6 +59,17 @@ const BRAND = {
   amberGlow: 'rgba(196, 52, 46, 0.12)',
   indigoGlow: 'rgba(36, 80, 127, 0.15)',
 };
+
+// Recharts style/margin props, hoisted to module scope. They are constants —
+// nothing in them depends on props or state — so allocating a fresh object
+// literal on every render only gave the chart children a new identity each time
+// and defeated their memoisation. Module scope rather than useMemo because
+// there is no dependency to track. (qodo #1 on PR #670.)
+const CHART_MARGIN = { top: 10, right: 10, left: -20, bottom: 0 };
+const CHART_TOOLTIP_STYLE = { backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' };
+const CHART_TOOLTIP_ITEM_STYLE = { fontSize: '11px', fontWeight: 'black', color: '#D9BC80' };
+const CHART_TOOLTIP_LABEL_STYLE = { fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' } as const;
+const PIE_TOOLTIP_STYLE = { backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' };
 
 interface ParticipantDashboardProps {
     user: User;
@@ -81,6 +93,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     }, [location.search]);
     const [searchQuery, setSearchQuery] = useState('');
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
+    // An empty roster/ledger is only worth ASSERTING when a feed actually
+    // succeeded. Both flags exist so the Insights empty states can say "we could
+    // not load this" instead of "you have none" after a failure — the same class
+    // of untrue statement this PR removes. (qodo #19 and #20 on PR #670.)
+    const [poolsFailed, setPoolsFailed] = useState(false);
+    const [winnersFailed, setWinnersFailed] = useState(false);
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     // "Picks due" badges for NFL season pools: season schedule + my entry per pool
@@ -138,6 +156,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     useEffect(() => {
         setIsLoading(true);
+        setPoolsFailed(false);
+        setWinnersFailed(false);
         let unsubParticipating: () => void = () => { };
         let unsubOwned: () => void = () => { };
         let unsubCoCommissioned: () => void = () => { };
@@ -184,6 +204,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unique.forEach(pool => {
                 dbService.subscribeToWinners(pool.id, (winners) => {
                     setPoolWinners(prev => ({ ...prev, [pool.id]: winners }));
+                }, (err) => {
+                    logger.error('Winners subscription error', pool.id, err);
+                    setWinnersFailed(true);
                 });
             });
         };
@@ -193,6 +216,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 processPools(pools);
             }, (error) => {
                 logger.error("SuperAdmin Pool Fetch Error", error);
+                setPoolsFailed(true);
                 setIsLoading(false);
             });
         } else {
@@ -213,6 +237,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 mergeAndUpdate();
             }, (err) => {
                 logger.error("Participating Pools Error", err);
+                setPoolsFailed(true);
                 setIsLoading(false);
             });
 
@@ -221,6 +246,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 mergeAndUpdate();
             }, (err) => {
                 logger.error("Owned Pools Error", err);
+                setPoolsFailed(true);
             }, user.id);
 
             // Commissioner Hub feed for NFL co-commissioners (PLAN-CO-COMMISSIONERS
@@ -232,6 +258,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                 mergeAndUpdate();
             }, (err) => {
                 logger.error("Co-commissioned Pools Error", err);
+                setPoolsFailed(true);
             });
         }
 
@@ -374,10 +401,22 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         [lifetimeStats.paidWins]
     );
 
-    const earningsEmpty = useMemo(
-        () => earningsEmptyState(lifetimeStats.totalWinnings),
-        [lifetimeStats.totalWinnings]
+    // The winners feed has ANSWERED only when every Squares pool has reported.
+    // Winner listeners are attached after the pool feeds resolve, so before that
+    // `poolWinners` is `{}` and a zero total is ignorance, not a fact.
+    const winningsKnown = useMemo(
+        () => !winnersFailed && myPools
+            .filter(p => p.type === 'SQUARES')
+            .every(p => poolWinners[p.id] !== undefined),
+        [winnersFailed, myPools, poolWinners]
     );
+
+    const earningsEmpty = useMemo(
+        () => earningsEmptyState(lifetimeStats.totalWinnings, winningsKnown),
+        [lifetimeStats.totalWinnings, winningsKnown]
+    );
+
+    const poolMixEmpty = useMemo(() => poolMixEmptyState(!poolsFailed), [poolsFailed]);
 
     // Financial Metrics
     const projectedPotEarnings = useMemo(() => {
@@ -623,7 +662,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 {cumulativeEarningsData.length > 0 ? (
                                     <div className="h-56 w-full mt-6">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={cumulativeEarningsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                            <AreaChart data={cumulativeEarningsData} margin={CHART_MARGIN}>
                                                 <defs>
                                                     <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
                                                         <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
@@ -633,9 +672,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                 <XAxis dataKey="month" stroke="#7C8698" fontSize={9} fontWeight="bold" />
                                                 <YAxis stroke="#7C8698" fontSize={9} fontWeight="bold" />
                                                 <Tooltip
-                                                    contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' }}
-                                                    itemStyle={{ fontSize: '11px', fontWeight: 'black', color: '#D9BC80' }}
-                                                    labelStyle={{ fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' }}
+                                                    contentStyle={CHART_TOOLTIP_STYLE}
+                                                    itemStyle={CHART_TOOLTIP_ITEM_STYLE}
+                                                    labelStyle={CHART_TOOLTIP_LABEL_STYLE}
                                                 />
                                                 <Area type="monotone" dataKey="Earnings" stroke="#C9A867" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
                                             </AreaChart>
@@ -646,7 +685,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     <div className="h-56 w-full mt-6 flex flex-col items-center justify-center text-center px-4">
                                         <TrendingUp className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
                                         <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">{earningsEmpty.headline}</p>
-                                        <p className="text-xs text-muted font-body max-w-xs leading-relaxed">{earningsEmpty.detail}</p>
+                                        {/* tabular-nums: the detail can embed a live dollar total (qodo #15). */}
+                                        <p className="text-xs text-muted font-body max-w-xs leading-relaxed tabular-nums">{earningsEmpty.detail}</p>
                                     </div>
                                 )}
                             </div>
@@ -676,7 +716,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                                         ))}
                                                     </Pie>
-                                                    <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' }} />
+                                                    <Tooltip contentStyle={PIE_TOOLTIP_STYLE} />
                                                 </PieChart>
                                             </ResponsiveContainer>
 
@@ -698,19 +738,23 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 ) : (
                                     /* No pools, no slices. This used to draw two invented ones. */
                                     <div className="mt-6 flex flex-col items-center justify-center text-center px-2">
-                                        <Trophy className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
-                                        <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">No pools yet</p>
+                                        {poolMixEmpty.showActions
+                                            ? <Trophy className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
+                                            : <AlertTriangle className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />}
+                                        <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">{poolMixEmpty.headline}</p>
                                         <p className="text-xs text-muted font-body leading-relaxed mb-5">
-                                            Join a pool with an invite link from a friend, browse public pools, or start your own.
+                                            {poolMixEmpty.detail}
                                         </p>
-                                        <div className="flex flex-col sm:flex-row gap-2 justify-center w-full">
-                                            <Button variant="primary" size="sm" onClick={() => navigate('/browse')}>
-                                                Browse Public Pools
-                                            </Button>
-                                            <Button variant="secondary" size="sm" onClick={() => navigate('/create-pool')}>
-                                                Create a Pool
-                                            </Button>
-                                        </div>
+                                        {poolMixEmpty.showActions && (
+                                            <div className="flex flex-col sm:flex-row gap-2 justify-center w-full">
+                                                <Button variant="primary" size="sm" onClick={() => navigate('/browse')}>
+                                                    Browse Public Pools
+                                                </Button>
+                                                <Button variant="secondary" size="sm" onClick={() => navigate('/create-pool')}>
+                                                    Create a Pool
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

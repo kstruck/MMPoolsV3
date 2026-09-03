@@ -113,6 +113,34 @@ describe('ParticipantDashboard charts — no fabricated data', () => {
         expect(uncategorised).toEqual([]);
     });
 
+    it('neither empty state asserts "none" until its feed has actually answered', () => {
+        // qodo #19/#20. Both feeds turn a failure into an empty result — the
+        // pool subscriptions log and leave `myPools` empty, and
+        // `subscribeToWinners` collapsed errors into `[]`. A component that
+        // renders the copy unconditionally states "you have none" after a failed
+        // read. The claim must be gated on knowing.
+        expect(source).toContain('poolMixEmptyState(!poolsFailed)');
+        expect(source).toContain('earningsEmptyState(lifetimeStats.totalWinnings, winningsKnown)');
+        expect(source).toContain('setPoolsFailed(true)');
+        expect(source).toContain('setWinnersFailed(true)');
+        // Both chart empty states must render the helper's copy, never a
+        // hardcoded headline that would bypass the gating above.
+        expect(source).toContain('{poolMixEmpty.headline}');
+        expect(source).toContain('{earningsEmpty.headline}');
+        // NOT asserted: that the strings "No pools yet" / "No winnings yet" are
+        // absent from the file. The pools-list tab has carried its own "No pools
+        // yet" card since long before this PR, so that assertion would fail on
+        // untouched code. That card has the same failure-mode gap and is noted
+        // as deferred follow-up in the PR body rather than widened into here.
+    });
+
+    it('the winners subscription reports its errors instead of swallowing them', () => {
+        const service = readFileSync(resolve(__dirname, '../src/services/dbService.ts'), 'utf8');
+        // `callback([])` on error is what made a failed ledger indistinguishable
+        // from an empty one. The onError path must exist for callers that care.
+        expect(service).toContain('if (onError) onError(error); else callback([]);');
+    });
+
     it('the trend card no longer claims to cover every win', () => {
         // `Winner` has no "won at" timestamp; only `paidAt` dates a win. The
         // heading must not promise a lifetime view the data cannot support.

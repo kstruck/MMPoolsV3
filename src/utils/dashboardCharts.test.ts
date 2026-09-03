@@ -3,6 +3,7 @@ import {
     buildPoolTypeSplit,
     buildCumulativePaidWinnings,
     earningsEmptyState,
+    poolMixEmptyState,
     toEpochMillis
 } from './dashboardCharts';
 
@@ -116,6 +117,52 @@ describe('toEpochMillis', () => {
     it('returns null when toMillis exists but does not return a usable number', () => {
         expect(toEpochMillis({ toMillis: () => Number.NaN })).toBeNull();
         expect(toEpochMillis({ toMillis: () => 'nope' })).toBeNull();
+    });
+
+    it('a THROWING toMillis returns null instead of taking the dashboard down', () => {
+        // qodo #8: the value is `unknown`, so toMillis is somebody else's code.
+        // The contract is "unusable date -> null", and an escaping exception
+        // would break it and crash the render over one corrupt payout row.
+        const hostile = { toMillis: () => { throw new Error('corrupt timestamp'); } };
+        expect(() => toEpochMillis(hostile)).not.toThrow();
+        expect(toEpochMillis(hostile)).toBeNull();
+    });
+
+    it('one hostile row does not sink the whole series', () => {
+        const series = buildCumulativePaidWinnings([
+            { amount: 10, paidAt: { toMillis: () => { throw new Error('boom'); } } },
+            { amount: 25, paidAt: firestoreTimestamp(new Date(2026, 5, 1)) }
+        ]);
+        expect(series).toEqual([{ month: "Jun '26", Earnings: 25 }]);
+    });
+});
+
+describe('poolMixEmptyState', () => {
+    it('pools loaded and empty → "No pools yet" with the browse/create actions', () => {
+        expect(poolMixEmptyState(true)).toEqual({
+            headline: 'No pools yet',
+            detail: 'Join a pool with an invite link from a friend, browse public pools, or start your own.',
+            showActions: true
+        });
+    });
+
+    it('defaults to the loaded-and-empty copy', () => {
+        expect(poolMixEmptyState()).toEqual(poolMixEmptyState(true));
+    });
+
+    it('pool feed failed → never claims the user has no pools', () => {
+        // qodo #19: every pool subscription logs its error and leaves myPools
+        // empty while clearing the loading flag, so a failed roster looks
+        // exactly like an empty one. Telling a user with eight pools to go
+        // create one is the same untrue statement this module exists to remove.
+        const state = poolMixEmptyState(false);
+        expect(state.headline).toBe('Roster unavailable');
+        expect(state.detail.toLowerCase()).not.toContain('no pools');
+        expect(state.headline.toLowerCase()).not.toContain('no pools');
+    });
+
+    it('offers no call to action on a failure — browsing does not fix a failed read', () => {
+        expect(poolMixEmptyState(false).showActions).toBe(false);
     });
 });
 
@@ -252,5 +299,23 @@ describe('earningsEmptyState', () => {
     it('a non-finite total degrades to the zero-winnings copy, never NaN on screen', () => {
         expect(earningsEmptyState(Number.NaN).headline).toBe('No winnings yet');
         expect(earningsEmptyState(Number.NaN).detail).not.toContain('NaN');
+    });
+
+    it('winnings not yet known → never claims the user has won nothing', () => {
+        // qodo #20: winner listeners attach only after the pool feeds resolve,
+        // and subscribeToWinners used to turn a failure into []. Both look
+        // identical to a clean zero, so the zero must not be asserted until the
+        // feed has actually answered.
+        const state = earningsEmptyState(0, false);
+        expect(state.headline).toBe('Winnings unavailable');
+        expect(state.detail.toLowerCase()).not.toContain('no winnings');
+    });
+
+    it('unknown beats a zero total AND a positive one — ignorance is not a number', () => {
+        expect(earningsEmptyState(0, false)).toEqual(earningsEmptyState(500, false));
+    });
+
+    it('defaults to known, so existing callers keep the asserted copy', () => {
+        expect(earningsEmptyState(0)).toEqual(earningsEmptyState(0, true));
     });
 });
