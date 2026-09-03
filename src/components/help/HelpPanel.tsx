@@ -168,7 +168,7 @@ export function HelpPanel({ state, onClose }: { state: HelpPanelState; onClose: 
           if (event.key === 'Escape') event.stopPropagation();
         }}
         className={cn(
-          'fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-line bg-page shadow-panel transition-transform duration-[250ms] ease-drawer motion-reduce:duration-0 md:w-[440px]',
+          'fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-line bg-page shadow-panel transition-transform duration-250 ease-drawer motion-reduce:duration-0 md:w-[440px]',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
       >

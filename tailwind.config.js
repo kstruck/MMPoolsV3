@@ -53,6 +53,9 @@ export default {
       },
       // Built-in CSS easings are too weak for entrances. Strong ease-out for
       // anything entering/exiting; drawer curve for slide-in panels.
+      transitionDuration: {
+        250: '250ms',
+      },
       transitionTimingFunction: {
         out: 'cubic-bezier(0.23, 1, 0.32, 1)',
         drawer: 'cubic-bezier(0.32, 0.72, 0, 1)',

@@ -190,8 +190,8 @@ export const EliminationTracker: React.FC<EliminationTrackerProps> = ({ entry, a
                 </div>
                 <div className="w-full bg-line rounded-full h-1.5 overflow-hidden">
                     <div
-                        className="h-full rounded-full bg-[#0F7B4A] transition-ui"
-                        style={{ width: `${totalPicks > 0 ? (correctPicks / (correctPicks + bustedPicks || 1)) * 100 : 0}%` }}
+                        className="h-full w-full origin-left rounded-full bg-[#0F7B4A] transition-transform duration-300 ease-out"
+                        style={{ transform: `scaleX(${totalPicks > 0 ? correctPicks / (correctPicks + bustedPicks || 1) : 0})` }}
                     />
                 </div>
             </div>

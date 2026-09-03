@@ -771,8 +771,8 @@ export const StatsHeader: React.FC<StatsHeaderProps> = ({
                             <span>{totalPicks > 0 ? Math.round((pickCount / totalPicks) * 100) : 0}%</span>
                         </div>
                         <div className="h-2 bg-card rounded-full overflow-hidden">
-                            <div className="h-full bg-gold-foil rounded-full transition-ui duration-500"
-                                style={{ width: `${totalPicks > 0 ? (pickCount / totalPicks) * 100 : 0}%` }} />
+                            <div className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300 ease-out"
+                                style={{ transform: `scaleX(${totalPicks > 0 ? pickCount / totalPicks : 0})` }} />
                         </div>
                     </div>
                     <div className="flex gap-2">

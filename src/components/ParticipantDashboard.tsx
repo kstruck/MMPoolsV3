@@ -875,8 +875,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                             {isSquares && (
                                                 <div className="h-1.5 w-full bg-line rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-gold-foil transition-ui duration-500"
-                                                        style={{ width: `${percentFull}%` }}
+                                                        className="h-full w-full origin-left bg-gold-foil transition-transform duration-300 ease-out"
+                                                        style={{ transform: `scaleX(${Math.min(percentFull, 100) / 100})` }}
                                                     />
                                                 </div>
                                             )}

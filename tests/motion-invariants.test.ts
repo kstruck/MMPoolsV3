@@ -75,9 +75,18 @@ describe('motion invariants', () => {
       }
     }
     expect([...unknown]).toEqual([]);
-    // Tailwind's duration scale is 0/75/100/150/200/300/500/700/1000 or an
-    // arbitrary `[..]`. Anything else silently does nothing.
-    expect(offenders(/\bduration-(?!0\b|75\b|100\b|150\b|200\b|300\b|500\b|700\b|1000\b|\[)\d+/)).toEqual([]);
+    // Tailwind's duration scale is 0/75/100/150/200/300/500/700/1000 plus any
+    // key added under `transitionDuration` in tailwind.config.js. Anything else
+    // silently does nothing. Arbitrary `duration-[..]` is banned outright: with
+    // tailwindcss-animate installed it is ambiguous between transition-duration
+    // and animation-duration, Tailwind warns and emits NOTHING (codex round 1
+    // caught the help drawer running at 150ms while EXIT_MS waited 250ms).
+    const configuredDurations: string[] = [];
+    const durBlock = config.match(/transitionDuration:\s*\{([\s\S]*?)\}/);
+    if (durBlock) for (const m of durBlock[1].matchAll(/^\s*'?(\d+)'?\s*:/gm)) configuredDurations.push(m[1]);
+    const durs = ['0', '75', '100', '150', '200', '300', '500', '700', '1000', ...configuredDurations];
+    expect(offenders(new RegExp(`\\bduration-(?!(?:${durs.join('|')})\\b)\\d+`))).toEqual([]);
+    expect(offenders(/\bduration-\[/)).toEqual([]);
   });
 
   it('no `transition-all` — it animates width/height/padding off the GPU; use `transition-ui`', () => {
@@ -105,8 +114,18 @@ describe('motion invariants', () => {
   });
 
   it('progress bars animate scaleX, not width (width triggers layout + paint every frame)', () => {
-    // A `transition-*` element whose inline style sets `width:` from a percentage.
-    expect(offenders(/transition-(?:ui|transform|all)[^>]*style=\{\{\s*width:/)).toEqual([]);
+    // A `transition-*` element whose inline style sets `width:`. Matched across
+    // lines — className and style usually sit on separate lines, and the
+    // single-line version of this check missed twelve bars (codex round 1).
+    // `transition-[width]` is the one sanctioned exception, for stacked
+    // side-by-side segments where per-segment scaleX would gap or overlap.
+    const hits: string[] = [];
+    for (const { rel, text } of files) {
+      for (const m of text.matchAll(/transition-(?:ui|transform|all)[^>]*?style=\{\{\s*width:/g)) {
+        hits.push(`${rel}:${text.slice(0, m.index).split('\n').length}`);
+      }
+    }
+    expect(hits).toEqual([]);
     expect(offenders(/animate=\{\{\s*width:/)).toEqual([]);
   });
 

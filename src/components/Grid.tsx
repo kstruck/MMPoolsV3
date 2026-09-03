@@ -1435,8 +1435,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               {/* Mini Progress Bar */}
                               <div className="w-full h-1 bg-navy-700 rounded-full mt-1 overflow-hidden">
                                  <div
-                                    className={`h-full rounded-full transition-ui duration-500 ${isLimitReached ? 'bg-brandred-500' : 'bg-gold-500'}`}
-                                    style={{ width: `${Math.min(100, (currentTotal / maxPerPlayer) * 100)}%` }}
+                                    className={`h-full w-full origin-left rounded-full transition-transform duration-300 ease-out ${isLimitReached ? 'bg-brandred-500' : 'bg-gold-500'}`}
+                                    style={{ transform: `scaleX(${Math.min(1, currentTotal / maxPerPlayer)})` }}
                                  ></div>
                               </div>
                            </div>
