@@ -70,21 +70,23 @@ body {
     scroll-behavior: auto;
   }
 
+  /* transition-property is set on EVERY element, not on named Tailwind classes,
+     so arbitrary utilities (`transition-[grid-template-rows,opacity]`,
+     `transition-[transform,background-color]`) and inline `style` transitions
+     are covered too. The list is Tailwind's default `transition` set minus
+     `transform`; an element whose only changing property is outside this list
+     simply snaps. */
   *,
   ::before,
   ::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     animation-delay: 0ms !important;
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
   }
 
   .animate-spin {
     animation: spin 1s linear infinite !important;
-  }
-
-  .transition,
-  .transition-transform {
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
   }
 }
 
