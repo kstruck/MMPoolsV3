@@ -98,7 +98,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     // not load this" instead of "you have none" after a failure — the same class
     // of untrue statement this PR removes. (qodo #19 and #20 on PR #670.)
     const [poolsFailed, setPoolsFailed] = useState(false);
-    const [winnersFailed, setWinnersFailed] = useState(false);
+    // PER POOL, not one global flag. `processPools` re-subscribes to winners on
+    // every pool-feed snapshot and never unsubscribes the previous listeners, so
+    // a listener for a pool the user has since LEFT stays alive and can still
+    // error. A single boolean would latch on that and hold the trend chart at
+    // "Winnings unavailable" forever, although every current pool had loaded
+    // fine. Keyed by pool id, entries for pools no longer in `myPools` are
+    // simply never read. (codex round 3 on PR #670.)
+    const [winnerErrors, setWinnerErrors] = useState<Record<string, true>>({});
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     // "Picks due" badges for NFL season pools: season schedule + my entry per pool
@@ -157,7 +164,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     useEffect(() => {
         setIsLoading(true);
         setPoolsFailed(false);
-        setWinnersFailed(false);
+        setWinnerErrors({});
         let unsubParticipating: () => void = () => { };
         let unsubOwned: () => void = () => { };
         let unsubCoCommissioned: () => void = () => { };
@@ -204,9 +211,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unique.forEach(pool => {
                 dbService.subscribeToWinners(pool.id, (winners) => {
                     setPoolWinners(prev => ({ ...prev, [pool.id]: winners }));
+                    // A later success clears an earlier failure for this pool —
+                    // otherwise one transient error would hold the chart at
+                    // "unavailable" even after the feed recovered.
+                    setWinnerErrors(prev => {
+                        if (!prev[pool.id]) return prev;
+                        const next = { ...prev };
+                        delete next[pool.id];
+                        return next;
+                    });
                 }, (err) => {
                     logger.error('Winners subscription error', pool.id, err);
-                    setWinnersFailed(true);
+                    setWinnerErrors(prev => ({ ...prev, [pool.id]: true }));
                 });
             });
         };
@@ -405,10 +421,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     // Winner listeners are attached after the pool feeds resolve, so before that
     // `poolWinners` is `{}` and a zero total is ignorance, not a fact.
     const winningsKnown = useMemo(
-        () => !winnersFailed && myPools
+        () => myPools
             .filter(p => p.type === 'SQUARES')
-            .every(p => poolWinners[p.id] !== undefined),
-        [winnersFailed, myPools, poolWinners]
+            .every(p => poolWinners[p.id] !== undefined && !winnerErrors[p.id]),
+        [myPools, poolWinners, winnerErrors]
     );
 
     const earningsEmpty = useMemo(

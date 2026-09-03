@@ -122,7 +122,13 @@ describe('ParticipantDashboard charts — no fabricated data', () => {
         expect(source).toContain('poolMixEmptyState(!poolsFailed)');
         expect(source).toContain('earningsEmptyState(lifetimeStats.totalWinnings, winningsKnown)');
         expect(source).toContain('setPoolsFailed(true)');
-        expect(source).toContain('setWinnersFailed(true)');
+        // Winner failures are keyed BY POOL, never one global boolean: stale
+        // listeners for pools the user has left stay alive and can still error,
+        // and a global flag would latch the chart at "unavailable" forever
+        // (codex round 3). Entries for pools not in `myPools` go unread.
+        expect(source).toContain('setWinnerErrors(prev => ({ ...prev, [pool.id]: true }))');
+        expect(source).not.toContain('setWinnersFailed(');
+        expect(source).toContain('!winnerErrors[p.id]');
         // Both chart empty states must render the helper's copy, never a
         // hardcoded headline that would bypass the gating above.
         expect(source).toContain('{poolMixEmpty.headline}');
