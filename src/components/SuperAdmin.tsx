@@ -1430,7 +1430,7 @@ export const SuperAdmin: React.FC = () => {
                                     onClick={() => setCharityFilter(!charityFilter)}
                                     className={`w-10 h-5 rounded-full relative transition-colors ${charityFilter ? 'bg-brandred-600' : 'bg-line'} `}
                                 >
-                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-ui ${charityFilter ? 'left-6' : 'left-1'} `} />
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full left-1 transition-transform duration-150 ease-out ${charityFilter ? 'translate-x-5' : 'translate-x-0'} `} />
                                 </button>
                             </label>
                         </div>

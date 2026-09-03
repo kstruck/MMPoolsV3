@@ -24,7 +24,7 @@ const DEFAULT_CONFIG: ReferralConfig = {
 };
 
 export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, userName }) => {
-  const { tx } = useMotionTransform();
+  const { reduce, tx } = useMotionTransform();
   const [copied, setCopied] = useState(false);
   const [config, setConfig] = useState<ReferralConfig>(DEFAULT_CONFIG);
   const [stats, setStats] = useState({
@@ -47,6 +47,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
   const creditsNeeded = config.creditsRequiredForFreePool;
   const creditsRemaining = Math.max(0, creditsNeeded - stats.creditsEarned);
   const progressPercent = creditsNeeded > 0 ? Math.min(100, (stats.creditsEarned / creditsNeeded) * 100) : 0;
+  const progressScale = `scaleX(${Math.min(progressPercent, 100) / 100})`;
 
   // Subscribe to referral config
   useEffect(() => {
@@ -234,8 +235,10 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
           </div>
           <div className="w-full bg-surface border border-line rounded-full h-2.5 overflow-hidden">
             <motion.div
-              initial={{ transform: tx('scaleX(0)') }}
-              animate={{ transform: tx(`scaleX(${Math.min(progressPercent, 100) / 100})`) }}
+              // Sizing transform — never `tx()` it to 'none' (that reads as 100%).
+              // Reduced motion starts at the final value so nothing interpolates.
+              initial={{ transform: reduce ? progressScale : 'scaleX(0)' }}
+              animate={{ transform: progressScale }}
               transition={{ duration: 0.4, ease: UI_EASE, delay: 0.1 }}
               className="h-full w-full origin-left rounded-full bg-gold-foil"
             />

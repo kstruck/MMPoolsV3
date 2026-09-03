@@ -6,15 +6,25 @@ import * as path from 'path';
  * Motion invariants — mechanical guards from the 2026-09-03 animation review
  * of src/components (review-animations skill, Emil Kowalski's bar).
  *
- * WHY THIS EXISTS. The review found 171 `animate-in` / `fade-in` /
- * `slide-in-from-*` / `zoom-in-*` class usages and ZERO definitions: the
+ * WHY THIS EXISTS. The review found `animate-in` / `fade-in` /
+ * `slide-in-from-*` / `zoom-in-*` in use with ZERO definitions: the
  * `tailwindcss-animate` plugin was never installed, so every modal, popover,
  * and landing-hero entrance in the app was a silent no-op. Nobody noticed for
  * months because a class that does nothing looks exactly like a class that
- * works, in the editor. Alongside it: 368 `transition-all` (animates layout
- * off-GPU), 128 ungated hover transforms (touch fires false :hover on tap),
- * six progress bars animating `width`, and no `prefers-reduced-motion` path
+ * works, in the editor. Alongside it: `transition-all` everywhere (animates
+ * layout off-GPU), ungated hover transforms (touch fires false :hover on tap),
+ * progress bars animating `width`, and no `prefers-reduced-motion` path
  * anywhere. Prose cannot gate any of that; this file does.
+ *
+ * Measured on origin/main ee86b8f5 (2026-09-03), before this file's PR:
+ *   grep -rhoE "animate-in" src/components | wc -l              -> 171
+ *   grep -rn "animate-in" src/index.css tailwind.config.js       -> (no output)
+ *   grep -n "tailwindcss-animate" package.json                   -> (no output)
+ *   grep -rhoE "\btransition-all\b" src/components | wc -l       -> 368
+ *   grep -rhoE "hover:scale-|hover:-translate-y" src/components | wc -l -> 128
+ *   grep -rn "prefers-reduced-motion" src | grep -v App.css      -> (no output)
+ * Re-run any of these against that SHA to reproduce; the assertions below are
+ * the executable form of the same claims against the current tree.
  *
  * Each block names the rule, the reason, and the fix, so a failure is a
  * pointer and not a puzzle.
@@ -50,11 +60,20 @@ function offenders(re: RegExp): string[] {
 }
 
 describe('motion invariants', () => {
-  it('tailwindcss-animate is installed AND registered — animate-in/fade-in/zoom-in/slide-in-from are not core Tailwind', () => {
+  // animate-in / fade-in / zoom-in-* / slide-in-from-* are NOT core Tailwind;
+  // they come from tailwindcss-animate. Three separately-failable links.
+  it('tailwindcss-animate is a declared dependency', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     expect(pkg.devDependencies?.['tailwindcss-animate'] ?? pkg.dependencies?.['tailwindcss-animate']).toBeTruthy();
+  });
+
+  it('tailwind.config.js imports tailwindcss-animate', () => {
     const config = fs.readFileSync(path.join(ROOT, 'tailwind.config.js'), 'utf8');
     expect(config).toMatch(/from ['"]tailwindcss-animate['"]/);
+  });
+
+  it('tailwind.config.js registers tailwindcss-animate in `plugins`', () => {
+    const config = fs.readFileSync(path.join(ROOT, 'tailwind.config.js'), 'utf8');
     expect(config).toMatch(/plugins:\s*\[[\s\S]*?tailwindcssAnimate/);
   });
 

@@ -49,7 +49,10 @@ export default {
       // Bounded replacement for `transition-all`: everything a hover/press/
       // state change legitimately animates, nothing that triggers layout.
       transitionProperty: {
-        ui: 'color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter',
+        ui: [
+          'color', 'background-color', 'border-color', 'text-decoration-color',
+          'fill', 'stroke', 'opacity', 'box-shadow', 'transform', 'filter', 'backdrop-filter',
+        ].join(', '),
       },
       // Built-in CSS easings are too weak for entrances. Strong ease-out for
       // anything entering/exiting; drawer curve for slide-in panels.

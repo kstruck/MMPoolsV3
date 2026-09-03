@@ -273,7 +273,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <span className={`text-sm font-display font-bold uppercase tracking-[0.05em] ${filterCharity ? 'text-[color:var(--text)]' : 'text-muted group-hover:text-[color:var(--text)]'}`}>Charity Pools Only</span>
                                 </div>
                                 <div className={`w-10 h-5 rounded-full relative transition-colors ${filterCharity ? 'bg-navy-800 dark:bg-gold-600' : 'bg-line'}`} onClick={() => setFilterCharity(!filterCharity)}>
-                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-ui ${filterCharity ? 'left-6' : 'left-1'}`} />
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full left-1 transition-transform duration-150 ease-out ${filterCharity ? 'translate-x-5' : 'translate-x-0'}`} />
                                 </div>
                             </label>
                         </div>
