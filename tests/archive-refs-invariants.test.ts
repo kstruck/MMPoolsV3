@@ -145,6 +145,45 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   });
 
+  it('sees a RENAMED-away doc as a deletion', () => {
+    // git reports `git mv a.md b.md` as R, not D, so a rename would slip past
+    // the deletion diff entirely and leave references to the old name dangling
+    // while everything reported green. The diffs pass --no-renames for this.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'OLD-NAME.md'), 'content\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      run('mv', 'OLD-NAME.md', 'NEW-NAME.md');
+      run('commit', '-qm', 'rename it');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('OLD-NAME.md');
+    });
+  });
+
+  it('still treats a move INTO the archive as a move, not a deletion', () => {
+    // The mirror of the case above: --no-renames makes `git mv x docs/archive/x`
+    // read as a delete plus an add, so the add side must be seen too or every
+    // archived doc would be reported as deleted.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'MOVED.md'), 'content\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      run('mv', 'MOVED.md', path.join('docs', 'archive', 'MOVED.md'));
+      run('commit', '-qm', 'archive it');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+    });
+  });
+
   it('fails when an existing manifest entry is removed — the record is append-only', () => {
     fixture((dir, run) => {
       fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\nOLD-DELETION.md\n');

@@ -122,10 +122,10 @@ function deletedDocs() {
     );
   }
   const committed = lines(
-    git(['diff', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md']),
+    git(['diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md']),
   );
   const uncommitted = lines(
-    git(['diff', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
+    git(['diff', '--no-renames', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
   );
   // A doc that left the root and ARRIVED in docs/archive/ in this same change
   // was MOVED, not deleted — git reports the old path as a deletion either
@@ -142,10 +142,10 @@ function deletedDocs() {
   const movedIn = new Set(
     [
       ...lines(git([
-        'diff', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+        'diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
       ])),
       ...lines(git([
-        'diff', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+        'diff', '--no-renames', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
       ])),
     ].map((f) => path.basename(f)),
   );
