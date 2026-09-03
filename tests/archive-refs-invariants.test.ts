@@ -9,13 +9,17 @@
  * required check. `build-and-test` is a required check, so putting it here is
  * what makes the guard enforced rather than advisory.
  *
- * BASE REF. The verifier compares against `origin/main` by default and FAILS
- * CLOSED when that ref is unreadable. A CI checkout does not always carry a
- * remote-tracking `origin/main`, so this test resolves a base that exists and
- * passes it explicitly. Falling back to HEAD narrows the deleted-doc set to the
- * manifest — it does not disable the check: invariant 1 still runs in full, and
- * invariant 2 still runs against every manifest-recorded deletion, which is the
- * half that is supposed to outlive the branch anyway.
+ * BASE REF. The verifier compares against `origin/main` and FAILS CLOSED when
+ * that ref is unreadable, so this test does too: it requires a real base rather
+ * than falling back to HEAD. A HEAD base makes the diff empty, which would
+ * quietly switch off invariant 3 — a deletion missing from the manifest would
+ * pass while the test still reported success, which is the precise failure this
+ * guard exists to prevent.
+ *
+ * That is safe here rather than brittle: `build-and-test` checks out with
+ * `fetch-depth: 0`, which fetches every branch, and the same job already runs
+ * `docs-state-invariants.test.ts`, which resolves SHAs against `origin/main`
+ * and (per the workflow's own comment) "fails loudly rather than skipping".
  */
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -37,9 +41,14 @@ function refExists(ref: string): boolean {
   }
 }
 
-/** The first ref that actually exists here. HEAD always does. */
-function resolveBase(): string {
-  return ['origin/main', 'main', 'HEAD'].find(refExists) ?? 'HEAD';
+const BASE_CANDIDATES = ['origin/main', 'main'] as const;
+
+/**
+ * A real base to diff against. Deliberately NOT falling back to HEAD — see the
+ * BASE REF note above; an empty diff disables invariant 3 silently.
+ */
+function resolveBase(): string | null {
+  return BASE_CANDIDATES.find(refExists) ?? null;
 }
 
 function runVerifier(base: string): { status: number; output: string } {
@@ -58,7 +67,15 @@ function runVerifier(base: string): { status: number; output: string } {
 
 describe('docs/archive citation graph', () => {
   it('is closed — no unresolved archive links, no references to deleted docs', () => {
-    const { status, output } = runVerifier(resolveBase());
+    const base = resolveBase();
+    expect(
+      base,
+      `no base ref among ${BASE_CANDIDATES.join(', ')} — the deletion invariant cannot ` +
+        `be checked against an empty diff, so this fails rather than passing vacuously. ` +
+        `Ensure the checkout fetches branches (actions/checkout with fetch-depth: 0).`,
+    ).not.toBeNull();
+
+    const { status, output } = runVerifier(base as string);
     expect(output, `verifyArchiveRefs.mjs failed:\n${output}`).not.toMatch(
       /UNRESOLVED|DANGLING|^FAIL:/m,
     );
