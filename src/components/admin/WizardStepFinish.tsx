@@ -92,7 +92,7 @@ export const WizardStepFinish: React.FC<WizardStepFinishProps> = ({
                             <button
                                 onClick={handleFixSync}
                                 disabled={isFixing}
-                                className="w-full bg-navy-800 hover:bg-navy-700 text-white py-2 px-4 rounded-md font-display font-bold uppercase text-xs tracking-[0.05em] transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="w-full bg-navy-800 hover:bg-navy-700 text-white py-2 px-4 rounded-md font-display font-bold uppercase text-xs tracking-[0.05em] transition duration-150 hover:-translate-y-px flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {isFixing ? <div className="animate-spin rounded-full h-3 w-3 border-2 border-white/60 border-t-transparent" /> : <RefreshCw size={14} />}
                                 Recalculate Scores from ESPN

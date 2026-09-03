@@ -128,7 +128,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                         setShareCopied(true);
                                         setTimeout(() => setShareCopied(false), 2000);
                                     }}
-                                    className="flex items-center gap-2 text-xs font-display font-bold uppercase tracking-[0.05em] text-white bg-navy-800 hover:bg-navy-700 transition-all duration-150 ml-2 px-3 py-1.5 rounded-lg hover:-translate-y-px"
+                                    className="flex items-center gap-2 text-xs font-display font-bold uppercase tracking-[0.05em] text-white bg-navy-800 hover:bg-navy-700 transition duration-150 ml-2 px-3 py-1.5 rounded-lg hover:-translate-y-px"
                                 >
                                     {shareCopied ? <><Check size={14} className="text-gold-400" /> Copied!</> : <><Share2 size={14} /> Share</>}
                                 </button>
@@ -495,7 +495,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                                                         setZelleCopied(true);
                                                         setTimeout(() => setZelleCopied(false), 2000);
                                                     }}
-                                                    className="bg-card border border-line hover:bg-page p-2 rounded transition-all duration-150 transform active:scale-95"
+                                                    className="bg-card border border-line hover:bg-page p-2 rounded transition duration-150 transform active:scale-95"
                                                     title="Copy Zelle Info"
                                                 >
                                                     {zelleCopied ? <Check size={16} className="text-[#0F7B4A]" /> : <Copy size={16} className="text-muted group-hover:text-[color:var(--text)]" />}

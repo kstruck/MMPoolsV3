@@ -111,7 +111,7 @@ export const ResourcesPage: React.FC<ResourcesPageProps> = ({ user, onLogin, onS
                     <button
                         onClick={canCreate ? onSignup : undefined}
                         disabled={!canCreate}
-                        className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:bg-brandred-600 disabled:shadow-none"
+                        className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:bg-brandred-600 disabled:shadow-none"
                         title={canCreate ? 'Start a Free Pool' : 'Pool creation is coming soon'}
                     >
                         {canCreate ? 'Start a Free Pool' : 'Pool Creation Coming Soon'}

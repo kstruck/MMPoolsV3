@@ -312,7 +312,7 @@ const ArtifactCard: React.FC<{ artifact: AIArtifact, poolId: string, userId?: st
     const isExplanation = artifact.type === 'WINNER_EXPLANATION';
 
     return (
-        <div className="bg-card border border-line rounded-lg overflow-hidden transition-all duration-150 hover:border-gold-500/40">
+        <div className="bg-card border border-line rounded-lg overflow-hidden transition duration-150 hover:border-gold-500/40">
             <div className="p-4">
                 <div className="flex justify-between items-start mb-2">
                     <span className={`text-[10px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded ${isExplanation ? 'bg-[#E4F5EC] text-[#0F7B4A] border border-[#BEE7D0]' : 'bg-[#E5EDF6] text-[#142A4C] border border-[#CBDCEC]'}`}>

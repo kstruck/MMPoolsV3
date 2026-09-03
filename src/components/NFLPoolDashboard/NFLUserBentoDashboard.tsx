@@ -632,7 +632,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         
         {/* CARD A: LIVE WEEKLY PICK'EM — full width so the week slate is readable */}
         <div
-          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -873,7 +873,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         {/* CARD B: SURVIVOR LEAGUE (Top Right) — survivor pools only */}
         {_pool.type === 'NFL_SURVIVOR' && (
         <div
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -897,7 +897,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 displayedMembers.map((member, i) => (
                   <div 
                     key={i} 
-                    className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
+                    className={`flex justify-between items-center p-3 rounded-lg border transition duration-150 ${
                       member.highlight
                         ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
                         : 'bg-page border-line'
@@ -1003,7 +1003,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         {/* CARD C: MARGIN POOL STATS (Bottom Left) — margin pools only */}
         {_pool.type === 'NFL_MARGIN' && (
         <div
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -1108,7 +1108,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD D: POOL STANDINGS (Bottom Right) — this pool's leaderboard */}
         <div
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -1131,7 +1131,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   return (
                     <div
                       key={i}
-                      className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
+                      className={`flex justify-between items-center p-3 rounded-lg border transition duration-150 ${
                         row.highlight
                           ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
                           : 'bg-page border-line'
@@ -1189,7 +1189,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             columns is what stops it leaving a new hole one row down. */}
         {isPoolMember && (
           <div
-            className={`${_pool.type === 'NFL_PICKEM' ? '' : 'md:col-span-2'} bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between`}
+            className={`${_pool.type === 'NFL_PICKEM' ? '' : 'md:col-span-2'} bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between`}
           >
             <div>
               <div className="flex justify-between items-center mb-6">
@@ -1216,7 +1216,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD E: MY PERFORMANCE RADAR & PICK ANALYTICS (Bottom Spanning Bento Box) */}
         <div 
-          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 grid grid-cols-1 md:grid-cols-2 gap-8"
+          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 grid grid-cols-1 md:grid-cols-2 gap-8"
         >
           {/* Radar Chart section */}
           <div className="flex flex-col justify-between">
@@ -1304,7 +1304,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         </div>
 
       {/* 3. Floating Bottom Timeline Block */}
-      <div className="md:col-span-2 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition-all duration-150">
+      <div className="md:col-span-2 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition duration-150">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 overflow-x-auto select-none py-2 px-4 whitespace-nowrap">
           
           {/* Timeline Node 1 */}

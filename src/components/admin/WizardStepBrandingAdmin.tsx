@@ -34,7 +34,7 @@ export const WizardStepBrandingAdmin: React.FC<WizardStepBrandingAdminProps> = (
                         {/* No Theme Option */}
                         <button
                             onClick={() => updateConfig({ themeId: undefined })}
-                            className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${!gameState.themeId ? 'border-navy-600 ring-2 ring-navy-600 bg-navy-600/10' : 'border-line hover:border-navy-600 bg-card'}`}
+                            className={`p-4 rounded-xl border transition text-left relative z-10 cursor-pointer ${!gameState.themeId ? 'border-navy-600 ring-2 ring-navy-600 bg-navy-600/10' : 'border-line hover:border-navy-600 bg-card'}`}
                         >
                             <div className="h-12 rounded-lg bg-card mb-3 flex items-center justify-center">
                                 <span className="text-faint text-xs">Default</span>
@@ -47,7 +47,7 @@ export const WizardStepBrandingAdmin: React.FC<WizardStepBrandingAdminProps> = (
                             <button
                                 key={theme.id || theme.name}
                                 onClick={() => handleThemeSelect(theme)}
-                                className={`p-4 rounded-xl border transition-all text-left relative z-10 cursor-pointer ${gameState.themeId === theme.id ? 'border-navy-600 ring-2 ring-navy-600' : 'border-line hover:border-navy-600'}`}
+                                className={`p-4 rounded-xl border transition text-left relative z-10 cursor-pointer ${gameState.themeId === theme.id ? 'border-navy-600 ring-2 ring-navy-600' : 'border-line hover:border-navy-600'}`}
                             >
                                 {/* Theme Preview */}
                                 <div
@@ -118,7 +118,7 @@ export const WizardStepBrandingAdmin: React.FC<WizardStepBrandingAdminProps> = (
                             )}
 
                             <div className="w-full">
-                                <label className="block text-center cursor-pointer bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] py-2 px-4 rounded-md transition-all duration-150 hover:-translate-y-px text-sm">
+                                <label className="block text-center cursor-pointer bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] py-2 px-4 rounded-md transition duration-150 hover:-translate-y-px text-sm">
                                     Upload Logo (Max 2MB)
                                     <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
                                 </label>

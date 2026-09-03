@@ -1254,7 +1254,7 @@ export const SuperAdmin: React.FC = () => {
                                 // Auto-select first tab in group
                                 setActiveTab(navStructure[group][0].id as typeof activeTab);
                             }}
-                            className={`px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all ${activeGroup === group
+                            className={`px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition ${activeGroup === group
                                 ? 'bg-navy-800 text-white shadow-card'
                                 : 'text-muted hover:text-[color:var(--text)] hover:bg-card'
                                 }`}
@@ -1430,7 +1430,7 @@ export const SuperAdmin: React.FC = () => {
                                     onClick={() => setCharityFilter(!charityFilter)}
                                     className={`w-10 h-5 rounded-full relative transition-colors ${charityFilter ? 'bg-brandred-600' : 'bg-line'} `}
                                 >
-                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${charityFilter ? 'left-6' : 'left-1'} `} />
+                                    <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform duration-150 ${charityFilter ? 'translate-x-5' : 'translate-x-0'}`} />
                                 </button>
                             </label>
                         </div>
@@ -1812,7 +1812,7 @@ export const SuperAdmin: React.FC = () => {
                         {themes.map((theme) => (
                             <div
                                 key={theme.id}
-                                className={`bg-card rounded-xl border overflow-hidden transition-all shadow-card ${theme.isDefault ? 'border-gold-500' : theme.isActive ? 'border-[#0F7B4A]/50' : 'border-line'}`}
+                                className={`bg-card rounded-xl border overflow-hidden transition shadow-card ${theme.isDefault ? 'border-gold-500' : theme.isActive ? 'border-[#0F7B4A]/50' : 'border-line'}`}
                             >
                                 {/* Preview */}
                                 <div
@@ -2162,7 +2162,7 @@ export const SuperAdmin: React.FC = () => {
                         </div>
                         <button
                             onClick={() => setShowSimDashboard(true)}
-                            className="shrink-0 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
+                            className="shrink-0 bg-navy-800 hover:bg-navy-700 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition duration-150 hover:-translate-y-px shadow-card whitespace-nowrap flex items-center gap-2"
                         >
                             <PlayCircle size={16} /> Open Simulation Dashboard
                         </button>
@@ -2179,7 +2179,7 @@ export const SuperAdmin: React.FC = () => {
                         </div>
                         <button
                             onClick={() => navigate('/tournament-sim')}
-                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
+                            className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] px-5 py-3 rounded-xl text-sm transition duration-150 hover:-translate-y-px shadow-red-cta whitespace-nowrap flex items-center gap-2"
                         >
                             <Trophy size={16} /> Open Tournament Simulator
                         </button>
@@ -2549,7 +2549,7 @@ export const SuperAdmin: React.FC = () => {
                                                     toast.error(getUserMessage(err, 'Failed to update max entries.'));
                                                 }
                                             }}
-                                            className="px-3 py-1.5 bg-gold-500/10 text-gold-700 dark:text-gold-400 hover:bg-gold-500/20 border border-gold-500/50 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-all"
+                                            className="px-3 py-1.5 bg-gold-500/10 text-gold-700 dark:text-gold-400 hover:bg-gold-500/20 border border-gold-500/50 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition"
                                         >
                                             Fix Max Entries
                                         </button>
@@ -2572,7 +2572,7 @@ export const SuperAdmin: React.FC = () => {
                                     <button
                                         key={tab.id}
                                         onClick={() => setModalTab(tab.id as any)}
-                                        className={`px-4 py-2 text-xs font-display font-bold uppercase tracking-[0.08em] rounded-lg transition-all ${
+                                        className={`px-4 py-2 text-xs font-display font-bold uppercase tracking-[0.08em] rounded-lg transition ${
                                             modalTab === tab.id
                                                 ? 'bg-navy-800 text-white shadow-card'
                                                 : 'text-muted hover:text-[color:var(--text)] hover:bg-card'
@@ -2691,7 +2691,7 @@ export const SuperAdmin: React.FC = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => setAdminIsPublic(!adminIsPublic)}
-                                                        className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+                                                        className={`w-full flex items-center justify-between p-3 rounded-xl border transition ${
                                                             adminIsPublic
                                                                 ? 'bg-gold-500/10 border-gold-500/50 text-gold-700 dark:text-gold-400 font-bold'
                                                                 : 'bg-card border-line text-muted font-medium'
@@ -2717,7 +2717,7 @@ export const SuperAdmin: React.FC = () => {
                                             <div className="pt-2">
                                                 <button
                                                     onClick={handleSavePoolSettingsAdmin}
-                                                    className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3 rounded-xl transition-all shadow-red-cta flex items-center justify-center gap-2"
+                                                    className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3 rounded-xl transition shadow-red-cta flex items-center justify-center gap-2"
                                                 >
                                                     <CheckCircle size={18} />
                                                     Save Settings Override
@@ -2823,7 +2823,7 @@ export const SuperAdmin: React.FC = () => {
                                                                         <td className="p-4 text-center">
                                                                             <button
                                                                                 onClick={() => handleToggleEntryPaidAdmin(entry.id, entry.paidStatus)}
-                                                                                className={`px-3 py-1.5 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em] border transition-all ${
+                                                                                className={`px-3 py-1.5 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em] border transition ${
                                                                                     entry.paidStatus === 'PAID'
                                                                                         ? 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]'
                                                                                         : 'bg-[#FBEEDD] border-[#F2D6B0] text-[#B4530A]'
@@ -2895,7 +2895,7 @@ export const SuperAdmin: React.FC = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => handleFixScores(viewingPool as GameState)}
-                                                    className="w-full sm:w-auto px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center justify-center gap-1.5"
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition shadow-card flex items-center justify-center gap-1.5"
                                                 >
                                                     <RefreshCw size={14} />
                                                     Process ESPN Sync
@@ -2910,7 +2910,7 @@ export const SuperAdmin: React.FC = () => {
                                                     </div>
                                                     <button
                                                         onClick={() => handleForceReopenPool(viewingPool)}
-                                                        className="w-full sm:w-auto px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center justify-center gap-1.5"
+                                                        className="w-full sm:w-auto px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition shadow-card flex items-center justify-center gap-1.5"
                                                     >
                                                         <Lock size={14} />
                                                         Force Re-Open
@@ -2926,7 +2926,7 @@ export const SuperAdmin: React.FC = () => {
                                                     </div>
                                                     <button
                                                         onClick={() => { handleClosePool(viewingPool as unknown as Pool); setViewingPool(null); }}
-                                                        className="w-full sm:w-auto px-4 py-2.5 bg-brandred-600 hover:bg-brandred-500 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-red-cta"
+                                                        className="w-full sm:w-auto px-4 py-2.5 bg-brandred-600 hover:bg-brandred-500 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition shadow-red-cta"
                                                     >
                                                         Close Pool
                                                     </button>
@@ -2940,7 +2940,7 @@ export const SuperAdmin: React.FC = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => window.location.href = `/admin/${viewingPool.id}`}
-                                                    className="w-full sm:w-auto px-4 py-2.5 bg-card hover:bg-page border border-line text-[color:var(--text)] rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card text-center"
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-card hover:bg-page border border-line text-[color:var(--text)] rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition shadow-card text-center"
                                                 >
                                                     Configure settings
                                                 </button>
@@ -2953,7 +2953,7 @@ export const SuperAdmin: React.FC = () => {
                                                 </div>
                                                 <button
                                                     onClick={() => { handleDeletePool(viewingPool.id); setViewingPool(null); }}
-                                                    className="w-full sm:w-auto px-4 py-2.5 bg-brandred-600 hover:bg-brandred-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all shadow-red-cta"
+                                                    className="w-full sm:w-auto px-4 py-2.5 bg-brandred-600 hover:bg-brandred-700 text-white rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition shadow-red-cta"
                                                 >
                                                     Super Delete Pool
                                                 </button>
@@ -3080,7 +3080,7 @@ export const SuperAdmin: React.FC = () => {
                                             <button
                                                 key={cat}
                                                 onClick={() => toggleCategory(cat)}
-                                                className={`px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border ${seedCategories.includes(cat)
+                                                className={`px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.05em] transition border ${seedCategories.includes(cat)
                                                     ? 'bg-navy-800 text-white border-navy-700'
                                                     : 'bg-card text-muted border-line hover:border-navy-600'
                                                     }`}
@@ -3194,7 +3194,7 @@ export const SuperAdmin: React.FC = () => {
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setShowResultsManager(true)}
-                                    className="bg-navy-800 hover:bg-navy-700 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center gap-2"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition shadow-card flex items-center gap-2"
                                 >
                                     <Trophy size={16} /> Manage Results / Score
                                 </button>
@@ -3232,7 +3232,7 @@ export const SuperAdmin: React.FC = () => {
                                 <button
                                     onClick={handleSavePlayoffs}
                                     disabled={isSavingPlayoffs}
-                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition-all shadow-red-cta"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition shadow-red-cta"
                                 >
                                     {isSavingPlayoffs ? 'Saving...' : 'Save Global Config'}
                                 </button>
@@ -3252,7 +3252,7 @@ export const SuperAdmin: React.FC = () => {
                                             }
                                         }
                                     }}
-                                    className="bg-navy-800 hover:bg-navy-700 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition-all shadow-card flex items-center gap-2"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-6 py-2 rounded-xl font-display font-bold uppercase tracking-[0.05em] transition shadow-card flex items-center gap-2"
                                 >
                                     <Bot size={16} /> Force Sync
                                 </button>
@@ -3278,7 +3278,7 @@ export const SuperAdmin: React.FC = () => {
                                         const overallIdx = playoffTeams.indexOf(team);
                                         const logo = getTeamLogo(team.id);
                                         return (
-                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-surface border-line opacity-50' : 'bg-surface border-line shadow-card'}`}>
+                                            <div key={overallIdx} className={`p-4 rounded-xl border transition ${team.eliminated ? 'bg-surface border-line opacity-50' : 'bg-surface border-line shadow-card'}`}>
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-12 h-12 bg-card rounded-lg flex items-center justify-center p-1 border border-line">
                                                         {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-faint">{team.id || '?'}</div>}
@@ -3341,7 +3341,7 @@ export const SuperAdmin: React.FC = () => {
                                         const overallIdx = playoffTeams.indexOf(team);
                                         const logo = getTeamLogo(team.id);
                                         return (
-                                            <div key={overallIdx} className={`p-4 rounded-xl border transition-all ${team.eliminated ? 'bg-surface border-line opacity-50' : 'bg-surface border-line shadow-card'}`}>
+                                            <div key={overallIdx} className={`p-4 rounded-xl border transition ${team.eliminated ? 'bg-surface border-line opacity-50' : 'bg-surface border-line shadow-card'}`}>
                                                 <div className="flex items-center gap-4">
                                                     <div className="w-12 h-12 bg-card rounded-lg flex items-center justify-center p-1 border border-line">
                                                         {logo ? <img src={logo} alt={team.id} className="w-full h-full object-contain" /> : <div className="font-bold text-faint">{team.id || '?'}</div>}
@@ -3494,7 +3494,7 @@ export const SuperAdmin: React.FC = () => {
                                 // them a disabled button still lightens and lifts under the
                                 // cursor, which reads as "this is clickable" — the same wrong
                                 // signal `cursor-pointer` was giving (qodo, PR #397).
-                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brandred-600 disabled:hover:translate-y-0 text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition-all hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
+                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brandred-600 disabled:hover:translate-y-0 text-white font-display font-extrabold uppercase tracking-[0.05em] px-6 py-3 rounded-xl text-sm transition hover:-translate-y-px shadow-red-cta flex items-center gap-2 cursor-pointer"
                             >
                                 <RefreshCw size={16} className={isImportingNfl ? 'animate-spin' : ''} />
                                 {isImportingNfl ? 'Seeding games...' : 'Bulk Import ESPN NFL Schedule'}

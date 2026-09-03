@@ -456,7 +456,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- SECTION 1: IDENTITY & ACCOUNT --- */}
          {!gameState.isLocked && (
-            <div className={`w-full max-w-2xl mb-6 rounded-xl border overflow-hidden transition-all duration-300 ${currentUser ? 'bg-card border-gold-500/40' : (isIdentitySet ? 'bg-card border-line' : 'bg-card border-gold-500/50 shadow-card')}`}>
+            <div className={`w-full max-w-2xl mb-6 rounded-xl border overflow-hidden transition duration-300 ${currentUser ? 'bg-card border-gold-500/40' : (isIdentitySet ? 'bg-card border-line' : 'bg-card border-gold-500/50 shadow-card')}`}>
 
                {/* Header */}
                <div
@@ -499,7 +499,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               <p className="opacity-70">Creating an account allows you to access to your personal dashboard showing the pools you have entered allowing quick access to those pools. You are not required to create an account to play in a pool.</p>
                            </div>
                            {onLogin && (
-                              <button onClick={onLogin} className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm flex items-center gap-2 transition-all duration-150 shadow-red-cta hover:-translate-y-px">
+                              <button onClick={onLogin} className="shrink-0 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm flex items-center gap-2 transition duration-150 shadow-red-cta hover:-translate-y-px">
                                  <LogIn size={16} /> Sign In / Join
                               </button>
                            )}
@@ -557,7 +557,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         {/* RIGHT SIDE: Action Button */}
                         <button
                            onClick={handleSetIdentity}
-                           className="bg-brandred-600 hover:bg-brandred-500 text-white px-6 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta transition-all duration-150 hover:-translate-y-px flex items-center gap-2"
+                           className="bg-brandred-600 hover:bg-brandred-500 text-white px-6 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta transition duration-150 hover:-translate-y-px flex items-center gap-2"
                         >
                            {currentUser ? 'Update Details' : 'Start Picking'} <ArrowRight size={18} />
                         </button>
@@ -664,7 +664,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      <button
                         onClick={handleConfirmPayment}
                         disabled={isConfirmingPayment}
-                        className="bg-brandred-600 hover:bg-brandred-500 disabled:bg-page disabled:text-faint text-white px-4 py-3 min-h-[44px] rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center gap-2 transition-all duration-150 hover:-translate-y-px whitespace-nowrap"
+                        className="bg-brandred-600 hover:bg-brandred-500 disabled:bg-page disabled:text-faint text-white px-4 py-3 min-h-[44px] rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center gap-2 transition duration-150 hover:-translate-y-px whitespace-nowrap"
                      >
                         {isConfirmingPayment ? <Loader size={16} className="animate-spin" /> : <Check size={16} />}
                         {isConfirmingPayment ? 'Sending...' : "I've Sent Payment"}
@@ -725,7 +725,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               type="checkbox"
                               checked={liabilityAccepted}
                               onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                              className="peer h-6 w-6 cursor-pointer appearance-none rounded border border-line bg-page transition-all checked:border-gold-500 checked:bg-gold-500 hover:border-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
+                              className="peer h-6 w-6 cursor-pointer appearance-none rounded border border-line bg-page transition checked:border-gold-500 checked:bg-gold-500 hover:border-gold-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                            />
                            <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-navy-950 opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                         </div>
@@ -746,7 +746,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      <button
                         onClick={handleFinalizePurchase}
                         disabled={!liabilityAccepted || isSubmitting}
-                        className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 disabled:bg-page disabled:text-faint disabled:cursor-not-allowed text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition-all duration-150"
+                        className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 disabled:bg-page disabled:text-faint disabled:cursor-not-allowed text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition duration-150"
                      >
                         {isSubmitting ? 'Reserving...' : `Reserve ${selectedSquares.length} Squares`}
                      </button>
@@ -821,7 +821,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               setShowGuestModal(false); // Close this modal
                               setIsConfirming(true); // Open CONFIRMATION modal
                            }}
-                           className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition-all duration-150"
+                           className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition duration-150"
                         >
                            Continue <ArrowRight size={16} />
                         </button>
@@ -886,7 +886,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         <button
                            onClick={handleJoinWaitlist}
                            disabled={waitlistSubmitting}
-                           className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 disabled:bg-page disabled:text-faint text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition-all duration-150"
+                           className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 disabled:bg-page disabled:text-faint text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition duration-150"
                         >
                            {waitlistSubmitting ? <Loader size={16} className="animate-spin" /> : <UserPlus size={16} />}
                            {waitlistSubmitting ? 'Joining...' : 'Join Waitlist'}
@@ -908,7 +908,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   <p className="text-muted mb-4">All 100 squares have been claimed. Join the waitlist to be notified if any squares become available.</p>
                   <button
                      onClick={() => setShowWaitlistModal(true)}
-                     className="bg-gold-foil text-navy-950 px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-card flex items-center gap-2 mx-auto transition-all duration-150 hover:-translate-y-px hover:shadow-card-hover"
+                     className="bg-gold-foil text-navy-950 px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-card flex items-center gap-2 mx-auto transition duration-150 hover:-translate-y-px hover:shadow-card-hover"
                   >
                      <UserPlus size={18} /> Join Waitlist
                   </button>
@@ -925,7 +925,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                <div className="flex justify-center gap-4 mb-6">
                   <button
                      onClick={() => setViewMode('grid')}
-                     className={`px-6 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 ${viewMode === 'grid'
+                     className={`px-6 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition duration-150 ${viewMode === 'grid'
                         ? 'bg-brandred-600 text-white shadow-red-cta'
                         : 'bg-card text-muted border border-line hover:text-[color:var(--text)] hover:bg-page'}`}
                   >
@@ -933,7 +933,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   </button>
                   <button
                      onClick={() => setViewMode('props')}
-                     className={`px-6 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex items-center gap-2 ${viewMode === 'props'
+                     className={`px-6 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition duration-150 flex items-center gap-2 ${viewMode === 'props'
                         ? 'bg-gold-foil text-navy-950 shadow-card'
                         : 'bg-card text-muted border border-line hover:text-[color:var(--text)] hover:bg-page'}`}
                   >
@@ -968,7 +968,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               </p>
                               <button
                                  onClick={onLogin}
-                                 className="px-6 py-3 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta transition-all duration-150 hover:-translate-y-px"
+                                 className="px-6 py-3 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta transition duration-150 hover:-translate-y-px"
                               >
                                  Sign In / Register
                               </button>
@@ -1006,7 +1006,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  <button
                                     key={setKey}
                                     onClick={() => setActiveSet(setKey as any)}
-                                    className={`flex-1 py-2 px-3 rounded text-xs font-display font-bold uppercase tracking-wider transition-all duration-150 whitespace-nowrap
+                                    className={`flex-1 py-2 px-3 rounded text-xs font-display font-bold uppercase tracking-wider transition duration-150 whitespace-nowrap
                               ${isActive
                                           ? 'bg-gold-foil text-navy-950 shadow-card border border-gold-300/60'
                                           : 'bg-transparent text-muted hover:bg-page hover:text-[color:var(--text)]'}`}
@@ -1097,8 +1097,9 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                   {/* --- SECTION 3: THE GRID --- */}
                   <div id="printable-grid" className="relative bg-navy-950 p-2 sm:p-4 rounded-b-xl shadow-panel overflow-x-auto overflow-y-hidden w-full max-w-[80vh] mx-auto border-x border-b border-[rgba(230,206,150,0.16)]">
-                     {/* Zoom works by widening the layout width; the parent overflow-x-auto container scrolls when zoomed in */}
-                     <div className="transition-[width] duration-200" style={{ width: `${zoomLevel * 100}%` }}>
+                     {/* Zoom works by widening the layout width; the parent overflow-x-auto container scrolls when zoomed in.
+                         No transition on purpose: animating width re-lays-out all 121 cells every frame. Zoom snaps. */}
+                     <div style={{ width: `${zoomLevel * 100}%` }}>
                         {/* Grid Layout: BACK TO STANDARD 11x11 ALWAYS */}
                         <div className="grid grid-cols-11 gap-0.5 sm:gap-1 select-none">
 
@@ -1119,7 +1120,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            {Array.from({ length: 10 }).map((_, i) => {
                               const digit = currentHomeAxis[i];
                               const isHighlighted = highlightHomeDigit !== undefined && digit !== null && digit === highlightHomeDigit && gameState.isLocked;
-                              const baseClass = "flex flex-col items-center justify-center font-display font-bold text-sm sm:text-xl md:text-2xl aspect-square rounded-md sm:rounded-lg border relative overflow-hidden group transition-all duration-300";
+                              const baseClass = "flex flex-col items-center justify-center font-display font-bold text-sm sm:text-xl md:text-2xl aspect-square rounded-md sm:rounded-lg border relative overflow-hidden group transition duration-300";
                               const colorClass = isHighlighted
                                  ? "bg-gradient-to-b from-gold-400 to-gold-500 text-navy-950 border-gold-300 shadow-[0_0_15px_rgba(217,188,128,0.5)] z-20 scale-105"
                                  : "bg-navy-900 text-brandred-500 border-navy-800 hover:border-brandred-500/40 hover:bg-navy-800";
@@ -1138,7 +1139,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  {(() => {
                                     const digit = currentAwayAxis[rowIndex];
                                     const isHighlighted = highlightAwayDigit !== undefined && digit !== null && digit === highlightAwayDigit && gameState.isLocked;
-                                    const baseClass = "flex flex-col items-center justify-center font-display font-bold text-sm sm:text-xl md:text-2xl w-full aspect-square rounded-md sm:rounded-lg border relative overflow-hidden transition-all duration-300";
+                                    const baseClass = "flex flex-col items-center justify-center font-display font-bold text-sm sm:text-xl md:text-2xl w-full aspect-square rounded-md sm:rounded-lg border relative overflow-hidden transition duration-300";
                                     const colorClass = isHighlighted
                                        ? "bg-gradient-to-r from-gold-400 to-gold-500 text-navy-950 border-gold-300 shadow-[0_0_15px_rgba(217,188,128,0.5)] z-20 scale-105"
                                        : "bg-navy-900 text-gold-300/80 border-navy-800 hover:border-gold-500/40 hover:bg-navy-800";
@@ -1181,7 +1182,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                     let bgClass = "bg-navy-900/40";
                                     let borderClass = "border-navy-800";
                                     let textClass = "text-[#9FB0CC]";
-                                    let effectClass = "transition-all duration-300 ease-out"; // smooth transition
+                                    let effectClass = "transition duration-300 ease-out"; // smooth transition
                                     let zIndex = "z-0";
 
                                     if (isWinner) {
@@ -1323,7 +1324,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                              </div>
                                           ) : (
                                              !gameState.isLocked && !isSelected && (
-                                                <div className="flex flex-col items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-all duration-300">
+                                                <div className="flex flex-col items-center gap-0.5 opacity-30 group-hover:opacity-100 transition duration-300">
                                                    <UserPlus size={14} className="text-navy-600" />
                                                    <span className="text-[10px] num text-navy-700 font-bold">${gameState.costPerSquare}</span>
                                                 </div>
@@ -1435,8 +1436,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               {/* Mini Progress Bar */}
                               <div className="w-full h-1 bg-navy-700 rounded-full mt-1 overflow-hidden">
                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${isLimitReached ? 'bg-brandred-500' : 'bg-gold-500'}`}
-                                    style={{ width: `${Math.min(100, (currentTotal / maxPerPlayer) * 100)}%` }}
+                                    className={`h-full w-full origin-left rounded-full transition-[transform,background-color] duration-300 ${isLimitReached ? 'bg-brandred-500' : 'bg-gold-500'}`}
+                                    style={{ transform: `scaleX(${Math.min(1, currentTotal / maxPerPlayer)})` }}
                                  ></div>
                               </div>
                            </div>
@@ -1451,7 +1452,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               </button>
                               <button
                                  onClick={handleInitiateCheckout}
-                                 className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 sm:px-6 py-2.5 min-h-[44px] rounded-full font-display font-bold uppercase tracking-[0.05em] shadow-red-cta transition-all duration-150 hover:scale-105 active:scale-95 flex items-center gap-2"
+                                 className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 sm:px-6 py-2.5 min-h-[44px] rounded-full font-display font-bold uppercase tracking-[0.05em] shadow-red-cta transition duration-150 hover:scale-105 active:scale-95 flex items-center gap-2"
                               >
                                  Reserve <ArrowRight size={16} />
                               </button>

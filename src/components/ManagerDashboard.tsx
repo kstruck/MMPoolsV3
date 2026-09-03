@@ -324,7 +324,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     <button
                         onClick={isSuperAdmin(user) ? onCreatePool : undefined}
                         disabled={!isSuperAdmin(user)}
-                        className={`px-6 py-3.5 rounded-md font-display font-bold text-xs uppercase tracking-[0.08em] flex items-center gap-2 transition-all duration-150 ${isSuperAdmin(user)
+                        className={`px-6 py-3.5 rounded-md font-display font-bold text-xs uppercase tracking-[0.08em] flex items-center gap-2 transition duration-150 ${isSuperAdmin(user)
                             ? "bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta hover:-translate-y-px"
                             : "bg-surface text-faint border border-line cursor-not-allowed opacity-80"
                             }`}
@@ -503,7 +503,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         <button
                                             key={type.id}
                                             onClick={() => setFilterType(type.id as any)}
-                                            className={`w-full text-left px-3 py-2.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.08em] transition-all flex justify-between items-center ${filterType === type.id
+                                            className={`w-full text-left px-3 py-2.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.08em] transition flex justify-between items-center ${filterType === type.id
                                                 ? 'bg-gold-500/10 border-l-4 border-gold-500 text-[color:var(--text)] shadow-sm'
                                                 : 'text-muted hover:text-[color:var(--text)] hover:bg-surface'
                                                 }`}
@@ -533,7 +533,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                             key={sport.id}
                                             onClick={() => sport.active && setSelectedLeague(sport.id)}
                                             disabled={!sport.active}
-                                            className={`w-full text-left px-3 py-2.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.08em] transition-all flex justify-between items-center ${!sport.active
+                                            className={`w-full text-left px-3 py-2.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.08em] transition flex justify-between items-center ${!sport.active
                                                 ? 'opacity-30 cursor-not-allowed text-faint'
                                                 : selectedLeague === sport.id
                                                     ? 'bg-gold-500/10 border-l-4 border-gold-500 text-[color:var(--text)]'
@@ -588,7 +588,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         <button
                                             key={price.id}
                                             onClick={() => setFilterPrice(price.id as any)}
-                                            className={`text-[9px] px-3 py-1.5 rounded-md border font-display font-bold uppercase tracking-[0.08em] num transition-all ${filterPrice === price.id ? 'bg-gold-500/15 border-gold-500 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted hover:border-navy-600'}`}
+                                            className={`text-[9px] px-3 py-1.5 rounded-md border font-display font-bold uppercase tracking-[0.08em] num transition ${filterPrice === price.id ? 'bg-gold-500/15 border-gold-500 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted hover:border-navy-600'}`}
                                         >
                                             {price.label}
                                         </button>
@@ -604,7 +604,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         <span className={`text-xs font-display font-bold uppercase tracking-[0.08em] ${filterCharity ? 'text-[color:var(--text)]' : 'text-muted group-hover:text-[color:var(--text)]'}`}>Charity Only</span>
                                     </div>
                                     <div className={`w-10 h-5 rounded-full relative transition-colors ${filterCharity ? 'bg-navy-800 dark:bg-gold-600' : 'bg-line'}`} onClick={() => setFilterCharity(!filterCharity)}>
-                                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${filterCharity ? 'left-6' : 'left-1'}`} />
+                                        <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform duration-150 ${filterCharity ? 'translate-x-5' : 'translate-x-0'}`} />
                                     </div>
                                 </label>
                             </div>
@@ -616,13 +616,13 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                             <div className="flex gap-2 mb-6">
                                 <button
                                     onClick={() => setArchiveTab('active')}
-                                    className={`px-4 py-2.5 rounded-md font-display font-bold text-xs uppercase tracking-[0.08em] transition-all flex items-center gap-2 ${archiveTab === 'active' ? 'bg-navy-800 text-white' : 'bg-surface border border-line text-muted hover:bg-card hover:text-[color:var(--text)]'}`}
+                                    className={`px-4 py-2.5 rounded-md font-display font-bold text-xs uppercase tracking-[0.08em] transition flex items-center gap-2 ${archiveTab === 'active' ? 'bg-navy-800 text-white' : 'bg-surface border border-line text-muted hover:bg-card hover:text-[color:var(--text)]'}`}
                                 >
                                     <Globe size={14} /> Active Pools
                                 </button>
                                 <button
                                     onClick={() => setArchiveTab('archived')}
-                                    className={`px-4 py-2.5 rounded-md font-display font-bold text-xs uppercase tracking-[0.08em] transition-all flex items-center gap-2 ${archiveTab === 'archived' ? 'bg-gold-foil text-navy-950' : 'bg-surface border border-line text-muted hover:bg-card hover:text-[color:var(--text)]'}`}
+                                    className={`px-4 py-2.5 rounded-md font-display font-bold text-xs uppercase tracking-[0.08em] transition flex items-center gap-2 ${archiveTab === 'archived' ? 'bg-gold-foil text-navy-950' : 'bg-surface border border-line text-muted hover:bg-card hover:text-[color:var(--text)]'}`}
                                 >
                                     <Archive size={14} /> Archived
                                 </button>
@@ -704,7 +704,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                         }
 
                                         return (
-                                            <div key={pool.id} className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover relative overflow-hidden flex flex-col justify-between">
+                                            <div key={pool.id} className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover relative overflow-hidden flex flex-col justify-between">
                                                 {charityEnabled && (
                                                     <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
                                                         <Heart size={100} className="fill-gold-500 text-gold-500" />
@@ -767,7 +767,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                         <div className="flex items-center gap-1.5">
                                                             {(isBracket || pool.type === 'SQUARES') && (
                                                                 <div className="w-20 h-1.5 bg-line rounded-full overflow-hidden">
-                                                                    <div className="h-full bg-gold-foil rounded-full transition-all" style={{ width: `${pct}%` }}></div>
+                                                                    <div className="h-full bg-gold-foil rounded-full transition" style={{ width: `${pct}%` }}></div>
                                                                 </div>
                                                             )}
                                                             <span className="text-[10px] font-display font-bold text-muted uppercase tracking-[0.08em] num">{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
@@ -788,7 +788,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     {onDuplicatePool && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); onDuplicatePool(pool.id); }}
-                                                            className="col-span-2 bg-surface hover:bg-card text-muted hover:text-[color:var(--text)] rounded-md flex items-center justify-center transition-all border border-line"
+                                                            className="col-span-2 bg-surface hover:bg-card text-muted hover:text-[color:var(--text)] rounded-md flex items-center justify-center transition border border-line"
                                                             title="Duplicate Pool"
                                                         >
                                                             <Copy size={13} />
@@ -797,7 +797,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                     {onArchivePool && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); onArchivePool(pool.id, archiveTab !== 'archived'); }}
-                                                            className={`col-span-2 rounded-md flex items-center justify-center transition-all border ${archiveTab === 'archived'
+                                                            className={`col-span-2 rounded-md flex items-center justify-center transition border ${archiveTab === 'archived'
                                                                 ? 'bg-[#0F7B4A]/10 hover:bg-[#0F7B4A]/20 text-[#0F7B4A] border-[#0F7B4A]/20'
                                                                 : 'bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 border-gold-500/30'
                                                                 }`}
@@ -806,7 +806,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                                             {archiveTab === 'archived' ? <RotateCcw size={13} /> : <Archive size={13} />}
                                                         </button>
                                                     )}
-                                                    <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ isOpen: true, poolId: pool.id, poolName: pool.name }); }} className="col-span-1 bg-brandred-600/10 hover:bg-brandred-600/20 text-brandred-600 border border-brandred-600/20 hover:border-brandred-600/50 rounded-md flex items-center justify-center transition-all px-1"><Trash2 size={13} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ isOpen: true, poolId: pool.id, poolName: pool.name }); }} className="col-span-1 bg-brandred-600/10 hover:bg-brandred-600/20 text-brandred-600 border border-brandred-600/20 hover:border-brandred-600/50 rounded-md flex items-center justify-center transition px-1"><Trash2 size={13} /></button>
                                                 </div>
                                             </div>
                                         );
@@ -869,7 +869,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                                     }
                                 }}
                                 disabled={deleteConfirmText !== deleteModal.poolName}
-                                className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white rounded-md text-xs font-display font-bold uppercase tracking-[0.08em] transition-all shadow-red-cta"
+                                className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white rounded-md text-xs font-display font-bold uppercase tracking-[0.08em] transition shadow-red-cta"
                             >
                                 Delete
                             </button>

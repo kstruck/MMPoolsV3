@@ -120,7 +120,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
           </code>
           <button
             onClick={handleCopy}
-            className={`px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all flex items-center gap-2 ${
+            className={`px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition flex items-center gap-2 ${
               copied
                 ? 'bg-[#0F7B4A] text-white'
                 : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
@@ -151,7 +151,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
             href={shareLinks.twitter}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-surface hover:bg-[#1DA1F2]/20 border border-line hover:border-[#1DA1F2]/50 text-[color:var(--text)] hover:text-[#1DA1F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-[#1DA1F2]/20 border border-line hover:border-[#1DA1F2]/50 text-[color:var(--text)] hover:text-[#1DA1F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -162,7 +162,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
             href={shareLinks.facebook}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-surface hover:bg-[#1877F2]/20 border border-line hover:border-[#1877F2]/50 text-[color:var(--text)] hover:text-[#1877F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-[#1877F2]/20 border border-line hover:border-[#1877F2]/50 text-[color:var(--text)] hover:text-[#1877F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
               <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
@@ -173,14 +173,14 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
             href={shareLinks.whatsapp}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-surface hover:bg-[#25D366]/20 border border-line hover:border-[#25D366]/50 text-[color:var(--text)] hover:text-[#25D366] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-[#25D366]/20 border border-line hover:border-[#25D366]/50 text-[color:var(--text)] hover:text-[#25D366] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition"
           >
             <MessageCircle size={16} />
             <span className="hidden sm:inline">WhatsApp</span>
           </a>
           <a
             href={shareLinks.email}
-            className="flex items-center gap-2 bg-surface hover:bg-gold-500/20 border border-line hover:border-gold-500/50 text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-gold-500/20 border border-line hover:border-gold-500/50 text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition"
           >
             <Mail size={16} />
             <span className="hidden sm:inline">Email</span>

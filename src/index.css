@@ -57,6 +57,37 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ============================================
+   REDUCED MOTION
+   Fewer and gentler, not zero: colour / opacity / shadow transitions stay
+   (they aid comprehension), movement goes (transform, layout, looping
+   keyframes). Loading spinners keep spinning — a frozen spinner reads as
+   a hang, not as calm. framer-motion is handled by <MotionConfig
+   reducedMotion="user"> in main.tsx.
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+  }
+
+  .animate-spin {
+    animation: spin 1s linear infinite !important;
+  }
+
+  .transition,
+  .transition-transform {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
+  }
+}
+
 h1, h2, h3, h4, .display {
   font-family: var(--font-display);
   text-transform: uppercase;

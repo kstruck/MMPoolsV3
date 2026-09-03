@@ -80,7 +80,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                                 setWeek(currentEstimatedWeek.toString());
                             }
                         }
-                    }} className={`px-5 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex items-center gap-2 ${showSchedule ? 'bg-card hover:bg-surface text-muted border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] hover:-translate-y-px'}`}>
+                    }} className={`px-5 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] transition duration-150 flex items-center gap-2 ${showSchedule ? 'bg-card hover:bg-surface text-muted border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] hover:-translate-y-px'}`}>
                         <Calendar size={18} className={!showSchedule ? 'animate-pulse' : ''} />
                         {showSchedule ? 'Hide Schedule' : 'Find Game'}
                     </button>
@@ -121,7 +121,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                                 </select>
                             )}
 
-                            <button onClick={fetchSchedule} disabled={isLoadingSchedule} className="bg-brandred-600 hover:bg-brandred-500 text-white px-3 py-1 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm ml-auto flex items-center gap-2 transition-all duration-150 hover:-translate-y-px disabled:opacity-50">
+                            <button onClick={fetchSchedule} disabled={isLoadingSchedule} className="bg-brandred-600 hover:bg-brandred-500 text-white px-3 py-1 rounded-md font-display font-bold uppercase tracking-[0.05em] text-sm ml-auto flex items-center gap-2 transition duration-150 hover:-translate-y-px disabled:opacity-50">
                                 {isLoadingSchedule ? 'Loading...' : <><RefreshCw size={14} /> Find Games</>}
                             </button>
                         </div>
@@ -136,7 +136,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({
                                 if (!home || !away) return null;
                                 const dateStr = new Date(game.date).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                                 return (
-                                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-surface cursor-pointer border border-transparent hover:border-navy-600/30 group transition-all">
+                                    <div key={game.id} onClick={() => selectGame(game)} className="flex items-center justify-between p-2 rounded hover:bg-surface cursor-pointer border border-transparent hover:border-navy-600/30 group transition">
                                         <div className="flex items-center gap-3">
                                             <span className="num text-xs text-faint w-24">{dateStr}</span>
                                             <div className="flex items-center gap-2">

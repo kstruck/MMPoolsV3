@@ -303,7 +303,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                     toast.error(getUserMessage(err, 'Error syncing claims.'));
                                 }
                             }}
-                            className="bg-gold-foil hover:brightness-105 text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-5 py-2.5 rounded-lg text-sm transition-all duration-150 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
+                            className="bg-gold-foil hover:brightness-105 text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-5 py-2.5 rounded-lg text-sm transition duration-150 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
                         >
                             Sync Admin Token Claims
                         </button>
@@ -500,7 +500,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                         checked={formData.smsOptIn || false}
                                         onChange={(e) => setFormData({ ...formData, smsOptIn: e.target.checked })}
                                     />
-                                    <div className="w-11 h-6 bg-line peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-gold-500 peer-focus-visible:ring-offset-1 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
+                                    <div className="w-11 h-6 bg-line peer-focus:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-gold-500 peer-focus-visible:ring-offset-1 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition peer-checked:bg-navy-800 dark:peer-checked:bg-gold-600"></div>
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-sm font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] transition-colors">Opt-in to SMS Notifications</span>
@@ -654,7 +654,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                             <button
                                 type="submit"
                                 disabled={isSaving}
-                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] shadow-[0_6px_16px_rgba(196,52,46,0.28)] transition-all duration-150 hover:-translate-y-px flex items-center gap-2"
+                                className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] shadow-[0_6px_16px_rgba(196,52,46,0.28)] transition duration-150 hover:-translate-y-px flex items-center gap-2"
                             >
                                 {isSaving ? <Loader size={20} className="animate-spin" /> : <Save size={20} />}
                                 Save Changes
@@ -720,7 +720,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
                                 <button
                                     type="submit"
                                     disabled={emailUpdateLoading}
-                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-6 py-2 rounded-md font-display font-bold uppercase tracking-[0.05em] shadow-[0_6px_16px_rgba(196,52,46,0.28)] flex items-center gap-2 transition-all duration-150"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white px-6 py-2 rounded-md font-display font-bold uppercase tracking-[0.05em] shadow-[0_6px_16px_rgba(196,52,46,0.28)] flex items-center gap-2 transition duration-150"
                                 >
                                     {emailUpdateLoading && <Loader size={16} className="animate-spin" />}
                                     Send Verification

@@ -46,7 +46,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             payouts: { q1: 25, half: 25, q3: 25, final: 25 },
                             ruleVariations: { ...gameState.ruleVariations, scoreChangePayout: false }
                         })}
-                        className={`relative p-6 rounded-2xl border-2 text-left transition-all group ${!gameState.ruleVariations.scoreChangePayout
+                        className={`relative p-6 rounded-2xl border-2 text-left transition group ${!gameState.ruleVariations.scoreChangePayout
                             ? 'bg-navy-600/10 border-navy-600 ring-4 ring-navy-600/10'
                             : 'bg-card border-line hover:border-navy-600'
                             }`}
@@ -90,7 +90,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                                 }
                             }
                         })}
-                        className={`relative p-6 rounded-2xl border-2 text-left transition-all group ${gameState.ruleVariations.scoreChangePayout
+                        className={`relative p-6 rounded-2xl border-2 text-left transition group ${gameState.ruleVariations.scoreChangePayout
                             ? 'bg-navy-600/10 border-navy-600 ring-4 ring-navy-600/10'
                             : 'bg-card border-line hover:border-navy-600'
                             }`}
@@ -167,7 +167,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                         <div className="grid md:grid-cols-2 gap-4">
                             <button
                                 onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'equal_split' } })}
-                                className={`relative p-5 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split'
+                                className={`relative p-5 rounded-xl border text-left transition ${gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split'
                                     ? 'bg-navy-600/20 border-navy-600 ring-2 ring-navy-600'
                                     : 'bg-card border-line hover:border-navy-600'
                                     }`}
@@ -190,7 +190,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
 
                             <button
                                 onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, scoreChangePayoutStrategy: 'hybrid' } })}
-                                className={`relative p-5 rounded-xl border text-left transition-all ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
+                                className={`relative p-5 rounded-xl border text-left transition ${gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid'
                                     ? 'bg-navy-600/20 border-navy-600 ring-2 ring-navy-600'
                                     : 'bg-card border-line hover:border-navy-600'
                                     }`}
@@ -412,7 +412,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <button
                                     onClick={() => updateConfig({ ruleVariations: { ...gameState.ruleVariations, unclaimedFinalPrizeStrategy: 'last_winner' } })}
-                                    className={`p-3 rounded-lg border text-left transition-all ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'last_winner' || !gameState.ruleVariations.unclaimedFinalPrizeStrategy ? 'bg-navy-600/20 border-navy-600 text-navy-600 dark:text-navy-500' : 'bg-page border-line text-muted hover:border-navy-600'}`}
+                                    className={`p-3 rounded-lg border text-left transition ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'last_winner' || !gameState.ruleVariations.unclaimedFinalPrizeStrategy ? 'bg-navy-600/20 border-navy-600 text-navy-600 dark:text-navy-500' : 'bg-page border-line text-muted hover:border-navy-600'}`}
                                 >
                                     <div className="font-display font-bold uppercase text-sm mb-1">Option A: Last Winner</div>
                                     <div className="text-xs opacity-80">Award prize to the most recent previous winner (e.g. Q3).</div>
@@ -420,7 +420,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
 
                                 <button
                                     onClick={handleRandomDrawClick}
-                                    className={`p-3 rounded-lg border text-left transition-all ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-navy-600/20 border-navy-600 text-navy-600 dark:text-navy-500' : 'bg-page border-line text-muted hover:border-navy-600'}`}
+                                    className={`p-3 rounded-lg border text-left transition ${gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' ? 'bg-navy-600/20 border-navy-600 text-navy-600 dark:text-navy-500' : 'bg-page border-line text-muted hover:border-navy-600'}`}
                                 >
                                     <div className="font-display font-bold uppercase text-sm mb-1">Option B: Random Draw</div>
                                     <div className="text-xs opacity-80">Activates a "Randomizer" button to pick a lucky square.</div>
@@ -459,7 +459,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             </button>
                             <button
                                 onClick={confirmRandomDraw}
-                                className="px-4 py-2 bg-gold-foil hover:brightness-105 text-navy-900 font-display font-bold uppercase tracking-[0.05em] rounded-md shadow-[0_6px_16px_rgba(140,109,51,0.28)] transition-all duration-150 hover:-translate-y-px"
+                                className="px-4 py-2 bg-gold-foil hover:brightness-105 text-navy-900 font-display font-bold uppercase tracking-[0.05em] rounded-md shadow-[0_6px_16px_rgba(140,109,51,0.28)] transition duration-150 hover:-translate-y-px"
                             >
                                 Yes, Use Random Draw
                             </button>

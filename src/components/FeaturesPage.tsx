@@ -41,12 +41,12 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <button
                                 onClick={canCreate ? onCreatePool : undefined}
                                 disabled={!canCreate}
-                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
+                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                                 title={canCreate ? "Create Your Pool" : "Pool creation is coming soon"}
                             >
                                 <Trophy size={20} /> {canCreate ? 'Create Your Pool' : 'Pool Creation Coming Soon'}
                             </button>
-                            <button onClick={() => window.location.href = '/browse'} className="border-[1.5px] border-white/30 text-white hover:border-gold-500 hover:text-gold-300 bg-transparent px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2">
+                            <button onClick={() => window.location.href = '/browse'} className="border-[1.5px] border-white/30 text-white hover:border-gold-500 hover:text-gold-300 bg-transparent px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition duration-150 hover:-translate-y-px flex items-center justify-center gap-2">
                                 <Layout size={20} /> Find a Pool
                             </button>
                         </div>
@@ -331,7 +331,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <button
                             onClick={canCreate ? onCreatePool : undefined}
                             disabled={!canCreate}
-                            className="bg-brandred-600 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px relative z-10 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
+                            className="bg-brandred-600 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg hover:bg-brandred-500 transition duration-150 hover:-translate-y-px relative z-10 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                             title={canCreate ? "Create Your Pool Free" : "Pool creation is coming soon"}
                         >
                             {canCreate ? 'Create Your Pool Free' : 'Pool Creation Coming Soon'}

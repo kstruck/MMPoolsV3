@@ -91,7 +91,7 @@ export const PropGradingDashboard: React.FC<PropGradingDashboardProps> = ({ game
                                                 key={optIdx}
                                                 onClick={() => handleGrade(q.id, optIdx)}
                                                 disabled={isLoading}
-                                                className={`px-3 py-2 text-sm rounded-lg border flex items-center justify-between transition-all duration-150
+                                                className={`px-3 py-2 text-sm rounded-lg border flex items-center justify-between transition duration-150
                                                     ${isCorrect
                                                         ? 'bg-[#E4F5EC] border-[#0F7B4A] text-[#0F7B4A]'
                                                         : 'bg-surface border-line text-muted hover:border-navy-600 hover:text-[color:var(--text)]'}

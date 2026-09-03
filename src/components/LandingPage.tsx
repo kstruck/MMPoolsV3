@@ -33,7 +33,7 @@ const cardCls = 'bg-card border border-line rounded-2xl';
 const heroCardCls = 'bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl';
 
 const heroBtn =
-  'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
+  'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition duration-150 hover:-translate-y-px cursor-pointer';
 
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   const navigate = useNavigate();
@@ -279,7 +279,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-16">
 
             {/* Card 1: Free Sandbox Tier (4 cols) */}
-            <div className={cn(cardCls, 'lg:col-span-4 rounded-3xl p-8 hover:border-gold-500/40 transition-all duration-300 flex flex-col justify-between shadow-card relative group hover:-translate-y-1')}>
+            <div className={cn(cardCls, 'lg:col-span-4 rounded-3xl p-8 hover:border-gold-500/40 transition duration-300 flex flex-col justify-between shadow-card relative group hover:-translate-y-1')}>
               <div className="space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="p-3.5 rounded-2xl bg-navy-600/10 text-navy-700 dark:text-[#9FB0CC] border border-line">
@@ -306,7 +306,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <button
                   onClick={canCreate ? onCreatePool : undefined}
                   disabled={!canCreate}
-                  className="w-full border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-line dark:text-[color:var(--text)] dark:hover:bg-white/10 py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  className="w-full border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-line dark:text-[color:var(--text)] dark:hover:bg-white/10 py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   title={canCreate ? 'Launch a free pool' : 'Pool creation is coming soon'}
                 >
                   {canCreate ? 'Launch Free Pool' : 'Coming Soon'}
@@ -315,7 +315,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
 
             {/* Card 2: Dynamic Pool Tier - Featured (5 cols) */}
-            <div className="lg:col-span-5 bg-card border border-gold-500/40 rounded-3xl p-8 hover:border-gold-500/70 transition-all duration-300 flex flex-col justify-between shadow-panel relative group hover:-translate-y-1 overflow-hidden">
+            <div className="lg:col-span-5 bg-card border border-gold-500/40 rounded-3xl p-8 hover:border-gold-500/70 transition duration-300 flex flex-col justify-between shadow-panel relative group hover:-translate-y-1 overflow-hidden">
               {/* Top ambient glow */}
               <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-gold-500/10 blur-2xl pointer-events-none" />
 
@@ -345,7 +345,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="font-display font-extrabold text-3xl text-[color:var(--text)] mb-4 num">Starts at $9 <span className="text-xs text-faint font-body font-medium normal-case">/ pool</span></div>
                 <button
                   onClick={() => navigate('/pricing')}
-                  className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all shadow-[0_6px_16px_rgba(140,109,51,0.28)] hover:brightness-105 flex items-center justify-center gap-1.5 group/btn"
+                  className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition shadow-[0_6px_16px_rgba(140,109,51,0.28)] hover:brightness-105 flex items-center justify-center gap-1.5 group/btn"
                 >
                   Estimate Pool Price
                   <Zap size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
@@ -354,7 +354,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
 
             {/* Card 3: Commissioner Packs (3 cols) */}
-            <div className={cn(cardCls, 'lg:col-span-3 rounded-3xl p-8 hover:border-gold-500/40 transition-all duration-300 flex flex-col justify-between shadow-card relative group hover:-translate-y-1')}>
+            <div className={cn(cardCls, 'lg:col-span-3 rounded-3xl p-8 hover:border-gold-500/40 transition duration-300 flex flex-col justify-between shadow-card relative group hover:-translate-y-1')}>
               <div className="space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="p-3.5 rounded-2xl bg-gold-500/10 text-gold-600 dark:text-gold-400 border border-line">
@@ -380,7 +380,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="font-display font-extrabold text-3xl text-[color:var(--text)] mb-4 num">$49 <span className="text-xs text-faint font-body font-medium normal-case">/ 3-pool bundle</span></div>
                 <button
                   onClick={() => navigate('/pricing')}
-                  className="w-full bg-navy-800 hover:bg-navy-700 text-white py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all"
+                  className="w-full bg-navy-800 hover:bg-navy-700 text-white py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition"
                 >
                   View Bundle Packages
                 </button>
@@ -399,7 +399,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
             <button
               onClick={() => navigate('/pricing')}
-              className="border-[1.5px] border-gold-500/50 text-gold-600 dark:text-gold-300 hover:bg-gold-500/10 px-5 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all whitespace-nowrap"
+              className="border-[1.5px] border-gold-500/50 text-gold-600 dark:text-gold-300 hover:bg-gold-500/10 px-5 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition whitespace-nowrap"
             >
               Open Pricing Calculator →
             </button>
@@ -501,7 +501,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <button
             onClick={canCreate ? onCreatePool : undefined}
             disabled={!canCreate}
-            className="bg-brandred-600 text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl transition-all hover:-translate-y-px hover:bg-brandred-500 shadow-red-cta mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none cursor-pointer"
+            className="bg-brandred-600 text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl transition hover:-translate-y-px hover:bg-brandred-500 shadow-red-cta mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none cursor-pointer"
             title={canCreate ? "Create Your Free Pool Now" : "Pool creation is coming soon"}
           >
             {canCreate ? 'Create Your Free Pool Now' : 'Pool Creation Coming Soon'}

@@ -446,7 +446,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition duration-150 ${pickOutcomeCardClass(outcome)}`}
               >
                 {/* Text half of the card highlight — see PickemPickEntry. */}
                 {outcome && (

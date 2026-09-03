@@ -735,7 +735,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
 
                     <div className="flex gap-2">
                         <ExportControls pool={pool} entries={entries} tournament={tournament} />
-                        <button onClick={() => setShowShareModal(true)} className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta">
+                        <button onClick={() => setShowShareModal(true)} className="bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 text-sm transition duration-150 hover:-translate-y-px shadow-red-cta">
                             <Share2 size={16} /> Share
                         </button>
                     </div>
@@ -785,7 +785,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 whitespace-nowrap text-sm ${activeTab === tab.id
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full font-display font-bold uppercase tracking-[0.05em] transition duration-150 whitespace-nowrap text-sm ${activeTab === tab.id
                                 ? (tab.id === 'manager' ? 'bg-gold-foil text-navy-900 shadow-lg shadow-gold-700/30' : 'bg-navy-800 text-white')
                                 : (tab.id === 'manager' ? 'bg-card border border-gold-500/40 text-gold-600 hover:bg-surface' : 'bg-card text-muted hover:bg-surface')
                                 }`}
@@ -843,7 +843,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             }}
                                             disabled={submitting || !tournament}
                                             title={!tournament ? "Tournament data not available yet" : ""}
-                                            className="bg-gold-foil hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-150 hover:-translate-y-px"
+                                            className="bg-gold-foil hover:brightness-105 disabled:opacity-50 disabled:cursor-not-allowed text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-4 py-2 rounded-lg flex items-center gap-2 transition duration-150 hover:-translate-y-px"
                                         >
                                             {submitting ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
                                             {userEntries.length === 0 ? 'Create Your Bracket' : 'Add Another Entry'}
@@ -991,7 +991,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleViewEntry(entry); }}
-                                                        className="bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 hover:-translate-y-px"
+                                                        className="bg-navy-800 hover:bg-navy-700 text-white px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition duration-150 hover:-translate-y-px"
                                                         title="View & Print"
                                                     >
                                                         <Printer size={16} />
@@ -1000,7 +1000,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                     {/* Share button temporarily hidden - image generation failing */}
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleEditEntry(entry); }}
-                                                        className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
+                                                        className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition duration-150 hover:-translate-y-px"
                                                         disabled={(entry.status === 'SUBMITTED' && pool.status !== 'OPEN') || pool.status === 'LOCKED' || pool.status === 'LIVE' || pool.status === 'COMPLETED'}
                                                     >
                                                         {entry.status === 'SUBMITTED' ? 'Edit' : 'Enter Picks/Edit Picks'}
@@ -1050,14 +1050,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <button
                                     onClick={handleSaveDraft}
                                     disabled={submitting}
-                                    className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm transition-all duration-150 hover:-translate-y-px"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm transition duration-150 hover:-translate-y-px"
                                 >
                                     <Save size={14} /> Save Draft
                                 </button>
                                 <button
                                     onClick={handleSubmitBracket}
                                     disabled={submitting}
-                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm shadow-red-cta transition-all duration-150 hover:-translate-y-px"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm shadow-red-cta transition duration-150 hover:-translate-y-px"
                                 >
                                     {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                                     Submit Bracket
@@ -1130,14 +1130,14 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                 <button
                                     onClick={handleSaveDraft}
                                     disabled={submitting}
-                                    className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm transition-all duration-150 hover:-translate-y-px"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm transition duration-150 hover:-translate-y-px"
                                 >
                                     <Save size={14} /> Save Draft
                                 </button>
                                 <button
                                     onClick={handleSubmitBracket}
                                     disabled={submitting}
-                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm shadow-red-cta transition-all duration-150 hover:-translate-y-px"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-display font-bold uppercase tracking-[0.05em] flex items-center gap-1.5 text-sm shadow-red-cta transition duration-150 hover:-translate-y-px"
                                 >
                                     {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                                     Submit Bracket
@@ -1199,7 +1199,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                     <div
                                         key={entry.id}
                                         onClick={() => handleViewEntry(entry)}
-                                        className={`bg-card p-4 rounded-lg border transition-all cursor-pointer hover:scale-105 shadow-card ${entry.ownerUid === user?.id ? 'border-brandred-600/60 bg-brandred-600/[0.05] hover:border-brandred-500' : 'border-line hover:border-gold-500'}`}
+                                        className={`bg-card p-4 rounded-lg border transition cursor-pointer hover:scale-105 shadow-card ${entry.ownerUid === user?.id ? 'border-brandred-600/60 bg-brandred-600/[0.05] hover:border-brandred-500' : 'border-line hover:border-gold-500'}`}
                                     >
                                         <div className="font-bold text-[color:var(--text)] flex items-center gap-2">
                                             {entry.name}
@@ -2364,7 +2364,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                         value={newNameInput}
                                         onChange={(e) => setNewNameInput(e.target.value)}
                                         placeholder="Enter a bracket name..."
-                                        className={`w-full bg-surface border ${isNameTaken && newNameInput.trim() !== '' ? 'border-brandred-500/50 focus:ring-brandred-500' : 'border-line focus:ring-gold-500'} rounded-lg px-4 py-3 text-[color:var(--text)] focus:ring-2 focus:border-transparent outline-none transition-all placeholder:text-faint`}
+                                        className={`w-full bg-surface border ${isNameTaken && newNameInput.trim() !== '' ? 'border-brandred-500/50 focus:ring-brandred-500' : 'border-line focus:ring-gold-500'} rounded-lg px-4 py-3 text-[color:var(--text)] focus:ring-2 focus:border-transparent outline-none transition placeholder:text-faint`}
                                         autoFocus
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && newNameInput.trim() && !isNameTaken) {
@@ -2398,7 +2398,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                             }
                                         }}
                                         disabled={!newNameInput.trim() || isNameTaken || submitting}
-                                        className="flex-1 bg-gold-foil hover:brightness-105 text-navy-900 px-4 py-2 rounded-lg transition-all font-display font-bold uppercase tracking-[0.05em] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="flex-1 bg-gold-foil hover:brightness-105 text-navy-900 px-4 py-2 rounded-lg transition font-display font-bold uppercase tracking-[0.05em] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
                                         Continue

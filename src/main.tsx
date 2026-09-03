@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { BrowserRouter } from 'react-router'
+import { MotionConfig } from 'framer-motion'
 import { HelmetProvider } from 'react-helmet-async'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -37,9 +38,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <HelmetProvider>
         <BrowserRouter>
           <ThemeProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
+            {/* reducedMotion="user": when the OS asks for reduced motion,
+                framer-motion drops transform/layout animation and keeps
+                opacity. Sits above ToastProvider because Toast uses motion. */}
+            <MotionConfig reducedMotion="user">
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </MotionConfig>
           </ThemeProvider>
         </BrowserRouter>
       </HelmetProvider>

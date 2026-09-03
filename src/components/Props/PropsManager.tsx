@@ -351,7 +351,7 @@ export const PropsManager: React.FC<PropsManagerProps> = ({ gameState, updateCon
                                     }
 
                                     return (
-                                        <div key={q.id} className="group bg-card border border-line hover:border-navy-600 rounded-lg p-4 transition-all duration-150 flex items-start gap-4">
+                                        <div key={q.id} className="group bg-card border border-line hover:border-navy-600 rounded-lg p-4 transition duration-150 flex items-start gap-4">
                                             {/* Drag Handles (Actually Up/Down Buttons) */}
                                             {selectedCategory === 'All' && !questionSearch && (
                                                 <div className="flex flex-col gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -607,7 +607,7 @@ const SeedLibrary: React.FC<{
                             return (
                                 <div
                                     key={seed.id}
-                                    className={`p-4 rounded-xl border transition-all duration-150 ${added
+                                    className={`p-4 rounded-xl border transition duration-150 ${added
                                         ? 'bg-surface border-line opacity-60'
                                         : 'bg-card border-line hover:border-gold-500/50 hover:shadow-card-hover'
                                         }`}

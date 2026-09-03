@@ -349,7 +349,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 onClick={startCreate}
                                 disabled={!canCreate}
                                 title={canCreate ? 'Start building your pool — no account needed' : 'Pool creation is coming soon'}
-                                className="inline-flex items-center justify-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-4 px-8 rounded-2xl text-sm transition-all duration-150 hover:-translate-y-px shadow-red-cta group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                className="inline-flex items-center justify-center gap-2 bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-4 px-8 rounded-2xl text-sm transition duration-150 hover:-translate-y-px shadow-red-cta group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                             >
                                 {canCreate ? (
                                     <>
@@ -390,7 +390,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         <button
                                             key={pool.id}
                                             onClick={() => setSelectedPoolId(pool.id)}
-                                            className={`w-full flex items-center justify-between p-4 rounded-xl border text-left transition-all ${
+                                            className={`w-full flex items-center justify-between p-4 rounded-xl border text-left transition ${
                                                 selectedPoolId === pool.id
                                                     ? 'bg-gold-500/10 border-gold-500 shadow-lg'
                                                     : 'bg-surface border-line hover:border-gold-500/40'
@@ -456,7 +456,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                         pool={pool as never}
                                                         addon={addon}
                                                         label={ADDON_LABELS[addon]}
-                                                        className="inline-flex items-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        className="inline-flex items-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     />
                                                 ))}
                                             </div>
@@ -468,7 +468,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
 
                         {/* Interactive Billing Calculator Panel — hidden when a PAYABLE pool is selected (that pool's checkout on the right is authoritative; the estimator is for exploring pricing before you pick a pool). A deep link to a pool the visitor cannot pay for keeps the estimator, since the right column stays estimate-only too. */}
                         {!selectedIsPayable && (
-                        <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition-all duration-300 relative overflow-hidden`}>
+                        <div className={`${contentCard} p-6 md:p-8 rounded-3xl space-y-6 shadow-panel backdrop-blur-md hover:border-gold-500/40 transition duration-300 relative overflow-hidden`}>
                             {/* Inner background blob */}
                             <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
 
@@ -510,7 +510,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     // What-If Simulator is a Bracket-only add-on (matches the checkout gating); clear it when switching to another format.
                                                     if (f.k.toUpperCase() !== 'BRACKET') setCalcSim(false);
                                                 }}
-                                                className={`py-3.5 px-3 rounded-2xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border ${
+                                                className={`py-3.5 px-3 rounded-2xl text-xs font-display font-bold uppercase tracking-[0.05em] transition border ${
                                                     calcPoolType === f.k
                                                         ? 'bg-gold-500/15 text-[color:var(--text)] border-gold-500 shadow-lg shadow-gold-500/10'
                                                         : 'bg-surface text-muted border-line hover:border-gold-500/30 hover:text-[color:var(--text)]'
@@ -562,7 +562,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     </label>
                                     <div className="space-y-2.5">
                                         {config.features.aiCommissioner.isPremium && (
-                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition duration-300 ${
                                                 calcAi ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
                                                 <div className="flex gap-3 items-center">
@@ -590,7 +590,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         )}
 
                                         {config.features.smsNotifications?.isPremium && (
-                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition duration-300 ${
                                                 calcSms ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
                                                 <div className="flex gap-3 items-center">
@@ -618,7 +618,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                         )}
 
                                         {config.features.whatIfSimulator.isPremium && calcPoolType.toUpperCase() === 'BRACKET' && (
-                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition-all duration-300 ${
+                                            <label className={`flex items-center justify-between cursor-pointer p-4 bg-surface border rounded-2xl hover:border-gold-500/30 hover:bg-card transition duration-300 ${
                                                 calcSim ? 'border-gold-500 bg-gradient-to-r from-gold-500/5 to-transparent' : 'border-line'
                                             }`}>
                                                 <div className="flex gap-3 items-center">
@@ -740,7 +740,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     <button
                                         onClick={startCreate}
                                         disabled={!canCreate}
-                                        className="w-full bg-surface hover:bg-card text-[color:var(--text)] border border-line hover:border-gold-500/40 py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line"
+                                        className="w-full bg-surface hover:bg-card text-[color:var(--text)] border border-line hover:border-gold-500/40 py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition duration-150 hover:-translate-y-px flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-line"
                                         title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
                                     >
                                         {canCreate ? <>Launch a New Pool Instead
@@ -763,7 +763,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 <button
                                     onClick={startCreate}
                                     disabled={!canCreate}
-                                    className="w-full bg-brandred-600 hover:bg-brandred-500 text-white py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                    className="w-full bg-brandred-600 hover:bg-brandred-500 text-white py-4 px-6 rounded-2xl text-sm font-display font-bold uppercase tracking-[0.05em] transition duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                     title={canCreate ? 'Launch a new pool' : 'Pool creation is coming soon'}
                                 >
                                     {canCreate ? (
@@ -807,7 +807,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                     : `$${(b.price / b.poolsIncluded).toFixed(2)} / pool`;
 
                                 return (
-                                    <div key={b.id} className={`${contentCard} rounded-3xl p-6 md:p-8 relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/40 transition-all duration-300 shadow-panel group hover:-translate-y-1`}>
+                                    <div key={b.id} className={`${contentCard} rounded-3xl p-6 md:p-8 relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/40 transition duration-300 shadow-panel group hover:-translate-y-1`}>
                                         <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
                                         <div className="space-y-4">
                                             <span className="bg-gold-500/10 border border-gold-500/25 text-gold-600 dark:text-gold-300 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full inline-block">
@@ -857,7 +857,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                         console.error("Bundle purchase failed:", err);
                                                     }
                                                 }}
-                                                className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-1.5 group/btn"
+                                                className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-1.5 group/btn"
                                             >
                                                 Purchase {b.name}
                                                 <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
@@ -869,7 +869,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                         ) : (
                             <>
                                 {/* Package 1: 3-Pool Bundle */}
-                                <div className={`${contentCard} p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/40 transition-all duration-300 shadow-panel group hover:-translate-y-1`}>
+                                <div className={`${contentCard} p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/40 transition duration-300 shadow-panel group hover:-translate-y-1`}>
                                     <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/5 blur-2xl pointer-events-none" />
                                     <div className="space-y-4">
                                         <span className="bg-gold-500/10 border border-gold-500/25 text-gold-600 dark:text-gold-300 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full inline-block">
@@ -916,7 +916,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     console.error("Bundle purchase failed:", err);
                                                 }
                                             }}
-                                            className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-1.5 group/btn"
+                                            className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-1.5 group/btn"
                                         >
                                             Purchase 3-Pool Credits Bundle
                                             <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
@@ -925,7 +925,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                 </div>
 
                                 {/* Package 2: Unlimited Annual Pass */}
-                                <div className="bg-card border border-gold-500/35 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/70 transition-all duration-300 shadow-panel group hover:-translate-y-1">
+                                <div className="bg-card border border-gold-500/35 p-6 md:p-8 rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between hover:border-gold-500/70 transition duration-300 shadow-panel group hover:-translate-y-1">
                                     <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-gold-500/10 blur-2xl pointer-events-none" />
                                     <div className="space-y-4">
                                         <span className="bg-gold-foil text-navy-900 font-display font-bold text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full inline-block">
@@ -980,7 +980,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                                                     console.error("Bundle purchase failed:", err);
                                                 }
                                             }}
-                                            className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all duration-150 hover:-translate-y-px hover:brightness-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)] flex items-center justify-center gap-1.5 group/btn"
+                                            className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition duration-150 hover:-translate-y-px hover:brightness-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)] flex items-center justify-center gap-1.5 group/btn"
                                         >
                                             Unlock 1-Year Unlimited Pass
                                             <ArrowRight size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />

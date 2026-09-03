@@ -565,7 +565,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                 </div>
                                 <button
                                     onClick={() => handleRemoveTierLocal(tier.id)}
-                                    className="p-2 border border-brandred-600/30 text-brandred-500 hover:bg-brandred-600/10 rounded-xl mt-3 md:mt-0 transition-all duration-200"
+                                    className="p-2 border border-brandred-600/30 text-brandred-500 hover:bg-brandred-600/10 rounded-xl mt-3 md:mt-0 transition duration-200"
                                     title="Delete Tier"
                                 >
                                     <Trash2 size={16} />
@@ -577,13 +577,13 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                     <div className="flex gap-3 mt-6 pt-4 border-t border-line">
                         <button
                             onClick={handleAddTierLocal}
-                            className="flex items-center gap-1 bg-surface hover:bg-card text-[color:var(--text)] px-4 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border border-line"
+                            className="flex items-center gap-1 bg-surface hover:bg-card text-[color:var(--text)] px-4 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition border border-line"
                         >
                             <Plus size={14} /> Add New Tier
                         </button>
                         <button
                             onClick={handleSaveTiers}
-                            className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all ml-auto shadow-red-cta"
+                            className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition ml-auto shadow-red-cta"
                         >
                             Save Tier Configuration
                         </button>
@@ -616,8 +616,8 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                     </div>
                                     <div className="h-3 w-full bg-surface rounded-full border border-line overflow-hidden">
                                         <div
-                                            className="h-full bg-gold-foil rounded-full transition-all duration-500"
-                                            style={{ width: `${pct}%` }}
+                                            className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300"
+                                            style={{ transform: `scaleX(${pct / 100})` }}
                                         ></div>
                                     </div>
                                     <p className="text-[10px] text-faint">{t.description}</p>
@@ -653,7 +653,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                 navigator.clipboard.writeText(emails);
                                 toast.success(`Copied ${list.length} emails to clipboard!`);
                             }}
-                            className="text-xs bg-surface hover:bg-card text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl border border-line transition-all flex items-center gap-1.5"
+                            className="text-xs bg-surface hover:bg-card text-[color:var(--text)] font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl border border-line transition flex items-center gap-1.5"
                         >
                             <Copy size={13} /> Copy Group Emails
                         </button>
@@ -684,7 +684,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                 link.click();
                                 document.body.removeChild(link);
                             }}
-                            className="text-xs bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl border border-gold-500/30 transition-all flex items-center gap-1.5"
+                            className="text-xs bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl border border-gold-500/30 transition flex items-center gap-1.5"
                         >
                             <ArrowDown size={13} /> Export CSV
                         </button>
@@ -701,7 +701,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                 setPromoType('coupon');
                                 setPromoCoupon('LOYALTY20');
                             }}
-                            className="text-xs bg-gold-foil text-navy-900 hover:brightness-105 font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl transition-all shadow-card flex items-center gap-1.5"
+                            className="text-xs bg-gold-foil text-navy-900 hover:brightness-105 font-display font-bold uppercase tracking-[0.05em] px-4 py-2.5 rounded-xl transition shadow-card flex items-center gap-1.5"
                         >
                             <Plus size={13} /> Bulk Mock Promo
                         </button>
@@ -790,7 +790,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                             <td className="p-4 flex gap-2">
                                                 <a
                                                     href={`mailto:${u.email}`}
-                                                    className="text-xs bg-surface hover:bg-card text-[color:var(--text)] px-2.5 py-1 rounded-lg border border-line transition-all font-display font-bold uppercase tracking-[0.05em]"
+                                                    className="text-xs bg-surface hover:bg-card text-[color:var(--text)] px-2.5 py-1 rounded-lg border border-line transition font-display font-bold uppercase tracking-[0.05em]"
                                                 >
                                                     Email
                                                 </a>
@@ -799,7 +799,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                                         navigator.clipboard.writeText(u.email);
                                                         toast.success('Email copied to clipboard!');
                                                     }}
-                                                    className="text-xs bg-surface hover:bg-card text-[color:var(--text)] px-2.5 py-1 rounded-lg border border-line transition-all"
+                                                    className="text-xs bg-surface hover:bg-card text-[color:var(--text)] px-2.5 py-1 rounded-lg border border-line transition"
                                                     title="Copy Email"
                                                 >
                                                     <Copy size={12} />
@@ -812,7 +812,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                                         setPromoType('coupon');
                                                         setPromoCoupon('DIRECT15');
                                                     }}
-                                                    className="text-xs bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-gold-400 border border-navy-600/30 px-2.5 py-1 rounded-lg transition-all font-display font-black uppercase tracking-[0.05em]"
+                                                    className="text-xs bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-gold-400 border border-navy-600/30 px-2.5 py-1 rounded-lg transition font-display font-black uppercase tracking-[0.05em]"
                                                 >
                                                     Direct Mock Promo
                                                 </button>
@@ -855,13 +855,13 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
                                         onClick={() => setPromoType('coupon')}
-                                        className={`py-2 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-xl border transition-all flex items-center justify-center gap-1.5 ${promoType === 'coupon' ? 'bg-gold-500/10 border-gold-500/40 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted'}`}
+                                        className={`py-2 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-xl border transition flex items-center justify-center gap-1.5 ${promoType === 'coupon' ? 'bg-gold-500/10 border-gold-500/40 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted'}`}
                                     >
                                         <Ticket size={13} /> Discount Coupon
                                     </button>
                                     <button
                                         onClick={() => setPromoType('reminder')}
-                                        className={`py-2 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-xl border transition-all flex items-center justify-center gap-1.5 ${promoType === 'reminder' ? 'bg-navy-600/10 border-navy-600/40 text-navy-700 dark:text-gold-400' : 'bg-surface border-line text-muted'}`}
+                                        className={`py-2 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-xl border transition flex items-center justify-center gap-1.5 ${promoType === 'reminder' ? 'bg-navy-600/10 border-navy-600/40 text-navy-700 dark:text-gold-400' : 'bg-surface border-line text-muted'}`}
                                     >
                                         <Megaphone size={13} /> Text Reminder/Promo
                                     </button>
@@ -907,7 +907,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                         <div className="flex gap-3 mt-6 pt-4 border-t border-line">
                             <button
                                 onClick={() => { setPromoUser(null); setPromoBulkTier(null); }}
-                                className="bg-surface hover:bg-card text-[color:var(--text)] px-4 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all border border-line"
+                                className="bg-surface hover:bg-card text-[color:var(--text)] px-4 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition border border-line"
                             >
                                 Cancel
                             </button>
@@ -926,7 +926,7 @@ export const MembersLoyaltyPanel: React.FC<MembersLoyaltyPanelProps> = ({
                                     setPromoBulkTier(null);
                                 }}
                                 disabled={isSendingPromo}
-                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition-all ml-auto shadow-red-cta disabled:opacity-50"
+                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-5 py-2 rounded-xl text-xs font-display font-bold uppercase tracking-[0.05em] transition ml-auto shadow-red-cta disabled:opacity-50"
                             >
                                 {isSendingPromo ? 'Sending Simulation...' : 'Execute Mock Campaign'}
                             </button>
@@ -1205,7 +1205,7 @@ export const MembersViewUserModal: React.FC<MembersViewUserModalProps> = ({
                             }).map(pool => {
                                 const isBracket = pool.type === 'BRACKET';
                                 return (
-                                    <div key={pool.id} className="bg-card border border-line rounded-xl p-5 hover:border-gold-500/50 hover:-translate-y-1 hover:shadow-card-hover transition-all duration-150 group">
+                                    <div key={pool.id} className="bg-card border border-line rounded-xl p-5 hover:border-gold-500/50 hover:-translate-y-1 hover:shadow-card-hover transition duration-150 group">
                                         <div className="flex justify-between items-start mb-3">
                                             <div>
                                                 <h4 className="font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] text-lg group-hover:text-gold-600 dark:group-hover:text-gold-400 transition-colors">{pool.name}</h4>

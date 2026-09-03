@@ -645,7 +645,7 @@ export const TournamentSimulator: React.FC<{ user?: User | null }> = ({ user }) 
                                 return (
                                     <div key={p} className="flex items-center flex-1">
                                         <div className={`
-                                        flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.06em] flex-1 transition-all duration-150
+                                        flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-display font-bold uppercase tracking-[0.06em] flex-1 transition duration-150
                                         ${isCurrent ? 'bg-gold-500/15 text-gold-300 border border-gold-500/30' : ''}
                                         ${isComplete ? 'bg-[#0F7B4A]/15 text-[#3CB371]' : ''}
                                         ${!isCurrent && !isComplete ? 'text-[#5E7096]' : ''}
@@ -866,7 +866,7 @@ const SetupPhase: React.FC<{
                         onClick={onLoadTournamentOnly}
                         disabled={isLoading}
                         className="w-full px-4 py-2.5 bg-navy-800 hover:bg-navy-700 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] text-white
-                            border border-[rgba(230,206,150,0.16)] hover:border-gold-500/50 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            border border-[rgba(230,206,150,0.16)] hover:border-gold-500/50 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         <Download className="w-4 h-4" /> Load Tournament Data Only
                     </button>
@@ -881,7 +881,7 @@ const SetupPhase: React.FC<{
                                     onClick={() => onLoadRound(round)}
                                     disabled={isLoading}
                                     className="px-3 py-2 bg-navy-800 hover:bg-gold-500 hover:text-navy-950 rounded-lg text-xs num text-white
-                                        border border-[rgba(230,206,150,0.16)] hover:border-gold-400 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        border border-[rgba(230,206,150,0.16)] hover:border-gold-400 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     R{round}
                                 </button>
@@ -894,7 +894,7 @@ const SetupPhase: React.FC<{
                         onClick={onClearTournament}
                         disabled={isLoading}
                         className="w-full px-4 py-2 bg-navy-900 hover:bg-brandred-600/20 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] text-[#9FB0CC] hover:text-brandred-500
-                            border border-[rgba(230,206,150,0.16)] hover:border-brandred-600/50 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            border border-[rgba(230,206,150,0.16)] hover:border-brandred-600/50 transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         <Trash2 className="w-4 h-4" /> Clear Tournament Data
                     </button>
@@ -927,7 +927,7 @@ const BracketPhase: React.FC<{
                 </div>
                 <div className="flex-1 max-w-xs bg-navy-800 rounded-full h-2 overflow-hidden">
                     <div
-                        className="h-full bg-gold-foil rounded-full transition-all duration-300"
+                        className="h-full bg-gold-foil rounded-full transition duration-300"
                         style={{ width: `${(pickCount / totalPicks) * 100}%` }}
                     />
                 </div>
@@ -1236,7 +1236,7 @@ const LeaderboardSidebar = ({
                             <div
                                 key={entry.id}
                                 className={`
-                                    px-4 py-2 flex items-center gap-3 text-sm border-b border-[rgba(230,206,150,0.10)] transition-all duration-150 cursor-pointer hover:bg-navy-800/50
+                                    px-4 py-2 flex items-center gap-3 text-sm border-b border-[rgba(230,206,150,0.10)] transition duration-150 cursor-pointer hover:bg-navy-800/50
                                     ${entry.isUser ? 'bg-brandred-600/15 border-l-2 border-l-brandred-500' : ''}
                                     ${rank <= 3 ? 'bg-gold-500/5' : ''}
                                     ${isEliminated ? 'opacity-40 hover:opacity-100' : ''}

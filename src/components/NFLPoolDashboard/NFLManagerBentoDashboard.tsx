@@ -428,7 +428,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
       {/* CARD 1: POOL PERFORMANCE & SUBMISSIONS HEALTH */}
       <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -485,7 +485,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Pending Pick Sheets (<span className="num">{unsubmittedPlayers.length}</span>)</span>
             {unsubmittedPlayers.length > 0 ? (
               unsubmittedPlayers.slice(0, 5).map((player, idx) => (
-                <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-page border-line transition-all duration-150 hover:bg-surface">
+                <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-page border-line transition duration-150 hover:bg-surface">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-md bg-navy-800 font-display font-bold text-xs text-white flex items-center justify-center uppercase">
                       {player.name.substring(0,2).toUpperCase()}
@@ -521,7 +521,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                       : player.hasEntry
                         ? undefined
                         : 'This member has not started an entry — nudging them is exactly the point.'}
-                    className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {/* The label still distinguishes the two states — a
                         commissioner wants to know who has not started — but the
@@ -551,7 +551,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
       {/* CARD 2: BUY-IN REVENUE LEDGER & MEMBERS ACCREDITATION */}
       <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -561,7 +561,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             </div>
             <button
               onClick={onOpenLedger}
-              className="bg-navy-800 hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
+              className="bg-navy-800 hover:bg-navy-700 transition duration-150 hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
             >
               Open Payment Ledger
             </button>
@@ -622,7 +622,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 return (
                   <div
                     key={player.uid}
-                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
+                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition duration-150"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
@@ -646,7 +646,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                       <button
                         onClick={() => togglePayment(player.uid, false, player.hasMember)}
                         disabled={togglingId === player.uid}
-                        className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
+                        className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition duration-150 hover:-translate-y-px"
                       >
                         {togglingId === player.uid ? 'Saving...' : 'Mark Paid'}
                       </button>
@@ -679,7 +679,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
       {/* CARD 3: COMMISSIONER AI BANTER WIDGET */}
       <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-4">
@@ -714,7 +714,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 type="button"
                 aria-pressed={aiMood === mood.id}
                 onClick={() => setAiMood(mood.id as 'savage' | 'professional' | 'analyst')}
-                className={`text-left p-3.5 rounded-lg border transition-all duration-150 ${
+                className={`text-left p-3.5 rounded-lg border transition duration-150 ${
                   aiMood === mood.id
                     ? 'bg-card border-gold-500 shadow-card scale-[1.02]'
                     : 'bg-page border-line opacity-60 hover:opacity-100'
@@ -742,7 +742,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               <button
                 type="submit"
                 disabled={!banterText.trim() || banterBusy !== null}
-                className="flex items-center justify-center gap-1.5 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1.5 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send size={13} aria-hidden="true" /> {banterBusy === 'post' ? 'Posting...' : 'Post as me'}
               </button>
@@ -751,7 +751,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 onClick={handleAskAI}
                 disabled={!banterText.trim() || banterBusy !== null || !aiUnlocked}
                 title={aiUnlocked ? 'The AI writes the post in the selected tone' : 'AI Commissioner is not unlocked on this pool'}
-                className="flex items-center justify-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles size={13} aria-hidden="true" /> {banterBusy === 'ai' ? 'Asking...' : 'Let AI write it'}
               </button>
