@@ -6,6 +6,7 @@ import { z } from "zod";
 import { validated } from "./lib/validated";
 import { withHeartbeat, configReadFailedVerdict, type HeartbeatVerdict } from "./lib/heartbeat";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { rethrowOrInternal } from "./lib/safeError";
 
 /**
  * authBackup — Firebase Auth export to GCS (PLAN-BACKUPS-PHASE3 item 18,
@@ -813,8 +814,9 @@ export const runAuthBackup = validated(
             const message = e instanceof Error ? e.message : String(e);
             console.error("[runAuthBackup] export failed:", message);
             await recordFailure(actor, gate, dryRun, message);
-            // No third arg: HttpsError's `details` is serialized to the client.
-            throw new HttpsError("internal", `Auth backup failed: ${message}`);
+            // The durable record above keeps the real message; the client copy
+            // is the stable generic (Phase 1, PLAN-API-TRUST-BOUNDARY).
+            rethrowOrInternal("runAuthBackup", e);
         }
         await recordRun(result, actor, gate);
         return {

@@ -9,6 +9,7 @@ import { checkBillingAccess } from "./billing";
 import { SQUARE_PRIVATE, buildSquarePrivate } from "./squarePrivate";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { validated } from "./lib/validated";
+import { hasConfirmedRole } from "./lib/confirmedRole";
 import { updatePlayerSchema, releaseSquaresSchema } from "./schemas/squares";
 import { reserveSquareSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
 
@@ -167,6 +168,13 @@ export const markSquaresPaid = validated(
 
     const poolRef = db.collection("pools").doc(poolId);
 
+    // CLAIM+DOC, resolved OUTSIDE the transaction (Phase 3,
+    // PLAN-API-TRUST-BOUNDARY). This check was DOC-ONLY — the reverse weakness
+    // of the claim-only sites: it never required the tamper-proof claim at all.
+    // Now both must agree, matching assertCallerRole everywhere else. An owner
+    // pays no read (claim short-circuit).
+    const isConfirmedAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
+
     await db.runTransaction(async (transaction) => {
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
@@ -174,14 +182,7 @@ export const markSquaresPaid = validated(
         const pool = poolDoc.data() as GameState;
 
         // Permission Check: Owner only for now (managerUid is for BracketPool, not GameState)
-        let isAuthorized = pool.ownerId === userId;
-
-        if (!isAuthorized) {
-            const userDoc = await transaction.get(db.collection("users").doc(userId));
-            if (userDoc.exists && userDoc.data()?.role === 'SUPER_ADMIN') {
-                isAuthorized = true;
-            }
-        }
+        const isAuthorized = pool.ownerId === userId || isConfirmedAdmin;
 
         if (!isAuthorized) {
             throw new HttpsError("permission-denied", "Only the pool manager can mark squares as paid.");
@@ -215,15 +216,18 @@ export const markSquaresPaid = validated(
 );
 
 // Shared authorization: pool owner, manager, or super admin.
-async function assertPoolManager(
-    db: admin.firestore.Firestore,
-    transaction: admin.firestore.Transaction,
+//
+// `isConfirmedAdmin` is resolved by the CALLER via hasConfirmedRole BEFORE its
+// transaction (Phase 3, PLAN-API-TRUST-BOUNDARY): the old shape read
+// users/{uid}.role inside the transaction with NO claim requirement — doc-only,
+// the reverse of the claim-only weakness, and a re-run cost on every tx retry.
+function assertPoolManager(
     pool: GameState,
     userId: string,
-): Promise<void> {
+    isConfirmedAdmin: boolean,
+): void {
     if (pool.ownerId === userId || pool.managerUid === userId) return;
-    const userDoc = await transaction.get(db.collection("users").doc(userId));
-    if (userDoc.exists && userDoc.data()?.role === "SUPER_ADMIN") return;
+    if (isConfirmedAdmin) return;
     throw new HttpsError("permission-denied", "Only the pool manager can edit players.");
 }
 
@@ -244,12 +248,15 @@ export const updatePlayer = validated(
     const poolRef = db.collection("pools").doc(poolId);
     const newName = details.name?.trim() || originalName;
 
+    // Claim+doc resolved before the transaction (Phase 3; see assertPoolManager).
+    const isConfirmedAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
+
     await db.runTransaction(async (transaction) => {
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
         const pool = poolDoc.data() as GameState;
 
-        await assertPoolManager(db, transaction, pool, userId);
+        assertPoolManager(pool, userId, isConfirmedAdmin);
 
         const affected = pool.squares.filter((s) => s.owner === originalName);
         if (affected.length === 0) throw new HttpsError("not-found", "Player not found.");
@@ -305,12 +312,15 @@ export const releaseSquares = validated(
 
     const poolRef = db.collection("pools").doc(poolId);
 
+    // Claim+doc resolved before the transaction (Phase 3; see assertPoolManager).
+    const isConfirmedAdmin = await hasConfirmedRole(request, 'SUPER_ADMIN');
+
     const releasedIds = await db.runTransaction(async (transaction) => {
         const poolDoc = await transaction.get(poolRef);
         if (!poolDoc.exists) throw new HttpsError("not-found", "Pool not found.");
         const pool = poolDoc.data() as GameState;
 
-        await assertPoolManager(db, transaction, pool, userId);
+        assertPoolManager(pool, userId, isConfirmedAdmin);
 
         const idSet = new Set<number>(Array.isArray(squareIds) ? squareIds : []);
         const toRelease = pool.squares

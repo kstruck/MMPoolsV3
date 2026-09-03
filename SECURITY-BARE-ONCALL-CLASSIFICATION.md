@@ -1,5 +1,13 @@
 # Bare `onCall(` callables — classification (2026-07-21)
 
+> **2026-09-01 — SUPERSEDED IN PART.** PLAN-API-TRUST-BOUNDARY-REMEDIATION
+> (and its sweeps doc) re-verified this list and fixed most of what it flags:
+> the sim files are claim+doc now, `simulateGameUpdate` has a named schema and
+> safe errors, `recordPoolPayouts`/`setPayoutSettled` admin halves resolve via
+> `confirmedAdminClaim`, and the live allowlist is ENFORCED by
+> `functions/src/__tests__/rawCallableExceptions.test.ts` — trust that test
+> over this document's counts.
+
 A classification pass, **not** a sweep. Nothing in this document was changed;
 it exists so the next person deciding what to harden starts from evidence
 rather than from a count in a stale doc.

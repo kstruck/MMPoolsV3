@@ -23,6 +23,7 @@
 import * as admin from 'firebase-admin';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { writeAdminAudit, capMetadata } from './lib/adminAudit';
+import { hasConfirmedRole } from './lib/confirmedRole';
 import { recomputeCommissionerAggregate } from './lib/commissionerAggregate';
 import { joinNFLPoolInternal, submitNFLPicksInternal, executeSurvivorRebuyInternal } from './nflPools';
 import { maybeFinalizeNFLPool } from './nflFinalize';
@@ -77,7 +78,7 @@ async function touchManifest(db: admin.firestore.Firestore, runId: string): Prom
  * its very next step is discoverable by the stranded-run sweep.
  */
 export const simStartRun = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { runId, scenarioId } = (request.data ?? {}) as { runId?: string; scenarioId?: string };
 
@@ -102,10 +103,19 @@ export const simStartRun = onCall(async (request) => {
     }
 });
 
-function assertSuperAdmin(request: { auth?: { uid?: string; token?: Record<string, unknown> } | null }): string {
+async function assertSuperAdmin(request: { auth?: { uid?: string; token?: Record<string, unknown> } | null }): Promise<string> {
+    // CLAIM+DOC (PLAN-API-TRUST-BOUNDARY Phase 3): the claim alone let a
+    // demoted admin's un-expired token drive every sim callable. The claim
+    // still short-circuits (a non-claimant pays no read); the users/{uid}.role
+    // doc must agree; a read failure denies (hasConfirmedRole fails closed).
     const uid = request.auth?.uid;
-    const role = request.auth?.token?.role;
-    if (!uid || role !== 'SUPER_ADMIN') {
+    const confirmed = uid
+        ? await hasConfirmedRole(
+            { auth: { uid, token: (request.auth?.token ?? {}) as Record<string, unknown> } },
+            'SUPER_ADMIN',
+        )
+        : false;
+    if (!uid || !confirmed) {
         throw new HttpsError('permission-denied', 'Sim harness callables are SUPER_ADMIN only.');
     }
     return uid;
@@ -172,7 +182,7 @@ async function getVerifiedSimPool(
  * playoff/props go through simUpdatePool with the same verification.
  */
 export const simWriteEntries = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId, entries } = (request.data ?? {}) as {
         poolId?: string; runId?: string; entries?: Array<Record<string, unknown>>;
@@ -236,7 +246,7 @@ const SIM_PATCH_FORBIDDEN = new Set([
     'season', 'seasonType', 'type',
 ]);
 export const simUpdatePool = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId, patch } = (request.data ?? {}) as {
         poolId?: string; runId?: string; patch?: Record<string, unknown>;
@@ -277,7 +287,7 @@ export const simUpdatePool = onCall(async (request) => {
  * game doc.
  */
 export const simSeedNFLGames = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { runId, games } = (request.data ?? {}) as {
         runId?: string; games?: Array<Record<string, unknown>>;
@@ -368,7 +378,7 @@ async function purgeSimConsensus(db: admin.firestore.Firestore, runId: string, s
  * CLEANED. Manifest-driven, never discovery-driven (Phase 0.7, Codex R1#7).
  */
 export const cleanupSimPool = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId, deleteGames } = (request.data ?? {}) as {
         poolId?: string; runId?: string; deleteGames?: boolean;
@@ -470,7 +480,7 @@ const ACTIVE_RUN_GRACE_MS = 30 * 60 * 1000; // RUNNING + touched within 30min = 
  * are recoverable even after their pool doc is gone.
  */
 export const sweepSimRuns = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { dryRun } = (request.data ?? {}) as { dryRun?: boolean };
     const isDry = dryRun !== false; // dry by default — Operations guardrail convention
@@ -570,7 +580,7 @@ function assertRunScopedUid(runId: string, subjectUid: unknown): string {
  * action, because submit/payouts/profiles all key off real membership (Codex R1#1).
  */
 export const simJoinMembers = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId, members } = (request.data ?? {}) as {
         poolId?: string; runId?: string; members?: Array<{ uid?: string; name?: string }>;
@@ -610,7 +620,7 @@ export const simJoinMembers = onCall(async (request) => {
  * spread gating, used-team rules, and the post-submit consensus recompute.
  */
 export const simSubmitPicks = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId, subjectUid, week, picks, confidence, tiebreakerPrediction } = (request.data ?? {}) as {
         poolId?: string; runId?: string; subjectUid?: string; week?: number;
@@ -674,7 +684,7 @@ export const simSubmitPicks = onCall(async (request) => {
 
 /** Survivor rebuy through the REAL path as a sim subject. */
 export const simExecuteRebuy = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId, subjectUid, week } = (request.data ?? {}) as {
         poolId?: string; runId?: string; subjectUid?: string; week?: number;
@@ -719,7 +729,7 @@ export const simExecuteRebuy = onCall(async (request) => {
  * Size-capped: at most 200 assertion rows, strings truncated server-side.
  */
 export const simReportRun = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { runId, report } = (request.data ?? {}) as {
         runId?: string;
@@ -770,7 +780,7 @@ export const simReportRun = onCall(async (request) => {
 });
 
 export const simFinalizePool = onCall(async (request) => {
-    const actor = assertSuperAdmin(request);
+    const actor = await assertSuperAdmin(request);
     const db = admin.firestore();
     const { poolId, runId } = (request.data ?? {}) as { poolId?: string; runId?: string };
 

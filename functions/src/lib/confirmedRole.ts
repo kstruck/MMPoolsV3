@@ -70,3 +70,26 @@ export async function confirmedAdminClaim(request: RoleCheckRequest): Promise<st
     if (claim !== "SUPER_ADMIN") return claim;
     return (await hasConfirmedRole(request, "SUPER_ADMIN")) ? claim : undefined;
 }
+
+/**
+ * The HTTP-endpoint sibling of hasConfirmedRole
+ * (PLAN-API-TRUST-BOUNDARY-REMEDIATION Phase 3, codex r2 #4).
+ *
+ * `inspectPoolState` and `testSmsHttp` verify a Bearer ID token themselves, so
+ * they hold a DECODED token rather than a CallableRequest. Same contract as the
+ * callable side: the claim short-circuits (no read unless the token claims
+ * SUPER_ADMIN), the `users/{uid}.role` doc must AGREE, and a doc read failure
+ * yields `false` — fail closed, logged. NOT pure: it reads Firestore.
+ *
+ * Call it OUTSIDE the endpoint's verifyIdToken try/catch: an invalid token is
+ * that catch's 401; a valid token this function does not confirm is a 403.
+ */
+export async function confirmedSuperAdminHttp(
+    decoded: { uid: string; role?: unknown },
+): Promise<boolean> {
+    if (decoded.role !== "SUPER_ADMIN") return false;
+    return hasConfirmedRole(
+        { auth: { uid: decoded.uid, token: { role: decoded.role } } },
+        "SUPER_ADMIN",
+    );
+}

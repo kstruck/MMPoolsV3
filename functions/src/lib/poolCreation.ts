@@ -32,6 +32,23 @@ export function assertNotBanned(
 }
 
 /**
+ * Named shape guard (PLAN-API-TRUST-BOUNDARY Phase 2): a create payload must
+ * be a plain object BEFORE any destructure touches it. A zero-arg
+ * `httpsCallable(fn)()` delivers `request.data === null`, and destructuring
+ * null throws a TypeError that surfaces as a generic `internal` — this turns
+ * that whole class (null / undefined / primitive / array) into the
+ * `invalid-argument` it actually is. TS assertion signature so the destructure
+ * after it is typed.
+ */
+export function assertCreatePayloadIsObject(
+  data: unknown,
+): asserts data is Record<string, unknown> {
+  if (data === null || data === undefined || typeof data !== 'object' || Array.isArray(data)) {
+    throw new HttpsError('invalid-argument', 'Invalid request: payload must be an object.');
+  }
+}
+
+/**
  * Validation GATE: throws HttpsError('invalid-argument') if the payload fails
  * the type's CreatePoolInput schema. Returns silently for types without a
  * schema (all seven are modeled today; this keeps migration incremental).

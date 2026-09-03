@@ -7,6 +7,7 @@ import { assertNotBannedLive } from './lib/systemGuards';
 import { isCanonicalMemberRecord } from './shared/memberRecord';
 import { writeAuditEvent } from './audit';
 import { isCoCommissionerPoolType, isPoolOwnerOrManager } from './poolOps';
+import { confirmedAdminClaim } from './lib/confirmedRole';
 
 /** K5: enough for a big pool, small enough that "who can score my pool" is a short list. */
 export const MAX_CO_COMMISSIONERS = 3;
@@ -41,7 +42,10 @@ export const setPoolCoCommissioner = validated(
     async (input, request) => {
         const db = admin.firestore();
         const actorUid = request.auth!.uid;
-        const claimRole = request.auth!.token.role as string | undefined;
+        // Resolved ONCE, before the pre-read and the transaction (Phase 3,
+        // PLAN-API-TRUST-BOUNDARY): an unconfirmed SUPER_ADMIN claim is
+        // stripped, so both gate checks below fall to real ownership.
+        const claimRole = await confirmedAdminClaim(request);
         const { poolId, uid: targetUid, op } = input;
         const poolRef = db.collection('pools').doc(poolId);
 

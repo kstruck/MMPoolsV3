@@ -30,6 +30,7 @@ import { entryCountWrite } from './lib/multiEntry';
 import { memberLiableEntries } from './shared/memberRecord';
 import { leaseIsLive, readScoringLease, readLockRevision, retryWhileScoring } from './lib/scoringLease';
 import { confirmedAdminClaim } from './lib/confirmedRole';
+import { rethrowOrInternal } from "./lib/safeError";
 
 /**
  * Is `uid` the pool's owner or its legacy designated manager?
@@ -336,7 +337,9 @@ export const createPool = validated(
         // Sim harness trust anchor, computed EARLY: the kill-switch bypass keys
         // on the STAMPED simRunId (codex r1, PLAN-SIM-CREATION-BYPASS) - input
         // is the pre-strip payload, simRunId honored only per claimRole.
-        const claimRole = request.auth!.token.role as string | undefined;
+        // Resolved claim (Phase 3): an unconfirmed SUPER_ADMIN claim is
+        // stripped, so it cannot mint a sim pool; other claims untouched.
+        const claimRole = await confirmedAdminClaim(request);
         const simRunId = simRunIdForCreate(input, claimRole);
         // Feature-flag + maintenance guard (server-authoritative).
         await assertPoolCreationAllowed(data.type || 'SQUARES', { simBypass: simRunId !== undefined });
@@ -463,12 +466,10 @@ export const createPool = validated(
         return { success: true, poolId };
 
     } catch (error: any) {
-        console.error("createPool Failure:", error);
-        // Re-throw HttpsErrors as is
-        if (error.code && error.details) throw error;
-        // Wrap unknown errors
-        // No 3rd arg: `details` is serialized to the client; a raw error leaks internals.
-        throw new HttpsError('internal', `Failed to create pool: ${error.message || 'Unknown error'}`);
+        // instanceof, not the old duck-typed `error.code && error.details`
+        // (which missed HttpsErrors constructed without details); unexpected
+        // errors are logged and the client gets the stable generic (Phase 1).
+        rethrowOrInternal('createPool', error);
     }
     },
 );
@@ -502,7 +503,8 @@ export const updatePoolSettings = validated(
     // on NFL pools — so it must accept the same principals. It used to carry a
     // managerUid bypass because the helper resolved a single owner; the helper
     // is a disjunction now (PLAN-CO-COMMISSIONERS D3), so the bypass is gone.
-    assertPoolOwnerOrSuperAdmin(pool, uid, claimRole);
+    // Unconfirmed SUPER_ADMIN claims are stripped (Phase 3, PLAN-API-TRUST-BOUNDARY).
+    assertPoolOwnerOrSuperAdmin(pool, uid, await confirmedAdminClaim(request));
 
     // Pure gate: validates each key against the editability matrix for the
     // pool's lifecycle phase; throws failed-precondition on any disallowed key.
@@ -815,16 +817,36 @@ export const toggleWinnerPaid = validated(
 );
 
 // ============ FIX PARTICIPANT IDS (Backfill) ============
+// Paged-run constants (PLAN-API-TRUST-BOUNDARY Phase 4).
+export const FIX_PARTICIPANTS_POOLS_PER_RUN = 25;
+export const FIX_PARTICIPANTS_ENTRY_CAP = 10_000;
 export const fixParticipantIds = validated(
-    { schema: fixParticipantIdsSchema, label: "fixParticipantIds", role: "SUPER_ADMIN", appCheck: "monitor" },
-    async ({ dryRun }) => {
+    {
+        schema: fixParticipantIdsSchema,
+        label: "fixParticipantIds",
+        role: "SUPER_ADMIN",
+        appCheck: "monitor",
+        // Batch-migration budget (PLAN-API-TRUST-BOUNDARY Phase 4) — the v2
+        // default 60s was the only bound the old full-scan had.
+        options: { timeoutSeconds: 300, memory: "512MiB" },
+    },
+    async ({ dryRun, afterPoolId }) => {
     const db = admin.firestore();
     let processed = 0;
     let updated = 0;
+    const oversizedPools: string[] = [];
 
-    const poolsSnap = await db.collection('pools').get();
+    // Paged (Phase 4): deterministic order + cursor; the panel loops pages.
+    // Same contract as backfillPools — see its header for the full shape.
+    let outerQ = db.collection('pools')
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(FIX_PARTICIPANTS_POOLS_PER_RUN + 1);
+    if (afterPoolId) outerQ = outerQ.startAfter(afterPoolId);
+    const poolsSnap = await outerQ.get();
+    const pageDocs = poolsSnap.docs.slice(0, FIX_PARTICIPANTS_POOLS_PER_RUN);
+    const hasMore = poolsSnap.docs.length > FIX_PARTICIPANTS_POOLS_PER_RUN;
 
-    for (const doc of poolsSnap.docs) {
+    for (const doc of pageDocs) {
         const pool = doc.data();
         const participantIds = new Set<string>();
 
@@ -850,9 +872,19 @@ export const fixParticipantIds = validated(
             });
         }
 
-        // 3. Bracket Pools (Subcollection)
+        // 3. Bracket Pools (Subcollection) — inner scan capped (Phase 4). An
+        // over-cap pool is skipped WHOLE (a partial union could arrayUnion a
+        // fraction of the roster and look repaired) and reported.
         if (pool.type === 'BRACKET') {
-            const entriesSnap = await doc.ref.collection('entries').get();
+            const entriesSnap = await doc.ref.collection('entries')
+                .limit(FIX_PARTICIPANTS_ENTRY_CAP + 1)
+                .get();
+            if (entriesSnap.docs.length > FIX_PARTICIPANTS_ENTRY_CAP) {
+                console.error(`[fixParticipantIds] pool ${doc.id} exceeds entry cap (${FIX_PARTICIPANTS_ENTRY_CAP}); skipped.`);
+                oversizedPools.push(doc.id);
+                processed++;
+                continue;
+            }
             entriesSnap.docs.forEach(entryDoc => {
                 const entryData = entryDoc.data();
                 if (entryData.ownerUid) participantIds.add(entryData.ownerUid);
@@ -876,7 +908,8 @@ export const fixParticipantIds = validated(
         }
     }
 
-    return { success: true, processed, updated, dryRun };
+    const nextCursor = hasMore ? (pageDocs[pageDocs.length - 1]?.id ?? null) : null;
+    return { success: true, processed, updated, dryRun, nextCursor, hasMore, oversizedPools };
     },
 );
 

@@ -12,6 +12,8 @@ import {
     sendUserEmailSchema,
 } from "./schemas/userManagement";
 import { searchUsersByEmailSchema } from "./schemas/userManagement";
+import { rethrowOrInternal } from "./lib/safeError";
+import { confirmedSuperAdminHttp } from "./lib/confirmedRole";
 
 
 
@@ -64,7 +66,9 @@ export const deleteUserAccount = validated(
             status: "error",
             error: error?.message,
         });
-        throw new functions.https.HttpsError("internal", error.message);
+        // The audit row above keeps the real message; the client gets the
+        // stable generic (PLAN-API-TRUST-BOUNDARY-REMEDIATION Phase 1).
+        rethrowOrInternal("deleteUserAccount", error);
     }
     },
 );
@@ -143,7 +147,7 @@ export const sendAdminPasswordReset = validated(
             status: "error",
             error: error?.message,
         });
-        throw new functions.https.HttpsError("internal", error.message);
+        rethrowOrInternal("sendAdminPasswordReset", error);
     }
     },
 );
@@ -175,8 +179,8 @@ export const sendSecuritySMSAlert = validated(
         const success = outcome === 'queued';
         return { success, message: success ? "Alert sent" : outcome === 'skipped' ? "SMS not configured" : "Failed to send SMS" };
     } catch (error: any) {
-        console.error(`[SecuritySMS] Failed:`, error);
-        throw new functions.https.HttpsError("internal", error.message);
+        // This one reaches ORDINARY users — the raw provider message must not.
+        rethrowOrInternal("sendSecuritySMSAlert", error);
     }
     },
 );
@@ -198,15 +202,19 @@ export const testSmsHttp = functions.https.onRequest({ secrets: [courierAuthToke
         res.status(401).send("Unauthorized: Missing Bearer token");
         return;
     }
+    // Token verification stays its own 401 boundary; role confirmation is the
+    // separate 403 below (Phase 3 — claim AND users/{uid}.role must agree, so a
+    // demoted admin's un-expired token no longer opens this endpoint).
+    let decoded: { uid: string; role?: unknown };
     try {
         const token = authHeader.split('Bearer ')[1];
-        const decoded = await admin.auth().verifyIdToken(token);
-        if (decoded.role !== 'SUPER_ADMIN') {
-            res.status(403).send("Forbidden: Super Admin access required");
-            return;
-        }
+        decoded = await admin.auth().verifyIdToken(token);
     } catch {
         res.status(401).send("Unauthorized: Invalid token");
+        return;
+    }
+    if (!(await confirmedSuperAdminHttp(decoded))) {
+        res.status(403).send("Forbidden: Super Admin access required");
         return;
     }
 

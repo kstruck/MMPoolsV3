@@ -21,7 +21,7 @@ const ADMIN_CTX = {
 async function wipe() {
   // admin_audit, not adminAudit — writeAdminAudit() writes to the snake_case
   // collection, so the camelCase name silently wiped nothing.
-  for (const col of ['pools', 'users', 'admin_audit']) {
+  for (const col of ['pools', 'users', 'admin_audit', 'system']) {
     const snap = await db.collection(col).get();
     for (const d of snap.docs) {
       for (const sub of ['entries', 'managedPools']) {
@@ -40,6 +40,9 @@ async function seed() {
   // requires the JWT claim AND users/{uid}.role to agree (C5).
   await db.collection('users').doc('admin1').set({ role: 'SUPER_ADMIN' });
   await db.collection('users').doc('owner1').set({ role: 'MEMBER' });
+  // Kill-switch armed by default in this suite (Phase 4); the refusal test
+  // disarms it explicitly.
+  await db.doc('system/config').set({ backfillPools: { enabled: true } }, { merge: true });
   const poolRef = db.collection('pools').doc('pool1');
   await poolRef.set({
     ownerId: 'owner1',
@@ -92,7 +95,18 @@ describe('backfillPools dry-run gate (emulator)', () => {
     expect(user.historicalStats).toBeUndefined();
   });
 
-  it('writes for real when dryRun is explicitly false', async () => {
+  it('REFUSES a live run while the kill-switch is off (PLAN-API-TRUST-BOUNDARY Phase 4)', async () => {
+    // Disarm — absent/false both mean disabled; dry runs stay allowed.
+    await db.doc('system/config').set({ backfillPools: { enabled: false } }, { merge: true });
+    await expect(wrapped({ data: { dryRun: false }, ...ADMIN_CTX })).rejects.toThrow(/backfillPools\.enabled/);
+    await expect(wrapped({ data: { dryRun: true }, ...ADMIN_CTX })).resolves.toMatchObject({ dryRun: true });
+    // and nothing was written
+    const user = (await db.collection('users').doc('owner1').get()).data()!;
+    expect(user.historicalStats).toBeUndefined();
+  });
+
+  it('writes for real when dryRun is explicitly false AND the kill-switch is armed', async () => {
+    await db.doc('system/config').set({ backfillPools: { enabled: true } }, { merge: true });
     const res = (await wrapped({ data: { dryRun: false }, ...ADMIN_CTX })) as any;
 
     expect(res.dryRun).toBe(false);
