@@ -28,11 +28,19 @@ import { execFileSync } from 'node:child_process';
 const ARCHIVE_DIR = 'docs/archive';
 const DELETED_MANIFEST = 'docs/archive/deleted-docs.txt';
 
-/** Extensions worth scanning for a citation. Anything else is binary or generated. */
-const TEXT_EXT = new Set([
-  '.md', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json',
-  '.yml', '.yaml', '.rules', '.txt', '.html', '.css', '.sh', '.py',
-]);
+/**
+ * Files skipped outright: lockfiles, which are enormous, generated, and cannot
+ * meaningfully cite a document. Everything else is classified by CONTENT, not
+ * by extension — an allowlist silently skips whatever it forgot (`nginx.conf`,
+ * `Dockerfile`, `.env.e2e`), and a citation hiding in a skipped file is exactly
+ * the miss this guard exists to catch.
+ */
+const SKIP_FILES = new Set(['package-lock.json', 'functions/package-lock.json']);
+
+/** A file is binary if a NUL byte appears early in it. Cheap and reliable. */
+function isBinary(buf) {
+  return buf.subarray(0, 8192).includes(0);
+}
 
 function fail(message) {
   console.error(`FAIL: ${message}`);
@@ -121,12 +129,19 @@ function deletedDocs() {
   // that basename sits in the archive". The weaker test would silently exempt
   // a genuine future deletion whose basename happens to collide with
   // something archived long ago, and references to it would then pass.
+  // Both halves, mirroring `committed` and `uncommitted` above. Without the
+  // second, a run mid-move — the workflow the README documents — sees the
+  // deleted root file but not its uncommitted arrival in the archive, and
+  // calls a move a deletion.
   const movedIn = new Set(
-    lines(
-      git([
+    [
+      ...lines(git([
         'diff', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
-      ]),
-    ).map((f) => path.basename(f)),
+      ])),
+      ...lines(git([
+        'diff', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+      ])),
+    ].map((f) => path.basename(f)),
   );
 
   return new Set(
@@ -146,9 +161,24 @@ function manifestDocs() {
     .filter((s) => s && !s.startsWith('#'));
 }
 
-/** Every tracked text file, so a citation in code or a skill cannot hide. */
+/**
+ * Every tracked file, so a citation in code, config, or a skill cannot hide.
+ * Binary content and lockfiles are dropped; nothing else is inferred from a
+ * file's name. Cached — the scan reports these counts as well as using them.
+ */
+let trackedCache = null;
 function trackedTextFiles() {
-  return lines(git(['ls-files'])).filter((f) => TEXT_EXT.has(path.extname(f).toLowerCase()));
+  if (trackedCache) return trackedCache;
+  trackedCache = lines(git(['ls-files'])).filter((f) => {
+    if (SKIP_FILES.has(f)) return false;
+    if (!fs.existsSync(f)) return true; // skipped in the scan loop below
+    try {
+      return !isBinary(fs.readFileSync(f));
+    } catch {
+      return true; // let the scan loop's fail-closed handler report it
+    }
+  });
+  return trackedCache;
 }
 
 // --- checks ----------------------------------------------------------------
