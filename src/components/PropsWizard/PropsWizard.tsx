@@ -194,7 +194,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                 <button
                                     key={idx}
                                     onClick={() => setStep(idx)}
-                                    className={`flex items-center gap-2 transition-all hover:opacity-100 ${idx === step ? 'opacity-100' : 'opacity-40 cursor-pointer'}`}
+                                    className={`flex items-center gap-2 transition-ui hover:opacity-100 ${idx === step ? 'opacity-100' : 'opacity-40 cursor-pointer'}`}
                                 >
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-display font-bold text-sm num transition-colors duration-150 ${idx === step ? 'bg-navy-800 text-white dark:bg-gold-500 dark:text-navy-900' : idx < step ? 'bg-gold-foil text-navy-900' : 'bg-surface border border-line text-muted'}`}>
                                         {idx < step ? <Check size={14} /> : idx + 1}
@@ -233,7 +233,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         )}
 
                         {step === 2 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                            <div className="space-y-6 animate-in slide-in-from-right duration-200">
                                 <div className="text-center mb-6">
                                     <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Pool Details</h2>
                                     <p className="text-muted">Configure public visibility and payment options.</p>
@@ -335,7 +335,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
 
                         {step === 3 && (
                             /* Adapting PropsManager to be used as a setup step */
-                            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                            <div className="space-y-6 animate-in slide-in-from-right duration-200">
                                 <div className="text-center mb-6">
                                     <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Configure Props Game</h2>
                                     <p className="text-muted">Set the entry fee, payouts, and questions.</p>
@@ -365,7 +365,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                     </div>
                                 </div>
 
-                                <div className="p-3.5 bg-gold-500/10 border border-gold-500/25 text-muted text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                                <div className="p-3.5 bg-gold-500/10 border border-gold-500/25 text-muted text-xs rounded-xl flex gap-2 items-start animate-in fade-in">
                                     <Sparkles size={16} className="text-gold-500 shrink-0 mt-0.5" />
                                     <div>
                                         <strong className="text-[color:var(--text)] block mb-0.5">Start Small, Upgrade Later!</strong>
@@ -448,7 +448,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         )}
 
                         {step === 4 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                            <div className="space-y-6 animate-in slide-in-from-right duration-200">
                                 <WizardStepReminders
                                     gameState={config as unknown as GameState}
                                     updateConfig={updateConfig as any}
@@ -465,7 +465,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                         )}
 
                         {step === 5 && (
-                            <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                            <div className="space-y-6 animate-in slide-in-from-right duration-200">
                                 <div className="text-center mb-6">
                                     <h2 className="text-2xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Final Preferences</h2>
                                     <p className="text-muted">Customize data collection, notifications, and access.</p>
@@ -572,7 +572,7 @@ export const PropsWizard: React.FC<PropsWizardProps> = ({ user, onCancel, onComp
                                         }}
                                     />
 
-                                    <div className="mt-4 p-4 bg-surface border border-line rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-muted text-xs">
+                                    <div className="mt-4 p-4 bg-surface border border-line rounded-2xl flex gap-3 items-start animate-in fade-in text-muted text-xs">
                                         <ShieldCheck className="text-gold-500 shrink-0 mt-0.5" size={20} />
                                         <div>
                                             <strong className="text-[color:var(--text)] block mb-0.5">100% Free Trial Setup</strong>

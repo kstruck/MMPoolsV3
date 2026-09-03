@@ -1,3 +1,5 @@
+import tailwindcssAnimate from 'tailwindcss-animate';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
@@ -39,6 +41,21 @@ export default {
         'ticker-slow': 'ticker 60s linear infinite',
         ticker: 'ticker 32s linear infinite',
         'live-pulse': 'live-pulse 1.5s ease-in-out infinite',
+        // Finite attention-getters. An infinite bounce on a board people stare
+        // at for hours is noise, not signal.
+        'bounce-3': 'bounce 1s ease-in-out 3',
+        'spin-slow': 'spin 3s linear infinite',
+      },
+      // Bounded replacement for `transition-all`: everything a hover/press/
+      // state change legitimately animates, nothing that triggers layout.
+      transitionProperty: {
+        ui: 'color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter',
+      },
+      // Built-in CSS easings are too weak for entrances. Strong ease-out for
+      // anything entering/exiting; drawer curve for slide-in panels.
+      transitionTimingFunction: {
+        out: 'cubic-bezier(0.23, 1, 0.32, 1)',
+        drawer: 'cubic-bezier(0.32, 0.72, 0, 1)',
       },
       keyframes: {
         ticker: {
@@ -52,5 +69,15 @@ export default {
       }
     },
   },
-  plugins: [],
+  plugins: [
+    // Provides animate-in / fade-in / zoom-in-* / slide-in-from-* used across
+    // src/components. Without it those classes were silent no-ops.
+    tailwindcssAnimate,
+    // `fine:` — hover motion only where hover is real (mouse, not touch) and
+    // the user has not asked for reduced motion. Touch fires false :hover on
+    // tap; a card that lifts and sticks lifted on a phone is a bug.
+    function ({ addVariant }) {
+      addVariant('fine', '@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    },
+  ],
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { UI_EASE, UI_TRANSITION } from '../ui/motion';
 import { Copy, Share2, CheckCircle, Gift, Users, Mail, MessageCircle } from 'lucide-react';
 import { referralService } from '../../services/referralService';
 import { db } from '../../firebase';
@@ -91,9 +92,9 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
+      initial={{ opacity: 0, transform: 'translateY(20px)' }}
+      animate={{ opacity: 1, transform: 'translateY(0px)' }}
+      transition={UI_TRANSITION}
       className="bg-card border border-line rounded-2xl p-6 md:p-8 space-y-6"
     >
       {/* Header */}
@@ -120,7 +121,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
           </code>
           <button
             onClick={handleCopy}
-            className={`px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all flex items-center gap-2 ${
+            className={`px-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui flex items-center gap-2 ${
               copied
                 ? 'bg-[#0F7B4A] text-white'
                 : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
@@ -151,7 +152,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
             href={shareLinks.twitter}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-surface hover:bg-[#1DA1F2]/20 border border-line hover:border-[#1DA1F2]/50 text-[color:var(--text)] hover:text-[#1DA1F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-[#1DA1F2]/20 border border-line hover:border-[#1DA1F2]/50 text-[color:var(--text)] hover:text-[#1DA1F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -162,7 +163,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
             href={shareLinks.facebook}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-surface hover:bg-[#1877F2]/20 border border-line hover:border-[#1877F2]/50 text-[color:var(--text)] hover:text-[#1877F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-[#1877F2]/20 border border-line hover:border-[#1877F2]/50 text-[color:var(--text)] hover:text-[#1877F2] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
               <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
@@ -173,14 +174,14 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
             href={shareLinks.whatsapp}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-surface hover:bg-[#25D366]/20 border border-line hover:border-[#25D366]/50 text-[color:var(--text)] hover:text-[#25D366] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-[#25D366]/20 border border-line hover:border-[#25D366]/50 text-[color:var(--text)] hover:text-[#25D366] px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui"
           >
             <MessageCircle size={16} />
             <span className="hidden sm:inline">WhatsApp</span>
           </a>
           <a
             href={shareLinks.email}
-            className="flex items-center gap-2 bg-surface hover:bg-gold-500/20 border border-line hover:border-gold-500/50 text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all"
+            className="flex items-center gap-2 bg-surface hover:bg-gold-500/20 border border-line hover:border-gold-500/50 text-[color:var(--text)] hover:text-gold-600 dark:hover:text-gold-400 px-4 py-2.5 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui"
           >
             <Mail size={16} />
             <span className="hidden sm:inline">Email</span>
@@ -192,7 +193,7 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
+        transition={{ ...UI_TRANSITION, delay: 0.05 }}
         className="bg-page border border-line rounded-xl p-5 space-y-4"
       >
         {/* Stats Grid */}
@@ -232,10 +233,10 @@ export const ReferralSharePanel: React.FC<ReferralSharePanelProps> = ({ userId, 
           </div>
           <div className="w-full bg-surface border border-line rounded-full h-2.5 overflow-hidden">
             <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPercent}%` }}
-              transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
-              className="h-full rounded-full bg-gold-foil"
+              initial={{ transform: 'scaleX(0)' }}
+              animate={{ transform: `scaleX(${Math.min(progressPercent, 100) / 100})` }}
+              transition={{ duration: 0.4, ease: UI_EASE, delay: 0.1 }}
+              className="h-full w-full origin-left rounded-full bg-gold-foil"
             />
           </div>
           <p className="text-xs text-muted text-center font-body">

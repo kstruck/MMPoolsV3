@@ -9,7 +9,7 @@ interface WizardStepRulesProps {
 
 export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, updateConfig }) => {
     return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right duration-200">
             <div className="bg-surface border border-line rounded-xl p-6">
                 <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2">Grid Rules</h3>
                 <p className="text-muted text-sm mb-6">Set the pricing and limitations for your players.</p>
@@ -66,7 +66,7 @@ export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, upd
                     </div>
                 </div>
 
-                <div className="mt-6 p-3.5 bg-navy-600/10 border border-navy-600/20 text-muted text-xs rounded-xl flex gap-2 items-start animate-in fade-in duration-300">
+                <div className="mt-6 p-3.5 bg-navy-600/10 border border-navy-600/20 text-muted text-xs rounded-xl flex gap-2 items-start animate-in fade-in">
                     <Sparkles size={16} className="text-gold-700 dark:text-gold-400 shrink-0 mt-0.5" />
                     <div>
                         <strong className="text-[color:var(--text)] block mb-0.5">Start Small, Upgrade Later!</strong>

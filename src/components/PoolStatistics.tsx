@@ -113,7 +113,7 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
                     </div>
                     <div className="h-3 bg-line rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-gold-foil transition-all duration-500"
+                            className="h-full bg-gold-foil transition-ui duration-500"
                             style={{ width: `${percentSold}%` }}
                         />
                     </div>
@@ -127,7 +127,7 @@ export const PoolStatistics: React.FC<PoolStatisticsProps> = ({ pool }) => {
                     </div>
                     <div className="h-3 bg-line rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-[#0F7B4A] transition-all duration-500"
+                            className="h-full bg-[#0F7B4A] transition-ui duration-500"
                             style={{ width: `${percentPaid}%` }}
                         />
                     </div>

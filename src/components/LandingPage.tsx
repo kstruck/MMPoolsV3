@@ -33,7 +33,7 @@ const cardCls = 'bg-card border border-line rounded-2xl';
 const heroCardCls = 'bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl';
 
 const heroBtn =
-  'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
+  'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer';
 
 export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   const navigate = useNavigate();
@@ -64,7 +64,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
         </div>
 
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-brandred-600/15 border border-brandred-600/35 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-brandred-600/15 border border-brandred-600/35 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <span className="flex h-2 w-2 rounded-full bg-brandred-500 animate-live-pulse"></span>
             {/* G1/D6 — the ONE launch-status line on the front door that was
                 unconditional. With creation open, "coming soon" sits directly
@@ -78,11 +78,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </span>
           </div>
 
-          <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-100">
+          <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-500 delay-50">
             <Countdown />
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-500 delay-100 mb-8">
             <button
               onClick={canCreate ? onCreatePool : undefined}
               disabled={!canCreate}
@@ -103,14 +103,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </button>
           </div>
 
-          <h1 className="font-display font-extrabold uppercase text-4xl md:text-[74px] text-white tracking-tight mb-6 md:mb-8 leading-[0.9] animate-in fade-in slide-in-from-bottom-8 duration-700">
+          <h1 className="font-display font-extrabold uppercase text-4xl md:text-[74px] text-white tracking-tight mb-6 md:mb-8 leading-[0.9] animate-in fade-in slide-in-from-bottom-8 duration-500">
             The Ultimate Platform for <br />
             <span className="text-gold-400">NFL Survivor & Pick'em Pools</span>
           </h1>
 
           {/* Trust-stat row */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
-            <div className={cn(heroCardCls, 'inline-flex items-center gap-4 p-3 pr-6 shadow-panel animate-in fade-in slide-in-from-bottom-8 duration-700')}>
+            <div className={cn(heroCardCls, 'inline-flex items-center gap-4 p-3 pr-6 shadow-panel animate-in fade-in slide-in-from-bottom-8 duration-500')}>
               <div className="p-3 rounded-lg bg-brandred-600/15">
                 <Heart size={24} className="text-brandred-500" />
               </div>
@@ -120,7 +120,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
               </div>
             </div>
 
-            <div className={cn(heroCardCls, 'inline-flex items-center gap-4 p-3 pr-6 shadow-panel animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100')}>
+            <div className={cn(heroCardCls, 'inline-flex items-center gap-4 p-3 pr-6 shadow-panel animate-in fade-in slide-in-from-bottom-8 duration-500 delay-50')}>
               <div className="p-3 rounded-lg bg-gold-500/15">
                 <Trophy size={24} className="text-gold-400" />
               </div>
@@ -131,12 +131,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
           </div>
 
-          <p className="font-body text-[#9FB0CC] text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100">
+          <p className="font-body text-[#9FB0CC] text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-500 delay-50">
             Host standard, high-stakes, or charity office pools. Seamlessly featuring <strong className="text-white">used-team locking</strong>, confidence weight systems, and Margin of victory cascades.
           </p>
 
           {/* Hero Visual */}
-          <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-400">
+          <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-500 delay-150">
             <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent z-20"></div>
             <div className={cn(heroCardCls, 'rounded-3xl p-2 shadow-panel')}>
               <div className="rounded-xl overflow-hidden relative group bg-navy-950">
@@ -146,7 +146,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                   loading="lazy"
                   width={1024}
                   height={1024}
-                  className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
+                  className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent opacity-60"></div>
               </div>
@@ -279,7 +279,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-16">
 
             {/* Card 1: Free Sandbox Tier (4 cols) */}
-            <div className={cn(cardCls, 'lg:col-span-4 rounded-3xl p-8 hover:border-gold-500/40 transition-all duration-300 flex flex-col justify-between shadow-card relative group hover:-translate-y-1')}>
+            <div className={cn(cardCls, 'lg:col-span-4 rounded-3xl p-8 hover:border-gold-500/40 transition-ui duration-300 flex flex-col justify-between shadow-card relative group fine:hover:-translate-y-1')}>
               <div className="space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="p-3.5 rounded-2xl bg-navy-600/10 text-navy-700 dark:text-[#9FB0CC] border border-line">
@@ -306,7 +306,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <button
                   onClick={canCreate ? onCreatePool : undefined}
                   disabled={!canCreate}
-                  className="w-full border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-line dark:text-[color:var(--text)] dark:hover:bg-white/10 py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  className="w-full border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-line dark:text-[color:var(--text)] dark:hover:bg-white/10 py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-ui disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   title={canCreate ? 'Launch a free pool' : 'Pool creation is coming soon'}
                 >
                   {canCreate ? 'Launch Free Pool' : 'Coming Soon'}
@@ -315,7 +315,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
 
             {/* Card 2: Dynamic Pool Tier - Featured (5 cols) */}
-            <div className="lg:col-span-5 bg-card border border-gold-500/40 rounded-3xl p-8 hover:border-gold-500/70 transition-all duration-300 flex flex-col justify-between shadow-panel relative group hover:-translate-y-1 overflow-hidden">
+            <div className="lg:col-span-5 bg-card border border-gold-500/40 rounded-3xl p-8 hover:border-gold-500/70 transition-ui duration-300 flex flex-col justify-between shadow-panel relative group fine:hover:-translate-y-1 overflow-hidden">
               {/* Top ambient glow */}
               <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-gold-500/10 blur-2xl pointer-events-none" />
 
@@ -345,7 +345,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="font-display font-extrabold text-3xl text-[color:var(--text)] mb-4 num">Starts at $9 <span className="text-xs text-faint font-body font-medium normal-case">/ pool</span></div>
                 <button
                   onClick={() => navigate('/pricing')}
-                  className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-all shadow-[0_6px_16px_rgba(140,109,51,0.28)] hover:brightness-105 flex items-center justify-center gap-1.5 group/btn"
+                  className="w-full bg-gold-foil text-navy-900 font-display font-bold uppercase tracking-[0.05em] py-3.5 px-6 rounded-md text-xs transition-ui shadow-[0_6px_16px_rgba(140,109,51,0.28)] hover:brightness-105 flex items-center justify-center gap-1.5 group/btn"
                 >
                   Estimate Pool Price
                   <Zap size={12} className="group-hover/btn:translate-x-0.5 transition-transform" />
@@ -354,7 +354,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
 
             {/* Card 3: Commissioner Packs (3 cols) */}
-            <div className={cn(cardCls, 'lg:col-span-3 rounded-3xl p-8 hover:border-gold-500/40 transition-all duration-300 flex flex-col justify-between shadow-card relative group hover:-translate-y-1')}>
+            <div className={cn(cardCls, 'lg:col-span-3 rounded-3xl p-8 hover:border-gold-500/40 transition-ui duration-300 flex flex-col justify-between shadow-card relative group fine:hover:-translate-y-1')}>
               <div className="space-y-6">
                 <div className="flex justify-between items-start">
                   <div className="p-3.5 rounded-2xl bg-gold-500/10 text-gold-600 dark:text-gold-400 border border-line">
@@ -380,7 +380,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
                 <div className="font-display font-extrabold text-3xl text-[color:var(--text)] mb-4 num">$49 <span className="text-xs text-faint font-body font-medium normal-case">/ 3-pool bundle</span></div>
                 <button
                   onClick={() => navigate('/pricing')}
-                  className="w-full bg-navy-800 hover:bg-navy-700 text-white py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all"
+                  className="w-full bg-navy-800 hover:bg-navy-700 text-white py-3 px-6 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-ui"
                 >
                   View Bundle Packages
                 </button>
@@ -399,7 +399,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </div>
             <button
               onClick={() => navigate('/pricing')}
-              className="border-[1.5px] border-gold-500/50 text-gold-600 dark:text-gold-300 hover:bg-gold-500/10 px-5 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-all whitespace-nowrap"
+              className="border-[1.5px] border-gold-500/50 text-gold-600 dark:text-gold-300 hover:bg-gold-500/10 px-5 py-2.5 rounded-md font-display font-bold uppercase tracking-[0.05em] text-xs transition-ui whitespace-nowrap"
             >
               Open Pricing Calculator →
             </button>
@@ -445,7 +445,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <div className="grid md:grid-cols-3 gap-8">
             {/* Feature 1 */}
             <div className={cn(cardCls, 'p-8 hover:border-gold-500/50 transition-colors group')}>
-              <div className="w-14 h-14 rounded-lg bg-gold-500/15 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-14 h-14 rounded-lg bg-gold-500/15 flex items-center justify-center mb-6 fine:group-hover:scale-110 transition-transform">
                 <Shield className="text-gold-600 dark:text-gold-400" size={28} />
               </div>
               <h3 className="font-display font-bold uppercase text-2xl text-[color:var(--text)] mb-4">NFL Survivor Suite</h3>
@@ -461,7 +461,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
             {/* Feature 2 */}
             <div className={cn(cardCls, 'p-8 hover:border-gold-500/50 transition-colors group')}>
-              <div className="w-14 h-14 rounded-lg bg-navy-600/15 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-14 h-14 rounded-lg bg-navy-600/15 flex items-center justify-center mb-6 fine:group-hover:scale-110 transition-transform">
                 <Zap className="text-navy-700 dark:text-[#9FB0CC]" size={28} />
               </div>
               <h3 className="font-display font-bold uppercase text-2xl text-[color:var(--text)] mb-4">Weekly Pick'em</h3>
@@ -477,7 +477,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
 
             {/* Feature 3 */}
             <div className={cn(cardCls, 'p-8 hover:border-gold-500/50 transition-colors group')}>
-              <div className="w-14 h-14 rounded-lg bg-brandred-600/15 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-14 h-14 rounded-lg bg-brandred-600/15 flex items-center justify-center mb-6 fine:group-hover:scale-110 transition-transform">
                 <Percent className="text-brandred-500" size={28} />
               </div>
               <h3 className="font-display font-bold uppercase text-2xl text-[color:var(--text)] mb-4">Margin of Victory</h3>
@@ -501,7 +501,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
           <button
             onClick={canCreate ? onCreatePool : undefined}
             disabled={!canCreate}
-            className="bg-brandred-600 text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl transition-all hover:-translate-y-px hover:bg-brandred-500 shadow-red-cta mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none cursor-pointer"
+            className="bg-brandred-600 text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl transition-ui fine:hover:-translate-y-px hover:bg-brandred-500 shadow-red-cta mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none cursor-pointer"
             title={canCreate ? "Create Your Free Pool Now" : "Pool creation is coming soon"}
           >
             {canCreate ? 'Create Your Free Pool Now' : 'Pool Creation Coming Soon'}

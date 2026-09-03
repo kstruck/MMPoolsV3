@@ -20,7 +20,7 @@ import { HelpPanelControlContext, useHelpPanelState, type HelpPanelState } from 
 /** The panel's element id. Also its identity in the overlay stack. */
 export const HELP_PANEL_ID = 'help-panel';
 /** Must match the CSS transition below, or the body unmounts mid-slide. */
-const EXIT_MS = 300;
+const EXIT_MS = 250;
 
 /** Mobile gets a modal panel with a backdrop; desktop gets a side drawer. */
 function useIsMobile(): boolean {
@@ -168,7 +168,7 @@ export function HelpPanel({ state, onClose }: { state: HelpPanelState; onClose: 
           if (event.key === 'Escape') event.stopPropagation();
         }}
         className={cn(
-          'fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-line bg-page shadow-panel transition-transform duration-300 md:w-[440px]',
+          'fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-line bg-page shadow-panel transition-transform duration-[250ms] ease-drawer motion-reduce:duration-0 md:w-[440px]',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
       >

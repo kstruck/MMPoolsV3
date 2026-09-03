@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { MODAL_TRANSITION, TOAST_TRANSITION } from './motion';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
 import { useOverlayOwner } from './overlayStack';
 
@@ -117,9 +118,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         return (
                             <motion.div
                                 key={t.id}
-                                initial={{ opacity: 0, y: 16 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: 8 }}
+                                initial={{ opacity: 0, transform: 'translateY(16px)' }}
+                                animate={{ opacity: 1, transform: 'translateY(0px)' }}
+                                exit={{ opacity: 0, transform: 'translateY(8px)' }}
+                                transition={TOAST_TRANSITION}
                                 role={t.kind === 'error' ? 'alert' : 'status'}
                                 className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${box}`}
                             >
@@ -145,13 +147,15 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={MODAL_TRANSITION}
                         className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/70"
                         onClick={() => resolveConfirm(false)}
                     >
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
+                            initial={{ opacity: 0, transform: 'scale(0.95)' }}
+                            animate={{ opacity: 1, transform: 'scale(1)' }}
+                            exit={{ opacity: 0, transform: 'scale(0.95)' }}
+                            transition={MODAL_TRANSITION}
                             role="dialog"
                             aria-modal="true"
                             aria-labelledby="confirm-title"
