@@ -146,7 +146,7 @@ See Section 7.
 
 **Coverage:** NOT configured. No `--coverage` provider (`@vitest/coverage-v8` is not a dependency) and no coverage config block. Do not claim coverage percentages; there is no tooling to produce them.
 
-**What CI runs** (`.github/workflows/ci.yml`, every PR + push to main): required job = `npm ci` (root + functions) → `npm run build:static` (tsc -b + vite build + prerender) → functions `npm run typecheck` → root `npm test` → functions `npm test`; plus a required `nginx -t` docker validation of `nginx.conf`. Lint is advisory (`continue-on-error: true`, ~540-finding backlog). **NOT in CI:** emulator suite, rules tests, Playwright, any UI verification. The only git hook is pre-commit secret scanning (`.husky/pre-commit` → `python scripts/scan_secrets.py`) — no local test gate.
+**What CI runs** (`.github/workflows/ci.yml`, every PR + push to main): required job = `npm ci` (root + functions) → `npm run build:static` (tsc -b + vite build + prerender) → functions `npm run typecheck` → root `npm test` → functions `npm test`; plus a required `nginx -t` docker validation of `nginx.conf`. Lint is a required check since 2026-09-03 (`continue-on-error` removed; 0 errors / ~1870 warnings baseline, warnings do not fail it). **NOT in CI:** emulator suite, rules tests, Playwright, any UI verification. The only git hook is pre-commit secret scanning (`.husky/pre-commit` → `python scripts/scan_secrets.py`) — no local test gate.
 
 ---
 
