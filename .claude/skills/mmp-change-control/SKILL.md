@@ -476,7 +476,7 @@ to main/master; token is contents:read only):
 |---|---|---|
 | `build-and-test` | `npm ci` (root + functions), `npm run build:static` (tsc -b + vite build + prerender), functions `npm run typecheck` (via the npm script — it mirrors `shared/` into `functions/src/shared/` first; bare tsc fails), root `npm test`, functions `npm test`. Node 20. | Intended as the REQUIRED check |
 | `nginx-validate` | `nginx -t` on `nginx.conf` in a docker nginx:alpine — gates the Coolify container config | Yes (job fails on bad conf) |
-| `lint` | `npm run lint` with `continue-on-error: true` | NO — advisory only, ~540-finding backlog |
+| `lint` | `npm run lint` (0 errors / 1871 warnings baseline, warnings do not fail it) | YES — required ruleset context since 2026-09-03 |
 
 `security-scan.yml` (same triggers): `npm audit --audit-level=high` + a Python
 dependency scanner (`skills/skill-security-scanner/scripts/scanner.py`).
@@ -499,8 +499,6 @@ not machinery):
   Corollary: green CI on main says NOTHING about what is running in prod.
   Deploy state must be verified, never assumed ("Functions are known stale"
   was a real finding).
-- **Lint is non-blocking** (`continue-on-error: true`). A PR can merge with
-  new lint errors.
 - **Nothing enforces the plan/review-log/sweep gate** (Rule 3) or worktree
   isolation (Rule 4) — those are discipline.
 - **Nothing prevents committing to someone else's active branch.**
