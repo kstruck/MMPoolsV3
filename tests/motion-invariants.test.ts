@@ -176,6 +176,12 @@ describe('motion invariants', () => {
     expect(hits).toEqual([]);
   });
 
+  it('`transition-ui` never sits on a max-h collapser — it excludes height, so the panel would jump (codex round 6)', () => {
+    // A collapser that toggles `max-h-*` needs an explicit
+    // `transition-[max-height,...]`; `transition-ui` only fades it.
+    expect(offenders(/\btransition-ui\b[^"'`]*\bmax-h-|\bmax-h-[^"'`]*\btransition-ui\b/)).toEqual([]);
+  });
+
   it('tx() never wraps a sizing transform — under reduced motion it returns none, and a w-full bar at none reads as 100%', () => {
     // qodo on PR #667: the referral progress bar's only sizing transform went
     // through tx(), so every reduced-motion user saw a full bar. Entrance

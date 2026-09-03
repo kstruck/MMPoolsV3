@@ -116,8 +116,14 @@ h1, h2, h3, h4, .display {
   .transition-transform {
     transition-duration: 0.01ms !important;
   }
-  .transition-ui {
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
+  /* `after:transition-ui` compiles to `.after\:transition-ui::after`, which the
+     bare class selector above does not match (codex round 6 — the Switch knob). */
+  .transition-ui,
+  .after\:transition-ui::after,
+  .before\:transition-ui::before {
+    transition-property:
+      color, background-color, border-color, text-decoration-color,
+      fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
   }
 }
 

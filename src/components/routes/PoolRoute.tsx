@@ -558,7 +558,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     </button>
                 </div>
 
-                <div className={`transition-ui duration-500 ease-in-out overflow-hidden ${showPoolInfo ? 'max-h-[1000px] opacity-100 mb-6' : 'max-h-0 opacity-0 mb-0'}`}>
+                <div className={`transition-[max-height,margin-bottom,opacity] duration-300 ease-in-out overflow-hidden ${showPoolInfo ? 'max-h-[1000px] opacity-100 mb-6' : 'max-h-0 opacity-0 mb-0'}`}>
                     <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${(squaresPool as GameState).charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
 
                         {/* 1. Status Card (Tabbed) */}
