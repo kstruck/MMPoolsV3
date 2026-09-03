@@ -214,12 +214,25 @@ function manifestDocs() {
   return parseManifest(fs.readFileSync(DELETED_MANIFEST, 'utf8'));
 }
 
-/** Where `ref` and HEAD diverged — the point the three-dot diffs compare from. */
+/**
+ * Where `ref` and HEAD diverged — the point the three-dot diffs compare from.
+ *
+ * `merge-base` exits 1 with no output when the histories are genuinely
+ * unrelated, which is a real state (a fixture repo, an orphan branch) and means
+ * "compare against ref itself". Any OTHER failure is a broken repository, and
+ * treating it the same would quietly change what this check compares.
+ */
 function mergeBase(ref) {
   try {
     return git(['merge-base', ref, 'HEAD']).trim();
-  } catch {
-    return ref; // no common ancestor (a fixture repo, say); ref is the honest base
+  } catch (err) {
+    const status = err?.status;
+    const stderr = String(err?.stderr ?? '').trim();
+    if (status === 1 && !stderr) return ref; // no common ancestor
+    fail(
+      `cannot resolve the merge base of '${ref}' and HEAD, so the append-only\n` +
+      `      manifest check cannot run: ${stderr || err?.message || 'unknown git failure'}`,
+    );
   }
 }
 
