@@ -14,6 +14,7 @@ import { useToast } from '../ui/Toast';
 import { Badge, Button, RankChip, Tag, YouPill } from '../ui';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
+import { resolveLogoUrl } from '../../utils/logoUrl';
 
 /** The tab ids, as one list — shared with `src/help/content/pool-pages.ts`. */
 const PLAYOFF_TABS = ['picks', 'leaderboard', 'rules', 'ai', 'commissioner'] as const;
@@ -109,7 +110,7 @@ export const PlayoffDashboard: React.FC<PlayoffDashboardProps> = ({ pool, user, 
                     <div className="flex items-center gap-4">
                         {pool.branding?.logoUrl && (
                         <div className="flex-shrink-0">
-                            <img src={pool.branding.logoUrl} alt="Pool Logo" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg" />
+                            <img src={resolveLogoUrl(pool.branding.logoUrl)} alt="Pool Logo" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg" />
                         </div>
                     )}    <div>
                             <h1 className="text-3xl font-display font-extrabold uppercase leading-[0.95] text-[color:var(--text)] mb-2">{pool.name}</h1>
