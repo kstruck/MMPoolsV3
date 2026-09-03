@@ -1,7 +1,7 @@
 /**
  * Verify the docs/archive/ criterion (PR #653, 2026-09-01).
  *
- * Two invariants, both of which the docs cleanup must keep true:
+ * Three invariants, all of which the docs cleanup must keep true:
  *
  *   1. LINKS RESOLVE. No kept markdown doc names an ARCHIVED file by a path
  *      that does not land in `docs/archive/` — otherwise an operator following
@@ -13,6 +13,12 @@
  *      tests, skills, workflows, docs — and matched with OR WITHOUT the `.md`
  *      suffix, because the citation this repo actually missed was
  *      `NOTES-WAVE2` (no suffix) in ~10 `functions/src/` comments.
+ *
+ *   3. EVERY DELETION IS RECORDED in docs/archive/deleted-docs.txt. Invariant 2
+ *      learns about deletions from the branch diff, which empties the moment
+ *      the branch merges — so without a manifest entry a deletion is enforced
+ *      today and silently unenforced tomorrow. The manifest is the only half
+ *      that outlives the branch.
  *
  * Run from the repo root:
  *   node scripts/verifyArchiveRefs.mjs [--base <ref>]
@@ -144,11 +150,29 @@ function deletedDocs() {
     ].map((f) => path.basename(f)),
   );
 
-  return new Set(
-    [...committed, ...uncommitted, ...manifestDocs()]
-      .map((f) => path.basename(f))
-      .filter((name) => !movedIn.has(name)),
-  );
+  const fromDiff = [...committed, ...uncommitted]
+    .map((f) => path.basename(f))
+    .filter((name) => !movedIn.has(name));
+
+  // INVARIANT 3 — every genuine deletion must be RECORDED in the manifest.
+  // Without this the guard has an expiry date: a deletion is enforced today
+  // because the branch diff carries it, and stops being enforced the moment
+  // the branch merges and that diff empties. The manifest is the only half
+  // that outlives the branch, so a deletion missing from it is a reference
+  // check that silently switches itself off later.
+  const recorded = new Set(manifestDocs().map((f) => path.basename(f)));
+  const unrecorded = [...new Set(fromDiff)].filter((name) => !recorded.has(name));
+  if (unrecorded.length > 0) {
+    fail(
+      `${unrecorded.length} deleted doc(s) are missing from ${DELETED_MANIFEST}.\n` +
+      `      Without an entry there, nothing catches a reference to them once this\n` +
+      `      branch merges and the diff that currently carries them goes empty.\n` +
+      `      Add these lines:\n` +
+      unrecorded.map((n) => `        ${n}`).join('\n'),
+    );
+  }
+
+  return new Set([...fromDiff, ...recorded]);
 }
 
 /** The tracked list of docs previous cleanups deleted. */
