@@ -113,13 +113,26 @@ function deletedDocs() {
   const uncommitted = lines(
     git(['diff', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
   );
-  // A doc that left the root but now lives in docs/archive/ was MOVED, not
-  // deleted — git reports the old path as a deletion either way, so subtract
-  // the archive or every archived file would be reported as dangling.
+  // A doc that left the root and ARRIVED in docs/archive/ in this same change
+  // was MOVED, not deleted — git reports the old path as a deletion either
+  // way, so subtract those or every archived file reads as dangling.
+  //
+  // Keyed on "added under docs/archive/ by THIS diff", not on "some file with
+  // that basename sits in the archive". The weaker test would silently exempt
+  // a genuine future deletion whose basename happens to collide with
+  // something archived long ago, and references to it would then pass.
+  const movedIn = new Set(
+    lines(
+      git([
+        'diff', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+      ]),
+    ).map((f) => path.basename(f)),
+  );
+
   return new Set(
     [...committed, ...uncommitted, ...manifestDocs()]
       .map((f) => path.basename(f))
-      .filter((name) => !archived.has(name)),
+      .filter((name) => !movedIn.has(name)),
   );
 }
 
@@ -191,6 +204,10 @@ for (const file of trackedTextFiles()) {
   }
 
   // Invariant 2 — a deleted doc may not be named anywhere, suffix or not.
+  // The manifest is the registry OF those names, so it is the one file allowed
+  // to contain them; scanning it would make the guard fail on its own record.
+  if (file === DELETED_MANIFEST) continue;
+
   for (const [stem, original] of deletedStems) {
     // Word-boundary match so `NOTES-WAVE2` is caught but `NOTES-WAVE20` is not.
     const re = new RegExp(`(?<![A-Za-z0-9_-])${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9_-])`);
