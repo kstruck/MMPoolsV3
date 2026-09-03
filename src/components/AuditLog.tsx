@@ -149,7 +149,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
 
     return (
         <OverlayRoot id="pool-audit-log" label="Audit log and disputes" onEscape={onClose} className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-end">
-            <div className="w-full max-w-2xl bg-surface h-full border-l border-line shadow-panel flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="w-full max-w-2xl bg-surface h-full border-l border-line shadow-panel flex flex-col animate-in slide-in-from-right duration-200">
                 {/* Header */}
                 <div className="p-6 border-b border-line flex justify-between items-center bg-page">
                     <div>
@@ -183,7 +183,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ poolId, onClose }) => {
                     {!loading && deduplicatedEvents.length === 0 && <div className="text-muted text-center py-10">No events found matching this filter.</div>}
 
                     {deduplicatedEvents.map((event) => (
-                        <div key={event.id} className={`bg-card border rounded-lg p-4 transition-all ${event.severity === 'CRITICAL' ? 'border-brandred-600/40 bg-brandred-600/5' : 'border-line'}`}>
+                        <div key={event.id} className={`bg-card border rounded-lg p-4 transition-ui ${event.severity === 'CRITICAL' ? 'border-brandred-600/40 bg-brandred-600/5' : 'border-line'}`}>
                             <div className="flex items-start gap-4">
                                 <div className={`mt-1 p-2 rounded-full bg-surface border border-line`}>
                                     {getIcon(event.type)}

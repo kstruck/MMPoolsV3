@@ -73,7 +73,7 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({
     const netPot = totalPot - charityAmount;
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right duration-200">
             {/* Header */}
             <div className="bg-gradient-to-r from-navy-800/20 to-navy-600/20 border border-navy-600/30 rounded-xl p-6">
                 <div className="flex items-center gap-3 mb-2">
@@ -235,7 +235,7 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({
                 }}
             />
 
-            <div className="mt-4 p-4 bg-card/60 border border-line rounded-2xl flex gap-3 items-start animate-in fade-in duration-300 text-muted text-xs text-left">
+            <div className="mt-4 p-4 bg-card/60 border border-line rounded-2xl flex gap-3 items-start animate-in fade-in text-muted text-xs text-left">
                 <ShieldCheck className="text-navy-600 dark:text-navy-500 shrink-0 mt-0.5" size={20} />
                 <div>
                     <strong className="text-[color:var(--text)] block mb-0.5">100% Free Trial Setup</strong>

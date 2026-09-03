@@ -504,8 +504,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                 {/* Lifetime Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-                        <div className="w-10 h-10 rounded-xl bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC] flex items-center justify-center group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-ui duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC] flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <LayoutGrid size={20} />
                         </div>
                         <div>
@@ -513,8 +513,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalPools}</p>
                         </div>
                     </div>
-                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-ui duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <TrendingUp size={20} />
                         </div>
                         <div>
@@ -522,8 +522,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalSquares}</p>
                         </div>
                     </div>
-                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-ui duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <Trophy size={20} />
                         </div>
                         <div>
@@ -531,9 +531,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalWins}</p>
                         </div>
                     </div>
-                    <div className="bg-card border border-gold-500/40 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/60 transition-all duration-150"
+                    <div className="bg-card border border-gold-500/40 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/60 transition-ui duration-150"
                          style={{ boxShadow: `0 4px 15px ${BRAND.emeraldGlow}` }}>
-                        <div className="w-10 h-10 rounded-xl bg-gold-foil text-navy-950 flex items-center justify-center group-hover:scale-105 transition-all">
+                        <div className="w-10 h-10 rounded-xl bg-gold-foil text-navy-950 flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <DollarSign size={20} />
                         </div>
                         <div>
@@ -549,7 +549,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`px-4 py-3.5 text-xs font-display font-bold uppercase tracking-[0.08em] border-b-2 transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
+                            className={`px-4 py-3.5 text-xs font-display font-bold uppercase tracking-[0.08em] border-b-2 transition-ui whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
                                 ? 'border-gold-500 text-[color:var(--text)]'
                                 : 'border-transparent text-muted hover:text-[color:var(--text)]'
                                 }`}
@@ -575,7 +575,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p))} />
                 ) : activeTab === 'insights' ? (
                     /* INSIGHTS TAB - PREMIUM RECHARTS DASHBOARD */
-                    <div className="space-y-8 animate-in fade-in duration-300">
+                    <div className="space-y-8 animate-in fade-in">
 
                         {/* Lock Warning Banner */}
                         {earliestLock && (
@@ -812,7 +812,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 <div
                                     key={pool.id}
                                     onClick={() => navigate(`/pool/${(pool as BracketPool).slug || (pool as GameState).urlSlug || pool.id}`)}
-                                    className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover cursor-pointer relative overflow-hidden flex flex-col justify-between"
+                                    className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition-ui duration-150 fine:hover:-translate-y-1 shadow-card hover:shadow-card-hover cursor-pointer relative overflow-hidden flex flex-col justify-between"
                                 >
                                     <div>
                                         <div className="flex justify-between items-start mb-4">
@@ -875,8 +875,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                             {isSquares && (
                                                 <div className="h-1.5 w-full bg-line rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-gold-foil transition-all duration-500"
-                                                        style={{ width: `${percentFull}%` }}
+                                                        className="h-full w-full origin-left bg-gold-foil transition-transform duration-300 ease-out"
+                                                        style={{ transform: `scaleX(${Math.min(percentFull, 100) / 100})` }}
                                                     />
                                                 </div>
                                             )}
@@ -893,7 +893,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     )}
                                     <div className="flex items-center justify-between text-[10px] text-faint border-t border-line pt-3 mt-auto font-display font-bold uppercase tracking-[0.05em]">
                                         <span className="flex items-center gap-1"><UserIcon size={10} /> Host: {pool.managerName || 'Unknown'}</span>
-                                        <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-gold-700 dark:text-gold-400 font-display font-bold">
+                                        <span className="fine:group-hover:translate-x-1 transition-transform flex items-center gap-1 text-gold-700 dark:text-gold-400 font-display font-bold">
                                             View Dashboard <ChevronRight size={10} />
                                         </span>
                                     </div>

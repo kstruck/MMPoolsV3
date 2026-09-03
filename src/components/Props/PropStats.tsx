@@ -21,7 +21,7 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 font-body">
+        <div className="space-y-6 animate-in fade-in font-body">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Summary Card */}
                 <StatTile label="Total Entries" value={totalEntries} />
@@ -66,8 +66,8 @@ export const PropStats: React.FC<PropStatsProps> = ({ questions, cards }) => {
                                             </div>
                                             <div className="h-2 bg-line rounded-full overflow-hidden">
                                                 <div
-                                                    className={`h-full rounded-full transition-all duration-1000 ${isCorrect ? 'bg-[#0F7B4A]' : 'bg-navy-600/60 dark:bg-gold-500/60'}`}
-                                                    style={{ width: `${percentage}%` }}
+                                                    className={`h-full w-full origin-left rounded-full transition-transform duration-300 ease-out ${isCorrect ? 'bg-[#0F7B4A]' : 'bg-navy-600/60 dark:bg-gold-500/60'}`}
+                                                    style={{ transform: `scaleX(${Math.min(percentage, 100) / 100})` }}
                                                 />
                                             </div>
                                         </div>

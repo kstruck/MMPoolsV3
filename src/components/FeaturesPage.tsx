@@ -26,7 +26,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                 <section className="relative overflow-hidden py-20 px-4 text-center bg-navy-950 text-white">
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gold-500/10 rounded-full blur-3xl -z-10"></div>
                     <div className="max-w-4xl mx-auto">
-                        <span className="inline-block py-1 px-3 rounded-full bg-gold-500/10 border border-gold-500/25 text-gold-400 font-display font-bold uppercase text-sm tracking-[0.16em] mb-6 animate-fade-in-up">
+                        <span className="inline-block py-1 px-3 rounded-full bg-gold-500/10 border border-gold-500/25 text-gold-400 font-display font-bold uppercase text-sm tracking-[0.16em] mb-6 animate-in fade-in">
                             The Ultimate Super Bowl Squares Platform
                         </span>
                         <h1 className="font-display font-extrabold uppercase text-5xl md:text-7xl text-white tracking-tight mb-8 leading-[0.9]">
@@ -41,12 +41,12 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                             <button
                                 onClick={canCreate ? onCreatePool : undefined}
                                 disabled={!canCreate}
-                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
+                                className="bg-brandred-600 hover:bg-brandred-500 text-white px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-ui duration-150 fine:hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                                 title={canCreate ? "Create Your Pool" : "Pool creation is coming soon"}
                             >
                                 <Trophy size={20} /> {canCreate ? 'Create Your Pool' : 'Pool Creation Coming Soon'}
                             </button>
-                            <button onClick={() => window.location.href = '/browse'} className="border-[1.5px] border-white/30 text-white hover:border-gold-500 hover:text-gold-300 bg-transparent px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-all duration-150 hover:-translate-y-px flex items-center justify-center gap-2">
+                            <button onClick={() => window.location.href = '/browse'} className="border-[1.5px] border-white/30 text-white hover:border-gold-500 hover:text-gold-300 bg-transparent px-8 py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg transition-ui duration-150 fine:hover:-translate-y-px flex items-center justify-center gap-2">
                                 <Layout size={20} /> Find a Pool
                             </button>
                         </div>
@@ -164,7 +164,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                                 width={1024}
                                 height={591}
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.01] transition-transform duration-500"
                             />
                         </div>
                     </div>
@@ -204,7 +204,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                                 width={1024}
                                 height={517}
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.01] transition-transform duration-500"
                             />
                         </div>
                     </div>
@@ -244,7 +244,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                                 width={1024}
                                 height={541}
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.01] transition-transform duration-500"
                             />
                         </div>
                     </div>
@@ -284,7 +284,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                                 width={996}
                                 height={986}
                                 alt="Easy Pool Setup Wizard for commissioners with customization options"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.01] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.01] transition-transform duration-500"
                             />
                         </div>
                     </div>
@@ -331,7 +331,7 @@ export const FeaturesPage: React.FC<FeaturesPageProps> = ({ user, onOpenAuth, on
                         <button
                             onClick={canCreate ? onCreatePool : undefined}
                             disabled={!canCreate}
-                            className="bg-brandred-600 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px relative z-10 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
+                            className="bg-brandred-600 text-white px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-lg hover:bg-brandred-500 transition-ui duration-150 fine:hover:-translate-y-px relative z-10 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:bg-brandred-600"
                             title={canCreate ? "Create Your Pool Free" : "Pool creation is coming soon"}
                         >
                             {canCreate ? 'Create Your Pool Free' : 'Pool Creation Coming Soon'}

@@ -558,7 +558,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                     </button>
                 </div>
 
-                <div className={`transition-all duration-500 ease-in-out overflow-hidden ${showPoolInfo ? 'max-h-[1000px] opacity-100 mb-6' : 'max-h-0 opacity-0 mb-0'}`}>
+                <div className={`transition-collapse duration-300 ease-in-out overflow-hidden ${showPoolInfo ? 'max-h-[1000px] opacity-100 mb-6' : 'max-h-0 opacity-0 mb-0'}`}>
                     <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${(squaresPool as GameState).charity?.enabled ? 'lg:grid-cols-3' : 'lg:grid-cols-2 max-w-5xl mx-auto'}`}>
 
                         {/* 1. Status Card (Tabbed) */}
@@ -572,7 +572,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
                             <div className="p-6 flex-1 flex flex-col justify-center">
                                 {statusTab === 'overview' && (
-                                    <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-200">
                                         <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Status:</h3>
                                             {!squaresPool.isLocked ? <div className="flex items-center gap-2"><Badge status="open" /><p className="text-faint text-[10px] font-body">Grid is available to choose squares</p></div>
                                                 : squaresPool.scores?.gameStatus === 'post' ? <div className="flex items-center gap-2"><Badge status="locked">Locked - Final</Badge><p className="text-faint text-[10px] font-body">Game has completed</p></div>
@@ -584,7 +584,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                     </div>
                                 )}
                                 {statusTab === 'rules' && (
-                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
                                         <div className="bg-page border border-line rounded-lg p-3 text-center">
                                             <PoolTimer
                                                 targetDate={squaresPool.scores.startTime}
@@ -646,7 +646,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                     </div>
                                 )}
                                 {statusTab === 'payment' && (
-                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200 w-full">
                                         {(squaresPool.paymentHandles?.venmo || squaresPool.paymentHandles?.zelle) ? (
                                             <div className="flex flex-col gap-2">
                                                 {squaresPool.paymentHandles?.venmo && <a href={`https://venmo.com/u/${squaresPool.paymentHandles.venmo.replace('@', '')}`} target="_blank" rel="noreferrer" className="bg-[#008CFF] hover:bg-[#0077D9] text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 justify-center transition-colors w-full">Venmo: {squaresPool.paymentHandles.venmo} <ExternalLink size={14} /></a>}

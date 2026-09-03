@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Lock, AlertTriangle, CreditCard, Clock, ExternalLink, CheckCircle2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UI_EASE, UI_TRANSITION, useMotionTransform } from '../ui/motion';
 import type { PoolBilling, BillingStatus } from '../../types';
 import { isHostingBannerDismissed, dismissHostingBanner } from './hostingBannerDismissal';
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_WARNING_AT } from '@shared/freePlanCap';
@@ -36,6 +37,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   isCommissioner,
   children,
 }) => {
+  const { reduce, tx } = useMotionTransform();
   const billing = pool.billing;
   const status: BillingStatus = billing?.status ?? 'free';
 
@@ -145,9 +147,9 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
+          transition={UI_TRANSITION}
           style={{
             background: 'linear-gradient(135deg, #15803d 0%, #16a34a 100%)',
             border: '1px solid rgba(22,163,74,0.5)',
@@ -312,9 +314,9 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
+          transition={UI_TRANSITION}
           style={{
             background: bannerBg,
             border: bannerBorder,
@@ -421,9 +423,9 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
+          transition={UI_TRANSITION}
           style={{
             background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(139,92,246,0.12) 100%)',
             border: '1px solid rgba(99,102,241,0.25)',
@@ -532,9 +534,9 @@ export const BillingGate: React.FC<BillingGateProps> = ({
     return (
       <>
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          initial={{ opacity: 0, transform: tx('translateY(-12px)') }}
+          animate={{ opacity: 1, transform: tx('translateY(0px)') }}
+          transition={UI_TRANSITION}
           style={{
             background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(239,68,68,0.08) 100%)',
             border: '1px solid rgba(245,158,11,0.35)',
@@ -551,7 +553,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <motion.div
-              animate={{ scale: [1, 1.15, 1] }}
+              animate={{ transform: reduce ? 'scale(1)' : ['scale(1)', 'scale(1.15)', 'scale(1)'] }}
               transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
               style={{
                 padding: '10px',
@@ -649,7 +651,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={UI_TRANSITION}
           style={{
             position: 'absolute',
             inset: 0,
@@ -662,9 +664,9 @@ export const BillingGate: React.FC<BillingGateProps> = ({
           }}
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, transform: tx('translateY(20px) scale(0.92)') }}
+            animate={{ opacity: 1, transform: tx('translateY(0px) scale(1)') }}
+            transition={{ duration: 0.25, ease: UI_EASE }}
             style={{
               pointerEvents: 'auto',
               background: 'rgba(15,23,42,0.92)',

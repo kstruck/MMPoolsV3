@@ -152,7 +152,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                                 <button
                                     key={p.id}
                                     onClick={() => setSelectedPoolId(p.id)}
-                                    className="p-4 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-lg text-left transition-all duration-150 group"
+                                    className="p-4 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-lg text-left transition-ui duration-150 group"
                                 >
                                     <div className="font-display font-bold uppercase text-[color:var(--text)] group-hover:text-gold-700 dark:group-hover:text-gold-400">{p.name}</div>
                                     <div className="text-xs text-faint font-mono mt-1">{p.id}</div>
@@ -253,7 +253,7 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
                             <button
                                 onClick={() => handleAction(`Filling Grid (leave ${blanksToLeave})`, () => fillGridWithBlanks(selectedPoolId, blanksToLeave))}
                                 disabled={isLoading}
-                                className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-2 rounded-lg transition-all duration-150 hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2"
+                                className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-2 rounded-lg transition-ui duration-150 fine:hover:-translate-y-px shadow-red-cta flex items-center justify-center gap-2"
                             >
                                 <Users size={18} /> Fill Grid
                             </button>
@@ -286,22 +286,22 @@ export const SimulationDashboard: React.FC<SimulationDashboardProps> = ({ pools,
 
                         {/* Controls */}
                         <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => runSimStep('START')} className="bg-brandred-600 hover:bg-brandred-500 p-3 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150 hover:-translate-y-px shadow-red-cta">Start Game</button>
-                            <button onClick={() => runSimStep('RESET')} className="border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-[color:var(--line)] dark:text-[color:var(--text)] dark:hover:bg-white/10 dark:hover:text-white p-3 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150">Reset</button>
+                            <button onClick={() => runSimStep('START')} className="bg-brandred-600 hover:bg-brandred-500 p-3 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-ui duration-150 fine:hover:-translate-y-px shadow-red-cta">Start Game</button>
+                            <button onClick={() => runSimStep('RESET')} className="border-[1.5px] border-navy-800 text-navy-800 hover:bg-navy-800 hover:text-white dark:border-[color:var(--line)] dark:text-[color:var(--text)] dark:hover:bg-white/10 dark:hover:text-white p-3 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150">Reset</button>
 
                             <div className="col-span-2 text-xs text-faint font-display font-bold uppercase tracking-[0.08em] mt-2">Score Events</div>
-                            <button onClick={() => runSimStep('HOME+7')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Home TD (+7)</button>
-                            <button onClick={() => runSimStep('AWAY+7')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Away TD (+7)</button>
-                            <button onClick={() => runSimStep('HOME+3')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Home FG (+3)</button>
-                            <button onClick={() => runSimStep('AWAY+3')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Away FG (+3)</button>
-                            <button onClick={() => runSimStep('HOME+2')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Home 2-Pt (+2)</button>
-                            <button onClick={() => runSimStep('AWAY+2')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 num">Away 2-Pt (+2)</button>
+                            <button onClick={() => runSimStep('HOME+7')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 num">Home TD (+7)</button>
+                            <button onClick={() => runSimStep('AWAY+7')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 num">Away TD (+7)</button>
+                            <button onClick={() => runSimStep('HOME+3')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 num">Home FG (+3)</button>
+                            <button onClick={() => runSimStep('AWAY+3')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 num">Away FG (+3)</button>
+                            <button onClick={() => runSimStep('HOME+2')} className="w-full bg-surface hover:bg-card border border-navy-600/40 text-navy-700 dark:text-gold-400 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 num">Home 2-Pt (+2)</button>
+                            <button onClick={() => runSimStep('AWAY+2')} className="w-full bg-surface hover:bg-card border border-brandred-600/40 text-brandred-600 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 num">Away 2-Pt (+2)</button>
 
                             <div className="col-span-2 text-xs text-faint font-display font-bold uppercase tracking-[0.08em] mt-2">Progresion</div>
-                            <button onClick={() => runSimStep('END_Q1')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150">End Q1</button>
-                            <button onClick={() => runSimStep('END_HALF')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150">End Half</button>
-                            <button onClick={() => runSimStep('END_Q3')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-all duration-150">End Q3</button>
-                            <button onClick={() => runSimStep('FINAL')} className="bg-gold-foil text-navy-900 hover:brightness-105 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 col-span-2">End Game (Final)</button>
+                            <button onClick={() => runSimStep('END_Q1')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-ui duration-150">End Q1</button>
+                            <button onClick={() => runSimStep('END_HALF')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-ui duration-150">End Half</button>
+                            <button onClick={() => runSimStep('END_Q3')} className="bg-navy-800 hover:bg-navy-700 p-2 rounded font-display font-bold uppercase tracking-[0.05em] text-white transition-ui duration-150">End Q3</button>
+                            <button onClick={() => runSimStep('FINAL')} className="bg-gold-foil text-navy-900 hover:brightness-105 p-2 rounded font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 col-span-2">End Game (Final)</button>
                         </div>
                     </div>
                 </div>

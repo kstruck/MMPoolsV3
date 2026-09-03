@@ -118,7 +118,7 @@ const MOBILE_DRAWER_ID = 'mobile-nav-drawer';
 
 /* Compact chrome action button (header is always navy — no theme flip here) */
 const chromeBtn =
-    'inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-display font-bold uppercase text-[13px] tracking-[0.05em] transition-all duration-150 hover:-translate-y-px';
+    'inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 font-display font-bold uppercase text-[13px] tracking-[0.05em] transition-ui duration-150 fine:hover:-translate-y-px';
 
 /* Small gold caption over each mobile drawer section. */
 const DrawerSection: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (

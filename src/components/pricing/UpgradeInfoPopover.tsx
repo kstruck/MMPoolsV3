@@ -59,7 +59,7 @@ export const UpgradeInfoPopover: React.FC<{ title: string; description: string }
                         e.preventDefault();
                         e.stopPropagation();
                     }}
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-card border border-line p-3.5 rounded-xl text-[11px] leading-relaxed text-[color:var(--text)] font-body normal-case tracking-normal text-left cursor-default shadow-panel z-50 backdrop-blur-md block animate-in fade-in zoom-in-95 duration-150"
+                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-card border border-line p-3.5 rounded-xl text-[11px] leading-relaxed text-[color:var(--text)] font-body normal-case tracking-normal text-left cursor-default shadow-panel z-50 backdrop-blur-md block origin-bottom animate-in fade-in zoom-in-95 duration-150"
                 >
                     <strong className="text-gold-600 dark:text-gold-400 block mb-1 font-display font-bold uppercase tracking-[0.08em] text-[10px]">{title}</strong>
                     {description}

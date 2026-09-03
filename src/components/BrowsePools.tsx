@@ -172,7 +172,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <button
                                         key={type.id}
                                         onClick={() => setFilterType(type.id as any)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex justify-between items-center ${filterType === type.id
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 flex justify-between items-center ${filterType === type.id
                                             ? 'bg-navy-800 text-white'
                                             : 'text-muted hover:bg-surface hover:text-[color:var(--text)]'
                                             }`}
@@ -198,7 +198,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <button
                                         key={status.id}
                                         onClick={() => setFilterStatus(status.id as any)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex items-center gap-2 ${filterStatus === status.id
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 flex items-center gap-2 ${filterStatus === status.id
                                             ? 'bg-navy-800 text-white'
                                             : 'text-muted hover:bg-surface hover:text-[color:var(--text)]'
                                             }`}
@@ -228,7 +228,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                         key={sport.id}
                                         onClick={() => sport.active && setSelectedLeague(sport.id)}
                                         disabled={!sport.active}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 flex justify-between items-center ${!sport.active
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 flex justify-between items-center ${!sport.active
                                             ? 'opacity-40 cursor-not-allowed text-faint hover:bg-transparent'
                                             : selectedLeague === sport.id
                                                 ? 'bg-navy-800 text-white'
@@ -257,7 +257,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <button
                                         key={price.id}
                                         onClick={() => setFilterPrice(price.id as any)}
-                                        className={`text-xs px-3 py-1.5 rounded-lg border font-display font-bold uppercase tracking-[0.05em] num transition-all duration-150 ${filterPrice === price.id ? 'bg-gold-500/15 border-gold-500 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted hover:border-navy-600'}`}
+                                        className={`text-xs px-3 py-1.5 rounded-lg border font-display font-bold uppercase tracking-[0.05em] num transition-ui duration-150 ${filterPrice === price.id ? 'bg-gold-500/15 border-gold-500 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-muted hover:border-navy-600'}`}
                                     >
                                         {price.label}
                                     </button>
@@ -273,7 +273,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                     <span className={`text-sm font-display font-bold uppercase tracking-[0.05em] ${filterCharity ? 'text-[color:var(--text)]' : 'text-muted group-hover:text-[color:var(--text)]'}`}>Charity Pools Only</span>
                                 </div>
                                 <div className={`w-10 h-5 rounded-full relative transition-colors ${filterCharity ? 'bg-navy-800 dark:bg-gold-600' : 'bg-line'}`} onClick={() => setFilterCharity(!filterCharity)}>
-                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${filterCharity ? 'left-6' : 'left-1'}`} />
+                                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full left-1 transition-transform duration-150 ease-out ${filterCharity ? 'translate-x-5' : 'translate-x-0'}`} />
                                 </div>
                             </label>
                         </div>
@@ -337,7 +337,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 return (
                                     <div key={pool.id}
                                         onClick={() => window.location.href = `/pool/${pool.id}`}
-                                        className="group bg-card border border-line hover:border-gold-500 rounded-2xl p-5 cursor-pointer transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover relative overflow-hidden flex flex-col"
+                                        className="group bg-card border border-line hover:border-gold-500 rounded-2xl p-5 cursor-pointer transition-ui duration-150 fine:hover:-translate-y-1 shadow-card hover:shadow-card-hover relative overflow-hidden flex flex-col"
                                     >
                                         {charityEnabled && (
                                             <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
@@ -347,7 +347,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
 
                                         <div className="flex justify-between items-start mb-4 relative z-10">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-lg font-display font-bold group-hover:scale-105 transition-transform ${isBracket ? 'bg-gold-500/15 border-gold-500/40 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-navy-700 dark:text-[#9FB0CC]'}`}>
+                                                <div className={`w-12 h-12 rounded-full border flex items-center justify-center text-lg font-display font-bold fine:group-hover:scale-105 transition-transform ${isBracket ? 'bg-gold-500/15 border-gold-500/40 text-gold-700 dark:text-gold-400' : 'bg-surface border-line text-navy-700 dark:text-[#9FB0CC]'}`}>
                                                     {isBracket ? <Trophy size={20} /> : pool.name.substring(0, 2).toUpperCase()}
                                                 </div>
                                                 <div>
@@ -384,7 +384,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-1.5">
                                                     <div className="w-20 h-1.5 bg-line rounded-full overflow-hidden">
-                                                        <div className="h-full bg-gold-foil rounded-full transition-all" style={{ width: `${pct}%` }}></div>
+                                                        <div className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300 ease-out" style={{ transform: `scaleX(${Math.min(pct, 100) / 100})` }}></div>
                                                     </div>
                                                     <span className="num">{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
                                                 </div>

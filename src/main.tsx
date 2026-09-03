@@ -7,6 +7,7 @@ import { HelmetProvider } from 'react-helmet-async'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { ToastProvider } from './components/ui/Toast'
+import { MotionConfig } from 'framer-motion'
 import { initSentry, installGlobalErrorHandlers } from './sentry'
 import { errorHandler, ErrorSeverity } from './services/errorHandler'
 
@@ -37,9 +38,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <HelmetProvider>
         <BrowserRouter>
           <ThemeProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
+            <MotionConfig reducedMotion="user">
+              <ToastProvider>
+                <App />
+              </ToastProvider>
+            </MotionConfig>
           </ThemeProvider>
         </BrowserRouter>
       </HelmetProvider>

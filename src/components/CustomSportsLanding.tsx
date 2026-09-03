@@ -36,17 +36,17 @@ export const CustomSportsLanding: React.FC<CustomSportsLandingProps> = ({ user, 
                 </div>
 
                 <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
-                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-gold-500/10 border border-gold-500/25 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-gold-500/10 border border-gold-500/25 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <span className="flex h-2 w-2 rounded-full bg-gold-400 animate-live-pulse"></span>
                         <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-gold-400">Custom Sports Pools</span>
                     </div>
 
-                    <h1 className="font-display font-extrabold uppercase text-4xl md:text-7xl text-white tracking-tight mb-6 md:mb-8 leading-[0.9] animate-in fade-in slide-in-from-bottom-8 duration-700">
+                    <h1 className="font-display font-extrabold uppercase text-4xl md:text-7xl text-white tracking-tight mb-6 md:mb-8 leading-[0.9] animate-in fade-in slide-in-from-bottom-8 duration-500">
                         Host Your Pool <br />
                         <span className="text-gold-400">For Any Sport</span>
                     </h1>
 
-                    <p className="font-body text-[#9FB0CC] text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100">
+                    <p className="font-body text-[#9FB0CC] text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-500 delay-50">
                         Want to run a golf major pool, NBA playoffs bracket, or a custom sports league challenge? Manage everything from your favorite custom events with our versatile platform.
                     </p>
                 </div>
@@ -67,7 +67,7 @@ export const CustomSportsLanding: React.FC<CustomSportsLandingProps> = ({ user, 
                             { icon: Heart, title: "Charity Focus", desc: "Built-in tools to allocate a portion of the pot directly to a chosen charity." }
                         ].map((feature, i) => (
                             <div key={i} className="p-8 rounded-2xl bg-card border border-line transition-colors group flex flex-col h-full hover:border-gold-500/50">
-                                <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 bg-gold-500/15 border border-gold-500/25">
+                                <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 fine:group-hover:scale-110 transition-transform duration-300 bg-gold-500/15 border border-gold-500/25">
                                     <feature.icon size={28} className="text-gold-600 dark:text-gold-400" />
                                 </div>
                                 <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-3">{feature.title}</h3>

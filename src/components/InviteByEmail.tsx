@@ -90,7 +90,7 @@ export const InviteByEmail: React.FC<InviteByEmailProps> = ({ poolId }) => {
             <button
                 onClick={handleSend}
                 disabled={count === 0 || overLimit || isSending}
-                className="w-full mt-2 min-h-[44px] px-4 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-all duration-150 bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] disabled:bg-cream disabled:text-faint disabled:shadow-none disabled:cursor-not-allowed"
+                className="w-full mt-2 min-h-[44px] px-4 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] disabled:bg-cream disabled:text-faint disabled:shadow-none disabled:cursor-not-allowed"
             >
                 <Send size={15} />
                 {isSending

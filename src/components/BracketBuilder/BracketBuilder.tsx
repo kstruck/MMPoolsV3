@@ -348,7 +348,7 @@ export const BracketBuilder: React.FC<BracketBuilderProps> = ({ tournament, pick
                     <button
                         onClick={handleNextRegion}
                         disabled={activeRegion === 'FF'}
-                        className="px-6 py-2 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px"
+                        className="px-6 py-2 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px"
                     >
                         Next Region <ChevronRight className="w-4 h-4" />
                     </button>

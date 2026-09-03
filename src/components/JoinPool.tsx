@@ -127,7 +127,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             </p>
             <button
               onClick={() => navigate('/')}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all"
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-ui"
             >
               Back to Home
             </button>
@@ -163,7 +163,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                     {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
                       <a
                         href={`mailto:${pool.contactEmail}`}
-                        className="p-1 bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-[#9FB0CC] border border-navy-600/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-[#9FB0CC] border border-navy-600/20 rounded-md transition-ui fine:hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Email Host: ${pool.contactEmail}`}
                       >
                         <Mail size={12} />
@@ -172,7 +172,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                     {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
                       <a
                         href={`tel:${castPool.contactPhone}`}
-                        className="p-1 bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 border border-gold-500/30 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 border border-gold-500/30 rounded-md transition-ui fine:hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Call/SMS Host: ${castPool.contactPhone}`}
                       >
                         <Phone size={12} />
