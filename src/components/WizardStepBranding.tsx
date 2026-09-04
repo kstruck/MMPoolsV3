@@ -6,6 +6,7 @@ import { Button } from './ui';
 // PLAN-HELP-SYSTEM T5. Direct, not through the `ui` barrel — the barrel does
 // not export it (see `ui/Field.tsx`, which imports it the same way).
 import { HelpTip } from './ui/HelpTip';
+import { resolveLogoUrl } from '../utils/logoUrl';
 
 interface WizardStepBrandingProps {
     gameState: GameState;
@@ -50,7 +51,7 @@ export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({ gameStat
                             {gameState.branding?.logoUrl ? (
                                 <div className="relative group">
                                     <div className="w-32 h-32 bg-card rounded-lg flex items-center justify-center border border-line p-2">
-                                        <img src={gameState.branding.logoUrl} className="max-w-full max-h-full object-contain" alt="Pool Logo" />
+                                        <img src={resolveLogoUrl(gameState.branding.logoUrl)} className="max-w-full max-h-full object-contain" alt="Pool Logo" />
                                     </div>
                                     <button
                                         onClick={() => updateConfig({ branding: { ...gameState.branding, logoUrl: undefined } })}
