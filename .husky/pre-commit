@@ -2,7 +2,7 @@ python scripts/scan_secrets.py
 
 # Hygiene warning only: preserve the developer's ability to make an emergency
 # commit, but make a large change explicit before it enters review.
-file_count=$(git diff --cached --name-only --diff-filter=ACDMR | wc -l | tr -d ' ')
+file_count=$(git diff --cached --name-only | wc -l | tr -d ' ')
 if [ "$file_count" -gt 10 ]; then
   echo "WARNING: this commit stages $file_count files (recommended maximum: 10)."
   echo "Consider splitting it into smaller, traceable logical commits."
