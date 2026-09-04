@@ -318,7 +318,7 @@ async function checkPlayoffReminders(db: admin.firestore.Firestore, pool: Playof
             // Send SMS if opted in and pool enables SMS
             if (pool.reminders?.smsEnabled && recipient.smsOptIn && recipient.phone) {
                 const smsMessage = `Hi ${recipient.name}, your entry "${recipient.entryName}" in ${pool.name} is Unpaid. Pool locks in < 2 hours!`;
-                recordDelivery(tally, await sendCourierSMS(recipient.phone, smsMessage, 'member'));
+                recordDelivery(tally, await sendCourierSMS(recipient.phone, smsMessage, 'member', { poolId: pool.id }));
             }
         }
 
@@ -784,7 +784,7 @@ async function checkBracketReminders(db: admin.firestore.Firestore, pool: Bracke
             }
 
             if (pool.reminders?.smsEnabled && userData.smsOptIn && userData.phone) {
-                recordDelivery(tally, await sendCourierSMS(userData.phone, smsBody, 'member'));
+                recordDelivery(tally, await sendCourierSMS(userData.phone, smsBody, 'member', { poolId: pool.id }));
                 smsSentCount++;
             }
         }

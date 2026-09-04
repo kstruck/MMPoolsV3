@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { defineSecret } from "firebase-functions/params";
+import { recordUsageEvent } from "./lib/usageEvents";
 import { AIProviderError, providerFailureReason } from "./lib/aiProviderError";
 
 // Re-exported so existing importers of `./gemini` keep working; the logic is
@@ -33,16 +34,58 @@ const OUTPUT_SCHEMA = {
     required: ["headline", "summaryBullets", "explanationSteps", "confidence"],
 };
 
+/**
+ * Attribution context for a Gemini call (PLAN-COST-CONTROLS Phase 1.3).
+ *
+ * REQUIRED, and deliberately not optional: the plan's Phase 1 exit gate is that
+ * EVERY external paid call produces an attributable usage event. An optional
+ * parameter would let a new call site silently opt out of attribution, which is
+ * exactly the enumeration gap the sweeps exist to close. Same reasoning as the
+ * `audience` parameter added to `sendCourierSMS` in Phase 0.5.3.
+ */
+export interface AIUsageContext {
+    /** Stable feature label, e.g. "ai.dispute" / "ai.winner" / "ai.recap". */
+    feature: string;
+    poolId?: string | null;
+    userId?: string | null;
+}
+
 export const generateAIResponse = async (
     systemInstruction: string,
     facts: any,
+    usageContext: AIUsageContext,
     jsonSchema: any = OUTPUT_SCHEMA
 ): Promise<any> => {
+    const startedAt = Date.now();
+    // Guards against double-counting ONE provider call. The JSON parsing below
+    // runs inside the same try block as the API call and can itself throw
+    // ("Failed to parse AI JSON"), which lands in the outer catch — so without
+    // this flag a malformed response records BOTH a success and an error event,
+    // inflating `calls` in the daily rollup while the cost lands only once.
+    // The cost ledger's question is "did the provider run and bill us", and a
+    // parse failure downstream does not change that answer.
+    let providerCallRecorded = false;
     const apiKey = geminiApiKey.value();
     // Checked BEFORE any network call. It used to sit below model discovery, so a
     // missing secret produced a fetch with `key=undefined` and a confusing 400
     // before the honest "not set" error ever fired.
     if (!apiKey) {
+        // Recorded as `skipped`, matching how `sendCourierSMS` treats a missing
+        // Courier token. No provider call happens, so it costs nothing — but a
+        // misconfigured deployment must be VISIBLE in the rollup rather than
+        // silently producing no telemetry at all, which is indistinguishable
+        // from "the feature was never used". Sits at the EARLY check #545 moved
+        // this to; the old position ran after discovery and fetched with
+        // `key=undefined` first.
+        await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "skipped",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            errorCode: "not_configured",
+        });
         throw new Error("GEMINI_API_KEY is not set.");
     }
     let selectedModelName = "gemini-1.5-flash"; // Default fallback
@@ -100,6 +143,30 @@ export const generateAIResponse = async (
                 systemInstruction: systemInstruction + "\n\nIMPORTANT: You must return valid PURE JSON matching the provided schema.",
             },
         });
+        // Phase 1.3: usageMetadata was previously discarded here — it is the only
+        // measured token count available, and Phase 2.3's spend breaker is built
+        // on it. Field names vary across SDK versions, so read defensively; a
+        // missing count records as unpriced rather than as zero.
+        const usage: Record<string, unknown> =
+            (result as { usageMetadata?: Record<string, unknown> } | undefined)?.usageMetadata ?? {};
+        const inputTokens = typeof usage.promptTokenCount === "number" ? usage.promptTokenCount : null;
+        const outputTokens = typeof usage.candidatesTokenCount === "number"
+            ? usage.candidatesTokenCount
+            : (typeof usage.responseTokenCount === "number" ? usage.responseTokenCount : null);
+
+        await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "success",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            model: selectedModelName,
+            inputTokens,
+            outputTokens,
+        });
+        providerCallRecorded = true;
+
         let text = result.text ?? '';
 
         // Robust JSON Cleaning
@@ -123,7 +190,7 @@ export const generateAIResponse = async (
             return { raw_response: text };
         }
     } catch (error: any) {
-        // 🛑 THE REASON IS EXTRACTED AND CARRIED, not just logged.
+// 🛑 THE REASON IS EXTRACTED AND CARRIED, not just logged.
         //
         // On 2026-08-24 the AI Commissioner had never once worked in production:
         // the Gemini key carried an HTTP-referrer restriction, Cloud Functions
@@ -134,6 +201,29 @@ export const generateAIResponse = async (
         // The reason now rides on the thrown error so the request document, and
         // therefore the commissioner's own screen, can name it.
         const reason = providerFailureReason(error);
+
+        // An ATTEMPTED call that failed may still be billed, and a spike in
+        // errors is itself a cost signal — so failures are recorded too.
+        // `errorCode` carries #545's SHORT STABLE reason code
+        // (API_KEY_HTTP_REFERRER_BLOCKED / HTTP_403 / UNKNOWN) rather than the
+        // ad-hoc status this used to derive: strictly more diagnostic, and still
+        // safe for telemetry because providerFailureReason never returns raw
+        // provider message text — prompts must never enter telemetry (1.4).
+        //
+        // Skipped when the provider call already succeeded: reaching here after
+        // that means OUR parsing threw, not the provider. Recording a second
+        // event would double-count a single billed call.
+        if (!providerCallRecorded) await recordUsageEvent({
+            provider: "gemini",
+            feature: usageContext.feature,
+            outcome: "error",
+            latencyMs: Date.now() - startedAt,
+            poolId: usageContext.poolId ?? null,
+            userId: usageContext.userId ?? null,
+            model: selectedModelName,
+            errorCode: reason,
+        });
+
         console.error(`[gemini] request failed (${reason}):`, JSON.stringify(error, Object.getOwnPropertyNames(error)));
 
         // The "list the models to see if the key is valid" retry that used to

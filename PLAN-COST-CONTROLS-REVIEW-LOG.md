@@ -321,3 +321,144 @@ documents. Every guard in this PR was therefore checked by reverting the thing i
 protects and confirming the test goes red: the rules tighten (3 assertions fail),
 the audience assignments, the transaction ordering, the health probe, the 24h
 window, and single-flight.
+
+---
+
+# Cycle 3 — Phase 1 (usage attribution)
+
+_Third review cycle on this plan: cycle 1 reviewed the plan document, cycle 2
+reviewed the Phase 0.5 implementation, this one reviews Phase 1. Run 2026-08-23,
+`codex exec`, codex-cli 0.149.0, model `gpt-5.3-codex` (the API project does not
+carry codex's default model). MAX_ROUNDS=10 flat; qodo DORMANT per §2b, so the
+stopping rule is TWO conditions — a clean codex round AND my own read agreeing._
+
+## Round 1 — `codex exec review --base origin/main`
+
+VERDICT: CLEAN. "I reviewed the diff against the specified merge base and did
+not find discrete, actionable defects introduced by this patch."
+
+### Claude's response
+
+Recorded, not treated as the review — §2c: "round 1 finds defects in the code,
+and rounds 2+ find defects in the fixes… do not treat a clean round 1 as the
+review." Self-review of the same diff immediately found TWO defects the stock
+prompt missed, both in code written this cycle:
+
+1. **Double-count.** `generateAIResponse` parses the model's JSON *inside* the
+   same `try` as the API call, and a malformed response throws
+   `Failed to parse AI JSON` into the outer catch — the catch that records
+   provider failures. One billed call therefore recorded BOTH a `success` (with
+   tokens and cost) and an `error`, inflating `calls` in the rollup and dragging
+   per-call cost averages low. Fixed with a `providerCallRecorded` flag: a parse
+   failure on our side does not change whether the provider billed us.
+2. **Silent misconfiguration.** `if (!apiKey) throw` sits OUTSIDE that try, so a
+   missing Gemini key threw with zero telemetry — indistinguishable in the
+   rollup from "nobody used the feature", while the equivalent missing-Courier-
+   token path already recorded `skipped`. Now records `skipped` /
+   `not_configured`.
+
+Both pinned by `geminiUsageAccounting.test.ts`, and both revert-checked.
+
+## Round 2 — adversarial: write amplification, telemetry latency, accounting holes, guard quality
+
+VERDICT: REVISE. 6 findings (1 High, 2 Medium, 3 Low). All 6 verified against
+the code, all 6 accepted.
+
+1. (High) Member SMS carried no pool context, so every pool's SMS collapsed into
+   ONE daily aggregate doc (`…__sms.member____none__`) — losing per-pool spend
+   attribution AND creating 1-write/sec contention on a single document during a
+   reminder blast.
+2. (Medium) `sendOpsSMS` reaches `api.courier.com` directly and recorded
+   nothing, so the Phase 1 exit gate ("every external paid call produces an
+   attributable usage event") was **false as written**, and Courier invoice
+   reconciliation would be incomplete.
+3. (Medium) The raw event and its daily aggregate were two separate awaits: the
+   event could land while the increment failed, leaving the rollup reading LOW
+   while calls were billed — and that rollup is what the Phase 2.3 breaker and
+   the Phase 6 cost card read.
+4. (Low) `normalized.startsWith(key)` has no delimiter boundary, so a
+   non-delimited id like `gemini-2.0-flashlite` would price as
+   `gemini-2.0-flash` — a WRONG number rather than the honest null this module
+   exists to return.
+5. (Low) The structural guards were loose: the SMS guard sliced from the
+   function declaration to end-of-file, and the AI guard accepted `feature:`
+   appearing anywhere in the argument list.
+6. (Low) The 90-day `expiresAt` is inert without a Firestore TTL policy, which
+   no deploy command creates and nothing in the repo can assert.
+
+### Claude's response
+
+All accepted; #5 accepted in part, with the AST half declined and reasoned.
+
+1. **Accepted.** `sendCourierSMS` takes a required 4th `context` parameter;
+   `reminders.ts:291,757` pass `{ poolId: pool.id }`, `userManagement.ts:174`
+   passes `{ userId: uid }`, `:219` passes `{}`. Required rather than defaulted
+   for the same reason as the `audience` parameter: a default makes a new call
+   site silently un-attributed.
+2. **Accepted.** `sendOpsSMS` instrumented on all four return paths as
+   `sms.ops`, with its own brace-bounded coverage guard. D4 exempts ops paging
+   from the KILL-SWITCH; it does not exempt it from costing money.
+3. **Accepted.** Both writes now commit in one `db.batch()`. Tests assert a
+   failed commit writes NEITHER document.
+4. **Accepted.** Boundary-safe (`key + "-"`), with regression tests for a
+   lookalike id.
+5. **Accepted in part.** The scoping half is a real defect and is fixed:
+   `extractFunctionBody()` brace-bounds both SMS guards, and `splitTopLevelArgs()`
+   makes the AI guard check the THIRD POSITIONAL argument. A correctness
+   experiment confirmed the change is not cosmetic — with a neighbouring
+   function appended below `sendCourierSMS`, the old slice-to-EOF guard reported
+   `6 outcome returns but only 5 usage events`, and the brace-bounded one is
+   unaffected. **The AST proposal is REJECTED**, on the same reasoning this repo
+   used to reject the equivalent request on #516's transaction-ordering guard:
+   the primary enforcement is the TYPE SYSTEM — `usageContext` is a required
+   parameter, so an omitted context is a compile error and CI typechecks — and
+   these tests are a tripwire for the day someone makes it optional, not the
+   enforcement itself. An AST pass is not worth its weight against a
+   compiler-enforced invariant. Recorded at the assertion rather than left
+   implied.
+6. **Accepted.** Recorded in `PLAN-COST-CONTROLS.md` as a required manual step
+   with the exact `gcloud firestore fields ttls update` command, and the
+   90-day retention line marked **aspirational until it runs**. The
+   automated-check half is not actionable from this repo: TTL is GCP-level
+   configuration and appears in no file CI can read.
+
+Two existing fixtures also needed updating — not product defects: `costControls`'
+call-site regexes assumed the audience was the final argument, and the
+`usageEvents` mock had to model a batch.
+
+## Round 3 — re-review of all six fixes, plus a hunt in the new code
+
+VERDICT: **APPROVED.** Confirmed each of the six fixes closes its finding, with
+file:line evidence for every one. No new findings. It also independently
+confirmed two properties I had checked myself: the batch rewrite preserves
+`merge: true` and the never-throws contract, and the ops-SMS attribution
+introduces no reentrancy loop (`recordUsageEvent` swallows its own failures and
+never dispatches an ops alert, so `sendOpsSMS → recordUsageEvent → fail` cannot
+recurse).
+
+### Claude's response
+
+Nothing to absorb.
+
+## Resolution — CONVERGED (clean final round), with ONE residual risk named
+
+3 rounds, **8 findings** (1 High, 2 Medium, 3 Low from codex; 2 more from
+self-review that codex's clean round 1 missed), 7 accepted outright, 1 accepted
+in part with the rejected half reasoned above. Round 3 came back APPROVED and my
+own read of the diff agrees — the two conditions §2c requires while §2b is
+dormant. 3 of the 10-round cap spent.
+
+⚠️ **NAMED RESIDUAL RISK — per-pool aggregate contention under a large blast.**
+Round 2's finding 1 fixed the *global* collapse; it did not eliminate
+contention, it scoped it. A reminder blast to one large pool still increments a
+single document (`{day}__courier__sms.member__{poolId}`) once per recipient, and
+`recordUsageEvent` swallows write failures — so a contended write is DROPPED,
+undercounting the rollup rather than erroring. Judged low in practice and NOT
+fixed here, for three measured reasons: sends are sequential and awaited, so the
+rate is bounded by Courier's round-trip; the call is already gated behind
+`pool.reminders?.smsEnabled && smsOptIn && phone`, so the write count is
+proportional to real intended sends rather than to membership; and member SMS is
+OFF by Kevin's decision #3, so the live rate is currently zero. **The fix, if it
+is ever needed, is a sharded counter, and Phase 2 is where it belongs** — that
+phase already introduces a per-pool quota transaction on the same key. Recorded
+here rather than in a comment so it is Kevin's call, not an assumption.

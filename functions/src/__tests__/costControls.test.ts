@@ -188,15 +188,15 @@ describe('every sendCourierSMS call site declares an audience (source-level)', (
   it('reminders.ts sends are BOTH member traffic — the sends the switch must stop', () => {
     const sites = callSites(read('reminders.ts'));
     expect(sites.length).toBe(2);
-    expect(sites.every((l) => /'member'\)/.test(l)), `not member:\n${sites.join('\n')}`).toBe(true);
+    expect(sites.every((l) => /'member'\s*[,)]/.test(l)), `not member:\n${sites.join('\n')}`).toBe(true);
   });
 
   it('userManagement.ts sends are NOT member traffic — D4 keeps them working', () => {
     const sites = callSites(read('userManagement.ts'));
     expect(sites.length).toBe(2);
-    expect(sites.some((l) => /'security'\)/.test(l)), 'security alert lost its audience').toBe(true);
-    expect(sites.some((l) => /'test'\)/.test(l)), 'testSmsHttp lost its audience').toBe(true);
-    expect(sites.some((l) => /'member'\)/.test(l)), 'a D4-exempt send is now gated as member').toBe(false);
+    expect(sites.some((l) => /'security'\s*[,)]/.test(l)), 'security alert lost its audience').toBe(true);
+    expect(sites.some((l) => /'test'\s*[,)]/.test(l)), 'testSmsHttp lost its audience').toBe(true);
+    expect(sites.some((l) => /'member'\s*[,)]/.test(l)), 'a D4-exempt send is now gated as member').toBe(false);
   });
 
   it('the ops pager does NOT route through sendCourierSMS at all', () => {

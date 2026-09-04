@@ -7,11 +7,24 @@ spend) and **authorization** (`firestore.rules` `ai_requests`, new callables)._
 
 ## Implementation status
 
-**Phase 0.5 — MERGED 2026-08-22 ([#516](https://github.com/kstruck/MMPoolsV3/pull/516))
-and its rules ARE live in prod** (evidence: the `ai_requests` entitlement rule
-was rejecting requests before C1's toggle granted the first entitlement —
-MORNING-2026-08-25.md AI-commissioner postmortem). Status below updated
-2026-08-24; the stale "NOT merged" line stood for two days.
+**Phase 0.5 — ✅ MERGED 2026-08-22 as
+[#516](https://github.com/kstruck/MMPoolsV3/pull/516) (`00408e97`), and its
+functions + rules ARE LIVE in prod.** Corrected 2026-08-24 by #557; this plan
+said "NOT DEPLOYED" for two days and that was wrong.
+
+**The evidence is behavioural, and it is strong** (MORNING-2026-08-25.md §1c,
+from production Cloud Function logs): the AI Commissioner had never once run in
+production, and it ran for the first time only after C1's toggle granted a pool
+the `aiCommissioner` entitlement. Before 0.5 there was NO entitlement check on
+the `onAIRequest` path at all — that is the unbounded hole this plan opened to
+close — so a pre-0.5 deployment would have served any pool without a toggle.
+The toggle mattering is the proof that 0.5's enforcement is live.
+
+⚠️ **What that evidence does NOT cover: the index.** 0.5.5's
+`ai_requests.createdAt` collection-group field override is a third deploy
+surface, and nothing in the AI-commissioner postmortem touches the health
+snapshot. Treat `firestore:indexes` as UNVERIFIED rather than done — the tell
+is a `FAILED_PRECONDITION` on the AI-volume count in `adminHealth`.
 
 | Item | State |
 |---|---|
@@ -21,18 +34,42 @@ MORNING-2026-08-25.md AI-commissioner postmortem). Status below updated
 | 0.5.4 SMS unsellable | ✅ built — `shared/schemas/quote.ts` (`UNSELLABLE_ADDON_KEYS`), + the Stripe in-flight-session clamp |
 | 0.5.5 AI volume on the health snapshot | ✅ built — `adminHealth.ts` + the `ai_requests.createdAt` COLLECTION_GROUP field override |
 
-⚠️ **Deploy is THREE surfaces and the order matters** (Rule 2): functions →
-rules → **indexes**. The index is not optional: 0.5.5's collection-group count
+⚠️ **Deploy was THREE surfaces and only TWO are confirmed** (Rule 2): functions
+→ rules → **indexes**. Functions and rules are live (see above). The index is
+the one still unverified, and it is not optional: 0.5.5's collection-group count
 throws `FAILED_PRECONDITION` without it, which is the `enforceBillingStatus`
 failure mode this repo has already paid for once.
 
-⚠️ **The SMS kill-switch defaults OFF at deploy.** `system/config.costControls`
-does not exist yet and the reader is fail-closed, so member SMS stops the moment
-functions deploy — which is where Kevin wants it (decision #3). Ops and
-security-alert SMS are unaffected (D4). Set `costControls.sms.enabled = true` to
-re-enable member SMS.
+```
+npx firebase deploy --only firestore:indexes --project gridiron-gamble-uzuqo
+```
 
-📌 **Phases 1, 2, 3, 4, 6 and 7 are NOT started.** Phase 5 is deferred (D5).
+Cheap to re-run when it is already applied, so run it rather than reason about
+it — and check the AI-volume tile on the health snapshot afterwards.
+
+⚠️ **The SMS kill-switch defaulted OFF at that deploy, so member SMS is very
+likely OFF in production right now.** `system/config.costControls` did not exist
+and the reader is fail-closed — which is where Kevin wants it (decision #3, and
+his "GO with recommendation" on 2026-08-24). Ops and security-alert SMS are
+unaffected (D4). Set `costControls.sms.enabled = true` to re-enable member SMS.
+This is written as a live-state fact, not a warning about a future deploy.
+
+**Phase 1 — BUILT and reviewed, in [#518](https://github.com/kstruck/MMPoolsV3/pull/518).
+NOT merged, NOT deployed.**
+
+| Item | State |
+|---|---|
+| 1.3 usage events (tokens, model, latency, outcome, cost, catalog version) | ✅ built — new `lib/usageEvents.ts`, `provider_usage_events` |
+| 1.4 daily aggregates per provider/feature/pool | ✅ built — `provider_usage_daily`, same atomic batch |
+| 1.5 versioned price catalog in code | ✅ built — new `lib/priceCatalog.ts`, unpriced ⇒ NULL cost |
+| wrapper attribution | ✅ built — required context on `generateAIResponse` + `sendCourierSMS`; all 7 AI call sites (the 7th, `ai.banter`, arrived with #530 mid-review), all 5 SMS return paths, and `sendOpsSMS` |
+| rules | ✅ built — both collections append-only, SUPER_ADMIN read |
+
+⚠️ **Phase 1 adds a THIRD manual step to the deploy: the TTL policy** (see the
+Phase 1 section). Functions → rules → indexes covers the code; the TTL policy is
+GCP-level and no deploy command creates it.
+
+📌 **Phases 2, 3, 4, 6 and 7 are NOT started.** Phase 5 is deferred (D5).
 
 ## Gate status (2026-08-22, updated same day after the environment fix)
 
@@ -281,6 +318,26 @@ no feature calls providers directly), with these repo-specific corrections:
   Firestore — prices change by deploy, with review.
 
 **Exit gate:** every external paid call produces an attributable usage event.
+
+⚠️ **A FIRESTORE TTL POLICY IS A MANUAL CONSOLE STEP AND NO DEPLOY COMMAND
+CREATES IT** (codex round 2, finding 6). Phase 1 writes an `expiresAt` timestamp
+on every raw event, but that field is **inert** until someone creates a TTL
+policy naming it. Until then raw events — which carry the `userId`/`poolId`
+attribution pair — accumulate for ever, which is both a storage cost and a
+retention-promise the plan does not keep (D3 says 90 days). It cannot be
+declared in `firestore.indexes.json`; TTL lives at the GCP/Firestore
+configuration level, so nothing in this repo can assert it.
+
+**Required after the Phase 1 deploy (Kevin, console or gcloud):**
+
+```
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=provider_usage_events \
+  --enable-ttl --project=gridiron-gamble-uzuqo
+```
+
+Until that runs, treat the 90-day retention line in §Retention as ASPIRATIONAL,
+not in force.
 
 ## Phase 2 — Enforce rate limits and spend controls
 

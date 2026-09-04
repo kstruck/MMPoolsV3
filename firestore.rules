@@ -936,6 +936,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // PAID-PROVIDER USAGE TELEMETRY (PLAN-COST-CONTROLS Phase 1.3/1.4).
+    // Append-only from the server, exactly like admin_audit above: these feed
+    // the Phase 2.3 spend breaker and the Phase 7.3 invoice reconciliation, so
+    // a client-writable counter would be a client-controllable cost ceiling.
+    // Raw events carry no prompts, responses or phone numbers by construction
+    // (see lib/usageEvents.ts) — but they DO carry the userId/poolId
+    // attribution pair, so reads stay SUPER_ADMIN-only.
+    match /provider_usage_events/{eventId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /provider_usage_daily/{dayId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
     // BILLING CHARGES (T14) — platform revenue ledger (Stripe charges). Sensitive
     // company income, so admin-only read and functions-only write. NOT under the
     // public stats/* — that holds only prize volume/charity.

@@ -1,6 +1,7 @@
 import { defineSecret } from "firebase-functions/params";
 import type { DeliveryOutcome } from "../lib/deliveryTally";
 import { isMemberSmsEnabled, type SmsAudience } from "../lib/costControls";
+import { recordUsageEvent } from "../lib/usageEvents";
 
 export const courierAuthToken = defineSecret("COURIER_AUTH_TOKEN");
 
@@ -46,23 +47,58 @@ function normalizePhone(phone: string): string {
  * Ops paging is NOT here: `lib/opsAlertDispatcher.ts` `sendOpsSMS` is its own
  * Courier path (deliberately, per its own header) and is exempt per D4.
  */
+/**
+ * Attribution context (PLAN-COST-CONTROLS Phase 1.3). REQUIRED, and `{}` is a
+ * legitimate value — a security alert is not pool-scoped. Requiring the
+ * parameter rather than defaulting it forces each call site to state what it
+ * knows: the daily rollup is keyed per pool, so a member blast that omits
+ * poolId collapses every pool's SMS into ONE aggregate document, which loses
+ * per-pool spend AND creates 1-write/sec contention on that single doc during a
+ * reminder run (codex round 2, finding 1).
+ */
+export interface SmsUsageContext {
+    poolId?: string | null;
+    userId?: string | null;
+}
+
 export async function sendCourierSMS(
     phoneNumber: string,
     message: string,
-    audience: SmsAudience
+    audience: SmsAudience,
+    context: SmsUsageContext
 ): Promise<DeliveryOutcome> {
+    // Phase 1.3 attribution. NOTE: the phone number is deliberately absent from
+    // every usage event below — telemetry records shape and cost, never
+    // recipients (plan 1.4).
+    const startedAt = Date.now();
+    const feature = `sms.${audience}`;
+
     if (audience === 'member' && !(await isMemberSmsEnabled())) {
         // Same 'skipped' semantics as an unconfigured Courier: a deployment
         // choice, not a fault. Returning 'failed' here would mark every
         // reminder pass unhealthy forever — the crying-wolf mode this file's
         // header exists to avoid.
         console.warn("[costControls] member SMS disabled by kill-switch; not sent.");
+        // Recorded so a silently-off feature is visible in the rollup rather
+        // than looking like nobody ever tried to send.
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "skipped",
+            latencyMs: Date.now() - startedAt, messageCount: 0,
+            errorCode: "killswitch_disabled",
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
+        });
         return 'skipped';
     }
 
     const token = courierAuthToken.value();
     if (!token) {
         console.warn("Courier Auth Token not configured. SMS not sent.");
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "skipped",
+            latencyMs: Date.now() - startedAt, messageCount: 0,
+            errorCode: "not_configured",
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
+        });
         return 'skipped';
     }
 
@@ -98,13 +134,30 @@ export async function sendCourierSMS(
 
         if (!response.ok) {
             console.error(`Courier API error (${response.status}):`, responseBody);
+            await recordUsageEvent({
+                provider: "courier", feature, outcome: "error",
+                latencyMs: Date.now() - startedAt, messageCount: 1,
+                errorCode: `http_${response.status}`,
+                poolId: context.poolId ?? null, userId: context.userId ?? null,
+            });
             return 'failed';
         }
 
         console.log(`Courier SMS accepted for ${e164Phone}`);
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "success",
+            latencyMs: Date.now() - startedAt, messageCount: 1,
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
+        });
         return 'queued';
     } catch (error) {
         console.error("Failed to send Courier SMS:", error);
+        await recordUsageEvent({
+            provider: "courier", feature, outcome: "error",
+            latencyMs: Date.now() - startedAt, messageCount: 1,
+            errorCode: "request_failed",
+            poolId: context.poolId ?? null, userId: context.userId ?? null,
+        });
         return 'failed';
     }
 }

@@ -35,11 +35,23 @@ const repoRoot = path.resolve(here, '..', '..');
 process.chdir(repoRoot);
 
 // Bump this when a rules test is ADDED. Lower it only with a written reason.
-// 13 as of PLAN-MEMBER-REMOVAL-HARDENING (memberRemoval.rules.test.mjs), on top
-// of the 12 from PLAN-AUDIT-AUTH-HARDENING Phase B (poolPrivateAccess.rules.test.mjs).
-// It had drifted to one BELOW the file count before Phase B — the empty-pass guard
-// only does its job when it tracks the real number.
-const MIN_FILES = 13;
+// 14: providerUsage (PLAN-COST-CONTROLS Phase 1), poolPrivateAccess
+// (PLAN-AUDIT-AUTH-HARDENING Phase B) and memberRemoval
+// (PLAN-MEMBER-REMOVAL-HARDENING) on top of the original 11.
+//
+// ⚠️ THIS COUNTER IS A MERGE HAZARD AND HAS NOW BEEN WRONG TWICE. It is
+// ADDITIVE: two branches that each add one rules test both bump it by one, so
+// each side is individually right and their merge is short by one. The second
+// time was worse than the first — both sides happened to land on 13, so the
+// NUMBER merged with no conflict at all and only the comment above it clashed.
+// Had the comments also agreed, git would have auto-merged a floor one below
+// the real count, silently, which is precisely the empty-pass this guard
+// exists to prevent.
+//
+// So: on ANY merge that touches this line, do not reconcile the two numbers —
+// recount from the filesystem:
+//     ls functions/scripts/*.rules.test.mjs | wc -l
+const MIN_FILES = 14;
 // Every test file initialises rules-unit-testing with this project id.
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 const host = process.env.FIRESTORE_EMULATOR_HOST;
