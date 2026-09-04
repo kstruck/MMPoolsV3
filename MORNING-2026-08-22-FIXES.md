@@ -377,7 +377,36 @@ restored both the URL and the rendered content. **Nothing further owed.**
 
 ## 7. Still open — carried forward, nothing lost
 
-### Four help-system defects, all yours to schedule, all plan-gated
+> ## 🟢 RE-DERIVED 2026-08-28 against `origin/main` = `f161b51d` — **ALL FOUR HELP-SYSTEM DEFECTS BELOW ARE CLOSED, AND SO IS T4.**
+>
+> This section was written on 2026-08-22 and was believed to be the open list.
+> An overnight triage checked every claim in it against the code rather than
+> against the doc, and **five of the items it carries have shipped since.** They
+> are struck through below with the evidence, rather than deleted, so this file
+> stays readable as the record of what was true when it was written.
+>
+> | Item | Status on `f161b51d` | Evidence |
+> |---|---|---|
+> | **(a)** `pointsPerPick` / `primetimeBonus` inert | **CLOSED — deleted, not honoured** | Kevin ruled 2026-08-22 in `PLAN-DELETE-INERT-PICKEM-SCORING.md` (§ "SIGNED … DELETE THEM"). Every control and member-facing row is gone; `src/help/coverage-allowlist.ts:119` records the PERMANENT row and why the schema still accepts the field. |
+> | **(b)** Pick'em commissioner proxy pick has never worked | **CLOSED** | `src/utils/proxyPickPayload.ts` builds the payload PER POOL TYPE and refuses a slate it cannot key against, BEFORE the confirm dialog. Tested in `src/utils/proxyPickPayload.test.ts` and pinned in `tests/nfl-surface-invariants.test.ts`. |
+> | **(c)** "List Pool Publicly" writes `settings.isListedPublic`, Browse reads `isPublic` | **CLOSED** | `publicListingUpdate()` (`src/utils/publicListing.ts`) now returns BOTH halves from one call, with the comment naming this exact defect at `NFLManagerView.tsx` `handleSaveSettings`. Tested in `src/__tests__/browsePublicListing.test.ts`. |
+> | **(d)** `HelpCopy.template` can never render | **CLOSED** | `TopicScope` carries `settings` (`src/help/registry.ts:55`), and `registry.ts:45` says so explicitly: *"Before it was here, `HelpCopy.template` could not fire anywhere."* |
+> | **T4** — 35 raw `<label>` in `NFLManagerView.tsx` | **CLOSED AND GUARDED** | `grep -c '<label' src/components/NFLPoolDashboard/NFLManagerView.tsx` returns **0**, and `tests/help-manager-label-coverage.test.ts` fails the build if one comes back. |
+>
+> **What IS still open on the help plan** is T5–T8 (and T15/T16): the
+> `FieldLabel` migration for the Squares/Bracket/Props/Playoff manager surfaces
+> and the rules-page readers. **~270 raw `<label>` remain across `src/`** — that
+> is T5–T7's scope, NOT T4's. The heaviest files are
+> `BracketPoolDashboard.tsx` (23), `admin/SuperAdminBillingPanel.tsx` (20),
+> `WizardStepReminders.tsx` (18) and `SuperAdmin.tsx` (18).
+>
+> One prerequisite for that half shipped overnight: the toggle switch now lives
+> in `src/components/ui/Switch.tsx`, so four of T5's files no longer need a raw
+> `<label>` for it. T5's remaining blocker is CONTENT, not markup — the Squares
+> rule-variation and charity fields have no topics yet, unlike the basics fields,
+> where 13 of 14 ids already resolve for a `SQUARES` commissioner.
+
+### ~~Four help-system defects, all yours to schedule, all plan-gated~~ — ALL FOUR CLOSED, see the box above
 
 - **(a) `settings.pointsPerPick` and `settings.primetimeBonus` are INERT.**
   `scorePickemEntry` (`functions/src/nflScoringEngine.ts:174-178`) awards exactly
@@ -397,11 +426,19 @@ restored both the URL and the rendered content. **Nothing further owed.**
   `Pick<HelpScope,'poolType'|'audience'>` and nothing publishes a pool's settings.
   Has already cost eight deliberately-widened sentences across #480 and #484.
 
-### PLAN-HELP-SYSTEM T4 not started
+### ~~PLAN-HELP-SYSTEM T4 not started~~ — T4 SHIPPED AND IS GUARDED (re-derived 2026-08-28)
 
-`NFLManagerView.tsx` still has **35 raw `<label>`** elements with no help topic.
-The label→topic map is measured in `MORNING-2026-08-19-HELP.md` §6. T3, T5–T8 and
-T10–T15 are also unstarted.
+~~`NFLManagerView.tsx` still has **35 raw `<label>`** elements with no help topic.~~
+It has **zero**, and `tests/help-manager-label-coverage.test.ts` keeps it that
+way — its headline assertion is `expect(code.match(/<label/g) ?? []).toEqual([])`
+for that file, so one coming back fails the build.
+
+~~T3, T5–T8 and T10–T15 are also unstarted.~~ **T3 and T10–T14 have all shipped**
+since this was written — #619 (T10), #620 (T12), #621 (T13), #622 (T11), #623
+(T3), #624 (a T5+T6 content slice), #625 (T14).
+
+**Genuinely unstarted on 2026-08-28: T5, T6, T7, T8, T15, T16.** The label→topic
+map in `MORNING-2026-08-19-HELP.md` §6 is still the reference for T5–T7.
 
 ### Smaller, known, unowned
 
