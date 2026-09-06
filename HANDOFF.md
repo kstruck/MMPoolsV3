@@ -1,5 +1,31 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-09-06 — **FRONTEND SECURITY AUDIT, PR A OPEN AS #671 — NOT MERGED, NOT DEPLOYED. FUNCTIONS DEPLOY OWED AFTER MERGE.**
+>
+> Codex's frontend attack-surface audit scored 1/6; every FAIL was re-verified
+> live and against the code before anything was written —
+> [PLAN-FRONTEND-SECURITY-AUDIT.md](PLAN-FRONTEND-SECURITY-AUDIT.md) §1 has the
+> verdict table, §6 the D1–D5 decisions (Kevin approved as recommended,
+> 2026-09-06). **PR A (#671)** = shared `setSecurityHeaders()` on the three
+> HTML-serving functions (`emailUnsubscribe`, `manageEmailPrefs`, `joinPreview`
+> — live they sent `content-type` and nothing else) + `escapeHtml` at every raw
+> interpolation in email/page HTML (14 sites across 10 files, incl. a real
+> qodo-found double-encode in `confirmPayment.ts`) + the `bracketEntries.ts`
+> swapped-args bug. All eight gates green on the final head; codex r1–r3
+> (`-m gpt-5.5` — the config default `gpt-6-astra` 400s on CLI 0.144.5); qodo
+> 13 + 5 findings, every one fixed or rejected on the PR.
+>
+> **Still to do, in order:** merge #671 → deploy **functions only**
+> (`git -C D:\march-melee-pools pull --ff-only origin main`, `npm --prefix
+> functions ci`, `npx firebase deploy --only functions`) → verify with
+> `curl.exe -s -D - -o NUL "https://us-central1-gridiron-gamble-uzuqo.cloudfunctions.net/emailUnsubscribe?e=x@y.z&t=bad"`
+> (expect `x-frame-options: DENY` + `content-security-policy` on the 403).
+> Then **PR B** (`firestore.rules` announcement schema — plan-gated, §3 of
+> the plan), **PR C** (`firebase.json` Referrer-Policy/Permissions-Policy
+> parity, §5), **PR B2** (users profile schema after a write inventory, §4).
+> App Check stays OFF (D1); admin UI stays in the SPA (D3); CSP
+> `'unsafe-inline'` waits for `system_logs/csp-violations-*` data (D4).
+
 > ## 🟡 2026-09-01 — **API TRUST-BOUNDARY REMEDIATION IS CODE-COMPLETE AND UNCOMMITTED IN THE MAIN CHECKOUT. NOT COMMITTED, NOT DEPLOYED, NO PROD DATA TOUCHED.**
 >
 > The codex API audit's four remaining failures are fixed on the working tree
