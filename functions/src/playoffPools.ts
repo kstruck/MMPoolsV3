@@ -6,7 +6,7 @@ import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { playoffSyncInWindow } from "./lib/scanBounds";
 import { PlayoffPool, PlayoffEntry } from "./types";
-import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { sendEmail } from "./reminders";
 import { assertPaidParticipantCeiling } from "./poolOps";
 import { validated } from "./lib/validated";
@@ -233,16 +233,16 @@ export const submitPlayoffPicks = validated(
             const pickList = pool.teams
                 .map(t => ({ ...t, rank: rankings[t.id] || 0 }))
                 .sort((a, b) => b.rank - a.rank)
-                .map(t => `<li style="margin-bottom: 5px;"><strong>${t.rank} pts:</strong> ${t.name} (${t.seed})</li>`)
+                .map(t => `<li style="margin-bottom: 5px;"><strong>${t.rank} pts:</strong> ${escapeHtml(t.name)} (${escapeHtml(String(t.seed))})</li>`)
                 .join('');
 
             // Body Content (Inner HTML)
             const bodyContent = `
-                <p>Hi ${userName},</p>
-                <p>Your picks for <strong>${pool.name}</strong> have been saved.</p>
-                
+                <p>Hi ${escapeHtml(userName)},</p>
+                <p>Your picks for <strong>${escapeHtml(pool.name)}</strong> have been saved.</p>
+
                 <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; color: #1f2937;">
-                    <p style="margin: 0; font-weight: bold;">Entry: <span style="color: #4f46e5;">${entryData.entryName}</span></p>
+                    <p style="margin: 0; font-weight: bold;">Entry: <span style="color: #4f46e5;">${escapeHtml(entryData.entryName ?? "")}</span></p>
                     <p style="margin: 5px 0 0 0;">Tiebreaker: <strong>${entryData.tiebreaker}</strong> (Total Points)</p>
                 </div>
 
@@ -317,12 +317,12 @@ export const managePlayoffEntry = validated(
                 if (recipientEmail) {
                     const subject = `Payment Received: ${pool.name}`;
                     const body = `
-                        <p>Hi ${entry.userName},</p>
-                        <p>Your payment for <strong>${pool.name}</strong> has been received/confirmed by the pool manager.</p>
+                        <p>Hi ${escapeHtml(entry.userName)},</p>
+                        <p>Your payment for <strong>${escapeHtml(pool.name)}</strong> has been received/confirmed by the pool manager.</p>
                         
                         <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 8px; padding: 15px; margin: 20px 0; color: #064e3b;">
                             <p style="margin: 0; font-weight: bold; font-size: 18px;">PAID ✅</p>
-                            <p style="margin: 5px 0 0 0;">Entry: ${entry.entryName || entry.userName}</p>
+                            <p style="margin: 5px 0 0 0;">Entry: ${escapeHtml(entry.entryName || entry.userName)}</p>
                             ${pool.settings?.entryFee ? `<p style="margin: 5px 0 0 0;">Amount: $${pool.settings.entryFee}</p>` : ''}
                         </div>
 

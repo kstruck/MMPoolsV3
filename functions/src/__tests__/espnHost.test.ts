@@ -24,8 +24,13 @@ describe('ESPN host (PR #443)', () => {
   });
 
   it('no non-test source under functions/src carries a site(.web).api.espn.com literal outside lib/espnHost.ts', () => {
+    // lib/httpHeaders.ts is exempt too: its SITE_CSP is a verbatim copy of the
+    // browser Content-Security-Policy (connect-src names the host the CLIENT
+    // calls), not a server-side fetch target. It is pinned byte-equal to
+    // nginx.conf / firebase.json by tests/csp-invariants.test.ts instead.
+    const EXEMPT = ['/lib/espnHost.ts', '/lib/httpHeaders.ts'];
     const offenders = walk(SRC)
-      .filter((p) => !p.split('\\').join('/').endsWith('/lib/espnHost.ts'))
+      .filter((p) => !EXEMPT.some((e) => p.split('\\').join('/').endsWith(e)))
       .filter((p) => /site(\.web)?\.api\.espn\.com/i.test(readFileSync(p, 'utf8')))
       .map((p) => p.slice(SRC.length + 1));
     expect(offenders).toEqual([]);
