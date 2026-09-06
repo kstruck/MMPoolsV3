@@ -26,7 +26,15 @@ export const STYLES = {
     buttonContainer: "margin-top: 30px; text-align: center;"
 };
 
+/**
+ * Shared email shell. `title` is TEXT and is escaped here — callers pass pool
+ * names and commissioner-typed subjects straight in, and none of them escaped
+ * first (audited 2026-09-05, every call site). `bodyContent` is HTML the caller
+ * built; escaping any user- or commissioner-controlled value inside it is the
+ * caller's job, with `escapeHtml` above.
+ */
 export const renderEmailHtml = (title: string, bodyContent: string, ctaLink?: string, ctaText?: string) => {
+    const safeTitle = escapeHtml(title);
     const buttonHtml = ctaLink ? `
         <div style="${STYLES.buttonContainer}">
             <a href="${ctaLink}" style="${STYLES.button}">${ctaText || 'View Pool'}</a>
@@ -47,7 +55,7 @@ export const renderEmailHtml = (title: string, bodyContent: string, ctaLink?: st
         </div>
         
         <div style="padding: 0 20px;">
-            <h1 style="${STYLES.h1}">${title}</h1>
+            <h1 style="${STYLES.h1}">${safeTitle}</h1>
             
             ${bodyContent}
             
