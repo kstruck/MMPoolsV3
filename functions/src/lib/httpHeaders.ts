@@ -34,8 +34,10 @@ export const SITE_CSP =
 export const SITE_REPORTING_ENDPOINTS =
     'csp-endpoint="https://us-central1-gridiron-gamble-uzuqo.cloudfunctions.net/cspReport"';
 
+// No img-src either: none of the three page templates loads an image (the
+// crawler preview's og:image is metadata a crawler fetches, not a page load).
 export const PAGE_CSP =
-    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 export const COMMON_SECURITY_HEADERS: Readonly<Record<string, string>> = {
     "X-Content-Type-Options": "nosniff",
