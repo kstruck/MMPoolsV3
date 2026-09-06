@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHmac } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Frontend attack-surface audit, 2026-09-05 (PLAN-FRONTEND-SECURITY-AUDIT.md, PR A).
@@ -62,15 +64,12 @@ vi.mock("firebase-admin", () => {
 vi.mock("firebase-admin/firestore", () => ({
     FieldValue: { serverTimestamp: () => "SERVER_TS" },
 }));
-// announcements.ts pulls in the reminders module (sendEmail) and squarePrivate;
-// neither is under test here.
-vi.mock("../reminders", () => ({ sendEmail: vi.fn() }));
-vi.mock("../squarePrivate", () => ({ getSquareEmails: vi.fn(async () => []) }));
-
 import { emailUnsubscribe } from "../emailUnsubscribeHttp";
 import { manageEmailPrefs } from "../emailPrefsPage";
 import { joinPreview } from "../joinPreview";
-import { buildAnnouncementBody } from "../announcements";
+// The announcement body builder lives in a dependency-light helper module so
+// no internal module (reminders, squarePrivate) has to be mocked to test it.
+import { buildAnnouncementBody } from "../announcements.helpers";
 import { renderEmailHtml, escapeHtml } from "../emailStyles";
 import {
     setSecurityHeaders,
@@ -115,7 +114,11 @@ function expectCommonHeaders(res: ReturnType<typeof makeRes>) {
     }
 }
 
-beforeEach(() => { writes.length = 0; for (const k of Object.keys(poolDocs)) delete poolDocs[k]; });
+beforeEach(() => {
+    vi.clearAllMocks();
+    writes.length = 0;
+    for (const k of Object.keys(poolDocs)) delete poolDocs[k];
+});
 
 // ── The helper ────────────────────────────────────────────────────────────
 
@@ -279,5 +282,39 @@ describe("email templates escape commissioner- and user-typed text", () => {
     it("escapeHtml covers the five HTML metacharacters", () => {
         expect(escapeHtml(`<>&"'`)).toBe("&lt;&gt;&amp;&quot;&#039;");
         expect(escapeHtml("")).toBe("");
+    });
+
+    it("a title escaped once renders single-encoded — the confirmPayment regression", () => {
+        // renderEmailHtml owns title escaping. A caller that escapes first
+        // double-encodes: `Smith & Sons` would print `Smith &amp; Sons` to the
+        // host (qodo on #671, confirmPayment.ts). The renderer must not be
+        // "fixed" by skipping escaping; the CALLER must pass plain text.
+        const html = renderEmailHtml("Payment Confirmation from Smith & Sons <Jr>", "<p>x</p>");
+        expect(html).toContain("Payment Confirmation from Smith &amp; Sons &lt;Jr&gt;");
+        expect(html).not.toContain("&amp;amp;");
+    });
+});
+
+describe("source invariant — no renderEmailHtml call pre-escapes its title", () => {
+    // Grep-style guard for the double-encoding class above, across every
+    // production file. Multi-line aware: the first argument may sit on the
+    // line after the call.
+    const SRC = join(__dirname, "..");
+    const walk = (dir: string): string[] =>
+        readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+            if (e.name === "__tests__" || e.name === "shared") return [];
+            const p = join(dir, e.name);
+            return e.isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : [];
+        });
+    const PRE_ESCAPED_TITLE = /renderEmailHtml\(\s*escapeHtml\(/;
+
+    it("no production call site passes escapeHtml(...) as the title", () => {
+        const offenders = walk(SRC).filter((f) => PRE_ESCAPED_TITLE.test(readFileSync(f, "utf8")));
+        expect(offenders).toEqual([]);
+    });
+
+    it("the grep is reachable — the pre-fix confirmPayment shape matches", () => {
+        const preFix = "const emailHtml = renderEmailHtml(\n            escapeHtml(`Payment Confirmation from ${x}`),\n            body";
+        expect(PRE_ESCAPED_TITLE.test(preFix)).toBe(true);
     });
 });
