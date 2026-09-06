@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { SITE, isSocialCrawler, extractPoolId, buildJoinPreviewHtml } from "./joinPreview.helpers";
+import { setSecurityHeaders } from "./lib/httpHeaders";
 
 const db = admin.firestore();
 
@@ -24,6 +25,10 @@ async function resolvePool(poolId: string): Promise<{ name?: string; type?: stri
 // here. Social crawlers get a per-pool Open Graph preview; humans and search
 // engines get the SPA shell (React Router handles the route; <RouteSEO> noindexes it).
 export const joinPreview = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, async (req, res) => {
+    // Default to the SITE policy: the human path below serves the real SPA
+    // shell, which must run under exactly the CSP it runs under on www. The
+    // crawler branch re-applies the strict `page` profile for its static HTML.
+    setSecurityHeaders(res, "spa");
     // Crawlers and browsers only ever GET/HEAD this route.
     if (req.method !== "GET" && req.method !== "HEAD") {
         res.status(405).send("Method Not Allowed");
@@ -40,6 +45,7 @@ export const joinPreview = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, a
         } catch {
             // Fall through to a generic preview if the read fails.
         }
+        setSecurityHeaders(res, "page");
         res.set("Cache-Control", "public, max-age=300, s-maxage=600");
         res.status(200).send(buildJoinPreviewHtml({ poolId, name, type, path: req.path }));
         return;

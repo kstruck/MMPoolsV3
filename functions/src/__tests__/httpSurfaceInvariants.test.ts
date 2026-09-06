@@ -38,6 +38,42 @@ describe("HTTP surface invariants", () => {
         expect(offenders, `onRequest endpoints with no req.method check: ${offenders.join(", ")}`).toEqual([]);
     });
 
+    it("every HTML-serving onRequest endpoint applies the shared security headers", () => {
+        // 2026-09-05 audit: the three HTML endpoints shipped with no security
+        // headers at all because nginx/firebase.json only cover the hosting
+        // origins. The allowlist below is PINNED, not derived: each entry is an
+        // onRequest that sends plain text or JSON (or nothing), with the reason.
+        // A new onRequest file must either call setSecurityHeaders or be added
+        // here with a reason — the default is the headers.
+        const PLAIN_TEXT_OR_JSON: Record<string, string> = {
+            "cspReport.ts": "204/405 with empty body; browser report sink",
+            "debug.ts": "SA-only diagnostic; res.send(text)/json",
+            "readiness.ts": "OK/UNAVAILABLE probe text",
+            "stripe.ts": "Stripe webhook; text acks only",
+            "userManagement.ts": "testSmsHttp SA-only diagnostic; json",
+        };
+        const offenders: string[] = [];
+        const seenAllowlisted: string[] = [];
+        for (const f of files) {
+            const text = readFileSync(f, "utf8");
+            if (!/export const \w+ = [\w.]*onRequest\(/.test(text)) continue;
+            const base = f.split(/[\\/]/).pop() as string;
+            if (base in PLAIN_TEXT_OR_JSON) { seenAllowlisted.push(base); continue; }
+            if (!/setSecurityHeaders\(res,\s*"(page|spa)"\)/.test(text)) offenders.push(base);
+        }
+        expect(offenders, `HTML onRequest endpoints without setSecurityHeaders: ${offenders.join(", ")}`).toEqual([]);
+        // The allowlist must not go stale in the other direction either: an
+        // entry for a file that no longer exports an onRequest is a dead reason.
+        expect(seenAllowlisted.sort()).toEqual(Object.keys(PLAIN_TEXT_OR_JSON).sort());
+    });
+
+    it("the security-headers grep is reachable — a handler without the call fails it", () => {
+        const withoutCall = 'export const x = onRequest(async (req, res) => { if (req.method !== "GET") return; res.send("<html>"); });';
+        expect(/setSecurityHeaders\(res,\s*"(page|spa)"\)/.test(withoutCall)).toBe(false);
+        const withCall = 'export const x = onRequest(async (req, res) => { setSecurityHeaders(res, "page"); res.send("<html>"); });';
+        expect(/setSecurityHeaders\(res,\s*"(page|spa)"\)/.test(withCall)).toBe(true);
+    });
+
     it("no HttpsError passes a raw error object as the details arg", () => {
         const offenders: string[] = [];
         for (const f of files) {
