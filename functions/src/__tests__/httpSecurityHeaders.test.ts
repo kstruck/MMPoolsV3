@@ -26,31 +26,37 @@ import { createHmac } from "node:crypto";
 // admin.firestore() (joinPreview at module load), so the SDK is stubbed before
 // import, same shape as adminHealthAiVolume.test.ts.
 
-const SECRET = "unit-test-secret";
-const writes: Array<{ path: string; data: unknown }> = [];
-const poolDocs: Record<string, { name?: string; type?: string } | undefined> = {};
-
-function fakeDb() {
-    const docRef = (path: string) => ({
-        get: async () => {
-            if (path === "config/internal") return { exists: true, data: () => ({ emailUnsubSecret: SECRET }) };
-            const id = path.split("/").pop() as string;
-            const d = poolDocs[id];
-            return { exists: !!d, data: () => d };
-        },
-        set: async (data: unknown) => { writes.push({ path, data }); },
-    });
-    return {
-        doc: (path: string) => docRef(path),
-        collection: (name: string) => ({
-            doc: (id: string) => docRef(`${name}/${id}`),
-            where: () => ({ limit: () => ({ get: async () => ({ empty: true, docs: [] }) }) }),
-        }),
-    };
-}
+// vi.mock factories are hoisted above the static imports, and joinPreview calls
+// admin.firestore() at module load — so everything the factory reaches must be
+// hoisted with it (codex r1). Same pattern as entitlements.test.ts.
+const h = vi.hoisted(() => {
+    const SECRET = "unit-test-secret";
+    const writes: Array<{ path: string; data: unknown }> = [];
+    const poolDocs: Record<string, { name?: string; type?: string } | undefined> = {};
+    function fakeDb() {
+        const docRef = (path: string) => ({
+            get: async () => {
+                if (path === "config/internal") return { exists: true, data: () => ({ emailUnsubSecret: SECRET }) };
+                const id = path.split("/").pop() as string;
+                const d = poolDocs[id];
+                return { exists: !!d, data: () => d };
+            },
+            set: async (data: unknown) => { writes.push({ path, data }); },
+        });
+        return {
+            doc: (path: string) => docRef(path),
+            collection: (name: string) => ({
+                doc: (id: string) => docRef(`${name}/${id}`),
+                where: () => ({ limit: () => ({ get: async () => ({ empty: true, docs: [] }) }) }),
+            }),
+        };
+    }
+    return { SECRET, writes, poolDocs, fakeDb };
+});
+const { SECRET, writes, poolDocs } = h;
 
 vi.mock("firebase-admin", () => {
-    const firestore = () => fakeDb();
+    const firestore = () => h.fakeDb();
     return { default: { firestore, apps: [], initializeApp: () => undefined }, firestore };
 });
 vi.mock("firebase-admin/firestore", () => ({
