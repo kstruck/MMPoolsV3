@@ -84,6 +84,23 @@ describe("HTTP surface invariants", () => {
         expect(offenders, `raw error as HttpsError details: ${offenders.join(", ")}`).toEqual([]);
     });
 
+    it("no renderEmailHtml call site pre-escapes its title", () => {
+        // 2026-09-06 (#671): renderEmailHtml escapes its `title` itself, so a
+        // caller that escapes first double-encodes — `Smith & Sons` reaches the
+        // host as `Smith &amp; Sons`. confirmPayment.ts did exactly this (found
+        // by qodo). Multi-line aware: the first argument may sit on the line
+        // after the call, which is how the first single-line sweep missed it.
+        const PRE_ESCAPED_TITLE = /renderEmailHtml\(\s*escapeHtml\(/;
+        const offenders: string[] = [];
+        for (const f of files) {
+            if (PRE_ESCAPED_TITLE.test(readFileSync(f, "utf8"))) offenders.push(f);
+        }
+        expect(offenders, `renderEmailHtml called with a pre-escaped title: ${offenders.join(", ")}`).toEqual([]);
+        // Reachability: the pre-fix confirmPayment shape must match.
+        const preFix = "const emailHtml = renderEmailHtml(\n            escapeHtml(`Payment Confirmation from ${x}`),\n            body";
+        expect(PRE_ESCAPED_TITLE.test(preFix)).toBe(true);
+    });
+
     it("searchUsersByEmail does not spread the raw user doc", () => {
         const text = readFileSync(join(SRC, "userManagement.ts"), "utf8");
         const fn = text.slice(text.indexOf("searchUsersByEmail"), text.indexOf("sendUserEmail"));

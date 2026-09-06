@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createHmac } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 
 /**
  * Frontend attack-surface audit, 2026-09-05 (PLAN-FRONTEND-SECURITY-AUDIT.md, PR A).
@@ -292,29 +290,7 @@ describe("email templates escape commissioner- and user-typed text", () => {
         const html = renderEmailHtml("Payment Confirmation from Smith & Sons <Jr>", "<p>x</p>");
         expect(html).toContain("Payment Confirmation from Smith &amp; Sons &lt;Jr&gt;");
         expect(html).not.toContain("&amp;amp;");
-    });
-});
-
-describe("source invariant — no renderEmailHtml call pre-escapes its title", () => {
-    // Grep-style guard for the double-encoding class above, across every
-    // production file. Multi-line aware: the first argument may sit on the
-    // line after the call.
-    const SRC = join(__dirname, "..");
-    const walk = (dir: string): string[] =>
-        readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-            if (e.name === "__tests__" || e.name === "shared") return [];
-            const p = join(dir, e.name);
-            return e.isDirectory() ? walk(p) : p.endsWith(".ts") ? [p] : [];
-        });
-    const PRE_ESCAPED_TITLE = /renderEmailHtml\(\s*escapeHtml\(/;
-
-    it("no production call site passes escapeHtml(...) as the title", () => {
-        const offenders = walk(SRC).filter((f) => PRE_ESCAPED_TITLE.test(readFileSync(f, "utf8")));
-        expect(offenders).toEqual([]);
-    });
-
-    it("the grep is reachable — the pre-fix confirmPayment shape matches", () => {
-        const preFix = "const emailHtml = renderEmailHtml(\n            escapeHtml(`Payment Confirmation from ${x}`),\n            body";
-        expect(PRE_ESCAPED_TITLE.test(preFix)).toBe(true);
+        // The repo-wide source guard for this class lives with the other
+        // functions/src invariants: httpSurfaceInvariants.test.ts.
     });
 });
