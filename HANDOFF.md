@@ -372,6 +372,18 @@
   !== true); nothing to do.` Firestore has 7-day PITR; user accounts, emails
   and password hashes do not. Do not read "backup job deployed" as "backed
   up". Arming steps and the bucket work are in `PLAN-BACKUPS-PHASE3.md`.
+- **`claimMySquares` is still an open security hole, and the repo is public.**
+  `guestDeviceKey` is a bearer token written onto each square inside the
+  publicly readable `pools/{poolId}` document; the claim check is one equality
+  test, so anyone who opens a share link can claim an unclaimed guest square.
+  Full write-up and the correct repair (reserve path, two claim callables, a
+  live-data migration): `SECURITY-CLAIM-SQUARES.md` — status there is still
+  "open, unfixed", and no fix has landed since #233 (2026-07-20). The decision
+  on file (2026-07-2x box, archived): accept through the preseason pilot, fix
+  before Squares carry real entry money again. What limits the blast radius
+  today: Squares pool CREATION is switched off (`SQUARES_CREATION_OPEN = false`
+  in `src/config/season.ts`, since 2026-08-28) — existing Squares pools remain
+  exposed. This is a Kevin decision, not a drive-by fix.
 
 ## History
 

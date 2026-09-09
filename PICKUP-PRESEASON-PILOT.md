@@ -298,8 +298,10 @@ deployed. What is left:
   ET"; [#259](https://github.com/kstruck/MMPoolsV3/pull/259) merged and deployed
   2026-07-22. Seven daily-or-slower jobs had run unpinned in UTC, which is how
   `nflFinalizeSweepJob` came to be documented as an 08:30 job that actually ran
-  at 04:30 ET. **HANDOFF §4 carries the resulting schedule** — read it there, not
-  here. A ratchet (`functions/src/__tests__/scheduleTimezones.test.ts`) now fails
+  at 04:30 ET. **The resulting schedule table (as of 2026-07-21) is in the
+  archived HANDOFF history** — `docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md`,
+  box "STOP POINT 2026-07-21", §4 "Heartbeat timing"; the current truth is the
+  `schedule:` / `timeZone:` strings in `functions/src`. A ratchet (`functions/src/__tests__/scheduleTimezones.test.ts`) now fails
   if a wall-clock schedule omits `timeZone` or pins a non-ET zone.
 
 ### Known cosmetic artifact, not an outage
@@ -607,7 +609,9 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   covers the scheduled sweep in the emulator** — the gate, candidate selection,
   live scoping, and a thrown pool making the run unhealthy. **Still true in
   prod:** it has never completed a run there. Runs **04:30 ET** (pinned since
-  #259) — see HANDOFF §4 for the full schedule.
+  #259) — the full schedule table as of 2026-07-21 is in the archived HANDOFF
+  history (`docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md`, box
+  "STOP POINT 2026-07-21", §4); `functions/src` `schedule:` strings are current.
 - **`replayFeedSnapshot` has never been invoked against production.** ~~The full
   callable path is not covered.~~ **#257 exercises it end-to-end against the
   emulator** with a real `encodeSnapshot` payload: dry-run default, live rebuild,
