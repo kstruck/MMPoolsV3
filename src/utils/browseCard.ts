@@ -23,7 +23,25 @@ import { getTeamLogo } from '../constants';
 import { getPoolTypeName } from './poolUtils';
 import { poolTypeLabel, poolOptionLabels } from './poolTypeLabel';
 import { formatEntryCount, getPoolEntrySummary, getPoolLifecycleState, isNFLSeasonPoolType } from './poolSport';
-import type { EntryCountable, LifecycleReadable } from './poolSport';
+import type { EntryCountable, LifecycleReadable, PoolLifecycleState } from './poolSport';
+
+/**
+ * Lifecycle state for an NFL season pool, finalization-aware.
+ *
+ * The scorer's finalizer (functions/src/nflFinalize.ts, `maybeFinalizeNFLPool`)
+ * stamps `finalizedAt` and writes NO status — a finished Survivor pool keeps
+ * `status: 'OPEN'` (or LOCKED) for good. `backfillPools` can also stamp
+ * `status: 'FINAL'`. `getPoolLifecycleState` reads neither, so on its own a
+ * finished season pool would sit under the default Open filter wearing an Open
+ * badge (codex r1 on this PR). Resolved here rather than in the shared reader
+ * because that reader also feeds `isActiveManagedPool` (commissioner rosters
+ * and stats), whose semantics are not this PR's to change.
+ */
+function nflSeasonLifecycle(pool: Pool): PoolLifecycleState {
+    const p = pool as { finalizedAt?: unknown; status?: string };
+    if ((p.finalizedAt !== undefined && p.finalizedAt !== null) || p.status === 'FINAL') return 'final';
+    return getPoolLifecycleState(pool as LifecycleReadable);
+}
 
 export type BrowseTypeFilter = 'all' | 'squares' | 'props' | 'bracket' | 'playoff' | 'survivor' | 'pickem' | 'margin';
 export type BrowsePriceFilter = 'all' | 'low' | 'mid' | 'high'; // low < 20, mid 20-50, high > 50
@@ -87,7 +105,7 @@ export function browseStatusMatches(pool: Pool, filter: BrowseStatusFilter): boo
         return status === 'COMPLETED';
     }
     if (isNFLSeasonPoolType(pool.type)) {
-        const state = getPoolLifecycleState(pool as LifecycleReadable);
+        const state = nflSeasonLifecycle(pool);
         if (filter === 'open') return state === 'open';
         if (filter === 'live') return state === 'live';
         return state === 'final' || state === 'closed';
@@ -172,7 +190,7 @@ export function describeBrowseCard(pool: Pool): BrowseCardModel {
         // players on the pool doc (getPoolEntrySummary); the rule chips are the
         // same words the My Entries cards and the Commissioner Hub use.
         const summary = getPoolEntrySummary(pool as EntryCountable);
-        const state = getPoolLifecycleState(pool as LifecycleReadable);
+        const state = nflSeasonLifecycle(pool);
         const charity = (pool as { charity?: { enabled?: boolean } }).charity;
         return {
             typeLabel: `NFL ${poolTypeLabel(pool)}`,

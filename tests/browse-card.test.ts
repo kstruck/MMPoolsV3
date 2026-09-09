@@ -100,6 +100,29 @@ describe('describeBrowseCard — NFL season pools (the production defect)', () =
         const locked = { ...(survivor as object), status: 'LOCKED', isLocked: true } as unknown as Pool;
         expect(describeBrowseCard(locked).badge).toBe('locked');
     });
+
+    // codex r1: maybeFinalizeNFLPool stamps `finalizedAt` and never touches
+    // `status`, so a finished pool still says OPEN. It must not be joinable-looking.
+    it('a scorer-finalized pool (finalizedAt set, status still OPEN) is closed, not open', () => {
+        const finished = { ...(survivor as object), status: 'OPEN', finalizedAt: { toMillis: () => 1_700_000_000_000 } } as unknown as Pool;
+        expect(describeBrowseCard(finished).badge).toBe('locked');
+        expect(browseStatusMatches(finished, 'open')).toBe(false);
+        expect(browseStatusMatches(finished, 'live')).toBe(false);
+        expect(browseStatusMatches(finished, 'closed')).toBe(true);
+    });
+
+    it('a backfilled status FINAL pool is closed too', () => {
+        const settled = { ...(pickem as object), status: 'FINAL' } as unknown as Pool;
+        expect(describeBrowseCard(settled).badge).toBe('locked');
+        expect(browseStatusMatches(settled, 'open')).toBe(false);
+        expect(browseStatusMatches(settled, 'closed')).toBe(true);
+    });
+
+    it('a null finalizedAt (never finalized) is still open', () => {
+        const fresh = { ...(survivor as object), finalizedAt: null } as unknown as Pool;
+        expect(describeBrowseCard(fresh).badge).toBe('open');
+        expect(browseStatusMatches(fresh, 'open')).toBe(true);
+    });
 });
 
 describe('describeBrowseCard — previous behaviour pinned for the other types', () => {
