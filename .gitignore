@@ -79,3 +79,6 @@ output/
 # this is the belt-and-braces catch if one ever lands in the repo anyway.
 auth-backup*.json
 *-auth-export.json
+
+# Debug dump written by scripts/inspectESPN.mjs — never commit it (removed from the tree 2026-09-08)
+scripts/espn_output.txt
