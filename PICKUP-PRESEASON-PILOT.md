@@ -671,7 +671,8 @@ Fifteen scheduled job bodies changed in that deploy and every one reported
 `Successful update operation`. Nothing was armed or disarmed; the behaviour
 change is that a job which fails now REPORTS it instead of stamping a healthy
 heartbeat — and **two of #250's nine** have since produced correct heartbeats
-in production (HANDOFF §3), plus one of #245's.
+in production (archived HANDOFF history, box "STOP POINT 2026-07-21", §3
+"First production evidence for the new heartbeat code"), plus one of #245's.
 
 Two operational notes worth keeping, both learned on this deploy:
 

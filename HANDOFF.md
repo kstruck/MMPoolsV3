@@ -378,12 +378,28 @@
   test, so anyone who opens a share link can claim an unclaimed guest square.
   Full write-up and the correct repair (reserve path, two claim callables, a
   live-data migration): `SECURITY-CLAIM-SQUARES.md` — status there is still
-  "open, unfixed", and no fix has landed since #233 (2026-07-20). The decision
-  on file (2026-07-2x box, archived): accept through the preseason pilot, fix
-  before Squares carry real entry money again. What limits the blast radius
-  today: Squares pool CREATION is switched off (`SQUARES_CREATION_OPEN = false`
-  in `src/config/season.ts`, since 2026-08-28) — existing Squares pools remain
+  "open, unfixed". Evidence, re-runnable: `git log --format=%h --
+  SECURITY-CLAIM-SQUARES.md` prints one commit, `9e7411e2` (#233, 2026-07-20);
+  the equality check is still `s.guestDeviceKey === guestDeviceKey` at
+  `functions/src/participant.ts:115`; `git log 9e7411e2..origin/main --
+  functions/src/participant.ts` shows three later commits (#341 ownership
+  laundering, `f4ec2754` maxInstances, `f7fe7dfd` member removal), none of
+  which touches that check. The decision on file (2026-07-2x box, archived):
+  accept through the preseason pilot, fix before Squares carry real entry
+  money again. What limits the blast radius today: Squares pool CREATION is
+  switched off — `SQUARES_CREATION_OPEN = false` in `src/config/season.ts`,
+  landed as `66d365d2` on 2026-08-30 (`git log -S 'SQUARES_CREATION_OPEN =
+  false' -- src/config/season.ts`) — but existing Squares pools remain
   exposed. This is a Kevin decision, not a drive-by fix.
+- **Known product limit, still open: confidence-mode proxy picks are refused
+  on the client.** `src/components/NFLPoolDashboard/NFLManagerView.tsx` (the
+  comment above the proxy form, ~line 1115) refuses a CONFIDENCE pool on
+  purpose: `proxyPick` writes `picks` and never `confidence`, and a confidence
+  pool scores a correct pick at `confidence[gameId] ?? 0`, so a proxied pick
+  would look right in the grid and be worth nothing. Closing it needs a
+  confidence control in the proxy form AND a callable change — a functions
+  deploy, not a UI tweak. Recorded in the archived 2026-08-25 box and
+  MORNING-2026-08-25 §5; still true in the code today.
 
 ## History
 
@@ -412,6 +428,9 @@ date there, not by reading 3,900 lines.
 
 ## Environment / deploy facts (unchanged)
 
+- Coolify dashboard for the `www` app (deployment history, manual rebuild,
+  rollback): `http://72.60.68.7:8000/project/ycoooow0g4c08ogso404k8o4/environment/ogs0cg0gg0kcgkgc8sg4c8g4/application/ics4kkww0c8oo0gw4wkg8w4o/deployment`
+  — this is the URL other runbooks mean by "the dashboard URL in HANDOFF's box".
 - Deploy: `npm --prefix functions ci` first (NOT `install` — it rewrites the lockfile and dirties the tree the deploy packages), then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify — **manual trigger only**, pushing to `main` does NOT auto-deploy it (corrects a stale claim that lived here; matches CLAUDE.md + the mmp-deploy-and-operate skill).
 - Emulator tests need Java on PATH: `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`; run `npm --prefix functions run test:emulator`. Unit: `npm --prefix functions test` (410 tests; emulator suite 39).
 - **PR review = TWO reviewers.** `codex exec review --base origin/main` before opening the PR, judgement up to 10 rounds, past 10 ask Kevin with a reason (CLAUDE.md §2c — it was 5, raised 2026-07-27). **AND qodo on the PR itself — Kevin, 2026-07-31: *"Qodo is now active and must be used."*** (§2b; it was off from 2026-07-25 only while the trial had lapsed, and an overnight prompt on 2026-07-30 repeated that stale line). Stop when both are clean and your own read of the diff agrees. qodo costs nothing per run and codex is billed per call, so the round budget is spent on codex. Validate every finding before fixing; a rejection needs written reasoning **on the PR**.
