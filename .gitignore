@@ -60,7 +60,6 @@ test-builder.ts
 # Security scan outputs (may contain sensitive data)
 security_scan_results*.json
 git_superadmin.txt
-FIX_INSTRUCTIONS.md
 user_prompt.txt
 
 # Compiled Cloud Functions output (rebuilt on deploy via predeploy tsc)
