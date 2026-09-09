@@ -4,7 +4,7 @@
 >
 > The codex API audit's four remaining failures are fixed on the working tree
 > (47 files, +768/−202) under the full Rule-3 gate:
-> [PLAN-API-TRUST-BOUNDARY-REMEDIATION.md](PLAN-API-TRUST-BOUNDARY-REMEDIATION.md)
+> [PLAN-API-TRUST-BOUNDARY-REMEDIATION.md](docs/plans/PLAN-API-TRUST-BOUNDARY-REMEDIATION.md)
 > (+ -REVIEW-LOG: plan APPROVED codex round 8 of 10, 23 findings, 1 reasoned
 > rejection; implementation diff clean at codex round 2; + -SWEEPS: complete
 > grep-derived instance lists).
@@ -481,7 +481,7 @@
 > 3. Coolify `www` rebuild (manual trigger). Changed by #564, #566, #568, #571,
 >    #577, #578, #579.
 > 4. **ONLY THEN** the pool-password migration sweep
->    ([PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md](PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md)).
+>    ([PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md](docs/plans/PLAN-AUDIT-AUTH-HARDENING-SWEEPS.md)).
 >    Before step 3 it would leave swept pools rendering UNGATED on the old bundle.
 >
 > 🟡 **TWO THINGS SHIPPED BUT INERT UNTIL KEVIN ACTS.** Sentry stays dead until
@@ -510,7 +510,7 @@
 >
 > Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](docs/archive/MORNING-2026-08-24-AUDIT-FIXES.md)**.
 >
-> 🆘 **Site down? Start at [RUNBOOK-SITE-DOWN.md](RUNBOOK-SITE-DOWN.md)** — one page: uptime alert → bundle-hash curl → debugging-playbook S7b → Coolify Rollback (§2b) → `/readiness` → `functions:log` → functions rollback (§1d).
+> 🆘 **Site down? Start at [RUNBOOK-SITE-DOWN.md](docs/runbooks/RUNBOOK-SITE-DOWN.md)** — one page: uptime alert → bundle-hash curl → debugging-playbook S7b → Coolify Rollback (§2b) → `/readiness` → `functions:log` → functions rollback (§1d).
 > Worked from Kevin's six audits (DB/storage, backend, auth, hosting, cloud,
 > VCS). Two new plan docs: PLAN-AUDIT-SCAN-BOUNDS (Phase 1 built) and
 > PLAN-AUDIT-AUTH-HARDENING (Phase A built; Phase B = pool-password plaintext

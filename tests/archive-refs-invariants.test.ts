@@ -192,6 +192,29 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('treats a move into ANY docs/ folder as a move, not a deletion', () => {
+    // Since the 2026-09-09 root declutter, live docs sit in docs/plans/,
+    // docs/runbooks/, docs/backlog/ and docs/decisions/, not only the archive.
+    // A `git mv PLAN-X.md docs/plans/PLAN-X.md` must not demand a manifest entry
+    // and must not flag every existing citation of PLAN-X as dangling.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'PLAN-X.md'), 'content\n');
+      fs.writeFileSync(path.join(dir, 'CITES.md'), 'see PLAN-X for the plan\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.mkdirSync(path.join(dir, 'docs', 'plans'), { recursive: true });
+      run('mv', 'PLAN-X.md', path.join('docs', 'plans', 'PLAN-X.md'));
+      run('commit', '-qm', 'file it under docs/plans');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+      expect(output).not.toContain('DANGLING');
+    });
+  }, TEST_TIMEOUT);
+
   it('does not treat a delete-then-restore as a deletion', () => {
     // Only the FINAL state matters. A doc removed in one commit and put back at
     // the same path in a later one still exists, and demanding a manifest entry

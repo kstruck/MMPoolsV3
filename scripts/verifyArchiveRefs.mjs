@@ -127,11 +127,11 @@ function deletedDocs() {
   const uncommitted = lines(
     git(['diff', '--no-renames', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
   );
-  // A doc that left the root and ARRIVED in docs/archive/ in this same change
+  // A doc that left the root and ARRIVED somewhere under docs/ in this same change
   // was MOVED, not deleted — git reports the old path as a deletion either
   // way, so subtract those or every archived file reads as dangling.
   //
-  // Keyed on "added under docs/archive/ by THIS diff", not on "some file with
+  // Keyed on "added under docs/ by THIS diff", not on "some file with
   // that basename sits in the archive". The weaker test would silently exempt
   // a genuine future deletion whose basename happens to collide with
   // something archived long ago, and references to it would then pass.
@@ -142,10 +142,10 @@ function deletedDocs() {
   const movedIn = new Set(
     [
       ...lines(git([
-        'diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+        'diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', 'docs/*.md',
       ])),
       ...lines(git([
-        'diff', '--no-renames', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
+        'diff', '--no-renames', 'HEAD', '--diff-filter=A', '--name-only', '--', 'docs/*.md',
       ])),
     ].map((f) => path.basename(f)),
   );

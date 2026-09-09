@@ -4,7 +4,9 @@ Dated session records (MORNING-*, checklists, memos, readiness audits) whose
 work has shipped. Moved here from the repo root by the 2026-09-01 docs cleanup
 (PR #653) because living docs, plans, ADRs, or code comments still cite them as
 provenance. Citations elsewhere may use the bare filename — resolve it against
-this directory.
+this directory. Since the 2026-09-09 root declutter the same bare-filename
+convention applies to the live folders too — `docs/plans/`, `docs/runbooks/`,
+`docs/backlog/`, `docs/decisions/` — and `docs/README.md` is the map.
 
 **Nothing here is a source of current state.** `HANDOFF.md` is the live-state
 carrier and `CONTEXT.md` the glossary. Read a file here only to recover the

@@ -42,7 +42,7 @@ const REPO_ROOT = path.resolve(__dirname, '..');
  * The operator entry points. Each MUST state a deploy SHA, so neither can quietly
  * drop out of the agreement check by rewording its way out.
  */
-const AUTHORITATIVE_DOCS = ['HANDOFF.md', 'PICKUP-PRESEASON-PILOT.md'];
+const AUTHORITATIVE_DOCS = ['HANDOFF.md', 'docs/runbooks/PICKUP-PRESEASON-PILOT.md'];
 
 /**
  * KNOWN LIMIT, stated rather than papered over.
@@ -360,7 +360,7 @@ describe('the scanner sees what the docs actually contain', () => {
     // carries the same value. Same class as the prefix-matching bug below:
     // treating a SHA VALUE as an identity for a specific mention.
     const src = fs.readFileSync(
-      path.join(REPO_ROOT, 'PICKUP-PRESEASON-PILOT.md'),
+      path.join(REPO_ROOT, 'docs/runbooks/PICKUP-PRESEASON-PILOT.md'),
       'utf8',
     );
     // Identified by the MATCH OFFSET of the baseline mention itself. Neither a
@@ -383,7 +383,7 @@ describe('the scanner sees what the docs actually contain', () => {
 
     const claims = collectDeployShaClaims();
     expect(
-      claims.some((c) => c.file === 'PICKUP-PRESEASON-PILOT.md' && c.start === shaOffset),
+      claims.some((c) => c.file === 'docs/runbooks/PICKUP-PRESEASON-PILOT.md' && c.start === shaOffset),
       `the baseline mention at PICKUP-PRESEASON-PILOT.md offset ${shaOffset} produced a ` +
         'deploy-state claim — the exemption rule is no longer suppressing baseline mentions',
     ).toBe(false);
@@ -1049,12 +1049,23 @@ export function unlinkedMorningGroups(
 
 describe('same-date MORNING docs point at each other', () => {
   it('every same-date MORNING group names a sibling in its first ten lines', () => {
-    const files = fs.readdirSync(REPO_ROOT).filter((f) => MORNING_DOC.test(f));
+    // Root PLUS docs/ (archive, backlog, …) — the same set every other guard in
+    // this file scans. Since the 2026-09-09 root declutter no MORNING doc lives
+    // at the root, so a root-only listing would trip the inert check below.
+    // A same-date pair can straddle folders (the open-defects doc in
+    // docs/backlog/, its overnight sibling in docs/archive/), so group by
+    // BASENAME and read each file by its full path.
+    const byName = new Map<string, string>();
+    for (const full of operatorMarkdownFiles()) {
+      const name = path.basename(full);
+      if (MORNING_DOC.test(name)) byName.set(name, full);
+    }
+    const files = [...byName.keys()];
     // The guard must have subjects, or it passes vacuously forever.
     expect(files.length, 'no MORNING-*.md files found — this guard is inert').toBeGreaterThan(0);
 
     const bad = unlinkedMorningGroups(files, (f) =>
-      fs.readFileSync(path.join(REPO_ROOT, f), 'utf8'),
+      fs.readFileSync(byName.get(f)!, 'utf8'),
     );
     expect(
       bad.map((g) => g.join(' + ')),
