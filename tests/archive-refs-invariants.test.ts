@@ -215,6 +215,33 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('does NOT let an unrelated namesake under docs/ exempt a real deletion', () => {
+    // The move exemption pairs on CONTENT (git rename detection), not on
+    // basename. Otherwise deleting a root doc for real and adding some other
+    // file with the same name anywhere under docs/ in the same change would
+    // skip both the manifest requirement and the dangling-reference check
+    // (qodo on #681). The namesake here shares nothing with the original, so
+    // git sees a delete plus an add, and the guard must fail naming the file.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'DOOMED.md'), 'the original plan, paragraph after paragraph\n'.repeat(20));
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.rmSync(path.join(dir, 'DOOMED.md'));
+      fs.mkdirSync(path.join(dir, 'docs', 'plans'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'docs', 'plans', 'DOOMED.md'), 'a completely different document\n');
+      run('add', '-A');
+      run('commit', '-qm', 'delete one, add a namesake');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('DOOMED.md');
+      expect(output).toContain('missing from');
+    });
+  }, TEST_TIMEOUT);
+
   it('does not treat a delete-then-restore as a deletion', () => {
     // Only the FINAL state matters. A doc removed in one commit and put back at
     // the same path in a later one still exists, and demanding a manifest entry

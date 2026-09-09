@@ -5,6 +5,16 @@ Since 2026-09-09 the repo root carries only four documents: `README.md` (product
 (glossary). Everything else is filed here by **purpose**, so a reader can tell
 from the folder whether a document is live, an operator procedure, or history.
 
+Check the claim rather than trusting it — tracked markdown at the root, nothing
+deeper:
+
+```bash
+git ls-files '*.md' | grep -v /
+```
+
+Expected output, four lines: `CLAUDE.md`, `CONTEXT.md`, `HANDOFF.md`, `README.md`.
+A fifth line means something was dropped at the root instead of filed below.
+
 | Folder | What goes here | Lifecycle |
 |---|---|---|
 | `plans/` | `PLAN-*.md` whose work is still **open** — unsigned, awaiting a deploy decision, or with phases not started — plus their `-REVIEW-LOG.md` and `-SWEEPS.md` companions. **New plans go here.** | Moves to `archive/` when the plan is shipped, closed, or superseded. Companions move with it. |
