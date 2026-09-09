@@ -242,6 +242,30 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('treats a move into docs/ that CHANGES the basename as a deletion of the old name', () => {
+    // Citations use the bare filename, so OLD-NAME.md → docs/plans/NEW-NAME.md
+    // deletes the identity every citation of OLD-NAME relies on, even though
+    // git pairs the contents as a rename. The old name must stay under
+    // enforcement: manifest entry required, and the surviving citation flagged
+    // (qodo on #681, the mirror of the root-level rename fixture above).
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'OLD-NAME.md'), 'the plan, paragraph after paragraph\n'.repeat(20));
+      fs.writeFileSync(path.join(dir, 'CITES.md'), 'see OLD-NAME for the plan\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.mkdirSync(path.join(dir, 'docs', 'plans'), { recursive: true });
+      run('mv', 'OLD-NAME.md', path.join('docs', 'plans', 'NEW-NAME.md'));
+      run('commit', '-qm', 'move and rename');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('OLD-NAME.md');
+    });
+  }, TEST_TIMEOUT);
+
   it('does not treat a delete-then-restore as a deletion', () => {
     // Only the FINAL state matters. A doc removed in one commit and put back at
     // the same path in a later one still exists, and demanding a manifest entry

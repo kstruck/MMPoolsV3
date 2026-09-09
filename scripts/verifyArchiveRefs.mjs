@@ -102,16 +102,38 @@ function lines(out) {
 }
 
 /**
- * OLD paths of markdown files that `range` shows as RENAMED to somewhere under
- * docs/, per git's similarity-based rename detection. `-M50%` is git's default
- * threshold, stated explicitly so the contract is visible: a link rewrite or a
- * banner edit during a move still pairs; a rewrite from scratch does not.
- * `--name-status` prints `R<score>\told\tnew`; only the two paths matter.
+ * OLD paths of markdown files that `range` shows as MOVED to somewhere under
+ * docs/ under the SAME basename, per git's similarity-based rename detection.
+ * `-M50%` is git's default threshold, stated explicitly so the contract is
+ * visible: a link rewrite or a banner edit during a move still pairs; a rewrite
+ * from scratch does not. `--name-status` prints `R<score>\told\tnew`.
+ *
+ * SAME BASENAME, deliberately. Citations name a doc by its bare filename, so a
+ * doc that changes its name on the way into docs/ (`OLD-NAME.md` →
+ * `docs/plans/NEW-NAME.md`) has deleted the identity every citation uses, even
+ * though git pairs the contents. That old name must stay a deletion — manifest
+ * entry required, references to it flagged — exactly as the root-level rename
+ * fixture already demands (qodo finding on #681).
+ *
+ * FAILS CLOSED with context: a rename scan that cannot run is a move exemption
+ * that cannot be decided, and the raw child-process error would not say which
+ * check was lost.
  */
 function renamedIntoDocs(range) {
-  return lines(git(['diff', '-M50%', '--diff-filter=R', '--name-status', range, '--', '*.md']))
+  let out;
+  try {
+    out = git(['diff', '-M50%', '--diff-filter=R', '--name-status', range, '--', '*.md']);
+  } catch (err) {
+    const stderr = String(err?.stderr ?? '').trim();
+    fail(
+      `cannot run rename detection over '${range}', so moves into docs/ cannot be told\n` +
+      `      apart from deletions: ${stderr || err?.message || 'unknown git failure'}`,
+    );
+  }
+  return lines(out)
     .map((row) => row.split('\t'))
-    .filter(([, , to]) => to && to.startsWith('docs/'))
+    .filter(([, from, to]) => from && to && to.startsWith('docs/'))
+    .filter(([, from, to]) => path.basename(from) === path.basename(to))
     .map(([, from]) => from);
 }
 
