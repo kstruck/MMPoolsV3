@@ -35,18 +35,30 @@ const ARCHIVE_DIR = 'docs/archive';
 const DELETED_MANIFEST = 'docs/archive/deleted-docs.txt';
 
 /**
- * Where PROJECT DOCUMENTS live: the repo root and docs/**. Deletion tracking
- * (invariants 2 and 3) is scoped to these. `:(glob)` makes `*` stop at `/`, so
- * the first spec is top-level only and the second is everything under docs/.
+ * Where PROJECT DOCUMENTS live. Deletion tracking (invariants 2 and 3) and the
+ * rename exemption are scoped to these, so a move is judged over the same set
+ * as a deletion. `:(glob)` makes `*` stop at `/`: the first spec is top-level
+ * only, the others are everything under that folder.
  *
- * Deliberately NOT `*.md` everywhere. A vendored library under skills/ or a
- * README inside node_modules-adjacent tooling is not a project document: nobody
- * cites it as provenance, and requiring a manifest line for each of the 180+
- * `SKILL.md` files removed on 2026-09-09 would then flag the word "SKILL" in
- * every remaining skill as a dangling reference. The rename exemption uses the
- * same specs, so a move is judged over the same set as a deletion.
+ *   - the repo root (README, CLAUDE, HANDOFF, CONTEXT)
+ *   - docs/**  (plans, runbooks, backlog, decisions, adr, archive)
+ *   - public/*.md — served to the world by Firebase Hosting (`firebase.json`
+ *     rewrites `/auth.md` to it), so it is a project document, not an asset
+ *
+ * Deliberately NOT `*.md` everywhere. Vendored material is not a project
+ * document, and treating it as one breaks the guard rather than extending it.
+ * Measured when skills/ was cut to its one CI-used pack (2026-09-09):
+ *
+ *   git ls-files skills | grep -c '/SKILL.md$'        # 55 files named SKILL.md
+ *   git grep -lE 'skills/skill-' -- . ':!skills/'     # security-scan.yml, one
+ *                                                     # skill, one archived audit
+ *
+ * With `*.md` everywhere that removal would have needed a manifest line per
+ * deleted file and then flagged the bare word "SKILL" in every surviving skill
+ * as a dangling reference to a deleted doc. Re-run the two commands above
+ * before widening this list; do not widen it on "more is safer".
  */
-const DOC_PATHSPECS = [':(glob)*.md', ':(glob)docs/**/*.md'];
+const DOC_PATHSPECS = [':(glob)*.md', ':(glob)docs/**/*.md', ':(glob)public/*.md'];
 
 /**
  * Files skipped outright: lockfiles, which are enormous, generated, and cannot
