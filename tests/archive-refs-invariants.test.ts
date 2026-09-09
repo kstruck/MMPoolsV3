@@ -266,6 +266,29 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('ignores a markdown deletion OUTSIDE the root and docs/ — vendored files are not project docs', () => {
+    // Deletion tracking is scoped to the root and docs/**. Removing a vendored
+    // skill pack's SKILL.md must not demand a manifest entry, and must not turn
+    // the word "SKILL" into a dangling reference everywhere it survives
+    // (the 2026-09-09 skills/ removal, 180+ such files).
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.mkdirSync(path.join(dir, 'skills', 'skill-x'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'skills', 'skill-x', 'SKILL.md'), 'vendored\n');
+      fs.writeFileSync(path.join(dir, 'KEPT.md'), 'this repo has a SKILL.md convention elsewhere\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      run('rm', '-r', '-q', 'skills');
+      run('commit', '-qm', 'drop the vendored pack');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+      expect(output).not.toContain('DANGLING');
+    });
+  }, TEST_TIMEOUT);
+
   it('does not treat a delete-then-restore as a deletion', () => {
     // Only the FINAL state matters. A doc removed in one commit and put back at
     // the same path in a later one still exists, and demanding a manifest entry

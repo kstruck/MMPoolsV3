@@ -35,6 +35,20 @@ const ARCHIVE_DIR = 'docs/archive';
 const DELETED_MANIFEST = 'docs/archive/deleted-docs.txt';
 
 /**
+ * Where PROJECT DOCUMENTS live: the repo root and docs/**. Deletion tracking
+ * (invariants 2 and 3) is scoped to these. `:(glob)` makes `*` stop at `/`, so
+ * the first spec is top-level only and the second is everything under docs/.
+ *
+ * Deliberately NOT `*.md` everywhere. A vendored library under skills/ or a
+ * README inside node_modules-adjacent tooling is not a project document: nobody
+ * cites it as provenance, and requiring a manifest line for each of the 180+
+ * `SKILL.md` files removed on 2026-09-09 would then flag the word "SKILL" in
+ * every remaining skill as a dangling reference. The rename exemption uses the
+ * same specs, so a move is judged over the same set as a deletion.
+ */
+const DOC_PATHSPECS = [':(glob)*.md', ':(glob)docs/**/*.md'];
+
+/**
  * Files skipped outright: lockfiles, which are enormous, generated, and cannot
  * meaningfully cite a document. Everything else is classified by CONTENT, not
  * by extension — an allowlist silently skips whatever it forgot (`nginx.conf`,
@@ -122,7 +136,7 @@ function lines(out) {
 function renamedIntoDocs(range) {
   let out;
   try {
-    out = git(['diff', '-M50%', '--diff-filter=R', '--name-status', range, '--', '*.md']);
+    out = git(['diff', '-M50%', '--diff-filter=R', '--name-status', range, '--', ...DOC_PATHSPECS]);
   } catch (err) {
     const stderr = String(err?.stderr ?? '').trim();
     fail(
@@ -158,10 +172,10 @@ function deletedDocs() {
     );
   }
   const committed = lines(
-    git(['diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', '*.md']),
+    git(['diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=D', '--name-only', '--', ...DOC_PATHSPECS]),
   );
   const uncommitted = lines(
-    git(['diff', '--no-renames', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
+    git(['diff', '--no-renames', 'HEAD', '--diff-filter=D', '--name-only', '--', ...DOC_PATHSPECS]),
   );
   // A doc that left the root and ARRIVED somewhere under docs/ in this same change
   // was MOVED, not deleted — the `--no-renames` diffs above report the old path
