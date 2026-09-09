@@ -46,7 +46,7 @@ Replace the five divergent pool-creation wizards (Squares `SetupWizard`, `Bracke
 
 ## Key decisions & tradeoffs
 
-- **Consolidate three existing callables into one** — [ADR 0001](docs/adr/0001-unified-createpool-callable.md) (revised: the win is uniform validation/billing/side-effects, not closing a client-write hole — that hole is already closed).
+- **Consolidate three existing callables into one** — [ADR 0001](../adr/0001-unified-createpool-callable.md) (revised: the win is uniform validation/billing/side-effects, not closing a client-write hole — that hole is already closed).
 - **react-hook-form + zod** (new deps) — Kevin chose full stack; accepts step-component rewrite cost.
 - **Big bang, sequenced** — Kevin locked one branch. Codex pushed staged rollout; rejected as a branch strategy, adopted as ordering: Phase A lands behind existing UIs first within the branch, so server hardening is independently revertable.
 - **Billing free-default (corrected)** — the plan originally said "trial-default"; execution found new pools today are implicitly `free` and never auto-lock, and stamping `trial` would switch on the dormant grace→lock funnel for every pool + email commissioners. Decision (2026-07-03): stamp `free`, no behavior change. Pricing still shown in every Review via `BillingInvoiceCard`; upgrade is post-launch, optional, Stripe-only.

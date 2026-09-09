@@ -60,7 +60,6 @@ test-builder.ts
 # Security scan outputs (may contain sensitive data)
 security_scan_results*.json
 git_superadmin.txt
-FIX_INSTRUCTIONS.md
 user_prompt.txt
 
 # Compiled Cloud Functions output (rebuilt on deploy via predeploy tsc)
@@ -80,3 +79,6 @@ output/
 # this is the belt-and-braces catch if one ever lands in the repo anyway.
 auth-backup*.json
 *-auth-export.json
+
+# Debug dump written by scripts/inspectESPN.mjs — never commit it (removed from the tree 2026-09-08)
+scripts/espn_output.txt
