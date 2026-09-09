@@ -192,6 +192,80 @@ describe('invariant 3 — deletions must be recorded, and stay recorded', () => 
     });
   }, TEST_TIMEOUT);
 
+  it('treats a move into ANY docs/ folder as a move, not a deletion', () => {
+    // Since the 2026-09-09 root declutter, live docs sit in docs/plans/,
+    // docs/runbooks/, docs/backlog/ and docs/decisions/, not only the archive.
+    // A `git mv PLAN-X.md docs/plans/PLAN-X.md` must not demand a manifest entry
+    // and must not flag every existing citation of PLAN-X as dangling.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'PLAN-X.md'), 'content\n');
+      fs.writeFileSync(path.join(dir, 'CITES.md'), 'see PLAN-X for the plan\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.mkdirSync(path.join(dir, 'docs', 'plans'), { recursive: true });
+      run('mv', 'PLAN-X.md', path.join('docs', 'plans', 'PLAN-X.md'));
+      run('commit', '-qm', 'file it under docs/plans');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(0);
+      expect(output).not.toContain('DANGLING');
+    });
+  }, TEST_TIMEOUT);
+
+  it('does NOT let an unrelated namesake under docs/ exempt a real deletion', () => {
+    // The move exemption pairs on CONTENT (git rename detection), not on
+    // basename. Otherwise deleting a root doc for real and adding some other
+    // file with the same name anywhere under docs/ in the same change would
+    // skip both the manifest requirement and the dangling-reference check
+    // (qodo on #681). The namesake here shares nothing with the original, so
+    // git sees a delete plus an add, and the guard must fail naming the file.
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'DOOMED.md'), 'the original plan, paragraph after paragraph\n'.repeat(20));
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.rmSync(path.join(dir, 'DOOMED.md'));
+      fs.mkdirSync(path.join(dir, 'docs', 'plans'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'docs', 'plans', 'DOOMED.md'), 'a completely different document\n');
+      run('add', '-A');
+      run('commit', '-qm', 'delete one, add a namesake');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('DOOMED.md');
+      expect(output).toContain('missing from');
+    });
+  }, TEST_TIMEOUT);
+
+  it('treats a move into docs/ that CHANGES the basename as a deletion of the old name', () => {
+    // Citations use the bare filename, so OLD-NAME.md → docs/plans/NEW-NAME.md
+    // deletes the identity every citation of OLD-NAME relies on, even though
+    // git pairs the contents as a rename. The old name must stay under
+    // enforcement: manifest entry required, and the surviving citation flagged
+    // (qodo on #681, the mirror of the root-level rename fixture above).
+    fixture((dir, run) => {
+      fs.writeFileSync(path.join(dir, MANIFEST), '# deleted docs\n');
+      fs.writeFileSync(path.join(dir, 'OLD-NAME.md'), 'the plan, paragraph after paragraph\n'.repeat(20));
+      fs.writeFileSync(path.join(dir, 'CITES.md'), 'see OLD-NAME for the plan\n');
+      run('add', '-A');
+      run('commit', '-qm', 'base');
+      const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+      fs.mkdirSync(path.join(dir, 'docs', 'plans'), { recursive: true });
+      run('mv', 'OLD-NAME.md', path.join('docs', 'plans', 'NEW-NAME.md'));
+      run('commit', '-qm', 'move and rename');
+
+      const { status, output } = runIn(dir, base);
+      expect(status, output).toBe(1);
+      expect(output).toContain('OLD-NAME.md');
+    });
+  }, TEST_TIMEOUT);
+
   it('does not treat a delete-then-restore as a deletion', () => {
     // Only the FINAL state matters. A doc removed in one commit and put back at
     // the same path in a later one still exists, and demanding a manifest entry

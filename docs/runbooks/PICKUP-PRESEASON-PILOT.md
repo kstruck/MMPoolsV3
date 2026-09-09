@@ -2,7 +2,9 @@
 
 **Paste this to start a new session:**
 
-> Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
+> Read `PICKUP-PRESEASON-PILOT.md` §0 first, then the newest dated box at the
+> top of `HANDOFF.md` (the STOP POINT boxes this doc cites elsewhere are
+> archived history under `docs/archive/`, reachable from its History section).
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
 > (**qodo is ON — Kevin, 2026-07-31: "Qodo is now active and must be used."**
@@ -296,8 +298,10 @@ deployed. What is left:
   ET"; [#259](https://github.com/kstruck/MMPoolsV3/pull/259) merged and deployed
   2026-07-22. Seven daily-or-slower jobs had run unpinned in UTC, which is how
   `nflFinalizeSweepJob` came to be documented as an 08:30 job that actually ran
-  at 04:30 ET. **HANDOFF §4 carries the resulting schedule** — read it there, not
-  here. A ratchet (`functions/src/__tests__/scheduleTimezones.test.ts`) now fails
+  at 04:30 ET. **The resulting schedule table (as of 2026-07-21) is in the
+  archived HANDOFF history** — `docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md`,
+  box "STOP POINT 2026-07-21", §4 "Heartbeat timing"; the current truth is the
+  `schedule:` / `timeZone:` strings in `functions/src`. A ratchet (`functions/src/__tests__/scheduleTimezones.test.ts`) now fails
   if a wall-clock schedule omits `timeZone` or pins a non-ET zone.
 
 ### Known cosmetic artifact, not an outage
@@ -605,7 +609,9 @@ PR #214 spread-gate fix makes this fixture — and only it, of 46 — fail.
   covers the scheduled sweep in the emulator** — the gate, candidate selection,
   live scoping, and a thrown pool making the run unhealthy. **Still true in
   prod:** it has never completed a run there. Runs **04:30 ET** (pinned since
-  #259) — see HANDOFF §4 for the full schedule.
+  #259) — the full schedule table as of 2026-07-21 is in the archived HANDOFF
+  history (`docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md`, box
+  "STOP POINT 2026-07-21", §4); `functions/src` `schedule:` strings are current.
 - **`replayFeedSnapshot` has never been invoked against production.** ~~The full
   callable path is not covered.~~ **#257 exercises it end-to-end against the
   emulator** with a real `encodeSnapshot` payload: dry-run default, live rebuild,
@@ -665,7 +671,8 @@ Fifteen scheduled job bodies changed in that deploy and every one reported
 `Successful update operation`. Nothing was armed or disarmed; the behaviour
 change is that a job which fails now REPORTS it instead of stamping a healthy
 heartbeat — and **two of #250's nine** have since produced correct heartbeats
-in production (HANDOFF §3), plus one of #245's.
+in production (archived HANDOFF history, box "STOP POINT 2026-07-21", §3
+"First production evidence for the new heartbeat code"), plus one of #245's.
 
 Two operational notes worth keeping, both learned on this deploy:
 

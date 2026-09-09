@@ -341,7 +341,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                         return (
                             <div
                                 key={game.id}
-                                className={`bg-navy-900 border rounded-xl p-4 transition-all ${isLive
+                                className={`bg-navy-900 border rounded-xl p-4 transition-ui ${isLive
                                     ? 'border-brandred-600/50'
                                     : 'border-[rgba(230,206,150,0.16)] hover:border-[rgba(230,206,150,0.35)]'
                                     }`}
@@ -462,19 +462,19 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 <div className="flex gap-2 mb-6">
                     <button
                         onClick={() => setActiveTab('nfl')}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'nfl' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 flex items-center gap-2 ${activeTab === 'nfl' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
                         <Shield size={16} /> NFL
                     </button>
                     <button
                         onClick={() => setActiveTab('college')}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'college' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 flex items-center gap-2 ${activeTab === 'college' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
                         <GraduationCap size={16} /> College Football
                     </button>
                     <button
                         onClick={() => setActiveTab('basketball')}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'basketball' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 flex items-center gap-2 ${activeTab === 'basketball' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
                         <Volleyball size={16} /> NCAA Basketball
                     </button>
@@ -506,7 +506,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
 
                 {/* categorized games sections */}
                 {!loading && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="animate-in fade-in">
                         {/* Basketball: always show LIVE section first */}
                         {activeTab === 'basketball' && renderLiveSection(categorizedGames.live)}
 

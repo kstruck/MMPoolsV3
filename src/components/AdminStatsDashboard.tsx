@@ -176,7 +176,7 @@ export const AdminStatsDashboard: React.FC<AdminStatsDashboardProps> = ({ pools,
     }, [pools, users]);
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-8 animate-in fade-in">
 
             {/* KPIS */}
             <div className="flex justify-end mb-4">

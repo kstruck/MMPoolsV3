@@ -613,8 +613,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         <div className="flex items-center gap-3">
           <div className="flex-1 h-2 bg-line rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-150 ${pickedCount === games.length ? 'bg-gold-foil' : 'bg-navy-600 dark:bg-gold-500'}`}
-              style={{ width: `${(pickedCount / games.length) * 100}%` }}
+              className={`h-full w-full origin-left rounded-full transition-transform duration-150 ease-out ${pickedCount === games.length ? 'bg-gold-foil' : 'bg-navy-600 dark:bg-gold-500'}`}
+              style={{ transform: `scaleX(${games.length ? pickedCount / games.length : 0})` }}
             />
           </div>
           <span className="text-xs font-display font-bold uppercase tracking-[0.05em] text-muted num whitespace-nowrap">
@@ -626,7 +626,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             <button
               type="button"
               onClick={() => setQuickPicksOpen(true)}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-card text-[color:var(--text)] font-display font-bold uppercase text-[11px] tracking-[0.08em] hover:border-gold-500/60 hover:shadow-card transition-all duration-150"
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-card text-[color:var(--text)] font-display font-bold uppercase text-[11px] tracking-[0.08em] hover:border-gold-500/60 hover:shadow-card transition-ui duration-150"
             >
               <Zap size={13} aria-hidden="true" /> Quick Picks
             </button>
@@ -698,7 +698,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-ui duration-150 ${pickOutcomeCardClass(outcome)}`}
               >
                 {/* The card colour is (d) in Kevin's request, and on its own it
                     is colour-only signalling. This line is the text half: one

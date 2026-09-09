@@ -149,10 +149,10 @@ export const QuickPicksDialog: React.FC<QuickPicksDialogProps> = ({
                 type="button"
                 disabled={empty}
                 onClick={() => { onApply(id); onClose(); }}
-                className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-150 ${
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-ui duration-150 ${
                   empty
                     ? 'bg-page border-line opacity-50 cursor-not-allowed'
-                    : 'bg-page border-line hover:border-gold-500/60 hover:-translate-y-0.5 hover:shadow-card-hover'
+                    : 'bg-page border-line hover:border-gold-500/60 fine:hover:-translate-y-0.5 hover:shadow-card-hover'
                 }`}
               >
                 <Icon size={18} className="shrink-0 text-muted" aria-hidden="true" />

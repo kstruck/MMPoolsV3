@@ -219,7 +219,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                             return (
                                 <div
                                     key={card.id || idx}
-                                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all duration-150 ${isViewing ? 'bg-navy-800/10 border border-navy-700 dark:border-gold-500' : 'bg-surface border border-line hover:border-navy-600'}`}
+                                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-ui duration-150 ${isViewing ? 'bg-navy-800/10 border border-navy-700 dark:border-gold-500' : 'bg-surface border border-line hover:border-navy-600'}`}
                                     onClick={() => setViewingCardId(isViewing ? null : card.id || null)}
                                 >
                                     <div>
@@ -347,7 +347,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                             key={optIdx}
                                             disabled={!!viewingCardId}
                                             onClick={() => handleSelect(q.id, optIdx)}
-                                            className={`p-4 rounded-lg border text-left transition-all duration-150 relative ${borderClass} ${bgClass} ${viewingCardId ? 'cursor-default' : ''}`}
+                                            className={`p-4 rounded-lg border text-left transition-ui duration-150 relative ${borderClass} ${bgClass} ${viewingCardId ? 'cursor-default' : ''}`}
                                         >
                                             <span className={`font-medium ${textClass}`}>{opt}</span>
                                             {showResult && isCorrect && (
@@ -533,7 +533,7 @@ export const PropCardForm: React.FC<PropCardFormProps> = ({ gameState, currentUs
                                         type="checkbox"
                                         checked={liabilityAccepted}
                                         onChange={(e) => setLiabilityAccepted(e.target.checked)}
-                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-all checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
+                                        className="peer h-6 w-6 cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-line bg-page transition-ui checked:border-navy-800 checked:bg-navy-800 hover:border-navy-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 focus-visible:ring-offset-1"
                                     />
                                     <Check size={16} className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                                 </div>

@@ -28,7 +28,7 @@ export const PayoutGallery: React.FC<PayoutGalleryProps> = ({ gameState, winners
                     })
                     .map((card, idx) => {
                         return (
-                            <div key={idx} className="bg-card border border-line rounded-xl p-6 text-center shadow-card transition-all duration-150 hover:-translate-y-1 hover:shadow-card-hover relative overflow-hidden group w-full md:w-[320px]">
+                            <div key={idx} className="bg-card border border-line rounded-xl p-6 text-center shadow-card transition-ui duration-150 fine:hover:-translate-y-1 hover:shadow-card-hover relative overflow-hidden group w-full md:w-[320px]">
                                 <div className={`absolute top-0 w-full h-1 opacity-40 group-hover:opacity-80 transition-opacity ${card.isLocked ? 'bg-brandred-600' : 'bg-gold-foil'}`}></div>
                                 <h4 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted mb-4">{card.label}</h4>
                                 <div className="flex justify-center gap-4 font-display font-bold text-2xl mb-2 items-center text-[color:var(--text)] num">

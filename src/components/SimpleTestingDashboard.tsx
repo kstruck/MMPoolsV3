@@ -143,9 +143,9 @@ export const SimpleTestingDashboard: React.FC = () => {
                     <button
                         onClick={handleRunSingle}
                         disabled={isRunning || !selectedScenario}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning || !selectedScenario
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ${isRunning || !selectedScenario
                             ? 'bg-surface border border-line text-faint cursor-not-allowed'
-                            : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta hover:-translate-y-px'
+                            : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta fine:hover:-translate-y-px'
                             }`}
                     >
                         <Play className="w-4 h-4" />
@@ -155,9 +155,9 @@ export const SimpleTestingDashboard: React.FC = () => {
                     <button
                         onClick={() => handleRunAll(NFL_TYPES)}
                         disabled={isRunning}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ${isRunning
                             ? 'bg-surface border border-line text-faint cursor-not-allowed'
-                            : 'bg-navy-700 hover:bg-navy-600 text-white hover:-translate-y-px'
+                            : 'bg-navy-700 hover:bg-navy-600 text-white fine:hover:-translate-y-px'
                             }`}
                     >
                         <Play className="w-4 h-4" />
@@ -167,9 +167,9 @@ export const SimpleTestingDashboard: React.FC = () => {
                     <button
                         onClick={() => handleRunAll()}
                         disabled={isRunning}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ${isRunning
                             ? 'bg-surface border border-line text-faint cursor-not-allowed'
-                            : 'bg-gold-foil text-navy-900 hover:brightness-105 hover:-translate-y-px'
+                            : 'bg-gold-foil text-navy-900 hover:brightness-105 fine:hover:-translate-y-px'
                             }`}
                     >
                         <Play className="w-4 h-4" />

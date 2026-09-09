@@ -70,7 +70,7 @@ export const AnnouncementManager: React.FC<AnnouncementManagerProps> = ({ pool, 
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-8 animate-in fade-in">
 
             {/* COMPOSE SECTION */}
             <div className="bg-card rounded-xl border border-line p-6 shadow-card">

@@ -37,7 +37,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
 
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right duration-200">
             <div className="bg-surface border border-line rounded-xl p-6">
                 <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2 flex items-center gap-2">
                     <Bell size={20} className="text-gold-700 dark:text-gold-400" /> Payment Reminders
@@ -136,7 +136,7 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
                 <p className="text-muted text-sm mb-6">Automatically lock the grid and reveal numbers.</p>
 
                 <div className="space-y-4">
-                    <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-surface rounded mb-2 border border-transparent hover:border-line transition-all">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 hover:bg-surface rounded mb-2 border border-transparent hover:border-line transition-ui">
                         <input
                             type="checkbox"
                             checked={safeReminders.lock.enabled}

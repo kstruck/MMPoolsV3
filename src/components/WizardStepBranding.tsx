@@ -34,7 +34,7 @@ export const WizardStepBranding: React.FC<WizardStepBrandingProps> = ({ gameStat
     };
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right duration-200">
             <div className="bg-card border border-line rounded-xl p-6 shadow-card">
                 <h3 className="text-xl font-display font-bold uppercase text-[color:var(--text)] mb-2">Customization</h3>
                 <p className="text-muted font-body text-sm mb-6">Make the pool your own.</p>

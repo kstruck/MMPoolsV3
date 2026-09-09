@@ -196,7 +196,7 @@ export const SuperBowlOddsArticle: React.FC = () => {
 
                 {/* Call to Action Box */}
                 <div className="mt-16 bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-2xl p-8 text-center relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-gold-500/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                    <div className="absolute inset-0 bg-gold-500/10 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     <h3 className="text-2xl font-display font-extrabold uppercase text-[#EDF1F8] mb-4 relative z-10">Host Your Own Super Bowl Pool</h3>
                     <p className="text-[#9FB0CC] mb-8 max-w-lg mx-auto relative z-10">
                         Create a free Squares or Props pool for your friends, office, or party.
@@ -204,7 +204,7 @@ export const SuperBowlOddsArticle: React.FC = () => {
                     </p>
                     <Link
                         to="/create-pool"
-                        className="relative z-10 inline-flex items-center gap-2 bg-gold-foil text-navy-900 hover:brightness-105 px-8 py-4 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-lg transition-all transform hover:scale-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
+                        className="relative z-10 inline-flex items-center gap-2 bg-gold-foil text-navy-900 hover:brightness-105 px-8 py-4 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-lg transition-ui transform fine:hover:scale-105 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
                     >
                         Create Your Pool Now
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-right"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>

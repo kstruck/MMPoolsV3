@@ -402,7 +402,7 @@ intention.
 ## 4. The plan -> review-log -> sweep workflow as practiced
 
 Worked example: `PLAN-SUPERADMIN-CONTROL.md` + `PLAN-SUPERADMIN-CONTROL-REVIEW-LOG.md`
-+ `PLAN-SUPERADMIN-CONTROL-SWEEPS.md` (all at repo root; read them before
++ `PLAN-SUPERADMIN-CONTROL-SWEEPS.md` (all in `docs/archive/` now that they shipped; live plans sit in `docs/plans/` — read them before
 writing your first plan). The actual step sequence extracted from that cycle:
 
 1. **Evidence gathering.** A live prod walkthrough + parallel code reviews

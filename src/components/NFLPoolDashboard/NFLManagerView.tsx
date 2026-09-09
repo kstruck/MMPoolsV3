@@ -172,7 +172,7 @@ const SaveSettingsControl: React.FC<{ onSave: () => void; isSaving: boolean; jus
       disabled={isSaving}
       className={`${justSaved
         ? 'bg-[#0F7B4A] hover:bg-[#0d6b40]'
-        : 'bg-[#0B5C37] hover:bg-[#0F7B4A]'} disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-all duration-150 hover:-translate-y-px cursor-pointer text-sm`}
+        : 'bg-[#0B5C37] hover:bg-[#0F7B4A]'} disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3 px-8 rounded-lg flex items-center gap-2 shadow-card transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer text-sm`}
     >
       {justSaved ? <CheckCircle size={15} /> : <Save size={15} />}
       {isSaving ? 'Saving...' : justSaved ? 'Saved!' : 'Save Pool Settings'}
@@ -1181,7 +1181,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
             aria-current={commishTab === t.id ? 'page' : undefined}
             title={commishTabHint(t.id)}
             onClick={() => setCommishTab(t.id)}
-            className={`min-h-[44px] px-4 rounded-lg font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-all duration-150 cursor-pointer ${
+            className={`min-h-[44px] px-4 rounded-lg font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-ui duration-150 cursor-pointer ${
               commishTab === t.id
                 ? 'bg-navy-800 text-white shadow-card'
                 : 'text-muted hover:text-[color:var(--text)] hover:bg-page'
@@ -1300,7 +1300,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   type="text"
                   value={poolName}
                   onChange={e => setPoolName(e.target.value)}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 />
               </div>
               <div>
@@ -1310,7 +1310,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   value={entryFee}
                   min={0}
                   onChange={e => setEntryFee(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 />
               </div>
               {(MULTI_ENTRY_WIZARD_ENABLED || currentMaxEntries > 1) && (
@@ -1322,7 +1322,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   min={currentMaxEntries}
                   max={MAX_ENTRIES_PER_USER_CAP}
                   onChange={e => setMaxEntriesPerUser(Math.min(MAX_ENTRIES_PER_USER_CAP, Math.max(currentMaxEntries, parseInt(e.target.value) || currentMaxEntries)))}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 />
                 <p className="font-body text-[10px] text-faint mt-1">
                   {currentMaxEntries > 1 ? `Currently ${currentMaxEntries}. ` : ''}Each entry pays the entry fee and competes on its own. Can be raised while the pool is open, never lowered.
@@ -1338,7 +1338,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 onChange={e => setPaymentInstructions(e.target.value)}
                 rows={2}
                 placeholder="e.g. Venmo @your-handle — include your name in the note."
-                className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all resize-none"
+                className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui resize-none"
               />
             </div>
 
@@ -1365,7 +1365,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     type="text"
                     value={editManagerName}
                     onChange={e => setEditManagerName(e.target.value)}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all animate-none"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui animate-none"
                     placeholder="Host Display Name"
                   />
                 </div>
@@ -1375,7 +1375,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     type="email"
                     value={editContactEmail}
                     onChange={e => setEditContactEmail(e.target.value)}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all animate-none"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui animate-none"
                     placeholder="host@example.com"
                   />
                 </div>
@@ -1385,7 +1385,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     type="text"
                     value={editContactPhone}
                     onChange={e => setEditContactPhone(e.target.value)}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all animate-none"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui animate-none"
                     placeholder="+1 (555) 0199"
                   />
                 </div>
@@ -1396,7 +1396,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <select
                   value={editContactMethod}
                   onChange={e => setEditContactMethod(e.target.value as any)}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui cursor-pointer"
                 >
                   <option value="email">Email Link Only</option>
                   <option value="phone">Phone Link Only</option>
@@ -1433,7 +1433,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     value={lockMode}
                     disabled={confidenceMode}
                     onChange={e => setLockMode(e.target.value as 'PER_GAME' | 'WEEKLY')}
-                    className={`w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all ${confidenceMode ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    className={`w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui ${confidenceMode ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     <option value="PER_GAME">Per-Game (each game locks at kickoff)</option>
                     <option value="WEEKLY">Weekly (all locks at first kickoff)</option>
@@ -1446,7 +1446,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <select
                     value={lockBufferMinutes}
                     onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   >
                     <option value={0}>0 min (exactly at kickoff)</option>
                     <option value={5}>5 min grace (recommended)</option>
@@ -1491,7 +1491,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
                     }
                   }}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 >
                   <option value="SEASON">Season-End Standings Only</option>
                   <option value="WEEKLY">Weekly Winner Only</option>
@@ -1544,7 +1544,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <select
                   value={weeklyTiebreaker}
                   onChange={e => setWeeklyTiebreaker(e.target.value)}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 >
                   {/* MNF_COMBINED is LEGACY (PLAN-WEEKLY-PRIZES §0/D1): not
                       offered, still honoured. A pool already on it must still
@@ -1579,7 +1579,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <select
                   value={lockBufferMinutes}
                   onChange={e => setLockBufferMinutes(parseInt(e.target.value))}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 >
                   <option value={60}>1 hour before the first kickoff</option>
                   <option value={30}>30 minutes before the first kickoff</option>
@@ -1602,7 +1602,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <select
                     value={maxStrikes}
                     onChange={e => setMaxStrikes(parseInt(e.target.value))}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   >
                     <option value={0}>0 — Sudden Death</option>
                     <option value={1}>1 — Double Elimination</option>
@@ -1614,7 +1614,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <select
                     value={maxRebuys}
                     onChange={e => setMaxRebuys(parseInt(e.target.value))}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   >
                     <option value={0}>None</option>
                     <option value={1}>1</option>
@@ -1634,7 +1634,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       min={1}
                       max={18}
                       onChange={e => setRebuyDeadlineWeek(Math.max(1, Math.min(18, parseInt(e.target.value) || 1)))}
-                      className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                      className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                     />
                   </div>
                   <div>
@@ -1644,7 +1644,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       value={rebuyCost}
                       min={0}
                       onChange={e => setRebuyCost(Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                      className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                     />
                   </div>
                 </div>
@@ -1656,7 +1656,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <select
                     value={tieCountsAs}
                     onChange={e => setTieCountsAs(e.target.value === 'WIN' ? 'WIN' : 'LOSS')}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   >
                     <option value="LOSS">Tie counts as a loss (strike)</option>
                     <option value="WIN">Tie counts as a win for the picked team</option>
@@ -1671,7 +1671,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     min={0}
                     max={23}
                     onChange={e => setMaxTeamUses(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
-                    className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-3 py-2 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   />
                   <p className="font-body text-[10px] text-faint mt-1">How many weeks a team may be picked. 0 = unlimited.</p>
                 </div>
@@ -1726,7 +1726,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       setWeeklyPlaces(lastKnownWeeklyPlacesRef.current);
                     }
                   }}
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                 >
                   <option value="SEASON">Season-End Totals Only</option>
                   <option value="WEEKLY">Weekly Highest Margin Wins</option>
@@ -1816,7 +1816,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               <button
                 onClick={handleScoreWeek}
                 disabled={isScoring || totalGamesCount === 0}
-                className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-4 rounded-lg flex items-center justify-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px cursor-pointer"
+                className="w-full bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-3.5 px-4 rounded-lg flex items-center justify-center gap-2 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
               >
                 <Play size={14} className={isScoring ? 'animate-spin' : ''} />
                 {isScoring ? 'Calculating...' : `Score & Recap ${nflWeekLabel(poolSeasonType(pool), week)}`}
@@ -1859,7 +1859,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <button
                   onClick={() => handleRemindBulk('PICKS')}
                   disabled={bulkReminding !== null || unpickedCount === 0}
-                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                 >
                   <BellRing size={12} />
                   {bulkReminding === 'PICKS' ? 'Sending...' : `Remind all unpicked (${unpickedCount})`}
@@ -1867,7 +1867,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <button
                   onClick={() => handleRemindBulk('PAYMENT')}
                   disabled={bulkReminding !== null || unpaidCount === 0}
-                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                 >
                   <DollarSign size={12} />
                   {bulkReminding === 'PAYMENT' ? 'Sending...' : `Remind all unpaid (${unpaidCount})`}
@@ -1910,7 +1910,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                             onClick={() => handleToggleCoCommissioner(row.uid)}
                             disabled={savingCoCommissioner === row.uid}
                             title={coManagers.includes(row.uid) ? 'Remove as co-commissioner' : 'Name as co-commissioner (up to 3)'}
-                            className="ml-2 align-middle inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] border border-line text-muted hover:border-gold-500/40 hover:text-gold-700 dark:hover:text-gold-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 cursor-pointer"
+                            className="ml-2 align-middle inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-display font-bold uppercase text-[9px] tracking-[0.08em] border border-line text-muted hover:border-gold-500/40 hover:text-gold-700 dark:hover:text-gold-400 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 cursor-pointer"
                           >
                             <UserCog size={10} />
                             {savingCoCommissioner === row.uid ? 'Saving...' : coManagers.includes(row.uid) ? 'Remove co-comm' : 'Make co-comm'}
@@ -1966,7 +1966,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                             (row.picked && !owesMoney(row))
                           }
                           title={!row.picked ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : 'Picked and settled — nothing to remind'}
-                          className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 hover:-translate-y-px cursor-pointer"
+                          className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />
                           {remindingUid === row.uid ? 'Sending...' : 'Remind'}
@@ -2047,7 +2047,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     min={1}
                     max={1440}
                     onChange={e => setExtendMinutes(Math.max(1, Math.min(1440, parseInt(e.target.value) || 1)))}
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -2058,7 +2058,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     onChange={e => setExtendReason(e.target.value)}
                     maxLength={200}
                     placeholder="e.g. Deadline was mis-set — several members were locked out"
-                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   />
                 </div>
               </div>
@@ -2070,7 +2070,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 <button
                   onClick={handleExtendDeadline}
                   disabled={isExtending}
-                  className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-all duration-150 hover:-translate-y-px cursor-pointer text-xs"
+                  className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer text-xs"
                 >
                   <Clock size={13} />
                   {isExtending ? 'Extending...' : 'Extend Deadline'}
@@ -2097,7 +2097,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       <select
                         value={proxyTargetEntryId}
                         onChange={e => setProxyTargetEntryId(e.target.value)}
-                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui cursor-pointer"
                       >
                         <option value="">{currentMaxEntries > 1 ? 'Select entry...' : 'Select member...'}</option>
                         {entries.map(entry => (
@@ -2113,7 +2113,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         min={1}
                         max={23}
                         onChange={e => setProxyWeek(Math.max(1, Math.min(23, parseInt(e.target.value) || 1)))}
-                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                       />
                     </div>
                     <div>
@@ -2121,7 +2121,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                       <select
                         value={proxyTeam}
                         onChange={e => setProxyTeam(e.target.value)}
-                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all cursor-pointer"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui cursor-pointer"
                       >
                         <option value="">Select team...</option>
                         {proxyWeekTeams.map(team => (
@@ -2137,7 +2137,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                         onChange={e => setProxyReason(e.target.value)}
                         maxLength={200}
                         placeholder="e.g. Member in hospital, texted me their pick"
-                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-all"
+                        className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                       />
                     </div>
                   </div>
@@ -2154,7 +2154,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                     <button
                       onClick={handleProxyPick}
                       disabled={isProxying}
-                      className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-all duration-150 hover:-translate-y-px cursor-pointer text-xs"
+                      className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer text-xs"
                     >
                       <UserCog size={13} />
                       {isProxying ? 'Submitting...' : 'Submit Proxy Pick'}
@@ -2185,14 +2185,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   onChange={e => setCancelReason(e.target.value)}
                   maxLength={200}
                   placeholder="e.g. Not enough members joined to run the season"
-                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-brandred-500 transition-all"
+                  className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-brandred-500 transition-ui"
                 />
               </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleCancelPool}
                   disabled={isCanceling}
-                  className="min-h-[44px] bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px cursor-pointer text-xs"
+                  className="min-h-[44px] bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer text-xs"
                 >
                   <Ban size={13} />
                   {isCanceling ? 'Canceling...' : 'Cancel Pool...'}

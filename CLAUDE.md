@@ -411,7 +411,7 @@ compare, come back.
    defaults as configured; they do not override this repo's test
    conventions (see `mmp-validation-and-qa` — extend existing vitest
    suites, do not claim a coverage percentage) or its plan-gate convention
-   (PLAN-*.md, not a fresh planning template).
+   (PLAN-*.md in `docs/plans/`, not a fresh planning template).
 
    **RESOLVED 2026-07-22 (Kevin).** The `PLAN-*.md` gate was "any 2+ file
    change", and it was systematically not followed — none of the twelve PRs

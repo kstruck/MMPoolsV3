@@ -106,7 +106,7 @@ export const ExportControls: React.FC<ExportControlsProps> = ({ pool, entries, t
         <div className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 text-sm transition-all duration-150 hover:-translate-y-px"
+                className="bg-navy-800 hover:bg-navy-700 text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 text-sm transition-ui duration-150 fine:hover:-translate-y-px"
             >
                 <Download size={16} /> Export
                 <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />

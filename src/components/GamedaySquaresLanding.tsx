@@ -23,7 +23,7 @@ interface GamedaySquaresLandingProps {
    between them flip cream <-> navy via CSS-var surfaces (bg-page/surface/card). */
 
 const heroBtn =
-    'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-all duration-150 hover:-translate-y-px cursor-pointer';
+    'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer';
 
 export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse }) => {
 
@@ -49,12 +49,12 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                 </div>
 
                 <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
-                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-brandred-600/15 border border-brandred-600/35 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-6 md:mb-8 bg-brandred-600/15 border border-brandred-600/35 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <span className="flex h-2 w-2 rounded-full bg-brandred-500 animate-live-pulse"></span>
                         <span className="font-display font-bold uppercase text-xs tracking-[0.16em] text-brandred-500">Live & Automated • Create Your Grid</span>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200 mb-8">
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-500 delay-100 mb-8">
                         <button
                             onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
                             disabled={!canAccessSquaresCreation(user)}
@@ -71,17 +71,17 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         </button>
                     </div>
 
-                    <h1 className="font-display font-extrabold uppercase text-4xl md:text-7xl text-white tracking-tight mb-6 md:mb-8 leading-[0.9] animate-in fade-in slide-in-from-bottom-8 duration-700">
+                    <h1 className="font-display font-extrabold uppercase text-4xl md:text-7xl text-white tracking-tight mb-6 md:mb-8 leading-[0.9] animate-in fade-in slide-in-from-bottom-8 duration-500">
                         The Modern Platform for <br />
                         <span className="text-gold-400">Gameday Squares</span>
                     </h1>
 
-                    <p className="font-body text-[#9FB0CC] text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-700 delay-100">
+                    <p className="font-body text-[#9FB0CC] text-lg md:text-xl max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed animate-in fade-in slide-in-from-bottom-12 duration-500 delay-50">
                         The professional choice for office pools and charity fundraisers. Fully automated scoring, live ESPN integration, and instant payouts. Say goodbye to spreadsheets.
                     </p>
 
                     {/* Hero Visual */}
-                    <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-1000 delay-400">
+                    <div className="mt-16 md:mt-20 relative mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-20 duration-500 delay-150">
                         <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent z-20"></div>
                         <div className="rounded-3xl p-2 shadow-panel bg-navy-900 border border-[rgba(230,206,150,0.16)]">
                             <div className="rounded-xl overflow-hidden relative group bg-navy-950">
@@ -91,7 +91,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                     loading="lazy"
                                     width={1024}
                                     height={591}
-                                    className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-700"
+                                    className="w-full h-auto object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-500"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-b from-navy-950 via-transparent to-transparent opacity-60"></div>
                             </div>
@@ -119,7 +119,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 width={1024}
                                 height={591}
                                 alt="Live interactive Super Bowl squares grid showing real-time score updates and winning highlights"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.02] transition-transform duration-500"
                             />
                         </div>
                         <div className="md:w-1/2 space-y-6">
@@ -145,7 +145,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 width={1024}
                                 height={517}
                                 alt="March Melee Pools dashboard with all-in-one view of scoreboard, payouts, and charity tracker"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.02] transition-transform duration-500"
                             />
                         </div>
                         <div className="md:w-1/2 space-y-6">
@@ -171,7 +171,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 width={1024}
                                 height={541}
                                 alt="Super Bowl squares payout examples including quarter breakdowns and back-loaded jackpot"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.02] transition-transform duration-500"
                             />
                         </div>
                         <div className="md:w-1/2 space-y-6">
@@ -197,7 +197,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                                 width={996}
                                 height={986}
                                 alt="AI commissioner chat for customizing Super Bowl pool rules"
-                                className="relative rounded-xl shadow-panel border border-line w-full transform group-hover:scale-[1.02] transition-transform duration-500"
+                                className="relative rounded-xl shadow-panel border border-line w-full transform fine:group-hover:scale-[1.02] transition-transform duration-500"
                             />
                         </div>
                         <div className="md:w-1/2 space-y-6">
@@ -213,7 +213,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             <button
                                 onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
                                 disabled={!canAccessSquaresCreation(user)}
-                                className="mt-4 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-white bg-brandred-600 hover:bg-brandred-500 transition-all duration-150 hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                className="mt-4 px-8 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-white bg-brandred-600 hover:bg-brandred-500 transition-ui duration-150 fine:hover:-translate-y-px shadow-red-cta disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                                 title={canAccessSquaresCreation(user) ? "Create Your Pool" : "Gameday Squares is coming soon"}
                             >
                                 {canAccessSquaresCreation(user) ? 'Create Your Pool' : 'Coming Soon'}
@@ -240,7 +240,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                             { icon: Heart, title: "Charity Integration", desc: "Easily designate a percentage of the pot to a charity of your choice. Built-in fundraising." }
                         ].map((feature, i) => (
                             <div key={i} className="p-8 rounded-2xl bg-card border border-line transition-colors group flex flex-col h-full hover:border-gold-500/50">
-                                <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 bg-gold-500/15 border border-gold-500/25">
+                                <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 fine:group-hover:scale-110 transition-transform duration-300 bg-gold-500/15 border border-gold-500/25">
                                     <feature.icon size={28} className="text-gold-600 dark:text-gold-400" />
                                 </div>
                                 <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-3">{feature.title}</h3>
@@ -266,7 +266,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
                         <button
                             onClick={canAccessSquaresCreation(user) ? onCreatePool : undefined}
                             disabled={!canAccessSquaresCreation(user)}
-                            className="text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl bg-brandred-600 hover:bg-brandred-500 shadow-red-cta transition-all duration-150 hover:-translate-y-px mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                            className="text-white px-10 py-5 rounded-lg font-display font-extrabold uppercase tracking-[0.05em] text-xl bg-brandred-600 hover:bg-brandred-500 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px mb-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                             title={canAccessSquaresCreation(user) ? "Create Your Grid Now" : "Gameday Squares is coming soon"}
                         >
                             {canAccessSquaresCreation(user) ? 'Create Your Grid Now' : 'Coming Soon'}

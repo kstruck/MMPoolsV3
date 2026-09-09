@@ -86,7 +86,7 @@ export const StickySaveBar: React.FC<StickySaveBarProps> = ({
           type="button"
           onClick={onSave}
           disabled={disabled}
-          className={`shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-display font-bold uppercase text-[12px] tracking-[0.08em] transition-all duration-150 ${
+          className={`shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-display font-bold uppercase text-[12px] tracking-[0.08em] transition-ui duration-150 ${
             disabled
               ? 'bg-page border border-line text-faint cursor-not-allowed'
               : 'bg-brandred-600 text-white border border-brandred-600 hover:brightness-110 shadow-card'
