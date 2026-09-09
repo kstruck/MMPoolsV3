@@ -339,9 +339,18 @@
   repo on 2026-08-25 (#585) and again on 2026-09-01 (#655), when
   `bypass_actors` was found empty with no known editor. Verify any time:
   `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.bypass_actors'`
-  (an empty array = the deadlock is back). Restore with
-  `gh api -X PUT repos/kstruck/MMPoolsV3/rulesets/11714546` and body
-  `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]}`.
+  (an empty array = the deadlock is back). Restore with ONE command that
+  re-reads the ruleset, sets the bypass list, and PUTs the whole object back
+  so no other setting is dropped (bash; the read half was exercised on
+  2026-09-08, the PUT was not because the bypass was present that day):
+
+  ```bash
+  gh api repos/kstruck/MMPoolsV3/rulesets/11714546 \
+    --jq '.bypass_actors=[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}] | {name,target,enforcement,bypass_actors,conditions,rules}' \
+    | gh api -X PUT repos/kstruck/MMPoolsV3/rulesets/11714546 --input -
+  ```
+
+  Then re-run the verify command; it must print the one-element array.
   ⚠️ `NEXT-SESSION-AUDIT-FIXES.md` still lists "remove the Repository admin
   bypass actor" as an optional task; doing that recreates the deadlock. Do not.
   The full 2026-08-25 and 2026-09-01 accounts are in the archived history.
