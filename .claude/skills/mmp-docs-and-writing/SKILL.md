@@ -29,6 +29,8 @@ Repo: `D:\march-melee-pools` (March Melee Pools / Gridiron Gamble). This skill t
 
 ### Repo root — product + change-control artifacts
 
+> **Layout since 2026-09-09:** only `README.md`, `CLAUDE.md`, `HANDOFF.md` and `CONTEXT.md` stay at the repo root. Open plans (+ their review logs and sweeps) live in `docs/plans/`, operator runbooks in `docs/runbooks/`, backlogs and open security notes in `docs/backlog/`, decision records in `docs/decisions/`, and everything shipped or consumed in `docs/archive/`. `docs/README.md` is the map. The rows below predate that move — resolve a bare filename against those folders.
+
 | File | Type | Role |
 |---|---|---|
 | `README.md` | Living | Product/feature description (231 lines): pool types, scoring, stack, pricing. Marketing-adjacent; some claims are aspirational (see stale list). |
@@ -50,7 +52,7 @@ Repo: `D:\march-melee-pools` (March Melee Pools / Gridiron Gamble). This skill t
 | `docs/bracket-pool-architecture.md` | Bracket subsystem reference. Contains a known-stale seed-parsing section (see stale list). |
 | `docs/annual-bracket-setup-runbook.md` | Annual NCAA import runbook (ESPN field mapping, "never break" rules, debug decision tree, yearly drift watchlist). |
 | `docs/UI-REVAMP-GUIDE.md` | UI style recipe — constrains UI copy and visual work (see House style). |
-| `docs/archive/2026-02-10-phase1-design.md` | Historical dated design doc (moved from `docs/plans/` 2026-09-01; that convention is superseded by root `PLAN-*.md`). Put new plans at root. |
+| `docs/archive/2026-02-10-phase1-design.md` | Historical dated design doc (moved from `docs/plans/` 2026-09-01; that convention is superseded by root `PLAN-*.md`). Put new plans in `docs/plans/`. |
 | `docs/wizard-unification/PHASE-A-INVENTORY.md` | Workstream evidence doc: pre-change audit with file:line cites and "RESOLVED (date)" decision stamps. |
 
 ### Where does a new document go? (decision table)
