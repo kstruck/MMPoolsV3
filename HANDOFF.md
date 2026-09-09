@@ -345,6 +345,10 @@ the SWEEP-LATER worklist, the Phase-2 observability notes and the July
 [docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md](docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md),
 moved verbatim on 2026-09-08. **Nothing there is current state.** Open a
 box there only to recover the reasoning behind something a live doc cites.
+Its header carries a **Box index** — every archived box by date and label —
+so a citation such as "HANDOFF's STOP POINT box" in `PICKUP-PRESEASON-PILOT.md`
+(dated sections) or "the 2026-08-12 DEPLOY STATE box" resolves by searching the
+date there, not by reading 3,900 lines.
 
 ## Key documents
 
