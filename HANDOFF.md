@@ -363,8 +363,9 @@
   ```
 
   Then re-run the verify command; it must print the one-element array.
-  ⚠️ `NEXT-SESSION-AUDIT-FIXES.md` still lists "remove the Repository admin
-  bypass actor" as an optional task; doing that recreates the deadlock. Do not.
+  ⚠️ `docs/archive/NEXT-SESSION-AUDIT-FIXES.md` (archived by the 2026-09-09
+  cleanup, still readable) lists "remove the Repository admin bypass actor" as
+  an optional task; doing that recreates the deadlock. Do not.
   The full 2026-08-25 and 2026-09-01 accounts are in the archived history.
 - **Never `git reset --hard` or `git clean` in `D:\march-melee-pools`.** That
   is the main checkout and other sessions leave uncommitted work in it. The
