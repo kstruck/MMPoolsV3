@@ -15,12 +15,23 @@
 >   restated in **Standing warnings** below so it is never archived.
 > - **The 2026-09-01 box below is stale on one point.** The trust-boundary
 >   remediation it calls "UNCOMMITTED" merged the same day as
->   [#654](https://github.com/kstruck/MMPoolsV3/pull/654). This PR does NOT
->   verify whether that build has reached Cloud Functions; the tagged live SHA
->   in the 2026-08-26 box is unchanged and has not been re-checked since it was
->   written. `functions/` has changed on `main` since that SHA (#654 and the
->   lockfile-only #655), so treat a functions deploy as possibly owed until
->   someone runs `npx firebase functions:list` against a named callable.
+>   [#654](https://github.com/kstruck/MMPoolsV3/pull/654). #654 has TWO deploy
+>   halves and this PR verifies NEITHER; the tagged live SHA in the 2026-08-26
+>   box is unchanged and has not been re-checked since it was written.
+>   1. **Functions.** #654 changed 20+ existing callables and added NO new
+>      export, so `functions:list` by name proves nothing here (the 2026-08-26
+>      box says why). The timestamp method shows only that a deploy RAN; the
+>      certification is the one that box records — a no-op deploy from a pulled
+>      checkout at the intended commit, every function reporting
+>      `Skipped (No changes detected)`. Kevin action.
+>   2. **Frontend.** #654 also changed `src/components/admin/OperationsPanel.tsx`
+>      (the paged runner for `backfillPools` / `fixParticipantIds`), so a Coolify
+>      rebuild is owed as well. Needle: `oversizedPools` — absent from `src/`
+>      before #654, present after, and a property name, so it survives
+>      minification (not a template literal). `curl.exe -s
+>      https://www.marchmeleepools.com/`, take the `index-*.js` chunk, fetch it
+>      and search for the needle, the way the 2026-08-26 box did for #597/#598.
+>      ABSENT = the rebuild has not happened.
 > - Merged to `main` 2026-09-01 → 2026-09-08, besides #654: #655 and #661
 >   (lockfile-only advisories), #656 (this file: ruleset restore command),
 >   #653 (docs cleanup), #666 (draft plan), #664 (lint required check),
