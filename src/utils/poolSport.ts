@@ -278,10 +278,17 @@ const TERMINAL_POOL_STATUSES = new Set(['FINAL', 'CANCELED', 'COMPLETED', 'ARCHI
 
 /**
  * Has this pool been settled by ANY writer? Named so the terminal rule reads as
- * one thing rather than a chain of ORs (qodo on #682). Client-side sibling of
- * `isTerminalPool` in functions/src/lib/autoScoreDecisions.ts — same four
- * signals, same case-insensitive status set. `closedVia === 'ADMIN_CLOSE'` is
- * handled BEFORE this by the caller so admin-close keeps its own label.
+ * one thing rather than a chain of ORs (qodo on #682).
+ *
+ * Shares three signals with the server's `isTerminalPool`
+ * (functions/src/lib/autoScoreDecisions.ts): `isFinal`, non-null `finalizedAt`,
+ * and the same case-insensitive status set. It is NOT identical: the client
+ * ALSO treats any truthy `closedVia` as terminal (pre-existing T2 behaviour —
+ * `closePool`/`autoClosePools` dual-write `closedVia`), which the server scorer
+ * does not read. So a pool carrying only a non-admin `closedVia` is final to
+ * every client consumer of this reader but still scoreable server-side (qodo
+ * r2 on #682). `closedVia === 'ADMIN_CLOSE'` is handled BEFORE this by the
+ * caller so admin-close keeps its own `closed` label.
  */
 function hasTerminalMarker(pool: LifecycleReadable): boolean {
   const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';

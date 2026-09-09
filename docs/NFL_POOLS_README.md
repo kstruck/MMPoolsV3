@@ -138,9 +138,12 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
    `ARCHIVED` (any case) all read as `FINAL`; `closedVia: 'ADMIN_CLOSE'` reads
    as `CLOSED`. That drives the GameOps status chips, the Browse status filter
    and the commissioner's active-pool roster (`isActiveManagedPool`). Server
-   side, `isTerminalPool` (`lib/autoScoreDecisions.ts`) applies the same rule
-   before scoring; `isFinishedPool` (`lib/poolInclusion.ts`) does not yet read
-   `finalizedAt` / `FINAL` and is tracked as a separate change.
+   side, `isTerminalPool` (`lib/autoScoreDecisions.ts`) applies the
+   `finalizedAt` / `isFinal` / status parts of that rule before scoring but does
+   not read `closedVia`, so a pool with only a non-admin `closedVia` is `FINAL`
+   on the client and still scoreable on the server; `isFinishedPool`
+   (`lib/poolInclusion.ts`) does not yet read `finalizedAt` / `FINAL` and is
+   tracked as a separate change.
 
 ---
 
