@@ -27,12 +27,21 @@
 >   [#654](https://github.com/kstruck/MMPoolsV3/pull/654). #654 has TWO deploy
 >   halves and this PR verifies NEITHER; the tagged live SHA in the 2026-08-26
 >   box is unchanged and has not been re-checked since it was written.
->   1. **Functions.** #654 changed 20+ existing callables and added NO new
->      export, so `functions:list` by name proves nothing here (the 2026-08-26
->      box says why). The timestamp method shows only that a deploy RAN; the
->      certification is the one that box records — a no-op deploy from a pulled
->      checkout at the intended commit, every function reporting
->      `Skipped (No changes detected)`. Kevin action.
+>   1. **Functions — MEASURED 2026-09-09, NOT DEPLOYED, DEPLOY OWED.** #654
+>      changed 20+ existing callables and added NO new export, so
+>      `functions:list` by name proves nothing (the 2026-08-26 box says why).
+>      The timestamp method does answer the cheaper question: `npx firebase
+>      functions:list --json --project gridiron-gamble-uzuqo`, read every
+>      `source.storageSource.generation` (microseconds; ÷1000 for epoch ms) —
+>      195 functions, 192 with a timestamp, latest upload
+>      **2026-08-31T01:34:30Z**, **zero** uploads after 2026-09-01. #654 merged
+>      2026-09-01, so nothing from it is in production. The deploy that ships
+>      it is CLAUDE.md §3's ritual from `D:\march-melee-pools` at `origin/main`
+>      (`npm --prefix functions ci`, then `npx firebase deploy --only functions
+>      --project gridiron-gamble-uzuqo`); the same run is the certification —
+>      re-run it afterwards and every function must print
+>      `Skipped (No changes detected)`. Kevin action (a session's deploy was
+>      refused by the permission classifier on 2026-09-09).
 >   2. **Frontend.** #654 also changed `src/components/admin/OperationsPanel.tsx`
 >      (the paged runner for `backfillPools` / `fixParticipantIds`), so a Coolify
 >      rebuild is owed as well. Needle: `oversizedPools` — absent from `src/`
