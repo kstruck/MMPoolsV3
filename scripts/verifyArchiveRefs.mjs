@@ -102,6 +102,42 @@ function lines(out) {
 }
 
 /**
+ * OLD paths of markdown files that `range` shows as MOVED to somewhere under
+ * docs/ under the SAME basename, per git's similarity-based rename detection.
+ * `-M50%` is git's default threshold, stated explicitly so the contract is
+ * visible: a link rewrite or a banner edit during a move still pairs; a rewrite
+ * from scratch does not. `--name-status` prints `R<score>\told\tnew`.
+ *
+ * SAME BASENAME, deliberately. Citations name a doc by its bare filename, so a
+ * doc that changes its name on the way into docs/ (`OLD-NAME.md` →
+ * `docs/plans/NEW-NAME.md`) has deleted the identity every citation uses, even
+ * though git pairs the contents. That old name must stay a deletion — manifest
+ * entry required, references to it flagged — exactly as the root-level rename
+ * fixture already demands (qodo finding on #681).
+ *
+ * FAILS CLOSED with context: a rename scan that cannot run is a move exemption
+ * that cannot be decided, and the raw child-process error would not say which
+ * check was lost.
+ */
+function renamedIntoDocs(range) {
+  let out;
+  try {
+    out = git(['diff', '-M50%', '--diff-filter=R', '--name-status', range, '--', '*.md']);
+  } catch (err) {
+    const stderr = String(err?.stderr ?? '').trim();
+    fail(
+      `cannot run rename detection over '${range}', so moves into docs/ cannot be told\n` +
+      `      apart from deletions: ${stderr || err?.message || 'unknown git failure'}`,
+    );
+  }
+  return lines(out)
+    .map((row) => row.split('\t'))
+    .filter(([, from, to]) => from && to && to.startsWith('docs/'))
+    .filter(([, from, to]) => path.basename(from) === path.basename(to))
+    .map(([, from]) => from);
+}
+
+/**
  * Docs deleted relative to BASE, including deletions that are only staged or
  * only in the working tree — the README tells contributors to run this after a
  * move, which is exactly when the deletion is not committed yet.
@@ -127,28 +163,32 @@ function deletedDocs() {
   const uncommitted = lines(
     git(['diff', '--no-renames', 'HEAD', '--diff-filter=D', '--name-only', '--', '*.md']),
   );
-  // A doc that left the root and ARRIVED in docs/archive/ in this same change
-  // was MOVED, not deleted — git reports the old path as a deletion either
-  // way, so subtract those or every archived file reads as dangling.
+  // A doc that left the root and ARRIVED somewhere under docs/ in this same change
+  // was MOVED, not deleted — the `--no-renames` diffs above report the old path
+  // as a deletion either way, so subtract those or every filed doc reads as
+  // dangling.
   //
-  // Keyed on "added under docs/archive/ by THIS diff", not on "some file with
-  // that basename sits in the archive". The weaker test would silently exempt
-  // a genuine future deletion whose basename happens to collide with
-  // something archived long ago, and references to it would then pass.
-  // Both halves, mirroring `committed` and `uncommitted` above. Without the
-  // second, a run mid-move — the workflow the README documents — sees the
-  // deleted root file but not its uncommitted arrival in the archive, and
-  // calls a move a deletion.
-  const movedIn = new Set(
-    [
-      ...lines(git([
-        'diff', '--no-renames', `${BASE}...HEAD`, '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
-      ])),
-      ...lines(git([
-        'diff', '--no-renames', 'HEAD', '--diff-filter=A', '--name-only', '--', `${ARCHIVE_DIR}/*.md`,
-      ])),
-    ].map((f) => path.basename(f)),
-  );
+  // Decided by git's own RENAME DETECTION (`-M`, content similarity ≥ 50%), not
+  // by basename. An earlier version keyed on "a file with this basename was
+  // added under docs/ by this diff", which is a hole: delete a root doc for
+  // real and add an UNRELATED doc with the same name anywhere under docs/ in
+  // the same change, and the deletion escaped both the manifest requirement
+  // and the dangling-reference check (qodo finding on #681). Pairing on
+  // content closes it: an unrelated file is not similar, so it is not a rename,
+  // so the deletion stays a deletion and the guard fails loudly. The cost is
+  // the fail-closed one — a doc moved AND rewritten past recognition in a
+  // single change reads as delete-plus-add and needs a manifest line (or the
+  // move and the rewrite in separate commits), which is the right side to err on.
+  //
+  // Keyed on the OLD PATH exactly, so the exemption covers precisely the file
+  // git paired, never a namesake. Both halves, mirroring `committed` and
+  // `uncommitted` above: without the second, a run mid-move — the workflow the
+  // README documents — sees the deleted root file but not its uncommitted
+  // arrival under docs/, and calls a move a deletion.
+  const movedIn = new Set([
+    ...renamedIntoDocs(`${BASE}...HEAD`),
+    ...renamedIntoDocs('HEAD'),
+  ]);
 
   // What matters is the FINAL state, not every intermediate commit. A doc
   // deleted in one commit and restored at the same path in a later one (an
@@ -157,8 +197,8 @@ function deletedDocs() {
   // ordinary workflow.
   const fromDiff = [...committed, ...uncommitted]
     .filter((f) => !fs.existsSync(f))
-    .map((f) => path.basename(f))
-    .filter((name) => !movedIn.has(name));
+    .filter((f) => !movedIn.has(f))
+    .map((f) => path.basename(f));
 
   // INVARIANT 3 — every genuine deletion must be RECORDED in the manifest.
   // Without this the guard has an expiry date: a deletion is enforced today

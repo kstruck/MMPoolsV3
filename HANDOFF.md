@@ -67,7 +67,7 @@
 >
 > The codex API audit's four remaining failures are fixed on the working tree
 > (47 files, +768/−202) under the full Rule-3 gate:
-> [PLAN-API-TRUST-BOUNDARY-REMEDIATION.md](PLAN-API-TRUST-BOUNDARY-REMEDIATION.md)
+> [PLAN-API-TRUST-BOUNDARY-REMEDIATION.md](docs/plans/PLAN-API-TRUST-BOUNDARY-REMEDIATION.md)
 > (+ -REVIEW-LOG: plan APPROVED codex round 8 of 10, 23 findings, 1 reasoned
 > rejection; implementation diff clean at codex round 2; + -SWEEPS: complete
 > grep-derived instance lists).
