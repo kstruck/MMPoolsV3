@@ -306,11 +306,13 @@ function hasTerminalMarker(pool: LifecycleReadable): boolean {
  * `closePool`/`autoClosePools` work (ticket T2); this reader is already
  * status-aware so those pools chip correctly the moment T2 ships.
  *
- * FINALIZATION (2026-09-08). The NFL season finalizer writes NO status — a
- * finished Survivor / Pick'em / Margin pool keeps `status: 'OPEN'` (or LOCKED)
- * for good and only gains `finalizedAt` (nflFinalize.ts:411, "finalizedAt is
- * terminal, so nothing retracts it"). `backfillPools` can also stamp
- * `status: 'FINAL'`, and the manager archive path stores lowercase `archived`.
+ * FINALIZATION (2026-09-08). The NFL season finalizer writes NO status — it
+ * leaves whatever `status` the pool already had (typically OPEN or LOCKED)
+ * untouched and only stamps `finalizedAt` (nflFinalize.ts:411, "finalizedAt is
+ * terminal, so nothing retracts it"). Other paths may still change the status
+ * afterwards — `backfillPools` can stamp `status: 'FINAL'`, cancel/archive
+ * write their own values, the archive path lowercase `archived` — so
+ * `finalizedAt` must be honoured independently of whatever `status` says.
  * Before this the reader honoured none of the three, so a finished season pool
  * chipped Open in GameOps and counted as active in `isActiveManagedPool`.
  * Codex r1 on #677 found it; the browse card carried a local wrapper until the

@@ -128,10 +128,12 @@ Because Margin pools often result in similar total scores, a strict 5-level casc
    card says so rather than rendering empty.
 9. **A finished season pool is `FINAL` by `finalizedAt`, not by `status`.**
    `maybeFinalizeNFLPool` stamps `finalizedAt` (and `firstFinalizedAt`) as a
-   server timestamp and writes **no pool status** — a finished Survivor /
-   Pick'em / Margin pool keeps `status: 'OPEN'` (or `'LOCKED'`) for good, and
-   `finalizedAt` is terminal: nothing retracts it (a late correction rescores
-   and re-finalizes, it does not un-finalize). Every reader of "is this pool
+   server timestamp and writes **no pool status** — it leaves whatever `status`
+   the pool already had (typically `OPEN` or `'LOCKED'`) untouched, and other
+   paths (`backfillPools` → `FINAL`, cancel, archive) may change it later. So
+   `status` alone never says "finished"; `finalizedAt` is terminal and nothing
+   retracts it (a late correction rescores and re-finalizes, it does not
+   un-finalize). Every reader of "is this pool
    done" must therefore honour `finalizedAt`, and the shared client reader
    `getPoolLifecycleState` does since PR #682: non-null `finalizedAt`, `isFinal`,
    a non-admin `closedVia`, or a status of `FINAL` / `CANCELED` / `COMPLETED` /
