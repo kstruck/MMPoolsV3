@@ -399,7 +399,24 @@
   would look right in the grid and be worth nothing. Closing it needs a
   confidence control in the proxy form AND a callable change — a functions
   deploy, not a UI tweak. Recorded in the archived 2026-08-25 box and
-  MORNING-2026-08-25 §5; still true in the code today.
+  MORNING-2026-08-25 §5; still true in the code today. Re-check with three
+  greps: `grep -n "CONFIDENCE pool is still refused"
+  src/components/NFLPoolDashboard/NFLManagerView.tsx` → `1115` (the client
+  gate); `grep -n confidence functions/src/schemas/poolExceptions.ts` → no
+  output (the proxyPick payload has no confidence field); `grep -n
+  "confidence?.\[gameId\] ?? 0" functions/src/nflScoringEngine.ts` → `175`
+  (why an unset value scores zero). The limit is closed only when the second
+  grep starts matching AND the form has a control for it.
+- **`onPoolLocked` double-counts global money totals on a duplicate delivery —
+  known, unfixed.** `functions/src/statsTrigger.ts` (~186–219) increments
+  `stats/global.totalPrizes` / `.totalDonated` with `FieldValue.increment` on
+  the `!before.isLocked && after.isLocked` edge and checks nothing else; Cloud
+  Functions triggers are at-least-once, so a redelivered event increments
+  twice, silently. Self-correcting only when someone runs
+  `recalculateGlobalStats` (absolute overwrite). On record since the 2026-07-18
+  backfill audit (archived); options there: a `statsFoldedAt` marker on the
+  pool, or periodic `recalculateGlobalStats` as the reconciler. Not urgent;
+  do not read a money-total mismatch as corruption before checking this.
 
 ## History
 
