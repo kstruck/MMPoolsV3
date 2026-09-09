@@ -485,15 +485,24 @@ The clobber-guard invariant tests (Section 3) run inside `build-and-test` as
 ordinary vitest tests — they are the anti-clobber automation.
 
 **Enforced by husky:** exactly one hook. `.husky/pre-commit` runs
-`python scripts/scan_secrets.py` (secret scanner). There is NO pre-push hook.
+`python scripts/scan_secrets.py` (secret scanner, blocking — husky runs the hook
+under `sh -e`, so a non-zero exit aborts the commit) and then prints an ADVISORY
+warning when more than 10 paths are staged (echo only, never exits; counts every
+staged path, deletions and type changes included — `tests/pre-commit-file-count.test.ts`
+pins that). There is NO pre-push hook.
+
+**Required status checks — VERIFIED 2026-09-03 by reading the ruleset, not the
+docs.** Ruleset `11714546` ("Required Checks", main-scoped, enforcement active)
+requires SIX contexts: `build-and-test`, `emulator-tests`, `nginx-validate`,
+`lint`, `secrets-scan`, `security-audit`. `e2e-playwright` runs but is NOT
+required. The ruleset also enforces strict up-to-date-with-main and required
+review-thread resolution, and its review rule is unsatisfiable by the sole
+author, so every merge is Kevin's `--admin` bypass — see HANDOFF's
+2026-09-01 deadlock note. Re-verify with the command in the provenance table;
+if `bypass_actors` ever comes back empty, every PR is deadlocked again.
 
 **NOT enforced by any automation in this repo** (know these; they are process,
 not machinery):
-- **Branch protection / required-check status**: a GitHub settings fact,
-  NOT verifiable from the repo. UNVERIFIED whether `build-and-test` is
-  actually marked required or whether direct pushes to `main` are blocked.
-  Verify at github.com repo Settings -> Branches. Treat "CI is required" as a
-  convention you must honor even if settings would let you bypass it.
 - **No deploy workflow exists.** CI never deploys anything. Functions/rules
   deploys are manual CLI (Rule 2); www frontend is manual Coolify (Section 6).
   Corollary: green CI on main says NOTHING about what is running in prod.
@@ -558,7 +567,8 @@ Facts here drift. Re-verify before relying (all from repo root
 |---|---|
 | CI jobs / what's blocking | `Get-Content .github/workflows/ci.yml` (look for `continue-on-error`) |
 | Husky hooks | `Get-ChildItem .husky; Get-Content .husky/pre-commit` |
-| Branch protection (UNVERIFIABLE from repo) | GitHub -> Settings -> Branches, or `gh api repos/{owner}/{repo}/branches/main/protection` |
+| Required checks (ruleset, not branch protection) | `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.rules[] \| select(.type=="required_status_checks") \| .parameters.required_status_checks[].context'` — expect the six contexts above |
+| Ruleset bypass entry (empty = every PR deadlocked) | `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.bypass_actors'` — expect `[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]` |
 | Kill-switch pattern still canonical | `Get-Content functions/src/autoClosePools.ts -TotalCount 50` |
 | Live kill-switch values (`autoClose.enabled/dryRun`) | Firestore console doc `system/config` (or an admin script) — not in the repo |
 | sim- rules state | `Select-String -Path firestore.rules -Pattern 'sim-'` |
@@ -569,6 +579,7 @@ Facts here drift. Re-verify before relying (all from repo root
 | Active worktrees/branches | `git worktree list; git branch -a --sort=-committerdate | Select-Object -First 15` |
 | Plan status ledger | "Implementation status" section at top of the newest `PLAN-*.md` |
 
-UNVERIFIED items in this skill (labeled inline): branch-protection settings;
-whether `build-and-test` is a GitHub-required check. Everything else was
-verified against the repo, git history, or the owner interview of 2026-07-06.
+UNVERIFIED items in this skill: none as of 2026-09-03 — the required-check list
+and bypass entry were read from ruleset `11714546` via `gh api` that day (they
+were UNVERIFIED from 2026-07-06 until then). Everything else was verified
+against the repo, git history, or the owner interview of 2026-07-06.
