@@ -1056,10 +1056,22 @@ describe('same-date MORNING docs point at each other', () => {
     // docs/backlog/, its overnight sibling in docs/archive/), so group by
     // BASENAME and read each file by its full path.
     const byName = new Map<string, string>();
+    const duplicates: string[] = [];
     for (const full of operatorMarkdownFiles()) {
       const name = path.basename(full);
-      if (MORNING_DOC.test(name)) byName.set(name, full);
+      if (!MORNING_DOC.test(name)) continue;
+      // Two folders holding the same MORNING basename would let one copy skip
+      // this guard (the map keeps one path per name), and would also break the
+      // bare-filename citation convention docs/README.md documents. Fail loudly
+      // rather than check one and forget the other (qodo on #681).
+      if (byName.has(name)) duplicates.push(`${byName.get(name)} + ${full}`);
+      byName.set(name, full);
     }
+    expect(
+      duplicates,
+      'the same MORNING-*.md basename exists in two folders — one copy would escape this ' +
+        'guard, and a bare-filename citation of it is now ambiguous; keep one',
+    ).toEqual([]);
     const files = [...byName.keys()];
     // The guard must have subjects, or it passes vacuously forever.
     expect(files.length, 'no MORNING-*.md files found — this guard is inert').toBeGreaterThan(0);
