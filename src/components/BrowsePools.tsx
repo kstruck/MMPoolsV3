@@ -1,13 +1,21 @@
 
 import React, { useState, useMemo } from 'react';
 import { Search, Trophy, Heart, DollarSign, Activity, Lock, Unlock } from 'lucide-react';
-import type { GameState, User, BracketPool, Pool, PlayoffPool, PropsPool, Square } from '../types';
+import type { GameState, User, Pool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
-import { getTeamLogo } from '../constants';
-import { getPoolTypeName } from '../utils/poolUtils';
-import { Badge } from './ui';
+import { Badge, cn } from './ui';
 import { isPubliclyListed } from '../utils/publicListing';
+import { isNFLSeasonPoolType } from '../utils/poolSport';
+import {
+    BROWSE_TYPE_FILTERS,
+    browsePriceMatches,
+    browseStatusMatches,
+    browseTypeMatches,
+    describeBrowseCard,
+    isSquaresPool,
+} from '../utils/browseCard';
+import type { BrowsePriceFilter, BrowseStatusFilter, BrowseTypeFilter } from '../utils/browseCard';
 
 interface BrowsePoolsProps {
     user: User | null;
@@ -21,32 +29,25 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [filterCharity, setFilterCharity] = useState(false);
-    const [filterType, setFilterType] = useState<'all' | 'squares' | 'props' | 'bracket' | 'playoff'>('all');
-    const [filterPrice, setFilterPrice] = useState<'all' | 'low' | 'mid' | 'high'>('all'); // low < 10, mid 10-50, high > 50
-    const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'live' | 'closed'>('open');
+    const [filterType, setFilterType] = useState<BrowseTypeFilter>('all');
+    const [filterPrice, setFilterPrice] = useState<BrowsePriceFilter>('all'); // low < 20, mid 20-50, high > 50
+    const [filterStatus, setFilterStatus] = useState<BrowseStatusFilter>('open');
 
-    // Filter Logic
+    // Filter Logic. Type / price / status live in utils/browseCard.ts so every
+    // pool type (including the three NFL season types) is handled and tested.
     const filteredPools = useMemo(() => {
         return pools.filter(p => {
             // Common fields
             const name = p.name || '';
             const isBracket = p.type === 'BRACKET';
-            const isProps = p.type === 'PROPS';
-            const isSquares = !p.type || p.type === 'SQUARES';
-            const isPlayoff = p.type === 'NFL_PLAYOFFS';
+            const isSquares = isSquaresPool(p);
 
             if (!isPubliclyListed(p)) return false;
 
             // Canceled pools never show in public discovery
             if ((p as any).status === 'CANCELED') return false;
 
-            // Type Filter
-            if (filterType !== 'all') {
-                if (filterType === 'squares' && !isSquares) return false;
-                if (filterType === 'props' && !isProps) return false;
-                if (filterType === 'bracket' && !isBracket) return false;
-                if (filterType === 'playoff' && !isPlayoff) return false;
-            }
+            if (!browseTypeMatches(p, filterType)) return false;
 
             // Search Match
             const searchLower = searchTerm.toLowerCase();
@@ -62,48 +63,14 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
             // Charity Filter
             if (filterCharity && (isBracket || !(p as GameState).charity?.enabled)) return false;
 
-            // Price Filter
-            if (filterPrice !== 'all') {
-                let cost = 0;
-                if (isBracket) cost = (p as any).settings?.entryFee || 0;
-                else if (isSquares) cost = (p as GameState).costPerSquare || 0;
-                else if (isPlayoff) cost = (p as PlayoffPool).settings?.entryFee || 0;
-
-                if (filterPrice === 'low' && cost >= 20) return false;
-                if (filterPrice === 'mid' && (cost < 20 || cost > 50)) return false;
-                if (filterPrice === 'high' && cost <= 50) return false;
-            }
-
-            // Status Filter
-            if (filterStatus !== 'all') {
-                if (filterStatus === 'open') {
-                    // Open = OPEN status (Bracket) or Not Locked (Squares)
-                    if (isBracket && (p as BracketPool).status !== 'OPEN') return false;
-                    if (isSquares && (p as GameState).isLocked) return false;
-                } else if (filterStatus === 'live') {
-                    // Live = LIVE status (Bracket) or In-Progress (Squares)
-                    if (isBracket) {
-                        if ((p as BracketPool).status !== 'LIVE' && (p as BracketPool).status !== 'LOCKED') return false;
-                    } else {
-                        const s = p as GameState;
-                        const isLive = s.isLocked && s.scores?.gameStatus === 'in';
-                        if (!isLive) return false;
-                    }
-                } else if (filterStatus === 'closed') {
-                    // Closed = COMPLETED status (Bracket) or Post-game (Squares)
-                    if (isBracket) {
-                        if ((p as BracketPool).status !== 'COMPLETED') return false;
-                    } else {
-                        const s = p as GameState;
-                        const isClosed = s.scores?.gameStatus === 'post';
-                        if (!isClosed) return false;
-                    }
-                }
-            }
+            if (!browsePriceMatches(p, filterPrice)) return false;
+            if (!browseStatusMatches(p, filterStatus)) return false;
 
             // League Filter
             if (selectedLeague !== 'all') {
                 if (isBracket && selectedLeague !== 'ncaa_bb') return false;
+                // Season-long NFL pools are NFL and nothing else.
+                if (isNFLSeasonPoolType(p.type) && selectedLeague !== 'nfl') return false;
                 if (isSquares) {
                     const poolLeague = (p as GameState).league || 'nfl';
                     if (selectedLeague === 'nfl' && poolLeague !== 'nfl') return false;
@@ -162,16 +129,10 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                 <Trophy size={14} /> Pool Type
                             </h3>
                             <div className="flex flex-col gap-2">
-                                {[
-                                    { id: 'all', label: 'All Types' },
-                                    { id: 'squares', label: 'Squares' },
-                                    { id: 'props', label: 'Side Hustle' },
-                                    { id: 'bracket', label: 'NCAA Brackets' },
-                                    { id: 'playoff', label: 'Playoff Brackets' },
-                                ].map((type) => (
+                                {BROWSE_TYPE_FILTERS.map((type) => (
                                     <button
                                         key={type.id}
-                                        onClick={() => setFilterType(type.id as any)}
+                                        onClick={() => setFilterType(type.id)}
                                         className={`w-full text-left px-3 py-2 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 flex justify-between items-center ${filterType === type.id
                                             ? 'bg-navy-800 text-white'
                                             : 'text-muted hover:bg-surface hover:text-[color:var(--text)]'
@@ -284,55 +245,8 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {filteredPools.map(pool => {
                                 const isBracket = pool.type === 'BRACKET';
-                                let filled = 0;
-                                let pct = 0;
-                                let homeLogo = null;
-                                let awayLogo = null;
-                                let homeTeam = '';
-                                let awayTeam = '';
-                                let cost = 0;
-                                let isLocked = false;
-                                let charityEnabled = false;
-
-                                if (isBracket) {
-                                    const bp = pool as BracketPool;
-                                    filled = bp.entryCount || 0;
-                                    const max = bp.settings.maxEntriesTotal === -1 ? 100 : bp.settings.maxEntriesTotal; // Mock 100 if unlimited for progress
-                                    pct = bp.settings.maxEntriesTotal === -1 ? 0 : Math.round((filled / max) * 100);
-                                    homeTeam = 'Tournament';
-                                    awayTeam = 'Bracket';
-                                    cost = bp.settings.entryFee;
-                                    isLocked = bp.status === 'LOCKED' || bp.status === 'LIVE' || bp.status === 'COMPLETED';
-                                } else if (pool.type === 'NFL_PLAYOFFS') {
-                                    const pp = pool as PlayoffPool;
-                                    filled = Object.keys(pp.entries || {}).length;
-                                    pct = 50; // Arbitrary for now
-                                    homeTeam = 'NFL';
-                                    awayTeam = 'Playoffs';
-                                    cost = pp.settings?.entryFee || 0;
-                                    isLocked = pp.isLocked;
-                                } else if (pool.type === 'PROPS') {
-                                    const pp = pool as PropsPool;
-                                    filled = pp.entryCount || 0;
-                                    pct = 20; // Arbitrary
-                                    homeTeam = 'Props';
-                                    awayTeam = 'Pool';
-                                    cost = pp.props?.cost || 0;
-                                    isLocked = !!pp.isLocked; // Need to ensure it exists
-                                    charityEnabled = false;
-                                } else {
-                                    // Fallback or squares if type is undefined (legacy)
-                                    const sp = pool as GameState;
-                                    filled = sp.squares?.filter((s: Square) => s.owner).length || 0;
-                                    pct = Math.round((filled / 100) * 100);
-                                    homeTeam = sp.homeTeam || 'Home';
-                                    awayTeam = sp.awayTeam || 'Away';
-                                    homeLogo = sp.homeTeamLogo || getTeamLogo(sp.homeTeam || '');
-                                    awayLogo = sp.awayTeamLogo || getTeamLogo(sp.awayTeam || '');
-                                    cost = sp.costPerSquare || 0;
-                                    isLocked = sp.isLocked;
-                                    charityEnabled = !!sp.charity?.enabled;
-                                }
+                                const card = describeBrowseCard(pool);
+                                const { cost, matchup, charityEnabled } = card;
 
                                 return (
                                     <div key={pool.id}
@@ -355,47 +269,55 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                                         {pool.name}
                                                     </h3>
                                                     <div className="flex items-center gap-2 text-xs text-muted font-body font-medium">
-                                                        {isBracket ? <span className="text-gold-700 dark:text-gold-400">March Madness Bracket</span> : <span>{getPoolTypeName(pool as GameState)}</span>}
+                                                        <span className={cn(card.typeAccent && 'text-gold-700 dark:text-gold-400')}>{card.typeLabel}</span>
                                                         {charityEnabled && <span className="text-gold-700 dark:text-gold-400 flex items-center gap-1">• <Heart size={10} className="fill-gold-500 text-gold-500" /> Charity</span>}
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <span className="block text-xl font-display font-bold text-gold-700 dark:text-gold-400 num">${cost}</span>
-                                                <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em]">{isBracket ? 'Entry Fee' : 'Per Square'}</span>
+                                                <span className="text-[10px] text-muted uppercase font-display font-bold tracking-[0.08em]">{card.costUnit}</span>
                                             </div>
                                         </div>
 
-                                        {/* Matchup */}
-                                        <div className="bg-surface rounded-lg p-3 border border-line mb-4 flex items-center justify-between relative z-10">
-                                            <div className="flex items-center gap-2">
-                                                {awayLogo && <img src={awayLogo} alt={`${awayTeam} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
-                                                <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{awayTeam}</span>
+                                        {/* Matchup — or, for season-long pools, the rules a player would want to know */}
+                                        {matchup ? (
+                                            <div className="bg-surface rounded-lg p-3 border border-line mb-4 flex items-center justify-between relative z-10">
+                                                <div className="flex items-center gap-2">
+                                                    {matchup.awayLogo && <img src={matchup.awayLogo} alt={`${matchup.away} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
+                                                    <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{matchup.away}</span>
+                                                </div>
+                                                <span className="text-xs text-faint font-display font-bold uppercase">VS</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{matchup.home}</span>
+                                                    {matchup.homeLogo && <img src={matchup.homeLogo} alt={`${matchup.home} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
+                                                </div>
                                             </div>
-                                            <span className="text-xs text-faint font-display font-bold uppercase">VS</span>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-display font-bold uppercase text-[color:var(--text)]">{homeTeam}</span>
-                                                {homeLogo && <img src={homeLogo} alt={`${homeTeam} logo`} loading="lazy" width={24} height={24} className="w-6 h-6 object-contain opacity-80" />}
+                                        ) : (
+                                            <div className="bg-surface rounded-lg p-3 border border-line mb-4 flex flex-wrap items-center gap-2 relative z-10">
+                                                {card.details.length > 0 ? card.details.map(label => (
+                                                    <span key={label} className="text-xs font-display font-bold uppercase tracking-[0.05em] text-[color:var(--text)] bg-card border border-line rounded-md px-2 py-1">{label}</span>
+                                                )) : (
+                                                    <span className="text-xs text-faint font-display font-bold uppercase">Season-long pool</span>
+                                                )}
                                             </div>
-                                        </div>
+                                        )}
 
                                         {/* Progress & Meta */}
                                         <div className="flex items-center justify-between text-xs font-body font-medium text-muted relative z-10">
                                             <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-1.5">
-                                                    <div className="w-20 h-1.5 bg-line rounded-full overflow-hidden">
-                                                        <div className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300 ease-out" style={{ transform: `scaleX(${Math.min(pct, 100) / 100})` }}></div>
-                                                    </div>
-                                                    <span className="num">{(isBracket || pool.type === 'PROPS' || pool.type === 'NFL_PLAYOFFS') ? `${filled} Entries` : `${100 - filled} Left`}</span>
+                                                    {card.pct !== null && (
+                                                        <div className="w-20 h-1.5 bg-line rounded-full overflow-hidden">
+                                                            <div className="h-full w-full origin-left bg-gold-foil rounded-full transition-transform duration-300 ease-out" style={{ transform: `scaleX(${Math.min(card.pct, 100) / 100})` }}></div>
+                                                        </div>
+                                                    )}
+                                                    <span className="num">{card.fillText}</span>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-center gap-2">
-                                                {!isLocked ? (
-                                                    <Badge status="open" />
-                                                ) : (
-                                                    <Badge status="locked" />
-                                                )}
+                                                <Badge status={card.badge} />
                                             </div>
                                         </div>
                                     </div>
