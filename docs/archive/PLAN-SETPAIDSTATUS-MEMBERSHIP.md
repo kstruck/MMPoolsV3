@@ -70,7 +70,9 @@ of band** (round 5).
    (store `sha256(key + serverPepper)`, never the key), and records
    `claimByCode`-only as considered-and-rejected. `schemas/participantOps.ts:82`
    carries the same warning inline.
-2. **There is a standing decision to defer it.** HANDOFF §5: *"`claimMySquares`
+2. **There is a standing decision to defer it.** HANDOFF.md, Standing warnings
+   (`claimMySquares`; originally §5 of the 2026-07-2x box, now in the archived
+   HANDOFF history): *"`claimMySquares`
    timing decision. Repo is PUBLIC, hole is unfixed... On file: accept through
    the pilot, fix before the regular season."* And the security doc notes
    **Squares pools are not part of the pilot**, while the reminder work is
@@ -95,7 +97,8 @@ ADDED were ones `reserveSquare` had not — which is the guest-claim path.
 
 ⚠️ **The squares-theft vulnerability itself remains OPEN, by decision.** This
 change stops it being promoted into membership evidence; it does not stop a
-stranger claiming an unclaimed guest square. That stays where HANDOFF §5 put it:
+stranger claiming an unclaimed guest square. That stays where the standing
+decision (HANDOFF.md, Standing warnings → `claimMySquares`) put it:
 accepted through the pilot, fixed before the regular season, via the hash
 migration in `SECURITY-CLAIM-SQUARES.md`.
 
