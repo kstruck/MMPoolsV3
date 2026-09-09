@@ -36,7 +36,11 @@
 >   (lockfile-only advisories), #656 (this file: ruleset restore command),
 >   #653 (docs cleanup), #666 (draft plan), #664 (lint required check),
 >   #665 (archive guard in CI), #667 (tailwindcss-animate, `src/` only),
->   #674 (sitemap dates). Only #654 touches `functions/src/`.
+>   #674 (sitemap dates). Only #654 touches `functions/src/` — measured, not
+>   asserted: `git log fdea3c8e --since=2026-08-31 --format=%h -- functions/src`
+>   prints exactly one commit, `4404a45e` (#654); the same command on
+>   `functions/` adds only `96acd181` (#655, lockfile). Re-run it from a
+>   fetched checkout if `main` has moved since `fdea3c8e`.
 
 > ## 🟡 2026-09-01 — **API TRUST-BOUNDARY REMEDIATION IS CODE-COMPLETE AND UNCOMMITTED IN THE MAIN CHECKOUT. NOT COMMITTED, NOT DEPLOYED, NO PROD DATA TOUCHED.**
 >
@@ -318,6 +322,20 @@
   bundle-hash timeline, is in the archived 2026-07-30 box
   (`docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md`).
   `tests/docs-state-invariants.test.ts` fails if this warning leaves this file.
+- **Any review requirement on `main` MUST keep "Repository admin" in the
+  ruleset's bypass list, or every PR in the repo deadlocks.** Every PR is
+  authored by the `kstruck` account, GitHub never lets an author approve their
+  own PR, and every session's tooling authenticates as that same account — so
+  a required review with no bypass actor is unsatisfiable. It deadlocked the
+  repo on 2026-08-25 (#585) and again on 2026-09-01 (#655), when
+  `bypass_actors` was found empty with no known editor. Verify any time:
+  `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.bypass_actors'`
+  (an empty array = the deadlock is back). Restore with
+  `gh api -X PUT repos/kstruck/MMPoolsV3/rulesets/11714546` and body
+  `{"bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]}`.
+  ⚠️ `NEXT-SESSION-AUDIT-FIXES.md` still lists "remove the Repository admin
+  bypass actor" as an optional task; doing that recreates the deadlock. Do not.
+  The full 2026-08-25 and 2026-09-01 accounts are in the archived history.
 
 ## History
 

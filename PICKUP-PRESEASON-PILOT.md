@@ -2,7 +2,9 @@
 
 **Paste this to start a new session:**
 
-> Read `PICKUP-PRESEASON-PILOT.md` §0 first, then `HANDOFF.md`'s STOP POINT box.
+> Read `PICKUP-PRESEASON-PILOT.md` §0 first, then the newest dated box at the
+> top of `HANDOFF.md` (the STOP POINT boxes this doc cites elsewhere are
+> archived history under `docs/archive/`, reachable from its History section).
 > The target is the Hall of Fame game, 2026-08-06. Deploy and prod-data
 > mutations are Kevin's; code, tests and PRs are yours. Follow CLAUDE.md §2b
 > (**qodo is ON — Kevin, 2026-07-31: "Qodo is now active and must be used."**
