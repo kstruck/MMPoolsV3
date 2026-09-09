@@ -66,15 +66,16 @@ subjects that cite it, and `HANDOFF.md`. A plan whose implementation is
 started) stays at the root. Companion `-REVIEW-LOG` and `-SWEEPS` docs travel
 with their plan and are never split from it.
 
-Root `.md` files: **170 → 52.** 120 files moved here: 44 shipped plans, their
-45 companion review logs and sweeps, 29 consumed status docs (MORNING-*,
-audits, checklists, pickups), plus `docs/UI-REVAMP-GUIDE.md`, whose
-source-of-truth `design/` folder no longer exists, and
-`docs/wizard-unification/PHASE-A-INVENTORY.md`.
-Nothing was deleted this round, so `deleted-docs.txt` is unchanged; the only
-removal is `scripts/espn_output.txt`, an uncited 2026-01 debug dump.
+Root `.md` files: **170 → 52.** 118 files moved here: 44 shipped plans, their
+45 companion review logs and sweeps, and 29 consumed status docs (MORNING-*,
+audits, checklists, pickups). Nothing was deleted this round, so
+`deleted-docs.txt` is unchanged; the only removal is `scripts/espn_output.txt`,
+an uncited 2026-01 debug dump. Nothing under `docs/` other than this directory
+moved: `docs/UI-REVAMP-GUIDE.md` and `docs/wizard-unification/PHASE-A-INVENTORY.md`
+are cited by their **full path** from live plans, skills, and source comments,
+and a full path is exactly what the bare-filename convention cannot resolve.
 
-Three files that look archivable were kept at the root on purpose:
+Files that look archivable but were kept at the root on purpose:
 `MORNING-2026-08-22-FIXES.md` (§7 is the only list of the open help-system T9
 defects), `PLAN-BILLING-ENFORCEMENT.md` + `PLAN-BILLING-INDEX-DEPLOY.md` (the
 deploy decision is still Kevin's), and `SECURITY-BARE-ONCALL-CLASSIFICATION.md`
