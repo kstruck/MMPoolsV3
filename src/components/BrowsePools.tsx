@@ -4,7 +4,7 @@ import { Search, Trophy, Heart, DollarSign, Activity, Lock, Unlock } from 'lucid
 import type { GameState, User, Pool } from '../types';
 import { Header } from './Header';
 import { Footer } from './Footer';
-import { Badge } from './ui';
+import { Badge, cn } from './ui';
 import { isPubliclyListed } from '../utils/publicListing';
 import { isNFLSeasonPoolType } from '../utils/poolSport';
 import {
@@ -269,7 +269,7 @@ export const BrowsePools: React.FC<BrowsePoolsProps> = ({ user, pools, onOpenAut
                                                         {pool.name}
                                                     </h3>
                                                     <div className="flex items-center gap-2 text-xs text-muted font-body font-medium">
-                                                        <span className={card.typeAccent ? 'text-gold-700 dark:text-gold-400' : undefined}>{card.typeLabel}</span>
+                                                        <span className={cn(card.typeAccent && 'text-gold-700 dark:text-gold-400')}>{card.typeLabel}</span>
                                                         {charityEnabled && <span className="text-gold-700 dark:text-gold-400 flex items-center gap-1">• <Heart size={10} className="fill-gold-500 text-gold-500" /> Charity</span>}
                                                     </div>
                                                 </div>

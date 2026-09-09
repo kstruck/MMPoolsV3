@@ -118,6 +118,27 @@ describe('describeBrowseCard — NFL season pools (the production defect)', () =
         expect(browseStatusMatches(settled, 'closed')).toBe(true);
     });
 
+    // qodo on #677: the manager archive path stores lowercase `archived`; the
+    // shared reader maps any unknown string status to open.
+    it('an archived pool is closed, not open', () => {
+        const archived = { ...(margin as object), status: 'archived', isLocked: false } as unknown as Pool;
+        expect(describeBrowseCard(archived).badge).toBe('locked');
+        expect(browseStatusMatches(archived, 'open')).toBe(false);
+        expect(browseStatusMatches(archived, 'live')).toBe(false);
+        expect(browseStatusMatches(archived, 'closed')).toBe(true);
+    });
+
+    // qodo on #677: a locked pool (deadline passed, games unscored) matched no
+    // bucket but All. It belongs under Live Now, as a LOCKED bracket does.
+    it('a locked season pool is found under Live Now, like a locked bracket', () => {
+        const locked = { ...(survivor as object), status: 'LOCKED', isLocked: true } as unknown as Pool;
+        expect(browseStatusMatches(locked, 'open')).toBe(false);
+        expect(browseStatusMatches(locked, 'live')).toBe(true);
+        expect(browseStatusMatches(locked, 'closed')).toBe(false);
+        const lockedBracket = { ...(bracket as object), status: 'LOCKED' } as unknown as Pool;
+        expect(browseStatusMatches(lockedBracket, 'live')).toBe(true);
+    });
+
     it('a null finalizedAt (never finalized) is still open', () => {
         const fresh = { ...(survivor as object), finalizedAt: null } as unknown as Pool;
         expect(describeBrowseCard(fresh).badge).toBe('open');

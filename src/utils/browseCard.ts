@@ -31,15 +31,25 @@ import type { EntryCountable, LifecycleReadable, PoolLifecycleState } from './po
  * The scorer's finalizer (functions/src/nflFinalize.ts, `maybeFinalizeNFLPool`)
  * stamps `finalizedAt` and writes NO status — a finished Survivor pool keeps
  * `status: 'OPEN'` (or LOCKED) for good. `backfillPools` can also stamp
- * `status: 'FINAL'`. `getPoolLifecycleState` reads neither, so on its own a
- * finished season pool would sit under the default Open filter wearing an Open
- * badge (codex r1 on this PR). Resolved here rather than in the shared reader
- * because that reader also feeds `isActiveManagedPool` (commissioner rosters
- * and stats), whose semantics are not this PR's to change.
+ * `status: 'FINAL'`, and the manager archive path stores lowercase `archived`
+ * (declared on every NFL pool type; `poolInclusion.ts` and `reminders.ts`
+ * already treat it as finished). `getPoolLifecycleState` reads none of the
+ * three, so on its own a finished or archived season pool would sit under the
+ * default Open filter wearing an Open badge (codex r1 + qodo on this PR).
+ * Resolved here rather than in the shared reader because that reader also
+ * feeds `isActiveManagedPool` (commissioner rosters and stats), whose
+ * semantics are not this PR's to change.
+ *
+ * Verified 2026-09-08 (re-run before trusting):
+ *   grep -n "finalizedAt\|status" functions/src/nflFinalize.ts   # :411 finalizedAt, no status write
+ *   grep -n "'FINAL'" functions/src/backfill.ts                   # :137 status FINAL
+ *   grep -rn "'archived'" functions/src/lib/poolInclusion.ts functions/src/reminders.ts
  */
 function nflSeasonLifecycle(pool: Pool): PoolLifecycleState {
     const p = pool as { finalizedAt?: unknown; status?: string };
-    if ((p.finalizedAt !== undefined && p.finalizedAt !== null) || p.status === 'FINAL') return 'final';
+    if (p.finalizedAt !== undefined && p.finalizedAt !== null) return 'final';
+    const status = typeof p.status === 'string' ? p.status.toUpperCase() : '';
+    if (status === 'FINAL' || status === 'ARCHIVED') return 'final';
     return getPoolLifecycleState(pool as LifecycleReadable);
 }
 
@@ -73,6 +83,7 @@ export function isSquaresPool(pool: { type?: string }): boolean {
     return !pool.type || pool.type === 'SQUARES';
 }
 
+/** Does this pool belong under the selected Pool Type chip? `all` admits everything. */
 export function browseTypeMatches(pool: { type?: string }, filter: BrowseTypeFilter): boolean {
     if (filter === 'all') return true;
     if (filter === 'squares') return isSquaresPool(pool);
@@ -88,6 +99,7 @@ export function browseCost(pool: Pool): number {
     return typeof fee === 'number' ? fee : 0;
 }
 
+/** Entry Cost buckets over `browseCost`: low < $20, mid $20–$50 inclusive, high > $50. */
 export function browsePriceMatches(pool: Pool, filter: BrowsePriceFilter): boolean {
     if (filter === 'all') return true;
     const cost = browseCost(pool);
@@ -96,6 +108,11 @@ export function browsePriceMatches(pool: Pool, filter: BrowsePriceFilter): boole
     return cost > 50;
 }
 
+/**
+ * Game Status buckets, per type. BRACKET reads its string status; NFL season
+ * types read the finalization-aware lifecycle; SQUARES (and, as before, PROPS
+ * and NFL_PLAYOFFS) read `isLocked` + `scores.gameStatus`.
+ */
 export function browseStatusMatches(pool: Pool, filter: BrowseStatusFilter): boolean {
     if (filter === 'all') return true;
     if (pool.type === 'BRACKET') {
@@ -105,9 +122,13 @@ export function browseStatusMatches(pool: Pool, filter: BrowseStatusFilter): boo
         return status === 'COMPLETED';
     }
     if (isNFLSeasonPoolType(pool.type)) {
+        // Three buckets for five states. `locked` (deadline passed, games not yet
+        // scored) goes under "Live Now", the same call the BRACKET branch makes
+        // above — otherwise a locked pool matched no bucket but All (qodo on
+        // this PR).
         const state = nflSeasonLifecycle(pool);
         if (filter === 'open') return state === 'open';
-        if (filter === 'live') return state === 'live';
+        if (filter === 'live') return state === 'live' || state === 'locked';
         return state === 'final' || state === 'closed';
     }
     // SQUARES / legacy, and (as before) PROPS + NFL_PLAYOFFS read through the squares fields.
@@ -136,6 +157,7 @@ export interface BrowseCardModel {
     charityEnabled: boolean;
 }
 
+/** Everything the Public Pools card prints for one pool, dispatched on `pool.type`. Pure. */
 export function describeBrowseCard(pool: Pool): BrowseCardModel {
     if (pool.type === 'BRACKET') {
         const bp = pool as BracketPool;
