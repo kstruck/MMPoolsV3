@@ -4,9 +4,18 @@
 >
 > - Everything older than the 2026-08-26 box — the 2026-08-25 launch-day box
 >   back through the 2026-07-17 Phase-2 notes and the July "Next-effort menu" —
->   now lives unchanged in
->   [docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md](docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md).
->   Nothing was reworded. `tests/docs-state-invariants.test.ts` scans
+>   now lives in
+>   [docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md](docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md)
+>   with its TEXT unchanged and exactly 11 markdown link destinations
+>   rewritten (`../../` prefix, so they resolve from `docs/archive/`); nothing
+>   was reworded. Reproducible: the moved range and the archived body hash the
+>   same at the move commit —
+>   `git show fdea3c8e:HANDOFF.md | sed -n '271,4184p' | md5sum` and
+>   `git show 406ee3ee:docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md | tail -n +18 | md5sum`
+>   both print `3a541bd212e9d202844dad6eab34e7c5`; the link rewrite is the
+>   whole of `git diff 406ee3ee ffa28a1c -- docs/archive/HANDOFF-HISTORY-2026-07-17-to-2026-08-25.md`
+>   (11 links + the header sentence that says so); a Box index was added to
+>   the archive header afterwards. `tests/docs-state-invariants.test.ts` scans
 >   `docs/` two levels deep, so every guard that held on those boxes here still
 >   holds on them there.
 > - Why: this file is read at the start of every session, and ~3,900 lines of
@@ -336,6 +345,24 @@
   ⚠️ `NEXT-SESSION-AUDIT-FIXES.md` still lists "remove the Repository admin
   bypass actor" as an optional task; doing that recreates the deadlock. Do not.
   The full 2026-08-25 and 2026-09-01 accounts are in the archived history.
+- **Never `git reset --hard` or `git clean` in `D:\march-melee-pools`.** That
+  is the main checkout and other sessions leave uncommitted work in it. The
+  2026-08-25 box warned of 351 uncommitted changes there (an archive pass);
+  that pass shipped as #653 and is gone, but the rule outlives it — measured
+  2026-09-08: `git -C D:\march-melee-pools status --short` shows 4 entries
+  (a modified `src/components/LandingPage.tsx`, an untracked
+  `src/components/prototype/`, a dev-UI script and a review doc), none of
+  them yours to discard. Set work aside with a WIP commit or a tagged stash,
+  never a reset. `.gitattributes` renormalise steps
+  (`git rm --cached -r . && git reset --hard`) are Kevin's, in a clean tree.
+- **Firebase Auth has NO effective backup.** The code shipped (#575:
+  `authBackupJob` weekly, `runAuthBackup` on demand) but is gated on
+  `system/config.authBackup.enabled === true` plus a bucket, and it is not
+  armed — measured 2026-09-06 in `npx firebase functions:log --only
+  authBackupJob`: `[authBackupJob] disabled (system/config.authBackup.enabled
+  !== true); nothing to do.` Firestore has 7-day PITR; user accounts, emails
+  and password hashes do not. Do not read "backup job deployed" as "backed
+  up". Arming steps and the bucket work are in `PLAN-BACKUPS-PHASE3.md`.
 
 ## History
 
