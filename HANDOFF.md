@@ -42,14 +42,17 @@
 >      re-run it afterwards and every function must print
 >      `Skipped (No changes detected)`. Kevin action (a session's deploy was
 >      refused by the permission classifier on 2026-09-09).
->   2. **Frontend.** #654 also changed `src/components/admin/OperationsPanel.tsx`
->      (the paged runner for `backfillPools` / `fixParticipantIds`), so a Coolify
->      rebuild is owed as well. Needle: `oversizedPools` — absent from `src/`
->      before #654, present after, and a property name, so it survives
->      minification (not a template literal). `curl.exe -s
->      https://www.marchmeleepools.com/`, take the `index-*.js` chunk, fetch it
->      and search for the needle, the way the 2026-08-26 box did for #597/#598.
->      ABSENT = the rebuild has not happened.
+>   2. **Frontend — MEASURED 2026-09-09, PRESENT, nothing owed.** #654 also
+>      changed `src/components/admin/OperationsPanel.tsx` (the paged runner for
+>      `backfillPools` / `fixParticipantIds`). Coolify's deployment history shows
+>      a Success build at `fdea3c8e` (#674, ten hours before this check), which
+>      is after #654, and the live bundle agrees: needle `oversizedPools` (absent
+>      from `src/` before #654, present after; a property name, so it survives
+>      minification) is in `assets/SuperAdmin-DRh4aHr0.js`, found by crawling
+>      all 113 JS chunks reachable from `index-D7S5x1zU.js`. ⚠️ A one-level
+>      check of `index-*.js` alone reported ABSENT — the panel is code-split
+>      into the SuperAdmin chunk — which is the same false-ABSENT the 2026-08-26
+>      box warned about. Crawl recursively; never conclude from the index chunk.
 > - Merged to `main` 2026-09-01 → 2026-09-08, besides #654: #655 and #661
 >   (lockfile-only advisories), #656 (this file: ruleset restore command),
 >   #653 (docs cleanup), #666 (draft plan), #664 (lint required check),
