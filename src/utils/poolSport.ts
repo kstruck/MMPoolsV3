@@ -277,6 +277,21 @@ export interface LifecycleReadable {
 const TERMINAL_POOL_STATUSES = new Set(['FINAL', 'CANCELED', 'COMPLETED', 'ARCHIVED']);
 
 /**
+ * Has this pool been settled by ANY writer? Named so the terminal rule reads as
+ * one thing rather than a chain of ORs (qodo on #682). Client-side sibling of
+ * `isTerminalPool` in functions/src/lib/autoScoreDecisions.ts — same four
+ * signals, same case-insensitive status set. `closedVia === 'ADMIN_CLOSE'` is
+ * handled BEFORE this by the caller so admin-close keeps its own label.
+ */
+function hasTerminalMarker(pool: LifecycleReadable): boolean {
+  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
+  if (TERMINAL_POOL_STATUSES.has(status)) return true;
+  if (pool.closedVia) return true;
+  if (pool.isFinal) return true;
+  return pool.finalizedAt !== undefined && pool.finalizedAt !== null;
+}
+
+/**
  * Lifecycle state for the GameOps status filter/chips, per pool type.
  * SQUARES tracks state via `scores.gameStatus`/`isLocked`; the string-status
  * types (BRACKET, NFL_PLAYOFFS, NFL season, PROPS) track it via `status`.
@@ -295,6 +310,17 @@ const TERMINAL_POOL_STATUSES = new Set(['FINAL', 'CANCELED', 'COMPLETED', 'ARCHI
  * shared rule landed here. The functions-side `isFinishedPool`
  * (lib/poolInclusion.ts) does NOT yet read `finalizedAt`/`FINAL` — that is a
  * separate change because `backfillMemberRecords` gates on it.
+ *
+ * Verified 2026-09-09 (re-run before trusting; outputs as measured):
+ *   grep -n "status:" functions/src/nflFinalize.ts
+ *     # only :599/:658/:735 — heartbeat/audit `status: "error"|"success"`,
+ *     # never a pool status; the finalizer writes no pool status.
+ *   grep -n "finalizedAt: admin" functions/src/nflFinalize.ts
+ *     # :411 finalizedAt: admin.firestore.FieldValue.serverTimestamp()
+ *   grep -n "'FINAL'" functions/src/backfill.ts
+ *     # :137 updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT')
+ *   grep -rn "'archived'" functions/src/lib/poolInclusion.ts functions/src/reminders.ts
+ *     # poolInclusion.ts:36 and reminders.ts:924 both treat it as finished
  */
 export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleState {
   // Admin-closed pools get a distinct `closed` state so the UI can show/filter
@@ -303,9 +329,7 @@ export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleSta
   if (pool.closedVia === 'ADMIN_CLOSE') return 'closed';
   // Terminal for every other type: canceled/completed/final/archived/otherwise-closed
   // pools are done (T2), and so is anything the NFL finalizer has stamped.
-  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
-  if (TERMINAL_POOL_STATUSES.has(status) || pool.closedVia || pool.isFinal) return 'final';
-  if (pool.finalizedAt !== undefined && pool.finalizedAt !== null) return 'final';
+  if (hasTerminalMarker(pool)) return 'final';
 
   if (pool.type === 'SQUARES') {
     const gs = pool.scores?.gameStatus;
@@ -313,7 +337,8 @@ export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleSta
     if (gs === 'in') return 'live';
     return pool.isLocked ? 'locked' : 'open';
   }
-  // String-status types (`status` is the uppercased value from above).
+  // String-status types, compared case-insensitively like the terminal set.
+  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
   if (status === 'LIVE') return 'live';
   if (status === 'LOCKED' || pool.isLocked) return 'locked';
   return 'open';

@@ -113,6 +113,8 @@ An independent computation of a Scenario's expected outcomes derived only from t
 ### Pool Lifecycle State
 The derived status of a Pool over its life: `OPEN` (accepting entries), `LOCKED` (entries closed, awaiting/underway play), `LIVE` (games in progress), `FINAL` (scored, results settled), `CLOSED` (archived by admin/commissioner via `closePool`, removed from active operation). Computed by `getPoolLifecycleState`. Distinct from the raw `status` field; `CLOSED` is set by the `closePool` callable and must be visible in every Pool listing.
 
+**What counts as `FINAL` (2026-09-09, PR #682).** Any ONE of: a non-null `finalizedAt` (the NFL season finalizer, `maybeFinalizeNFLPool`, stamps this and writes NO status — a finished Survivor / Pick'em / Margin pool keeps `status: 'OPEN'` or `'LOCKED'` forever); `isFinal: true`; any `closedVia` other than `ADMIN_CLOSE`; or a raw `status` of `FINAL`, `CANCELED`, `COMPLETED` or `ARCHIVED`, compared **case-insensitively** (the archive path stores lowercase `archived`). `closedVia: 'ADMIN_CLOSE'` wins over all of these and yields `CLOSED`, not `FINAL`. This is the same rule the server's `isTerminalPool` (`functions/src/lib/autoScoreDecisions.ts`) applies before scoring. Known gap: the functions-side `isFinishedPool` (`lib/poolInclusion.ts`, commissioner aggregate + member-record backfill) does not yet read `finalizedAt` or `FINAL`.
+
 ### Health Snapshot
 The result of probing external integrations (ESPN API, Firestore, email delivery, Cloud Functions) via the `getAdminHealthSnapshot` callable, surfaced in the Overview tab's API Status Center. A Health Snapshot is a point-in-time reading; persisting a history of snapshots and running them on a schedule is a stated goal.
 
