@@ -270,7 +270,7 @@
 
 > ## ✅ 2026-08-25 — LAUNCH DAY. **HISTORY, and its deploy facts are SUPERSEDED by the box above.** Eight PRs merged (#587–#594 + #529).
 >
-> Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](MORNING-2026-08-25-MULTI-ENTRY.md)**.
+> Full detail: **[MORNING-2026-08-25-MULTI-ENTRY.md](docs/archive/MORNING-2026-08-25-MULTI-ENTRY.md)**.
 >
 > ⚠️ **READ EVERY "THIS DEPLOY" AND EVERY BUNDLE HASH BELOW AS 2026-08-25's.**
 > The functions claim of this box was <!-- deploy-state:ignore --> `main` @
@@ -439,8 +439,8 @@
 
 > ## 🟢 2026-08-25 (latest) — **OVERNIGHT AUDIT REMEDIATION, SESSION 2: SEVENTEEN PRs MERGED (#550, #564–#579). THE STRIPE MOCK-ACTIVATION P0 IS CLOSED. POOL-PASSWORD HASHING IS BUILT BUT EXISTING POOLS ARE STILL PLAINTEXT UNTIL THE SWEEP RUNS. FOUR DEPLOY STEPS ARE OWED AND THE ORDER IS LOAD-BEARING.**
 >
-> Full detail: **[MORNING-2026-08-25-AUDIT-2.md](MORNING-2026-08-25-AUDIT-2.md)**.
-> Worked [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md) items 1–24 plus a
+> Full detail: **[MORNING-2026-08-25-AUDIT-2.md](docs/archive/MORNING-2026-08-25-AUDIT-2.md)**.
+> Worked [NEXT-SESSION-AUDIT-FIXES.md](docs/archive/NEXT-SESSION-AUDIT-FIXES.md) items 1–24 plus a
 > triaged codex external-findings program. Run as 15 parallel worktree streams with
 > sequential merges; `codex exec review` on every PR (~60 rounds, ~45 findings
 > absorbed, 4 rejected with measurements, 0 carried).
@@ -508,7 +508,7 @@
 
 > ## 🟢 2026-08-24 (superseded by the 2026-08-25 box above) — **OVERNIGHT AUDIT REMEDIATION: NINE PRs MERGED (#547–#549, #551–#556). E2E SUITE 8/8 GREEN FOR THE FIRST TIME SINCE JULY. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
 >
-> Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](MORNING-2026-08-24-AUDIT-FIXES.md)**.
+> Full detail: **[MORNING-2026-08-24-AUDIT-FIXES.md](docs/archive/MORNING-2026-08-24-AUDIT-FIXES.md)**.
 >
 > 🆘 **Site down? Start at [RUNBOOK-SITE-DOWN.md](RUNBOOK-SITE-DOWN.md)** — one page: uptime alert → bundle-hash curl → debugging-playbook S7b → Coolify Rollback (§2b) → `/readiness` → `functions:log` → functions rollback (§1d).
 > Worked from Kevin's six audits (DB/storage, backend, auth, hosting, cloud,
@@ -561,12 +561,12 @@
 > 🟡 Kevin decisions D1–D7 (pool passwords, auto-deploy, PNG deletion, e2e in
 > CI, history scrub, blocking functions, emailVerified) restated with
 > recommendations in the morning chat message; next-session prompt in
-> [NEXT-SESSION-AUDIT-FIXES.md](NEXT-SESSION-AUDIT-FIXES.md).
+> [NEXT-SESSION-AUDIT-FIXES.md](docs/archive/NEXT-SESSION-AUDIT-FIXES.md).
 
 
 > ## 🟢 2026-08-25 (SUPERSEDED by the 2026-08-24 box above — this box was forward-dated; the audit-remediation session is newer) — **SEVEN PRs MERGED. THE AI COMMISSIONER RUNS IN PRODUCTION FOR THE FIRST TIME.**
 >
-> Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)**.
+> Full detail: **[MORNING-2026-08-25.md](docs/archive/MORNING-2026-08-25.md)**.
 >
 > ✅ **MERGED**, each with all gates and a clean final `codex exec review` round:
 > **#536** (T10 — one scoped Standings tab), **#537** (pool feed + pinned message),
@@ -642,7 +642,7 @@
 
 > ## 🟢 2026-08-25 (earlier) — **FOUR PRs MERGED: T10 (THE LAUNCH BLOCKER), THE POOL FEED + PIN, AND BOTH HALVES OF PER-POOL PREMIUM. ONE FUNCTIONS DEPLOY AND ONE COOLIFY REBUILD ARE OWED, IN THAT ORDER.**
 >
-> Full detail: **[MORNING-2026-08-25.md](MORNING-2026-08-25.md)** — read it before
+> Full detail: **[MORNING-2026-08-25.md](docs/archive/MORNING-2026-08-25.md)** — read it before
 > touching this effort. This box is the live state; that file is the reasoning.
 >
 > ✅ **MERGED overnight 2026-08-24→25**, each with all gates and a clean final
@@ -697,7 +697,7 @@
 
 > ## 🟢 2026-08-24 (latest) — **PLAN-WIZARD-BUYFLOW-FIXES: ELEVEN PRs MERGED (9 of 10 TICKETS). THE LAUNCH FLIP IS BUILT AND WAITING FOR KEVIN (#529). TWO DEPLOYS OWED BEFORE MONDAY.**
 >
-> Full detail: **[MORNING-2026-08-24.md](MORNING-2026-08-24.md)**. Read that before
+> Full detail: **[MORNING-2026-08-24.md](docs/archive/MORNING-2026-08-24.md)**. Read that before
 > touching this effort — this box is the live state, that file is the reasoning.
 >
 > ✅ **MERGED overnight 2026-08-23→24**, each with all five gates and a clean
@@ -856,7 +856,7 @@
 
 > ## 🟢 2026-08-22 — **SIX PRs MERGED AND DEPLOYED. THE REVIEW GATE DID NOT RUN, AND THE FIX IS KEVIN'S TO MAKE.**
 >
-> **Read [MORNING-2026-08-22-OVERNIGHT.md](MORNING-2026-08-22-OVERNIGHT.md)** — it
+> **Read [MORNING-2026-08-22-OVERNIGHT.md](docs/archive/MORNING-2026-08-22-OVERNIGHT.md)** — it
 > continues `MORNING-2026-08-22-FIXES.md` and supersedes that doc's §7. Its §1
 > runbook is DONE; §4 still names the artifact most worth a second look.
 >
