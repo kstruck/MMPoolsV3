@@ -11,8 +11,18 @@
 > | **D5** | New confidence pools default to per-game (recommendation). | §3.5. |
 > | **D6** | **Reopen Week 1. Jim is aware.** | §6 restated as a consequences list, not a recommendation against. |
 >
-> **STATUS: RULED ON. Review log and sweeps next, then implementation.** No
-> code written at the time of this ruling.
+> **STATUS: RULED ON; codex round 1 absorbed (9 accept / 1 reject, see
+> REVIEW-LOG). This is plan v3.** Implementation starts on v3.
+>
+> **v3 additions from round 1** — (a) `settings.lockRuleVersion: 2`, a
+> server-written stamp: the rule keeps legacy weekly behaviour for any confidence
+> pool NOT stamped 2, `createPool` stamps new Pick'em pools, the backfill stamps
+> legacy ones — closes the deploy window and the new-vs-legacy predicate while
+> keeping the backfill Kevin ruled for; (b) a **hard ceiling at kickoff** for a
+> confidence PER_GAME game's lock, so neither a deadline extension nor a buffer
+> edit can reopen a game that has started; (c) `proxyPick` refuses confidence
+> pools; (d) confidence-key validation; (e) `confidenceMode` can no longer be
+> flipped once anybody has submitted (T10).
 
 > **Provenance:** Kevin, 2026-09-10: *"As a rule that we made, if it is a
 > confidence pool, that pool locks at the first game of the week. After some
@@ -49,16 +59,23 @@ After this plan:
 > through any path. Open games stay fully editable — team and weight — subject
 > to the week-wide "each weight used once" rule, which counts the weights
 > already frozen on locked games. **A locked game the member never picked
-> forfeits the highest remaining weight** (D2).
+> forfeits the highest remaining weight** (D2). **Kickoff is a hard ceiling:**
+> no deadline extension and no buffer edit can move a confidence game's lock
+> past its kickoff, so a game that has started is closed by every path
+> (codex r1 #1/#2).
 
 Three things do NOT change:
 
 - WEEKLY-lockMode pools (any Pick'em) behave exactly as today.
 - Survivor and Margin are untouched (hard weekly lock from the TYPE).
-- The scoring engine is untouched. `scorePickemEntry` already grades per game
-  off `entry.confidence[gameId]` and a missing pick scores 0; the scorer already
-  decides gradability per game (`gameLockClosed`, `nflPools.ts:1496`). Lock
-  mode is a SUBMISSION rule, not a scoring rule.
+- The scoring engine code is untouched. `scorePickemEntry` already grades per
+  game off `entry.confidence[gameId]`: a missing pick scores 0 and a pick with
+  no stored weight scores 0 (`?? 0`, `nflScoringEngine.ts:175`) — today and
+  after. The scorer already decides gradability per game (`gameLockClosed`,
+  `nflPools.ts:1496`). Lock mode is a SUBMISSION rule, not a scoring rule. What
+  this plan adds is the guarantee that no server path can CREATE a pick without
+  a weight in a confidence pool any more (§3.2, §3.3); historical ones keep
+  scoring exactly as they do today (codex r1 #9).
 
 ---
 
@@ -106,9 +123,21 @@ Three things do NOT change:
 rule is `lockMode` alone and the stored value stops being a lie. The op is
 idempotent; a second run reports zero. The flag alternative is rejected per
 Kevin. What "does not break the pool" means mechanically: the backfill writes
-ONE dotted path (`settings.lockMode`) plus a `settings.lockRevision` bump — the
-same two fields a commissioner's own save of Lock Mode writes — nothing else on
-the doc, and it never touches entries, standings, or leases. For a pool that
+`settings.lockMode`, `settings.lockRuleVersion: 2` and a `settings.lockRevision`
+bump — dotted paths, nothing else on the doc, never entries, standings, or
+leases.
+
+**v3 (codex r1 #3/#4): the backfill is paired with a server-written version
+stamp.** `nflLockMode` keeps today's behaviour — confidence forces WEEKLY —
+for any pool whose `settings.lockRuleVersion !== 2`. `createPool` stamps 2 on
+every new NFL_PICKEM pool; the backfill stamps 2 (with `lockMode: 'WEEKLY'`) on
+every legacy confidence pool. So: between the functions deploy and the backfill
+every legacy pool still plays weekly to EVERY caller including a hand-crafted
+callable; a pool created after the deploy is never matched by the backfill
+predicate; and once the backfill reports zero the legacy clause is dead code,
+retired in a follow-up after `lockRuleVersion !== 2` is measured at zero pools.
+This is not a commissioner-facing flag (rejected by Kevin): no person sets it,
+no UI shows it, and the stored `lockMode` is still what decides the mode. For a pool that
 plays weekly today it is a no-op in behaviour: it makes explicit what the pool
 already does.
 
@@ -148,13 +177,17 @@ week."). It is a warning. The save proceeds on confirm.
 `shared/nflLockMode.ts`:
 
 ```ts
+export const LOCK_RULE_VERSION = 2;
 export function nflLockMode(poolType, settings): NFLLockMode {
   if (usesWeeklyHardLock(poolType)) return 'WEEKLY';
+  // Legacy clause (retire when no pool is left unstamped): a confidence pool the
+  // PLAN-CONFIDENCE-PER-GAME-LOCK backfill has not reached still plays weekly.
+  if (settings?.confidenceMode && settings?.lockRuleVersion !== LOCK_RULE_VERSION) return 'WEEKLY';
   return settings?.lockMode === 'WEEKLY' ? 'WEEKLY' : 'PER_GAME';
 }
 ```
 
-`confidenceMode` leaves the rule. The three server sites (`nflPools.ts:626`,
+For a stamped pool `confidenceMode` leaves the rule. The three server sites (`nflPools.ts:626`,
 `pickReveal.ts:71`, `poolExceptions.ts:338`) **import** `nflLockMode` from
 `./shared/nflLockMode` (the copy-shared output) instead of restating the
 expression. `tests/nfl-lockmode-invariants.test.ts` flips from "the literal
@@ -172,12 +205,14 @@ if mode === WEEKLY:   UNCHANGED — WEEK_LOCKED; validateConfidenceValues (compl
 else (PER_GAME):
   for each submitted gameId:
     game must be in this week's slate                                    (existing)
-    locked = isGameLockedAt(now, game.startTime, week, lockSettings)
+    locked = isGameLockedAt(now, game, week, lockSettings, { kickoffCeiling: confidenceMode })
     if locked && picks[gameId] !== stored.picks[gameId]                 → GAME_LOCKED        (existing)
-    if confidenceMode && locked && confidence[gameId] !== undefined
-       && confidence[gameId] !== stored.confidence[gameId]               → CONFIDENCE_LOCKED  (new)
   if confidenceMode:
-    merged = for each game in this week's slate:
+    every key of `confidence` must be in this week's slate              → invalid-argument   (r1 #7)
+    for each gameId in the slate with a submitted weight:
+      locked (as above) && confidence[gameId] !== stored.confidence[gameId]
+                                                                         → CONFIDENCE_LOCKED  (new)
+    merged = for each game in this week's slate (slate ids ONLY):
                pick   = submitted pick   ?? stored pick
                weight = submitted weight ?? stored weight
     every OPEN game must have a merged pick                              → INCOMPLETE_CONFIDENCE_SUBMISSION
@@ -190,6 +225,20 @@ else (PER_GAME):
        && tiebreakerPrediction !== stored.weeklyTiebreakers[week]
        && tiebreakTargetLocked(now, games, frozenTarget, rule, lockSettings) → TIEBREAK_LOCKED   (new)
 ```
+
+### 3.2a Kickoff is a hard ceiling (codex r1 #1/#2)
+
+`effectiveGameLockAt` is `max(kickoff − buffer, weekOverride)`, and
+`extendWeekDeadline` / a `lockBufferMinutes` edit can move that LATER than
+kickoff — on straight per-game pools that is the documented exception path
+("Extend the deadline first if an exception is warranted"), and it stays so
+there. In a **confidence PER_GAME pool** Kevin's rule is literal, so the shared
+`gameLockAt` and the server `effectiveGameLockAt` take a `kickoffCeiling`
+option: when set, the result is `Math.min(asToday, kickoff)`. Used by submit,
+proxy (moot after §3.3), reveal, and every client surface through the shared
+file. A game that has NOT started can still be reopened by an extension or a
+buffer edit — Kevin's words draw the line at "has started", and that is where
+this draws it.
 
 Why "every OPEN game must have a merged pick" is required on the server in
 confidence mode (it is not for straight per-game): the D2 range depends on k,
@@ -213,11 +262,14 @@ freeze, `committedPickForWeek`, and the entry write shape are untouched.
 A PER_GAME confidence pool then reveals picks AND weights game by game, which
 is what `nflPickReveal.ts:339` already does per revealed game id.
 
-`proxyPick` (`poolExceptions.ts`) → imports the rule. It still cannot set a
-weight (pre-existing gap, **out of scope**, §8). A proxied team pick on a
-PER_GAME confidence pool therefore leaves that game unweighted; the member's
-next submit must weight it (the merged validator requires a weight on every
-picked game), and until then `scorePickemEntry` scores a missing weight as 0.
+`proxyPick` (`poolExceptions.ts`) → imports the rule, and **refuses a
+confidence pool outright** (`PROXY_CONFIDENCE_UNSUPPORTED`, codex r1 #6). Its
+schema carries picks only, so on a confidence pool it could only ever write a
+pick with no weight — an entry that is neither a ranked pick nor a D2 missed
+game. That was already true on weekly confidence pools; it is now refused
+rather than silently half-written. Adding a `confidence` map to the callable
+(with the same merged validator and locked-weight checks) is the recorded
+follow-up in §8.
 
 ### 3.4 Client (`PickemPickEntry.tsx`)
 
@@ -262,11 +314,14 @@ the SCHEMA layer, per-run cap, `admin_audit` summary on every run, paged with
 `addReportPage`).
 
 - Query: `pools` where `type == 'NFL_PICKEM'`, paged by document id.
-- Predicate (pure, unit-tested): `settings.confidenceMode === true &&
-  settings.lockMode !== 'WEEKLY'`.
+- Predicate (pure, unit-tested, re-evaluated INSIDE the write transaction):
+  `settings.confidenceMode === true && settings.lockRuleVersion !== 2`. A pool
+  created after the release is stamped 2 by `createPool` and never matches
+  (codex r1 #4). A legacy confidence pool that already stores `WEEKLY` still
+  matches — it needs the stamp — and its `lockMode` write is a no-op.
 - Write (live only), in a transaction per pool: `settings.lockMode = 'WEEKLY'`,
-  `settings.lockRevision = readLockRevision(pool) + 1`, `updatedAt`. Dotted
-  paths only. The `lockRevision` bump is what a commissioner's own Lock Mode
+  `settings.lockRuleVersion = 2`, `settings.lockRevision = readLockRevision(pool) + 1`,
+  `updatedAt`. Dotted paths only. The `lockRevision` bump is what a commissioner's own Lock Mode
   save does (`poolOps.ts:659`), so a scoring pass in flight re-reads rather
   than publishing against a stale lock; it is harmless here because the
   effective mode does not change, and omitting it would be the one way this
@@ -293,6 +348,8 @@ the SCHEMA layer, per-run cap, `admin_audit` summary on every run, paged with
 | T6 | Client pick sheet (3.4) incl. D2 range and forfeit note | `PickemPickEntry.tsx`, `shared/nflLockMode.ts` (drop-stale weights), `utils/confidenceWeights.ts` | unit (shared/utils) |
 | T7 | Manager UI (incl. D4 confirm) + wizard + rules page + copy (3.5) | `NFLManagerView.tsx`, `CreateNFLPickemPool.tsx`, `NFLPoolRules.tsx`, `help/content/nfl-pickem.ts`, `help/glossary.ts`, `CONTEXT.md`, help tests | unit (help tests) |
 | T8 | Emulator scenario: PER_GAME confidence pool with one locked game | `functions/src/__tests__/emulator/confidencePerGame.emulator.test.ts` (new) | emulator |
+| T10 | `confidenceMode` joins the once-anybody-submitted gate (`CONFIDENCE_MODE_LOCKED`), same transaction as `weeklyTiebreaker` (codex r1 #8) | `poolOps.ts`, `lib/` predicate, `NFLManagerView.tsx` (disable + reason) | unit + emulator |
+| T11 | `createPool` stamps `settings.lockRuleVersion: 2` on every new NFL_PICKEM | `nflPools.ts` create path, `shared/schemas/nfl.ts` | unit + emulator |
 | T9 | Sweep doc: grep-complete lists of (a) every reader of `lockMode`/`confidenceMode`, (b) every copy string, (c) every test pinning the old rule, (d) every `validateConfidenceValues` caller | `PLAN-CONFIDENCE-PER-GAME-LOCK-SWEEPS.md` | — |
 
 **T8 scenarios (every feature ships with its test — Kevin 2026-08-17):**
@@ -306,6 +363,13 @@ the SCHEMA layer, per-run cap, `admin_audit` summary on every run, paged with
 8. Backfill: seed three pools (confidence+PER_GAME, confidence+absent lockMode, confidence+WEEKLY, straight+PER_GAME); dry run reports exactly the first two with `storedLockMode`; live run writes `WEEKLY` + bumps `lockRevision` on those two only; second live run reports zero.
 9. Reveal: `getPoolPicks` on the PER_GAME pool reveals only the locked game's picks/weights to a member.
 10. Scorer: `scoreNFLWeek` on the PER_GAME pool produces the same points as the WEEKLY pool with identical sheets (lock mode is not a scoring input), and a missed-game entry scores 0 for that game.
+11. **Kickoff ceiling — extension:** PER_GAME confidence pool, Wed game kicked off; commissioner `extendWeekDeadline` to Sunday → accepted for the week (Pick'em), but a changed Wed pick or weight is still `GAME_LOCKED` / `CONFIDENCE_LOCKED`; a Thursday game (not started) IS reopened by it (codex r1 #1).
+12. **Kickoff ceiling — buffer:** same pool, buffer 60 → 0 after the Wed game started → Wed still locked (codex r1 #2).
+13. **Proxy:** `proxyPick` on any confidence pool → `PROXY_CONFIDENCE_UNSUPPORTED`; on a straight PER_GAME pool unchanged (codex r1 #6).
+14. **Legacy clause:** confidence pool with `lockMode: 'PER_GAME'` and NO `lockRuleVersion` → plays WEEKLY (`WEEK_LOCKED` after first kickoff, `revealMode` 'WEEK'); same pool after the backfill → stored WEEKLY, stamped 2, still WEEKLY; a pool created through `createNFLPool` after the release → stamped 2 (codex r1 #3/#4).
+15. **confidenceMode gate:** toggling `confidenceMode` on a pool with one stored pick → `CONFIDENCE_MODE_LOCKED`; on an empty pool → accepted (codex r1 #8).
+16. **Hard-lock regression:** Survivor and Margin, member submit and proxy, `WEEK_LOCKED` after the weekly deadline regardless of `lockMode`/`lockRuleVersion` (codex r1 #10).
+17. **Backfill paging:** emulator seeds 3 legacy pools with `limit: 2` → first page returns `nextCursor`, second page finishes, aggregate `poolsChanged: 3` (codex r1 #5 clarification).
 
 Gates: all seven commands in CLAUDE.md §2e, lint delta zero against a measured
 baseline, `codex exec review --base origin/main` (probe `-m gpt-5.6-terra`
@@ -318,13 +382,16 @@ stop.
 
 | Risk | Closed by |
 |---|---|
-| Existing confidence pools flip to per-game at functions deploy, before the backfill runs | The backfill CANNOT run before the functions deploy that carries it (same bundle). Exposure in the window: pools with stored `PER_GAME` + confidence + a week whose weekly lock has passed. In that window the OLD www bundle still computes WEEKLY from the old shared file and renders the sheet locked, so no member can submit through the UI; only a hand-crafted callable call could. Close it by running the backfill IMMEDIATELY after the functions deploy and BEFORE the Coolify deploy (§7 order), and by the dry run listing every affected pool first. |
+| Existing confidence pools flip to per-game at functions deploy, before the backfill runs | **Closed by the `lockRuleVersion` stamp (codex r1 #3):** an unstamped confidence pool plays WEEKLY to every caller, UI or hand-crafted, until the backfill stamps it. T8 #14. |
+| A deadline extension or a buffer edit reopens a started confidence game | Kickoff ceiling (§3.2a); T8 #11, #12 |
+| A pick without a weight is created in a confidence pool | proxyPick refused (§3.3); confidence keys validated and every picked game must carry a weight (§3.2); T8 #13 |
+| `confidenceMode` flipped mid-season changes scoring | T10 gate; T8 #15 |
 | Server and client disagree about the rule (the 2026-08-18 production defect) | T2: server IMPORTS the shared rule; invariant test asserts no hand copy remains |
 | A locked weight changes through any path | T3 `CONFIDENCE_LOCKED` + merged uniqueness; proxyPick cannot write weights at all; `firestore.rules` blocks direct client entry writes |
 | A stored sheet becomes invalid when a later game locks (D2 k grows) | Open-set completeness at every submit (3.2); T8 #6 |
 | Late joiner locked out of the week | D2 / T3 / T8 #5 |
 | Tiebreaker edited after MNF kicks off (pre-existing) | D3 / T4 / T8 #7 |
-| Backfill writes the wrong pools | Pure predicate, unit-tested; dry run lists `{poolId, name, storedLockMode}`; T8 #8; idempotent |
+| Backfill writes the wrong pools, or a pool created mid-rollout | Pure predicate on the stamp, re-checked in the transaction; new pools stamped at create; dry run lists `{poolId, name, storedLockMode}`; T8 #8, #14, #17; idempotent |
 | Deploy-window skew (functions and www deploy separately, CLAUDE.md §3) | Old client + new server: old client computes WEEKLY for confidence → sheet locked → fail-closed. New client + old server: new client opens Sunday games, old server returns `WEEK_LOCKED` → error toast, no write → fail-closed. Order: functions → backfill → Coolify. |
 | Live scorer (`nflAutoScoreJob` */5) | Scorer code untouched; PR body still states the deploy lands in a live scorer per the G1 rule |
 | Copy drift (six places say "forces weekly") | T7 + T9 sweep list + help tests |
@@ -368,7 +435,7 @@ missed game forfeits the 16, is strongly advised.
 
 1. `git -C D:\march-melee-pools pull --ff-only origin main` (CLAUDE.md §3 step zero).
 2. `npm --prefix functions ci`, then `npx firebase deploy --only functions --project gridiron-gamble-uzuqo`. NEW export `backfillConfidenceLockMode` — verify by name: `npx firebase functions:list | Select-String "backfillConfidenceLockMode"`.
-3. SuperAdmin → Operations → **Backfill Confidence Lock Mode (dry run)**. Read `plannedWrites`: it lists every confidence pool whose stored lockMode is not WEEKLY, with the stored value. Donkeys should appear if its stored value is `PER_GAME`; if it is absent, Donkeys already stores WEEKLY and the live run will not touch it.
+3. SuperAdmin → Operations → **Backfill Confidence Lock Mode (dry run)**. One click runs every page (the panel runner loops on `nextCursor`, `OperationsPanel.tsx:211-227`). Read `plannedWrites`: it lists every confidence pool whose stored lockMode is not WEEKLY, with the stored value. Donkeys should appear if its stored value is `PER_GAME`; if it is absent, Donkeys already stores WEEKLY and the live run will not touch it.
 4. Operations → **Backfill Confidence Lock Mode** (live). Expect `poolsChanged` = the dry-run count. Run once more: expect 0.
 5. Coolify manual redeploy of www; verify the new `index-*.js` hash and that the needle `CONFIDENCE_LOCKED` (a client-rendered error code) is present in the crawled chunks (HANDOFF 2026-09-08 box: crawl, never the index chunk alone).
 6. Donkeys flip: pool → Manager → Settings → Pick'em Rules → Lock Mode → "Per-Game" → confirm the mid-week dialog → Save.
@@ -378,9 +445,16 @@ missed game forfeits the 16, is strongly advised.
 
 ## 8. Out of scope (recorded, not forgotten)
 
-- `proxyPick` cannot set a confidence weight (pre-existing). A commissioner
-  proxying into a confidence pool sets the team only.
+- `proxyPick` cannot set a confidence weight (pre-existing); as of this plan it
+  REFUSES confidence pools rather than writing a half entry. Follow-up: add a
+  `confidence` map to the callable with the same validation.
+- Retire the `lockRuleVersion !== 2` legacy clause in `nflLockMode` once a
+  census shows zero unstamped confidence pools.
+- Straight (non-confidence) per-game pools keep today's extension semantics: an
+  extension CAN reopen a started game there. Only confidence pools get the
+  kickoff ceiling.
 - `extendWeekDeadline` semantics are unchanged: an extension still applies to
   every game in the week (the `weekLockCaption` caveat stands).
 - No change to Survivor, Margin, scoring, payouts, or `firestore.rules`.
-- No server-side guard on mid-week lock-mode changes (D4 = no).
+- No server-side guard on mid-week LOCK-MODE changes (D4 = no). (`confidenceMode`
+  changes ARE gated — T10 — because they change scoring, which D4 did not rule on.)
