@@ -9,7 +9,9 @@ PR #686.
 
 ## S1 — writers of `participantIds` (functions)
 
-`grep -rn "participantIds: FieldValue\|participantIds: \[" functions/src --include=*.ts` (tests excluded)
+```
+grep -rnE "participantIds: FieldValue|participantIds: \[" functions/src --include=*.ts | grep -vE "__tests__|\.test\.ts"
+```
 
 | Site | What it does | Affected by this plan? |
 |---|---|---|
@@ -23,7 +25,9 @@ PR #686.
 
 ## S2 — readers of `participantIds` (what the drift broke, what the fix reaches)
 
-`grep -rln participantIds functions/src src firestore.rules` (tests excluded)
+```
+grep -rl participantIds functions/src src firestore.rules --include=*.ts --include=*.tsx --include=*.rules | grep -vE "__tests__|\.test\.tsx?$"
+```
 
 | Reader | Why it matters here | Conclusion |
 |---|---|---|
@@ -39,7 +43,18 @@ PR #686.
 
 ## S3 — production instances
 
-Read-only admin-SDK census over every NFL pool (`type in NFL_PICKEM / NFL_SURVIVOR / NFL_MARGIN`), members vs `participantIds`, 2026-09-10:
+Read-only census script, committed with this PR (qodo #5, round 2):
+
+```
+GOOGLE_APPLICATION_CREDENTIALS=C:/keys/mmp-census.json node functions/scripts/censusMembership.mjs
+```
+
+Output on 2026-09-10 (before the repair), verbatim:
+
+```
+scanned 4 NFL pools; 1 with Member Records missing from participantIds
+{"poolId":"ubHD4bgszL05oURYubrn","name":"Donkeys 2026","type":"NFL_PICKEM","status":"OPEN","members":22,"participantIds":21,"missing":[{"uid":"6C09waBoqiSavoBnPZrMkhxWt7x2","name":"Kevin Struck","role":"PARTICIPANT","joinedAt":"2026-09-09T04:07:26.830Z"}]}
+```
 
 | Pool | Members | participantIds | Missing |
 |---|---|---|---|
@@ -47,8 +62,11 @@ Read-only admin-SDK census over every NFL pool (`type in NFL_PICKEM / NFL_SURVIV
 | the other 3 NFL pools | — | — | none |
 
 One row. Repaired by the one-off script in plan §3 (dry-run reviewed; applied
-from Kevin's shell). Non-NFL pool types were not censused: their join paths are
-not touched by this plan and their pick paths have no SUPER_ADMIN bypass.
+from Kevin's shell). Re-run the census after the repair: expected
+`scanned 4 NFL pools; 0 with Member Records missing from participantIds`.
+Non-NFL pool types were not censused by default (`--all-types` widens it):
+their join paths are not touched by this plan and their pick paths have no
+SUPER_ADMIN bypass.
 
 ## S4 — behaviour changes a reader should know about
 

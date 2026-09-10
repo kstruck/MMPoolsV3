@@ -96,3 +96,16 @@ instead (below).
 Stopping rule: qodo reported and every finding absorbed or rejected in writing
 (above, and on the PR); codex round 2 clean on the final diff; own read agrees.
 Two codex rounds total.
+
+### qodo round 2 — re-review after the draft → ready toggle (Code Review updated 2026-09-10T15:36:56Z; watcher `QODO REPORTED — 3 inline finding(s)` on the second arming of that SINCE)
+
+Round-1 findings #1–#7 marked `✓ Resolved` by qodo; #8 marked `✗ Dismissed` (the
+written rejection stood). Three NEW findings, all documentation:
+
+| # | Finding | Verdict | Action |
+|---|---|---|---|
+| R2-1 | `CONTEXT.md` glossary does not describe implicit membership from an accepted pick, nor `ownerId` precedence over `createdByUid` | VALID (doc — CONTEXT.md is the canonical glossary) | Pool and Member Record entries updated. Read-repair while there: the Member Record entry claimed `reconcileMembership` keeps the three membership stores consistent, but that helper has no callers (measured); the entry now names what actually writes them. |
+| R2-5 | The S3 census is not reproducible — no command, no output artifact | VALID (doc) | `functions/scripts/censusMembership.mjs` committed (read-only, same shape as `censusPayoutRanks.mjs`); invocation and verbatim output in SWEEPS S3, plus the expected post-repair line. |
+| R2-6 | S1/S2 grep commands do not exclude tests and use basic-regex `\|` | VALID (doc) | Commands rewritten to the `grep -E` + `grep -vE "__tests__|\.test\.ts"` forms actually run; re-executed after the rewrite and they reproduce the tables. |
+
+New code in this round is one read-only census script — round 3 below.
