@@ -642,9 +642,13 @@ export async function submitNFLPicksInternal(
       // rather than applied to arithmetic done under the other mode; the
       // client's ordinary retry lands on a consistent read.
       const settings = (poolInTx.settings ?? pool.settings) as typeof pool.settings;
+      // `lockRevision` covers the rest: every lock-affecting save bumps it
+      // (buffer, extension, mode), so one comparison catches a deadline edit
+      // that landed after the pre-transaction arithmetic (qodo #9 on #687).
       if (settings.confidenceMode !== pool.settings?.confidenceMode
           || settings.lockMode !== pool.settings?.lockMode
-          || settings.lockRuleVersion !== pool.settings?.lockRuleVersion) {
+          || settings.lockRuleVersion !== pool.settings?.lockRuleVersion
+          || (settings as { lockRevision?: number }).lockRevision !== (pool.settings as { lockRevision?: number } | undefined)?.lockRevision) {
         throw new HttpsError('aborted', 'SETTINGS_CHANGED: the pool\'s lock settings changed while your picks were being saved. Please submit again.');
       }
       // ONE rule, imported (PLAN-CONFIDENCE-PER-GAME-LOCK T2) — never restated
@@ -654,6 +658,8 @@ export async function submitNFLPicksInternal(
       // D3: on a PER_GAME pool the tiebreaker prediction closes with its TARGET
       // game(s); computed inside the tiebreak block below, read after it.
       let tiebreakTargetLockedNow = false;
+      // What actually lands in `weeklyTiebreakers[week]` — D3 may drop it.
+      let predictionToWrite: number | undefined = tiebreakerPrediction;
 
       // THIS WEEK'S KEYS ONLY (codex r6 on the diff). The pick sheet hydrates the
       // entry's whole-season `picks` / `confidence` maps and sends them back on
@@ -685,6 +691,32 @@ export async function submitNFLPicksInternal(
       const weekWeights: Record<string, number> = settings.confidenceMode
         ? onlyThisWeek((confidence || {}) as Record<string, number>, (existingEntry?.confidence ?? {}) as Record<string, number>)
         : {};
+
+      // FRESH STATUS FOR WHAT THIS SAVE CHANGES (qodo #5 on #687). The slate was
+      // read before the transaction; a game that flips SCHEDULED → IN_PROGRESS
+      // between that read and this commit is invisible to Firestore's conflict
+      // detection unless its doc is read HERE. In a confidence pool "started"
+      // is the whole rule, so the games whose pick or weight this save would
+      // change are re-read inside the transaction (reads precede every write
+      // below) and their live status overrides the pre-read copy. Straight
+      // pools keep the clock rule and need no read.
+      const liveById = new Map<string, NFLGame>();
+      if (lockSettings.kickoffCeiling === true) {
+        const changedIds = new Set<string>();
+        for (const [id, v] of Object.entries(weekPicks)) if (v !== existingEntry?.picks?.[id]) changedIds.add(id);
+        for (const [id, v] of Object.entries(weekWeights)) {
+          if (v !== ((existingEntry?.confidence ?? {}) as Record<string, number>)[id]) changedIds.add(id);
+        }
+        const snaps = await Promise.all([...changedIds].map(id => transaction.get(db.collection('nfl_games').doc(id))));
+        for (const s of snaps) {
+          const d = s.data() as Partial<NFLGame> | undefined;
+          const base = games.find(g => g.id === s.id);
+          if (base && d && typeof d.status === 'string') liveById.set(s.id, { ...base, status: d.status as NFLGame['status'] });
+        }
+      }
+      const live = (g: NFLGame): NFLGame => liveById.get(g.id) ?? g;
+      const liveStatusLocksWeek = lockSettings.kickoffCeiling === true
+        && games.some(g => { const s = live(g).status; return typeof s === 'string' && s !== 'SCHEDULED'; });
 
       // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
       // the first submission, once per pool-week, and hold every later
@@ -802,7 +834,7 @@ export async function submitNFLPicksInternal(
       }
 
       if (weeklyLockMode) {
-        if (weekLocked) {
+        if (weekLocked || liveStatusLocksWeek) {
           throw new HttpsError('failed-precondition', 'WEEK_LOCKED: All picks in weekly lock pools are locked.');
         }
 
@@ -817,7 +849,7 @@ export async function submitNFLPicksInternal(
         // PER_GAME lock checks — status-aware in a confidence pool, where a game
         // that has left SCHEDULED is locked whatever the clock says
         // (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a).
-        const lockedNow = (g: NFLGame) => isGameLockedForGame(now, g, week, lockSettings);
+        const lockedNow = (g: NFLGame) => isGameLockedForGame(now, live(g), week, lockSettings);
         for (const [gameId, pickedTeam] of Object.entries(weekPicks)) {
           const game = games.find(g => g.id === gameId);
           if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
@@ -871,12 +903,21 @@ export async function submitNFLPicksInternal(
           }
         }
 
-        // D3: a CHANGED prediction after the tiebreak target has locked. An
-        // unchanged resend is fine — the sheet always sends the number it holds.
-        if (tiebreakerPrediction !== undefined && tiebreakTargetLockedNow
-            && tiebreakerPrediction !== existingEntry?.weeklyTiebreakers?.[week]) {
-          throw new HttpsError('failed-precondition',
-            'TIEBREAK_LOCKED: the tiebreaker game has started, so the prediction can no longer be changed.');
+        // D3: once the tiebreak target has locked, a prediction the member
+        // already holds cannot CHANGE (refused, so they know); a prediction they
+        // never recorded cannot be recorded now (dropped, not refused — their
+        // open picks still save, and the number never lands). An unchanged
+        // resend is fine — the sheet always sends the number it holds.
+        // `goldenArc` submits a first pick on an open Sunday game with the
+        // Monday target already live; refusing the whole save there would block
+        // a valid pick over a number that is simply not taken.
+        if (tiebreakerPrediction !== undefined && tiebreakTargetLockedNow) {
+          const stored = existingEntry?.weeklyTiebreakers?.[week];
+          if (stored !== undefined && tiebreakerPrediction !== stored) {
+            throw new HttpsError('failed-precondition',
+              'TIEBREAK_LOCKED: the tiebreaker game has started, so the prediction can no longer be changed.');
+          }
+          if (stored === undefined) predictionToWrite = undefined;
         }
       }
 
@@ -904,7 +945,7 @@ export async function submitNFLPicksInternal(
           : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
-          ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})
+          ...(predictionToWrite !== undefined ? { [week]: predictionToWrite } : {})
         },
         totalScore: existingEntry?.totalScore ?? 0,
         submittedAt: now,

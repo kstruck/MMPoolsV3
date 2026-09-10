@@ -72,6 +72,13 @@ describe('confidenceMode gate (T10, codex r1 #8)', () => {
       .toBe('CONFIDENCE_MODE_LOCKED_AFTER_SUBMISSIONS');
   });
 
+  it('refuses a non-boolean value outright — 1 / "true" cannot slip past the change detector (qodo #3)', () => {
+    for (const bad of [1, 'true', 'yes', null]) {
+      const r = confidenceModeRefusal(pool({ confidenceMode: false }), { 'settings.confidenceMode': bad }, []);
+      expect(r?.code).toBe('CONFIDENCE_MODE_INVALID_VALUE');
+    }
+  });
+
   it('refuses after a scored week without reading entries', () => {
     const scored = pool({ confidenceMode: false }, { scoredWeeks: { 1: true } });
     expect(confidenceModeEditNeedsEntries(scored, flipOn)).toBe(false);

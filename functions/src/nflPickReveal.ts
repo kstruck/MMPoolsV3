@@ -293,8 +293,11 @@ export const getPoolPicks = validated(
             .where('seasonType', '==', Number(pool.seasonType || 2))
             .where('week', '==', week)
             .get();
+        // `status` rides along (qodo #7 on #687): in a confidence pool a game
+        // that has left SCHEDULED is locked — and therefore revealed — whatever
+        // its corrected `startTime` says, and `weekRevealFor` reads it.
         const games = gamesSnap.docs.map(d => d.data() as NFLGame)
-            .map(g => ({ id: g.id, startTime: g.startTime }));
+            .map(g => ({ id: g.id, startTime: g.startTime, status: g.status }));
 
         const reveal: WeekReveal = isSuperAdmin
             ? fullReveal(pool, games)

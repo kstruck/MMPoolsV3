@@ -38,7 +38,7 @@ export function confidenceModeEditNeedsEntries(
 }
 
 export type ConfidenceModeRefusal = {
-  code: 'CONFIDENCE_MODE_LOCKED_AFTER_SUBMISSIONS' | 'SETTINGS_LOCKED_AFTER_SCORING';
+  code: 'CONFIDENCE_MODE_LOCKED_AFTER_SUBMISSIONS' | 'SETTINGS_LOCKED_AFTER_SCORING' | 'CONFIDENCE_MODE_INVALID_VALUE';
   field: 'confidenceMode';
   message: string;
 };
@@ -50,6 +50,17 @@ export function confidenceModeRefusal(
 ): ConfidenceModeRefusal | null {
   if (pool?.type !== 'NFL_PICKEM') return null;
   if (!touchesConfidenceModeSetting(patch)) return null;
+  // Booleans only (qodo #3 on #687): the flattened patch stores whatever it is
+  // handed, and `1` / `"true"` would slip past the `=== true` change detector
+  // yet read as enabled by every truthiness check downstream. Same shape as
+  // the tiebreaker's TIEBREAKER_INVALID_VALUE.
+  if (typeof patch[CONFIDENCE_MODE_SETTING_KEY] !== 'boolean') {
+    return {
+      code: 'CONFIDENCE_MODE_INVALID_VALUE',
+      field: 'confidenceMode',
+      message: 'CONFIDENCE_MODE_INVALID_VALUE: confidence mode must be true or false.',
+    };
+  }
   if (!changesConfidenceMode(pool, patch)) return null;
 
   if (poolHasScoredWeek(pool)) {

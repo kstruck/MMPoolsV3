@@ -376,6 +376,40 @@ describe('codex r5 — a frozen 16 is grandfathered after a later miss, and lock
     }, 60000);
 });
 
+describe('D3 on a STRAIGHT per-game pool — the goldenArc shape (CI regression on #687)', () => {
+    const runId = 'run-cpg-straight-d3';
+    const poolId = `pool-${runId}`;
+    const GINA = `sim-${runId}-gina`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-straight-d3' }, auth: superAdmin } as never);
+        await seedPool(poolId, runId, { confidenceMode: false, lockMode: 'PER_GAME' });
+        await db.collection('pools').doc(poolId).update({ 'settings.weeklyTiebreaker': admin.firestore.FieldValue.delete() });
+        // The goldenArc slate: g1 open (Sunday-ish, kicks off in 2h), g3 the Monday
+        // target ALREADY LIVE. Nothing stored yet for Gina.
+        await wSeed({ data: { runId, games: slate(Date.now() - 5 * 24 * HOUR, { g1: { startTime: Date.now() + 2 * HOUR }, g2: { startTime: Date.now() + 3 * HOUR }, g3: { status: 'IN_PROGRESS', startTime: Date.now() - 2 * HOUR, scores: { home: 14, away: 7 } } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: GINA, name: 'Gina' }] }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('a FIRST prediction sent after the target started is dropped, and the open pick still saves', async () => {
+        await wSubmit({ data: { poolId, runId, subjectUid: GINA, week: 1, picks: { [g(1)]: 'SEA' }, tiebreakerPrediction: 38 }, auth: superAdmin } as never);
+        const e = await entry(poolId, GINA);
+        expect(e.picks[g(1)]).toBe('SEA');
+        expect(e.weeklyTiebreakers?.['1']).toBeUndefined();
+    }, 30000);
+
+    it('a changed pick on the started game is still GAME_LOCKED', async () => {
+        await expect(wSubmit({ data: { poolId, runId, subjectUid: GINA, week: 1, picks: { [g(3)]: 'KC' } }, auth: superAdmin } as never))
+            .rejects.toThrow(/GAME_LOCKED/);
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
 describe('codex r4 — a legacy MNF_COMBINED tiebreaker locks when the FIRST Monday game starts', () => {
     const runId = 'run-cpg-combined';
     const poolId = `pool-${runId}`;

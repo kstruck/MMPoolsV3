@@ -245,6 +245,16 @@ const runConfidenceLockModeBackfill = async (dryRun: boolean) => {
     cursor = r.nextCursor || undefined;
     pages++;
   } while (cursor && pages < 100);
+  // A run with per-pool failures is NOT a success (qodo #6 on #687): the
+  // executor reads `ok`, and without it a partial migration renders green.
+  // The op is idempotent, so the remedy is the one the message says.
+  if (agg.failures.length > 0) {
+    return {
+      ...agg,
+      ok: false,
+      error: `${agg.failures.length} pool(s) failed to stamp — see failures. Run again: already-stamped pools are skipped, the failed ones are retried.`,
+    };
+  }
   return agg;
 };
 

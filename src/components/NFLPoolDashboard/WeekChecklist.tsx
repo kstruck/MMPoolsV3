@@ -115,7 +115,13 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
     // being on the wrong week (Kevin's live-test report, 2026-08-05). The nag
     // now speaks only about the current week; future weeks stay visible as
     // chips below, and the nag moves forward on its own when this week locks.
-    const currentWeek = weeks.find(w => w.deadline !== null && w.deadline > serverNow()) ?? null;
+    // …and, since the pool-aware status can call a week locked BEFORE its
+    // clock-derived deadline (a confidence week closed by game status while the
+    // feed's corrected kickoff is still ahead), a week already reported as
+    // missed or locked-complete is not "current" either (qodo #11 on #687).
+    const currentWeek = weeks.find(w =>
+      w.deadline !== null && w.deadline > serverNow() && w.status !== 'missed' && w.status !== 'locked-complete',
+    ) ?? null;
 
     const nextDue = currentWeek && currentWeek.status === 'due' ? currentWeek : null;
     // Positive confirmation for the same slot: "your picks are in" is exactly
