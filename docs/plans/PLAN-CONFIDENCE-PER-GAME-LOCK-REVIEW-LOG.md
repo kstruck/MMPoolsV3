@@ -177,6 +177,47 @@ as the one un-reviewed change. My own read of the diff: the round-10 change
 substitutes one map for another inside a check whose other branch already used
 that map; the risk is nil beyond what the type-check covers.
 
+---
+
+## qodo on PR #687 — 2026-09-10 ~18:40 MDT (12 inline findings, `QODO REPORTED` after three settle windows)
+
+| # | qodo | Verdict | Action |
+|---|---|---|---|
+| 1 | Entries can omit confidence weights (missed game / legacy locked pick accepted with < N weights) | **REJECT** — this IS Kevin's D2 ruling; a locked legacy pick with no weight is grandfathered per codex r9 #2 | reasoning posted on the PR |
+| 2 | Finished weeks remain provisional — `weekCompletion`, reminder and fingerprint helpers still clock-only | **VALID** | `isGameLockedForGame` in `weekCompletion.ts` and both `autoScoreDecisions.ts` sites |
+| 3 | Non-boolean `confidenceMode` (1, "true") bypasses the `=== true` change detector | **VALID** | `CONFIDENCE_MODE_INVALID_VALUE` in the gate; unit case |
+| 4 | SUPER_ADMIN direct `settings.confidenceMode` write bypasses the gate (rules) | **REJECT / DEFERRED** — rules already deny a manager any `settings` write on NFL pools; the SUPER_ADMIN escape hatch is by design and a rules change is its own authorization plan | reasoning posted |
+| 5 | Game status flip between the pre-transaction slate read and the write is invisible to the transaction | **VALID** | changed games re-read inside the transaction in confidence pools (`live()` map); WEEKLY branch honours the live status too |
+| 6 | Runner appends failures but returns `ok` undefined → green Run Log on a partial migration | **VALID** | `ok: false` + re-run instruction when any pool failed |
+| 7 | `getPoolPicks` drops `status` before calling `weekRevealFor`, so a status-locked game stays unrevealed | **VALID** | `status` passed through |
+| 8 | Backfill can apply partly (per-pool catch, cursor advances past a failed doc) | **REJECT** — idempotent per-pool op; failure reported and retried on re-run; same contract as `backfillPublishedWeeks`; #6 makes the failure visible | reasoning posted |
+| 9 | Settings guard omits `lockBufferMinutes` / `weekLockOverrides` | **VALID** | `lockRevision` compared too — every lock-affecting save bumps it |
+| 10 | Scoring cases in an "ad hoc" test file | **REJECT** — functions modules are unit-tested under `functions/src/__tests__` (repo taxonomy) | reasoning posted |
+| 11 | Checklist keeps a status-locked week as "current" and hides a later due week | **VALID** | `currentWeek` skips `missed` / `locked-complete` |
+| 12 | Pure lock tests in the functions test folder | **REJECT** — same as #10 | reasoning posted |
+
+Plus one CI finding (not qodo): `goldenArc` "accepts a pre-lock pick" failed with
+`TIEBREAK_LOCKED` — the D3 guard refused a FIRST prediction sent after the
+Monday target had started, and with it the valid Sunday pick. D3 refined: a
+prediction the member already holds cannot change (refused); one they never
+recorded is dropped, not refused — the picks still save and the number never
+lands. Emulator scenario "D3 on a STRAIGHT per-game pool — the goldenArc shape".
+
+Code written to close #2, #3, #5, #6, #7, #9, #11 and the D3 refinement is code
+codex had not seen → **round 11, §2b-forced, recorded in the PR body** (CLAUDE.md
+§2c exception: up to 5 past the cap).
+
+---
+
+## Round 11 — 2026-09-10 ~19:20 MDT, §2b-forced (code written to close qodo findings), diff @ `cfc3203e`
+
+2 findings, both P1, both accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | The WEEKLY status closure treated ANY non-SCHEDULED status as "the week has started" — a game CANCELLED before kickoff would refuse every remaining pick (`WEEK_LOCKED`) and reveal every sheet. | **ACCEPT** | "Started" = `IN_PROGRESS` or `FINAL` for the week-level closure (`gameHasStarted` in shared; submit pre-tx and in-tx; reveal WEEK branch). A cancelled game is still locked by itself. Unit cases in both test files. |
+| 2 | P1 | In a WEEKLY confidence pool the in-transaction re-read covered only the games this save changed, so an earlier game flipping to live mid-flight while a later pick was edited went unseen. | **ACCEPT** | WEEKLY confidence pools re-read the whole slate inside the transaction (≤ the week's games, only on confidence pools); PER_GAME keeps the changed-ids read. |
+
 Pattern for the record: rounds 3–10 each found exactly one to three defects in
 the code written to close the previous round — never in the plan's design, and
 each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That

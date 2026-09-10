@@ -163,6 +163,18 @@ export function gameStatusLocks(
 }
 
 /**
+ * Has this game actually STARTED (live or over)? The predicate a WEEKLY
+ * confidence week closes on. Deliberately narrower than `gameStatusLocks`: a
+ * game CANCELLED before its kickoff is locked by itself (nothing to pick) but
+ * is no evidence the week's first kickoff has happened — closing the whole
+ * sheet on it would refuse every remaining pick and reveal every sheet early
+ * (codex r11 on the diff).
+ */
+export function gameHasStarted(game: NFLLockGame): boolean {
+  return game.status === 'IN_PROGRESS' || game.status === 'FINAL';
+}
+
+/**
  * When ONE game's pick closes in THIS pool, in epoch ms — buffer, override and
  * the kickoff ceiling folded in from the pool doc. The one helper every
  * per-game reader uses (pick sheet, Bento CTA, `nflPending`), mirrored on the
@@ -214,7 +226,8 @@ export function isWeekLockedFor(
 ): boolean {
   if (weekGames.length === 0) return false;
   if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY') {
-    if (weekGames.some((g) => gameStatusLocks(pool?.settings, g))) return true;
+    // A game that has STARTED closes a confidence week; a CANCELLED one does not.
+    if (lockStopsAtKickoff(pool?.settings) && weekGames.some(gameHasStarted)) return true;
     const at = weekLockAtFor(pool, week, weekGames.map((g) => g.startTime));
     return at !== null && now >= at;
   }

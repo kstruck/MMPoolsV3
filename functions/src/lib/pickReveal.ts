@@ -100,8 +100,10 @@ export function weekRevealFor(
     // or final game closes — and therefore reveals — a WEEKLY week whatever the
     // feed's corrected `startTime` says. Same predicate as the submit path.
     const weekSettings = effectiveLockSettings(pool?.settings, pool?.type);
+    // STARTED (live or final), not CANCELLED: a cancellation before kickoff is
+    // no reason to reveal every sheet in the week (codex r11).
     const statusClosed = weekSettings.kickoffCeiling === true
-      && games.some(g => typeof g.status === 'string' && g.status !== 'SCHEDULED');
+      && games.some(g => g.status === 'IN_PROGRESS' || g.status === 'FINAL');
     const open = statusClosed || now >= lockAt;
     return {
       mode,

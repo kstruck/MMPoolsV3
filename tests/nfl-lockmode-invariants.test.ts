@@ -163,6 +163,16 @@ describe('isGameLockedFor / isWeekLockedFor — the pool-aware readers', () => {
     expect(isGameLockedFor(straight, 1, live, [live], NOW)).toBe(false);
   });
 
+  it('a CANCELLED game does not close a WEEKLY confidence week — only a STARTED one does (codex r11)', () => {
+    const cancelled = g('x', NOW + 60 * 60_000, 'CANCELLED');
+    const open = g('y', NOW + 2 * 60 * 60_000);
+    expect(isWeekLockedFor(conf('WEEKLY'), 1, [cancelled, open], NOW)).toBe(false);
+    const started = g('z', NOW + 60 * 60_000, 'IN_PROGRESS');
+    expect(isWeekLockedFor(conf('WEEKLY'), 1, [started, open], NOW)).toBe(true);
+    // The cancelled game itself is still locked (nothing to pick).
+    expect(isGameLockedFor(conf('PER_GAME'), 1, cancelled, [cancelled, open], NOW)).toBe(true);
+  });
+
   it('PER_GAME week is closed when EVERY game is, status included (codex r8)', () => {
     const pool = conf('PER_GAME');
     const doneEarly = g('a', NOW - 60_000, 'FINAL');

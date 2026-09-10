@@ -73,6 +73,9 @@ describe('revealMode', () => {
     // A straight WEEKLY pool keeps the clock rule.
     const straight = { type: 'NFL_PICKEM', settings: { lockMode: 'WEEKLY', lockBufferMinutes: 5 } };
     expect(weekRevealFor(straight, 3, [live, later], now).weekRevealed).toBe(false);
+    // A CANCELLED game before kickoff is not a kickoff: the week stays unrevealed (codex r11).
+    const cancelled = { id: 'cx', startTime: now + 7_200_000, status: 'CANCELLED' };
+    expect(weekRevealFor(pool, 3, [cancelled, later], now).weekRevealed).toBe(false);
   });
 
   it('cannot be downgraded on a hard-lock pool by a settings write', () => {

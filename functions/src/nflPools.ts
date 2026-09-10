@@ -562,8 +562,11 @@ export async function submitNFLPicksInternal(
   // in a confidence pool, where a game that has left SCHEDULED closes the week
   // whatever the feed's `startTime` now says (PLAN-CONFIDENCE-PER-GAME-LOCK
   // §3.2a, codex r3): the status half never moves either.
+  // STARTED (live or final) — not CANCELLED: a game cancelled before kickoff is
+  // locked by itself but is no evidence the week's first kickoff happened
+  // (codex r11).
   const weekStatusLocked = lockSettings.kickoffCeiling === true
-    && games.some(g => typeof g.status === 'string' && g.status !== 'SCHEDULED');
+    && games.some(g => g.status === 'IN_PROGRESS' || g.status === 'FINAL');
   let weekLocked = weekStatusLocked || now >= effectiveWeekLock;
 
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
@@ -702,12 +705,18 @@ export async function submitNFLPicksInternal(
       // pools keep the clock rule and need no read.
       const liveById = new Map<string, NFLGame>();
       if (lockSettings.kickoffCeiling === true) {
-        const changedIds = new Set<string>();
-        for (const [id, v] of Object.entries(weekPicks)) if (v !== existingEntry?.picks?.[id]) changedIds.add(id);
-        for (const [id, v] of Object.entries(weekWeights)) {
-          if (v !== ((existingEntry?.confidence ?? {}) as Record<string, number>)[id]) changedIds.add(id);
+        const toRead = new Set<string>();
+        if (weeklyLockMode) {
+          // WEEKLY: ANY game starting closes the whole sheet, so every game's
+          // status matters, not only the ones this save changes (codex r11).
+          for (const g of games) toRead.add(g.id);
+        } else {
+          for (const [id, v] of Object.entries(weekPicks)) if (v !== existingEntry?.picks?.[id]) toRead.add(id);
+          for (const [id, v] of Object.entries(weekWeights)) {
+            if (v !== ((existingEntry?.confidence ?? {}) as Record<string, number>)[id]) toRead.add(id);
+          }
         }
-        const snaps = await Promise.all([...changedIds].map(id => transaction.get(db.collection('nfl_games').doc(id))));
+        const snaps = await Promise.all([...toRead].map(id => transaction.get(db.collection('nfl_games').doc(id))));
         for (const s of snaps) {
           const d = s.data() as Partial<NFLGame> | undefined;
           const base = games.find(g => g.id === s.id);
@@ -715,8 +724,10 @@ export async function submitNFLPicksInternal(
         }
       }
       const live = (g: NFLGame): NFLGame => liveById.get(g.id) ?? g;
+      // Started — live or final — not merely non-SCHEDULED (a cancellation is
+      // not a kickoff; codex r11).
       const liveStatusLocksWeek = lockSettings.kickoffCeiling === true
-        && games.some(g => { const s = live(g).status; return typeof s === 'string' && s !== 'SCHEDULED'; });
+        && games.some(g => { const s = live(g).status; return s === 'IN_PROGRESS' || s === 'FINAL'; });
 
       // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
       // the first submission, once per pool-week, and hold every later
