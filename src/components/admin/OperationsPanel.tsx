@@ -235,9 +235,10 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
 const runConfidenceLockModeBackfill = async (dryRun: boolean) => {
   let cursor: string | undefined;
   let pages = 0;
-  const agg = { dryRun, poolsScanned: 0, poolsChanged: 0, plannedWrites: [] as any[], failures: [] as any[] };
+  const agg = { dryRun, poolsScanned: 0, poolsChanged: 0, plannedWrites: [] as unknown[], failures: [] as unknown[] };
   do {
-    const r: any = await call('backfillConfidenceLockMode', { dryRun, limit: 200, ...(cursor ? { startAfter: cursor } : {}) });
+    const r = (await call('backfillConfidenceLockMode', { dryRun, limit: 200, ...(cursor ? { startAfter: cursor } : {}) })) as
+      Record<string, unknown> & { plannedWrites?: unknown[]; failures?: unknown[]; nextCursor?: string | null };
     addReportPage(agg, r);
     if (Array.isArray(r.plannedWrites)) agg.plannedWrites.push(...r.plannedWrites);
     if (Array.isArray(r.failures)) agg.failures.push(...r.failures);

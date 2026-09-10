@@ -84,8 +84,8 @@ export const backfillConfidenceLockMode = validated(
                         });
                     });
                 }
-            } catch (err: any) {
-                report.failures.push({ poolId: doc.id, error: String(err?.message || err) });
+            } catch (err: unknown) {
+                report.failures.push({ poolId: doc.id, error: err instanceof Error ? err.message : String(err) });
             }
         }
 

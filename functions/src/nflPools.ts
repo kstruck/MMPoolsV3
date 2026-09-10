@@ -673,7 +673,11 @@ export async function submitNFLPicksInternal(
         const targetGames = authoritative.length > 0
           ? games.filter(g => authoritative.includes(g.id))
           : [games.reduce((last, g) => (g.startTime > last.startTime ? g : last), games[0])];
-        tiebreakTargetLockedNow = targetGames.every(g => isGameLockedForGame(now, g, week, lockSettings));
+        // `some`, not `every` (codex r4): a legacy MNF_COMBINED target is the SUM
+        // of two Monday games, and once the first has started a member holding
+        // the prediction open until the second locks would be revising a total
+        // with half the outcome known.
+        tiebreakTargetLockedNow = targetGames.some(g => isGameLockedForGame(now, g, week, lockSettings));
         // Hoisted: both the rejection below and the freeze guard further down
         // are scoped to the ONE week whose meaning this release changed.
         const noMondayGame = games.every(g => g.isMonday !== true);

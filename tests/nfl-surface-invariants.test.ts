@@ -480,9 +480,12 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     expect(code).toContain('disabled={taken}');
   });
 
-  it('the owners map is built from THIS week\'s games only', () => {
-    // Folding the whole entry in would gray out weights spent on other weeks.
-    expect(code).toContain('confidenceValueOwners(games.map(g => g.id), confidence)');
+  it('the owners map is built from THIS week\'s games only, minus the games the member missed', () => {
+    // Folding the whole entry in would gray out weights spent on other weeks;
+    // folding a MISSED game in (locked, never picked — its draft weight is
+    // dropped at submit) would gray out a value the member still needs
+    // (PLAN-CONFIDENCE-PER-GAME-LOCK, codex r3 on the diff).
+    expect(code).toContain("confidenceValueOwners(games.map(g => g.id).filter(id => !confidenceSlate.missedIds.includes(id)), confidence)");
   });
 
   it('the duplicate detection is still present and still blocks the submit', () => {

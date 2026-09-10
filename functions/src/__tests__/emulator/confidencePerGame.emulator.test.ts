@@ -36,7 +36,7 @@ const wUpdate = test.wrap(updatePoolSettings);
 const wCreate = test.wrap(createNFLPool);
 const wBackfill = test.wrap(backfillConfidenceLockMode);
 
-const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN', email: 'admin@test.local' } } as any;
+const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN', email: 'admin@test.local' } } as never;
 
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 const HOUR = 60 * 60 * 1000;
@@ -324,6 +324,41 @@ describe('T8 #19 / #20 — cancellation policy (codex r2 #5)', () => {
     }, 60000);
 });
 
+describe('codex r4 — a legacy MNF_COMBINED tiebreaker locks when the FIRST Monday game starts', () => {
+    const runId = 'run-cpg-combined';
+    const poolId = `pool-${runId}`;
+    const EVE = `sim-${runId}-eve`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-combined' }, auth: superAdmin } as never);
+        // Legacy rule: no `weeklyTiebreaker` at all → MNF_COMBINED (sum of every Monday game).
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 });
+        await db.collection('pools').doc(poolId).update({ 'settings.weeklyTiebreaker': admin.firestore.FieldValue.delete() });
+        // Two Monday games (g2 and g3), both open; g1 a Sunday game.
+        await wSeed({ data: { runId, games: slate(Date.now() + 24 * HOUR, { g2: { isMonday: true }, g3: { isMonday: true } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: EVE, name: 'Eve' }] }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('accepts a prediction while both Monday games are open, refuses a change once the first has started', async () => {
+        const picks = { [g(1)]: 'SEA', [g(2)]: 'PIT', [g(3)]: 'KC' };
+        const confidence = { [g(1)]: 16, [g(2)]: 15, [g(3)]: 14 };
+        await wSubmit({ data: { poolId, runId, subjectUid: EVE, week: 1, picks, confidence, tiebreakerPrediction: 44 }, auth: superAdmin } as never);
+        expect((await entry(poolId, EVE)).weeklyTiebreakers?.['1']).toBe(44);
+        await db.collection('nfl_games').doc(g(2)).update({ status: 'IN_PROGRESS' });
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: EVE, week: 1, picks, confidence, tiebreakerPrediction: 45 }, auth: superAdmin,
+        } as never)).rejects.toThrow(/TIEBREAK_LOCKED/);
+        // Unchanged resend, with g3 still open, is fine.
+        await wSubmit({ data: { poolId, runId, subjectUid: EVE, week: 1, picks, confidence, tiebreakerPrediction: 44 }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
 describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confidence pool, pages, and is idempotent', () => {
     const runId = 'run-cpg-backfill';
     const ids = ['a-pergame', 'b-absent', 'c-weekly', 'd-straight'].map((s) => `pool-${runId}-${s}`);
@@ -337,15 +372,22 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
         await seedPool(ids[3], runId, { confidenceMode: false, lockMode: 'PER_GAME' });
     }, 30000);
 
-    const mine = (r: any) => (r.plannedWrites as any[]).filter((w) => ids.includes(w.poolId));
+    type BackfillReport = {
+        dryRun: boolean; poolsScanned: number; poolsChanged: number; nextCursor: string | null;
+        plannedWrites: Array<{ poolId: string; name: string; storedLockMode: string | null }>;
+        failures: Array<{ poolId: string; error: string }>;
+    };
+    const backfill = async (data: Record<string, unknown>): Promise<BackfillReport> =>
+        (await wBackfill({ data, auth: superAdmin } as never)) as BackfillReport;
+    const mine = (r: BackfillReport) => r.plannedWrites.filter((w) => ids.includes(w.poolId));
 
     it('dry run lists the THREE confidence pools with their stored lock mode, writes nothing', async () => {
-        const r: any = await wBackfill({ data: { dryRun: true, limit: 200 }, auth: superAdmin } as never);
+        const r = await backfill({ dryRun: true, limit: 200 });
         const planned = mine(r);
         expect(planned.map((w) => w.poolId).sort()).toEqual([ids[0], ids[1], ids[2]].sort());
-        expect(planned.find((w) => w.poolId === ids[0]).storedLockMode).toBe('PER_GAME');
-        expect(planned.find((w) => w.poolId === ids[1]).storedLockMode).toBeNull();
-        expect(planned.find((w) => w.poolId === ids[2]).storedLockMode).toBe('WEEKLY');
+        expect(planned.find((w) => w.poolId === ids[0])!.storedLockMode).toBe('PER_GAME');
+        expect(planned.find((w) => w.poolId === ids[1])!.storedLockMode).toBeNull();
+        expect(planned.find((w) => w.poolId === ids[2])!.storedLockMode).toBe('WEEKLY');
         for (const id of ids) {
             expect((await db.collection('pools').doc(id).get()).data()!.settings.lockRuleVersion).toBeUndefined();
         }
@@ -358,7 +400,7 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
         let pages = 0;
         let scanned = 0;
         do {
-            const r: any = await wBackfill({ data: { dryRun: true, limit: 2, ...(cursor ? { startAfter: cursor } : {}) }, auth: superAdmin } as never);
+            const r = await backfill({ dryRun: true, limit: 2, ...(cursor ? { startAfter: cursor } : {}) });
             scanned += r.poolsScanned;
             cursor = r.nextCursor;
             pages++;
@@ -368,7 +410,7 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
     }, 60000);
 
     it('live run stamps all three (lockMode WEEKLY, a no-op on the third), bumps lockRevision, leaves the straight pool alone', async () => {
-        const r: any = await wBackfill({ data: { dryRun: false, limit: 200 }, auth: superAdmin } as never);
+        const r = await backfill({ dryRun: false, limit: 200 });
         expect(mine(r)).toHaveLength(3);
         for (const id of [ids[0], ids[1], ids[2]]) {
             const s = (await db.collection('pools').doc(id).get()).data()!.settings;
@@ -382,7 +424,7 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
     }, 30000);
 
     it('a second live run changes nothing', async () => {
-        const r: any = await wBackfill({ data: { dryRun: false, limit: 200 }, auth: superAdmin } as never);
+        const r = await backfill({ dryRun: false, limit: 200 });
         expect(mine(r)).toHaveLength(0);
     }, 30000);
 
@@ -398,18 +440,18 @@ describe('T8 #14 — createNFLPool stamps a new Pick\'em pool (codex r1 #4)', ()
     // role out from under every other file (measured: goldenArc then failed its
     // beforeAll with "Sim harness callables are SUPER_ADMIN only").
     const CREATOR = 'cpg-creator-1';
-    const creator = { uid: CREATOR, token: { role: 'PARTICIPANT' } } as any;
+    const creator = { uid: CREATOR, token: { role: 'PARTICIPANT' } } as never;
 
     it('a wizard-created confidence pool carries lockRuleVersion 2 and therefore plays its stored lockMode', async () => {
         await db.collection('users').doc(CREATOR).set({ role: 'PARTICIPANT', name: 'Creator' });
-        const res: any = await wCreate({
+        const res: { poolId?: string; id?: string } = await wCreate({
             data: {
                 type: 'NFL_PICKEM', name: 'Stamp test', season: 2026, seasonType: 2,
                 settings: { entryFee: 0, confidenceMode: true, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', payoutMode: 'SEASON', payouts: { places: [], bonuses: [] } },
             },
             auth: creator,
         } as never);
-        const poolId = res?.poolId ?? res?.id;
+        const poolId = (res.poolId ?? res.id) as string;
         expect(typeof poolId).toBe('string');
         const doc = (await db.collection('pools').doc(poolId).get()).data()!;
         expect(doc.settings.lockRuleVersion).toBe(2);

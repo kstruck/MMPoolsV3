@@ -72,5 +72,24 @@ process. Cause: the new `createNFLPool` scenario created a pool AS admin-1,
 which wrote `managedPools` / `commissionerAggregate` onto the shared admin user
 doc, and a later suite's profile recompute then changed that user's role.
 Fixed by giving the scenario its own creator user and deleting its subtree
-afterwards. The ordering dependency in `goldenArc` (beforeAll before the
-seeding beforeEach) is pre-existing and untouched.
+afterwards. **Correction after measuring:** the same combo (`autoScore` then
+`goldenArc`, or `fixtureMatrix` then `goldenArc`) fails identically on
+origin/main `59deb790` with this branch's code checked out nowhere — the
+`goldenArc` beforeAll-before-beforeEach ordering is pre-existing and not
+caused by this branch. Task chip filed; the isolation change above is kept
+because it is hygiene either way.
+
+---
+
+## Round 4 — 2026-09-10 ~14:20 MDT, implementation diff @ `adbc39e1`
+
+(A first round-4 run coincided with the lint-baseline `git checkout --detach
+origin/main` and reported "HEAD matches the merge-base — no changes"; it was
+re-run on the branch. Lesson: never move HEAD while a `codex exec review` is
+running in the same worktree.)
+
+1 finding, P1, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | The new tiebreaker guard used `every` over the target games, so a legacy `MNF_COMBINED` target (the SUM of two Monday games) stayed editable after the first game started — a member could revise a combined total with half the outcome known. | **ACCEPT** | `nflPools.ts`: `some` instead of `every`. Emulator scenario "a legacy MNF_COMBINED tiebreaker locks when the FIRST Monday game starts" (27/27 in the file). |
