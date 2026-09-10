@@ -471,7 +471,12 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     // Guard the guard — see the nav block. Both strings live only in comments.
     expect(sheet).toContain('strand the member');
     expect(code).not.toContain('strand the member');
-    expect(code).toContain('availableConfidenceValues.map'); // code survived
+    // The option list is now a per-game expression (a locked game lists only its
+    // frozen weight; an open game lists what it may still take plus what it holds
+    // — PLAN-CONFIDENCE-PER-GAME-LOCK), so the surviving-code check names the
+    // list and the map separately.
+    expect(code).toContain('...availableConfidenceValues]'); // code survived
+    expect(code).toContain(').map(v => {');
   });
 
   it('the per-game dropdown disables values from the shared rule, not a local re-derivation', () => {
