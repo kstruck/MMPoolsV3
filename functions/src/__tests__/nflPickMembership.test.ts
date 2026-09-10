@@ -9,7 +9,8 @@ vi.mock('firebase-admin', () => {
     return { firestore, __esModule: true, default: { firestore } };
 });
 
-import { assertNFLPickMembership } from '../nflPools';
+import { assertNFLPickMembership, assertJoinCapacity } from '../nflPools';
+import { FREE_PLAN_PARTICIPANT_CAP } from '../shared/freePlanCap';
 
 // PLAN-TEST-SUITE item 11: submitNFLPicks previously accepted picks from ANY
 // authenticated user. The gate must reject non-members and admit participants,
@@ -44,5 +45,35 @@ describe('assertNFLPickMembership', () => {
         expect(() => assertNFLPickMembership({}, 'stranger', undefined)).toThrowError(/NOT_POOL_MEMBER/);
         expect(() => assertNFLPickMembership({ participantIds: 'not-an-array' }, 'stranger', undefined))
             .toThrowError(/NOT_POOL_MEMBER/);
+    });
+});
+
+// PLAN-ADMIN-PICK-IMPLICIT-JOIN: the seat gates joinNFLPool applies, hoisted so
+// the implicit join in submitNFLPicks runs the SAME two checks. `count` is the
+// roster size BEFORE the joiner.
+describe('assertJoinCapacity', () => {
+    it('admits a joiner while a free pool is under the cap', () => {
+        expect(() => assertJoinCapacity({ billing: { status: 'free' } }, FREE_PLAN_PARTICIPANT_CAP - 1)).not.toThrow();
+    });
+
+    it('refuses the joiner that would exceed the free cap', () => {
+        expect(() => assertJoinCapacity({ billing: { status: 'free' } }, FREE_PLAN_PARTICIPANT_CAP))
+            .toThrowError(/full/i);
+    });
+
+    it('treats a missing billing block as free', () => {
+        expect(() => assertJoinCapacity({}, FREE_PLAN_PARTICIPANT_CAP)).toThrowError(/full/i);
+        expect(() => assertJoinCapacity({ billing: null }, 0)).not.toThrow();
+    });
+
+    it('enforces a PAID pool\'s purchased ceiling and ignores the free cap', () => {
+        const paid = { billing: { status: 'paid', paid: { maxPlayersAllowed: 25 } } };
+        expect(() => assertJoinCapacity(paid, FREE_PLAN_PARTICIPANT_CAP)).not.toThrow();
+        expect(() => assertJoinCapacity(paid, 24)).not.toThrow();
+        expect(() => assertJoinCapacity(paid, 25)).toThrowError(/full/i);
+    });
+
+    it('a trial pool has no seat limit', () => {
+        expect(() => assertJoinCapacity({ billing: { status: 'trial' } }, 500)).not.toThrow();
     });
 });
