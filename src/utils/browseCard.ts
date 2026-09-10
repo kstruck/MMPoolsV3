@@ -23,35 +23,7 @@ import { getTeamLogo } from '../constants';
 import { getPoolTypeName } from './poolUtils';
 import { poolTypeLabel, poolOptionLabels } from './poolTypeLabel';
 import { formatEntryCount, getPoolEntrySummary, getPoolLifecycleState, isNFLSeasonPoolType } from './poolSport';
-import type { EntryCountable, LifecycleReadable, PoolLifecycleState } from './poolSport';
-
-/**
- * Lifecycle state for an NFL season pool, finalization-aware.
- *
- * The scorer's finalizer (functions/src/nflFinalize.ts, `maybeFinalizeNFLPool`)
- * stamps `finalizedAt` and writes NO status — a finished Survivor pool keeps
- * `status: 'OPEN'` (or LOCKED) for good. `backfillPools` can also stamp
- * `status: 'FINAL'`, and the manager archive path stores lowercase `archived`
- * (declared on every NFL pool type; `poolInclusion.ts` and `reminders.ts`
- * already treat it as finished). `getPoolLifecycleState` reads none of the
- * three, so on its own a finished or archived season pool would sit under the
- * default Open filter wearing an Open badge (codex r1 + qodo on this PR).
- * Resolved here rather than in the shared reader because that reader also
- * feeds `isActiveManagedPool` (commissioner rosters and stats), whose
- * semantics are not this PR's to change.
- *
- * Verified 2026-09-08 (re-run before trusting):
- *   grep -n "finalizedAt\|status" functions/src/nflFinalize.ts   # :411 finalizedAt, no status write
- *   grep -n "'FINAL'" functions/src/backfill.ts                   # :137 status FINAL
- *   grep -rn "'archived'" functions/src/lib/poolInclusion.ts functions/src/reminders.ts
- */
-function nflSeasonLifecycle(pool: Pool): PoolLifecycleState {
-    const p = pool as { finalizedAt?: unknown; status?: string };
-    if (p.finalizedAt !== undefined && p.finalizedAt !== null) return 'final';
-    const status = typeof p.status === 'string' ? p.status.toUpperCase() : '';
-    if (status === 'FINAL' || status === 'ARCHIVED') return 'final';
-    return getPoolLifecycleState(pool as LifecycleReadable);
-}
+import type { EntryCountable, LifecycleReadable } from './poolSport';
 
 export type BrowseTypeFilter = 'all' | 'squares' | 'props' | 'bracket' | 'playoff' | 'survivor' | 'pickem' | 'margin';
 export type BrowsePriceFilter = 'all' | 'low' | 'mid' | 'high'; // low < 20, mid 20-50, high > 50
@@ -110,8 +82,10 @@ export function browsePriceMatches(pool: Pool, filter: BrowsePriceFilter): boole
 
 /**
  * Game Status buckets, per type. BRACKET reads its string status; NFL season
- * types read the finalization-aware lifecycle; SQUARES (and, as before, PROPS
- * and NFL_PLAYOFFS) read `isLocked` + `scores.gameStatus`.
+ * types read the shared lifecycle reader (`getPoolLifecycleState`, which
+ * honours `finalizedAt` / status FINAL / archived since the follow-up to #677);
+ * SQUARES (and, as before, PROPS and NFL_PLAYOFFS) read `isLocked` +
+ * `scores.gameStatus`.
  */
 export function browseStatusMatches(pool: Pool, filter: BrowseStatusFilter): boolean {
     if (filter === 'all') return true;
@@ -126,7 +100,7 @@ export function browseStatusMatches(pool: Pool, filter: BrowseStatusFilter): boo
         // scored) goes under "Live Now", the same call the BRACKET branch makes
         // above — otherwise a locked pool matched no bucket but All (qodo on
         // this PR).
-        const state = nflSeasonLifecycle(pool);
+        const state = getPoolLifecycleState(pool as LifecycleReadable);
         if (filter === 'open') return state === 'open';
         if (filter === 'live') return state === 'live' || state === 'locked';
         return state === 'final' || state === 'closed';
@@ -212,7 +186,7 @@ export function describeBrowseCard(pool: Pool): BrowseCardModel {
         // players on the pool doc (getPoolEntrySummary); the rule chips are the
         // same words the My Entries cards and the Commissioner Hub use.
         const summary = getPoolEntrySummary(pool as EntryCountable);
-        const state = nflSeasonLifecycle(pool);
+        const state = getPoolLifecycleState(pool as LifecycleReadable);
         const charity = (pool as { charity?: { enabled?: boolean } }).charity;
         return {
             typeLabel: `NFL ${poolTypeLabel(pool)}`,
