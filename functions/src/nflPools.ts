@@ -705,18 +705,14 @@ export async function submitNFLPicksInternal(
       // pools keep the clock rule and need no read.
       const liveById = new Map<string, NFLGame>();
       if (lockSettings.kickoffCeiling === true) {
-        const toRead = new Set<string>();
-        if (weeklyLockMode) {
-          // WEEKLY: ANY game starting closes the whole sheet, so every game's
-          // status matters, not only the ones this save changes (codex r11).
-          for (const g of games) toRead.add(g.id);
-        } else {
-          for (const [id, v] of Object.entries(weekPicks)) if (v !== existingEntry?.picks?.[id]) toRead.add(id);
-          for (const [id, v] of Object.entries(weekWeights)) {
-            if (v !== ((existingEntry?.confidence ?? {}) as Record<string, number>)[id]) toRead.add(id);
-          }
-        }
-        const snaps = await Promise.all([...toRead].map(id => transaction.get(db.collection('nfl_games').doc(id))));
+        // The WHOLE slate, in either mode. WEEKLY: any game starting closes the
+        // sheet (codex r11). PER_GAME: a game that started since the pre-read
+        // and that this save does NOT touch still changes the confidence slate
+        // — it becomes a MISS, which shrinks the range — so judging the sheet
+        // on its stale SCHEDULED status would refuse a valid save as
+        // "incomplete" (codex r12). At most the week's games, confidence pools
+        // only; reads precede every write below.
+        const snaps = await Promise.all(games.map(g => transaction.get(db.collection('nfl_games').doc(g.id))));
         for (const s of snaps) {
           const d = s.data() as Partial<NFLGame> | undefined;
           const base = games.find(g => g.id === s.id);

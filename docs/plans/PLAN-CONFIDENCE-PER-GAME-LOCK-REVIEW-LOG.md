@@ -218,6 +218,16 @@ codex had not seen → **round 11, §2b-forced, recorded in the PR body** (CLAUD
 | 1 | P1 | The WEEKLY status closure treated ANY non-SCHEDULED status as "the week has started" — a game CANCELLED before kickoff would refuse every remaining pick (`WEEK_LOCKED`) and reveal every sheet. | **ACCEPT** | "Started" = `IN_PROGRESS` or `FINAL` for the week-level closure (`gameHasStarted` in shared; submit pre-tx and in-tx; reveal WEEK branch). A cancelled game is still locked by itself. Unit cases in both test files. |
 | 2 | P1 | In a WEEKLY confidence pool the in-transaction re-read covered only the games this save changed, so an earlier game flipping to live mid-flight while a later pick was edited went unseen. | **ACCEPT** | WEEKLY confidence pools re-read the whole slate inside the transaction (≤ the week's games, only on confidence pools); PER_GAME keeps the changed-ids read. |
 
+---
+
+## Round 12 — 2026-09-10 ~19:55 MDT, §2b-forced, diff @ post-r11 commit
+
+1 finding, P2, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P2 | PER_GAME confidence: an earlier game that flipped to live after the pre-read, and that this save does not touch, was not re-read — its stale SCHEDULED status made the validator demand a pick for it ("incomplete") instead of treating it as a miss. | **ACCEPT** | Confidence pools re-read the WHOLE slate in the transaction in both modes (the changed-ids optimisation is gone; at most the week's games, confidence pools only). |
+
 Pattern for the record: rounds 3–10 each found exactly one to three defects in
 the code written to close the previous round — never in the plan's design, and
 each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That
