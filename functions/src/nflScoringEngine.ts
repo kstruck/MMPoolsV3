@@ -224,6 +224,57 @@ export function validateConfidenceValues(
   return { valid: true };
 }
 
+/**
+ * The PER_GAME confidence rule (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2, D2).
+ *
+ * Judged on the MERGED sheet — what the entry will hold after this write —
+ * over the confidence slate `confidenceSlateFor` computed (a CANCELLED game
+ * nobody picked is not in it). Rules, in order:
+ *
+ *  1. every OPEN game in the slate has a pick — the range depends on how many
+ *     games the member missed, and k can only grow as games lock, so a sheet
+ *     that leaves an open game unpicked while spending a high value elsewhere
+ *     could become invalid under its own k later (§3.2);
+ *  2. every picked game has a weight;
+ *  3. weights lie in `[minValue .. maxValue]` = `[17−N .. 16−k]` — a missed
+ *     game forfeits the top value (Kevin: "for a 16 game week, they would lose 16");
+ *  4. no weight is used twice.
+ *
+ * Locked games are the caller's concern (`CONFIDENCE_LOCKED` / `GAME_LOCKED`
+ * before this runs); here they simply contribute their frozen pick and weight.
+ * Error codes are the ones the sheet already knows.
+ */
+export function validatePerGameConfidence(
+  merged: { picks: Record<string, string>; confidence: Record<string, number> },
+  slate: { slateIds: readonly string[]; missedIds: readonly string[]; minValue: number; maxValue: number },
+  openIds: ReadonlySet<string>,
+): { valid: boolean; error?: string } {
+  const missed = new Set(slate.missedIds);
+  const assigned = new Set<number>();
+  for (const gameId of slate.slateIds) {
+    const pick = merged.picks[gameId];
+    if (pick === undefined) {
+      if (openIds.has(gameId)) {
+        return { valid: false, error: `INCOMPLETE_CONFIDENCE_SUBMISSION: Missing pick for game ${gameId}` };
+      }
+      if (missed.has(gameId)) continue; // forfeited — nothing to weight
+      continue; // locked, unpicked, not in missedIds: cannot happen by construction; tolerate
+    }
+    const value = merged.confidence[gameId];
+    if (value === undefined || value === null) {
+      return { valid: false, error: `INCOMPLETE_CONFIDENCE_SUBMISSION: Missing confidence value for game ${gameId}` };
+    }
+    if (!Number.isInteger(value) || value < slate.minValue || value > slate.maxValue) {
+      return { valid: false, error: `OUT_OF_RANGE_CONFIDENCE: Value ${value} must be between ${slate.minValue} and ${slate.maxValue}` };
+    }
+    if (assigned.has(value)) {
+      return { valid: false, error: `DUPLICATE_CONFIDENCE_VALUES: Value ${value} assigned more than once` };
+    }
+    assigned.add(value);
+  }
+  return { valid: true };
+}
+
 // ============================================================================
 // Survivor Scoring Logic
 // ============================================================================

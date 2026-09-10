@@ -96,16 +96,21 @@ export function buildPoolSettingsUpdate(
  * concurrency protocol's backstop — a client that could reset it would let a
  * scoring pass that should have been invalidated commit anyway.
  */
-export const SERVER_OWNED_SETTINGS_KEYS: readonly string[] = ['weekLockOverrides', 'lockRevision'];
+export const SERVER_OWNED_SETTINGS_KEYS: readonly string[] = ['weekLockOverrides', 'lockRevision', 'lockRuleVersion'];
 
 /**
  * Settings whose value changes WHEN a pick locks, and therefore what the scorer
  * is allowed to reveal. A write touching any of these has to serialize with a
  * live scoring pass and bump `settings.lockRevision` (see poolOps.updatePoolSettings).
  *
- * `confidenceMode` is on the list because submission derives weekly-lock mode
- * from `settings.confidenceMode || settings.lockMode === 'WEEKLY'` — flipping it
- * silently converts a Pick'em pool from per-game to weekly locking.
+ * `confidenceMode` is on the list because `shared/nflLockMode.ts` reads it —
+ * on an unstamped (legacy) pool it forces weekly locking, and on a stamped one
+ * it turns the kickoff ceiling on — so flipping it changes when picks lock.
+ * (`poolOps.updatePoolSettings` additionally refuses the flip once anybody has
+ * submitted: `lib/confidenceModeGate.ts`.)
+ *
+ * `lockRuleVersion` is SERVER-OWNED, not lock-affecting: no manager save may
+ * set, downgrade or delete the stamp (PLAN-CONFIDENCE-PER-GAME-LOCK, codex r2 #2).
  */
 export const LOCK_AFFECTING_SETTINGS_KEYS: readonly string[] =
   ['lockMode', 'lockBufferMinutes', 'confidenceMode', 'weekLockOverrides'];

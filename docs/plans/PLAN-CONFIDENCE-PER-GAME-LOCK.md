@@ -273,7 +273,8 @@ in k, not pickable, no weight. It is not the member's miss and nobody could have
 used its value. If the member HAS a stored pick, the weight stays frozen and
 scores 0 — today's documented behaviour ("confidence points lost, not
 reassigned"). Worked example: 16 games, one cancelled before anyone picked it →
-15 games, range 1..15, k = 0. A postponed game whose `status` is still
+15 games, range `[17−15 .. 16−0]` = 2..16, k = 0 — exactly what a natural
+15-game bye week already plays. A postponed game whose `status` is still
 `SCHEDULED` with a later `startTime` is simply open. A game re-slotted to
 another WEEK leaves this week's slate — a pre-existing class, out of scope.
 Scoped to the PER_GAME confidence validator; WEEKLY pools keep today's rule.

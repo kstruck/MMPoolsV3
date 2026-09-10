@@ -11,7 +11,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { loadDraft, saveDraft, clearDraft, isDraftStorageAvailable } from '../../utils/draftStore';
 import { pickHighlightLabel } from '../../utils/pickHighlight';
 import { spreadsBlockWeek } from '../../utils/poolUsesSpreads';
-import { nflLockMode, weekLockOverrideFor, gameLockAt, dropStaleLockedPicks } from '@shared/nflLockMode';
+import { nflLockMode, weekLockOverrideFor, isGameLockedFor, confidenceSlateFor, dropStaleLockedPicks, dropStaleLockedWeights } from '@shared/nflLockMode';
 import { gradePick } from '../../utils/pickemResult';
 import { computeTeamRecords, formatTeamRecord } from '../../utils/nflTeamRecords';
 import { confidenceValueOwners, isConfidenceValueTaken } from '../../utils/confidenceWeights';
@@ -90,13 +90,15 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   const confidenceMode = castPool.settings?.confidenceMode ?? false;
   const bufferMinutes = castPool.settings?.lockBufferMinutes ?? 5;
   // WEEKLY or PER_GAME, from the one shared definition (`shared/nflLockMode.ts`).
-  // Confidence mode forces WEEKLY whatever `lockMode` says, which is the clause
-  // that is easy to miss: such a pool's stored `lockMode` still reads PER_GAME.
+  // A confidence pool plays weekly only while unstamped (legacy) or when its
+  // lockMode says so; a stamped PER_GAME confidence pool locks each game's pick
+  // AND weight at that game's kickoff (PLAN-CONFIDENCE-PER-GAME-LOCK).
   const lockMode = nflLockMode(castPool.type, castPool.settings);
   // A commissioner's extendWeekDeadline for this week. The server honours it on
   // Pick'em (`effectiveGameLockAt` takes max(base, override)); before this
   // change the sheet ignored it, so an approved extension never reopened
-  // anything for the member it was granted for.
+  // anything for the member it was granted for. In a confidence pool it stops
+  // at kickoff (`lockStopsAtKickoff`) — folded into `isGameLockedFor` below.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, week);
   // 🛑 THE ENTRY IS PART OF THE DRAFT'S IDENTITY (PLAN-MULTI-ENTRY T5,
   // codex r1 P1). A local draft is restored into the sheet and then SUBMITTED
@@ -171,12 +173,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     saveDraft<PickemDraft>(draftKey, { picks, confidence, tiebreakerPrediction });
   }, [picks, confidence, tiebreakerPrediction, draftKey, isWeekLocked]);
 
-  // Compute confidence range for this week: [17 - N .. 16]
-  const N = games.length;
-  const minVal = 17 - N;
-  const availableConfidenceValues = useMemo(() => {
-    return Array.from({ length: N }, (_, i) => minVal + i).reverse(); // high to low e.g., 16, 15, 14...
-  }, [N, minVal]);
+  // The confidence range is computed below `isGameLocked` (it depends on it):
+  // `confidenceSlate` / `availableConfidenceValues`.
 
   // Check if a game is locked (server-corrected clock — device time can drift)
   //
@@ -188,10 +186,31 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // still have accepted a Sunday pick. The per-game branch below it was
   // unreachable. Kevin's ruling, 2026-08-18: the manager chooses the option and
   // the site abides by it.
+  //
+  // ONE pool-aware reader now (`isGameLockedFor`, PLAN-CONFIDENCE-PER-GAME-LOCK
+  // §3.2a): mode, buffer, extension, the kickoff ceiling and game status all
+  // come from the pool and game docs, the same way the server computes them.
+  // The dashboard's `isWeekLocked` flag is kept as a short-circuit on WEEKLY
+  // pools so the sheet and the Lock Status card can never disagree.
   const isGameLocked = (game: NFLGame): boolean => {
     if (lockMode === 'WEEKLY' && isWeekLocked) return true; // Whole week locks together
-    return serverNow() >= gameLockAt(game.startTime, bufferMinutes, weekLockOverrideMs);
+    return isGameLockedFor(castPool, week, game, games, serverNow());
   };
+
+  // The confidence slate and range for THIS entry: `[17 − N .. 16 − k]`, where a
+  // CANCELLED game nobody picked leaves the slate and each locked game the
+  // member never picked forfeits the top value (PLAN-CONFIDENCE-PER-GAME-LOCK
+  // D2; `confidenceSlateFor` is shared with the server's validator). On a
+  // weekly pool, or before anything locks, this is the old `[17 − N .. 16]`.
+  const confidenceSlate = useMemo(
+    () => confidenceSlateFor(games, (entry?.picks ?? {}) as Record<string, string>, g => isGameLocked(g)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [games, entry, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick],
+  );
+  const availableConfidenceValues = useMemo(() => {
+    const { minValue, maxValue } = confidenceSlate;
+    return Array.from({ length: Math.max(0, maxValue - minValue + 1) }, (_, i) => maxValue - i); // high to low
+  }, [confidenceSlate]);
 
   // Records and the crowd split — the two things Kevin's testers asked to see
   // WHILE picking rather than on another screen. Both derive from data the
@@ -275,16 +294,22 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     // A sheet whose every game has locked has nothing left to send.
     if (games.every(g => isGameLocked(g))) return false;
 
-    // In confidence mode, all values must be unique and set
+    // Confidence: every game that CAN carry a weight has one — open games, and
+    // locked games the member picked in time. A locked game with no pick is a
+    // forfeit (D2) and is not asked for. Every weight lies in this entry's range
+    // (a 16 held on an open game after a miss must be re-ranked) and none repeats.
     if (confidenceMode) {
-      const allConfidenceSet = games.every(g => !!confidence[g.id]);
-      if (!allConfidenceSet) return false;
+      const { slateIds, missedIds, minValue, maxValue } = confidenceSlate;
+      const missed = new Set(missedIds);
+      const weightable = slateIds.filter(id => !missed.has(id));
+      if (!weightable.every(id => !!confidence[id])) return false;
+      if (weightable.some(id => confidence[id] < minValue || confidence[id] > maxValue)) return false;
       if (duplicateConfidenceValues.size > 0) return false;
     }
 
     return true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [games, picks, confidence, confidenceMode, duplicateConfidenceValues, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
+  }, [games, picks, confidence, confidenceMode, confidenceSlate, duplicateConfidenceValues, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
 
   /** Games still open for editing — what the blocked-reason message counts. */
   const openGames = useMemo(() => {
@@ -411,12 +436,22 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
      * rather than rejects outright, and sending it costs nothing.
      */
     const lockedById = new Map(games.map(g => [g.id, isGameLocked(g)]));
-    const { picks: submittablePicks, droppedGameIds } = dropStaleLockedPicks(
+    const { picks: submittablePicks, droppedGameIds: droppedPickIds } = dropStaleLockedPicks(
       games.map(g => g.id),
       picks,
       (entry?.picks ?? {}) as Record<string, string>,
       id => lockedById.get(id) === true,
     );
+    // Same rule for a locked WEIGHT (`CONFIDENCE_LOCKED`, PLAN-CONFIDENCE-PER-GAME-LOCK).
+    const { confidence: submittableWeights, droppedGameIds: droppedWeightIds } = confidenceMode
+      ? dropStaleLockedWeights(
+          games.map(g => g.id),
+          confidence,
+          (entry?.confidence ?? {}) as Record<string, number>,
+          id => lockedById.get(id) === true,
+        )
+      : { confidence, droppedGameIds: [] as string[] };
+    const droppedGameIds = Array.from(new Set([...droppedPickIds, ...droppedWeightIds]));
     if (droppedGameIds.length > 0) {
       // Never silently: the pick disappears off their sheet on the next load,
       // and a member who is not told will read that as the app losing it.
@@ -433,10 +468,10 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       poolId: pool.id,
       week,
       picks: submittablePicks,
-      // Confidence forces WEEKLY locking, so no game is ever individually
-      // locked while the week is open and `submittablePicks` is the whole map
-      // here. Kept aligned anyway rather than relying on that from a distance.
-      confidence: confidenceMode ? confidence : undefined,
+      // The whole week's weights, locked ones included: the server COMPARES a
+      // locked weight and keeps it, so sending it costs nothing and keeps the
+      // payload a straight picture of the sheet (same reasoning as picks).
+      confidence: confidenceMode ? submittableWeights : undefined,
       // Omitted under NONE — the sheet never asked, so sending the default 40
       // would store a prediction the member did not make. `submitNFLPicks`
       // already writes nothing for an absent value, so this is a no-op on the
@@ -642,6 +677,20 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
           onApply={handleQuickPicks}
           onClose={() => setQuickPicksOpen(false)}
         />
+      )}
+
+      {/* D2 forfeit note (PLAN-CONFIDENCE-PER-GAME-LOCK): a missed game costs
+          the top weight, and the dropdowns below simply stop offering it. Said
+          once, up front, so the missing 16 is not read as a bug. */}
+      {confidenceMode && confidenceSlate.missedIds.length > 0 && (
+        <div className="bg-page border border-line rounded-xl px-4 py-3 font-body text-xs text-muted flex items-start gap-2">
+          <AlertTriangle size={12} className="mt-0.5 shrink-0 text-gold-600 dark:text-gold-400" aria-hidden="true" />
+          <span>
+            {confidenceSlate.missedIds.length === 1
+              ? `One game locked before you picked it, so the ${confidenceSlate.maxValue + 1} is not available this week. Rank your other games ${confidenceSlate.minValue}–${confidenceSlate.maxValue}.`
+              : `${confidenceSlate.missedIds.length} games locked before you picked them, so weights above ${confidenceSlate.maxValue} are not available this week. Rank your other games ${confidenceSlate.minValue}–${confidenceSlate.maxValue}.`}
+          </span>
+        </div>
       )}
 
       {/* Matchups list */}
@@ -905,7 +954,9 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                 : duplicateConfidenceValues.size > 0 ? 'Two games share a confidence weight'
                   : openGames.some(g => !picks[g.id])
                     ? `Pick all ${openGames.length} open ${openGames.length === 1 ? 'game' : 'games'} to submit`
-                    : 'Set a confidence weight for every game'
+                    : confidenceSlate.slateIds.some(id => confidence[id] > confidenceSlate.maxValue)
+                      ? `Weights above ${confidenceSlate.maxValue} are no longer available this week — re-rank those games`
+                      : 'Set a confidence weight for every open game'
           }
           // 🔨 KEVIN 2026-08-27: tell the member a half-finished sheet is not
           // lost. The sentence and the conditions under which it is true live in

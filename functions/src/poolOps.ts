@@ -23,6 +23,8 @@ import { validLaunchCouponCode } from './lib/launchCoupon';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
+import { confidenceModeEditNeedsEntries, touchesConfidenceModeSetting, confidenceModeRefusal } from './lib/confidenceModeGate';
+import { stampLockRuleVersion } from './lib/lockRuleVersion';
 import { hybridNoOpKeys, hybridSplitNeedsClearing, hybridSplitRefusal, touchesHybridSplitSettings } from './lib/hybridSplitGate';
 import { normalizePayoutListsPatch, payoutListsNoOpKeys, payoutListsRefusal, touchesPayoutLists, weeklyPayoutsNeedsClearing } from './lib/weeklyPayoutsGate';
 import { maxEntriesNoOpKeys, maxEntriesRefusal, touchesMaxEntriesSetting } from './lib/multiEntryGate';
@@ -404,6 +406,9 @@ export const createPool = validated(
         // simRunId computed above the creation guard; stamped here.
         if (simRunId) newPool.simRunId = simRunId;
         assertSeasonNotForgedSim(newPool.season, simRunId);
+        // PLAN-CONFIDENCE-PER-GAME-LOCK: this creator accepts NFL types too, so
+        // it stamps them exactly as createNFLPool does (codex r2 #2).
+        stampLockRuleVersion(newPool);
 
         // Initialize Squares-specific data
         if (isSquaresPool) {
@@ -553,6 +558,10 @@ export const updatePoolSettings = validated(
     // check could pass while a member's first submission commits behind it.
     // (PLAN-WEEKLY-TIEBREAKERS §5.)
     const tiebreakerTouched = touchesWeeklyTiebreakerSetting(patch);
+    // `confidenceMode` joins the same gate for the same two reasons: it changes
+    // scoring (weight vs one point) and, since PLAN-CONFIDENCE-PER-GAME-LOCK,
+    // which lock rule the pool plays. Refused once anybody has submitted.
+    const confidenceModeTouched = touchesConfidenceModeSetting(patch);
     // The hybrid split joins the same transaction: its invariant spans three
     // fields (split, payoutMode, entryFee) and must be judged against the pool
     // as it stands at write time, not at the pre-transaction read.
@@ -598,7 +607,8 @@ export const updatePoolSettings = validated(
             // read AFTER a write that Firestore forbids.
             const needsEntries =
                 (parityTouched && parityEditNeedsEntries({ ...current, id: poolId }, patch)) ||
-                (tiebreakerTouched && tiebreakerEditNeedsEntries({ ...current, id: poolId }, patch));
+                (tiebreakerTouched && tiebreakerEditNeedsEntries({ ...current, id: poolId }, patch)) ||
+                (confidenceModeTouched && confidenceModeEditNeedsEntries({ ...current, id: poolId }, patch));
             const entries = needsEntries
                 ? (await tx.get(poolRef.collection('entries'))).docs.map((d) => d.data() as { picks?: Record<string, unknown>; weeklyTiebreakers?: Record<string, unknown> })
                 : [];
@@ -614,6 +624,10 @@ export const updatePoolSettings = validated(
             }
             if (tiebreakerTouched) {
                 const refusal = weeklyTiebreakerRefusal({ ...current, id: poolId }, patch, entries);
+                if (refusal) throw new HttpsError('failed-precondition', refusal.message);
+            }
+            if (confidenceModeTouched) {
+                const refusal = confidenceModeRefusal({ ...current, id: poolId }, patch, entries);
                 if (refusal) throw new HttpsError('failed-precondition', refusal.message);
             }
             if (hybridTouched) {

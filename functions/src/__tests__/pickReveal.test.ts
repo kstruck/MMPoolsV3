@@ -33,17 +33,32 @@ describe('revealMode', () => {
   });
 
   /**
-   * ⚠️ confidenceMode is a WEEKLY lock even when lockMode still reads PER_GAME.
-   * `submitNFLPicksInternal` derives its submission lock as
-   * `confidenceMode || lockMode === 'WEEKLY'`, and this predicate must mirror
-   * that expression — otherwise the commissioner is held out of a sheet that has
-   * been immutable for hours, and the weekly tiebreaker is withheld until the
-   * last kickoff. codex r4.
+   * PLAN-CONFIDENCE-PER-GAME-LOCK: the reveal and the submission lock are ONE
+   * imported function (`nflLockMode`). A confidence pool reveals weekly only
+   * while UNSTAMPED (legacy — the backfill has not reached it) or when its
+   * lockMode says so; a stamped PER_GAME confidence pool reveals game by game,
+   * picks and weights alike.
    */
-  it('is WEEK for a confidence pool whose lockMode still says PER_GAME', () => {
+  it('LEGACY: an unstamped confidence pool still reveals as WEEK while lockMode says PER_GAME', () => {
     expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: true } })).toBe('WEEK');
     expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'PER_GAME' } })).toBe('WEEK');
     expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: false, lockMode: 'PER_GAME' } })).toBe('PER_GAME');
+  });
+
+  it('STAMPED: a confidence pool reveals the way its lockMode says', () => {
+    expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 } })).toBe('PER_GAME');
+    expect(revealMode({ type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'WEEKLY', lockRuleVersion: 2 } })).toBe('WEEK');
+  });
+
+  it('status beats the clock in a PER_GAME confidence pool (codex r2 #1)', () => {
+    const pool = { type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2, lockBufferMinutes: 5 } };
+    const now = 1_000_000_000;
+    // Feed moved kickoff two hours LATER while the game is live: still revealed.
+    const live = { id: 'live', startTime: now + 7_200_000, status: 'IN_PROGRESS' };
+    const later = { id: 'later', startTime: now + 7_200_000, status: 'SCHEDULED' };
+    const r = weekRevealFor(pool, 3, [live, later], now);
+    expect(r.mode).toBe('PER_GAME');
+    expect(r.revealedGameIds).toEqual(['live']);
   });
 
   it('cannot be downgraded on a hard-lock pool by a settings write', () => {

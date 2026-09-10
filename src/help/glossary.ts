@@ -266,7 +266,7 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
     id: 'pick-reveal',
     term: 'Pick reveal',
     short: 'When another member’s actual pick becomes visible to you — never before their own deadline has passed.',
-    long: 'The rule is the same instant their deadline was, so nobody is ever shown a pick that could still be changed.\n\nIn a pick’em pool that locks game by game, each pick reveals as that game kicks off. In confidence mode, weekly-lock mode, survivor and margin, the whole week reveals at its single deadline.\n\nOnce a week reveals, every member of that pool can see it. Somebody outside the pool never can.',
+    long: 'The rule is the same instant their deadline was, so nobody is ever shown a pick that could still be changed.\n\nIn a pick’em pool that locks game by game, each pick — and its confidence weight, if the pool uses them — reveals as that game kicks off. In weekly-lock mode, survivor and margin, the whole week reveals at its single deadline.\n\nOnce a week reveals, every member of that pool can see it. Somebody outside the pool never can.',
     contextHeading: 'Pick Reveal',
     audience: ['member', 'commissioner', 'admin'],
     related: ['pool-consensus', 'entry'],

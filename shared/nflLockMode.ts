@@ -31,11 +31,12 @@ export type NFLLockMode = 'WEEKLY' | 'PER_GAME';
 export interface NFLLockModeSettings {
   lockMode?: string;
   confidenceMode?: boolean;
+  /** Server-written stamp (PLAN-CONFIDENCE-PER-GAME-LOCK). Absent = legacy rule. */
+  lockRuleVersion?: number;
 }
 
 /**
- * The lock mode a pool actually plays, folding in the two rules that override
- * the stored setting.
+ * The lock mode a pool actually plays.
  *
  * 1. **Survivor and Margin are always WEEKLY**, derived from the pool TYPE and
  *    never from stored settings, so no settings write (or missing field) can
@@ -44,22 +45,56 @@ export interface NFLLockModeSettings {
  *    checks the newly selected team's kickoff, so per-game locking there would
  *    let a member replace a locked Thursday selection after seeing the result.
  *
- * 2. **Confidence mode forces WEEKLY on Pick'em**, whatever `lockMode` says.
- *    A confidence sheet spends each weight across the week's games exactly
- *    once, so the week has to be answered as one unit. This is the clause the
- *    two drifted server copies dropped, and it is the easy one to miss because
- *    such a pool's `lockMode` still reads `PER_GAME`.
+ * 2. **On a STAMPED Pick'em pool, `lockMode` decides — confidence or not.**
+ *    Until PLAN-CONFIDENCE-PER-GAME-LOCK (Kevin, 2026-09-10) confidence mode
+ *    forced WEEKLY here, and a confidence pool's stored `lockMode` was routinely
+ *    a lie (the wizard default `PER_GAME` while the pool played weekly). That
+ *    plan's backfill stamps `lockMode: 'WEEKLY'` + `lockRuleVersion: 2` onto
+ *    every legacy confidence pool, and `createNFLPool` stamps 2 on every new
+ *    Pick'em pool, so on a stamped pool the stored value is the truth. A
+ *    PER_GAME confidence pool then locks each game's pick AND weight at that
+ *    game's own deadline (`submitNFLPicks` enforces the weight half as
+ *    `CONFIDENCE_LOCKED`).
  *
- * Mirrors `functions/src/nflPools.ts:568` (`submitNFLPicks`) and
- * `functions/src/lib/pickReveal.ts:71`. `tests/nfl-lockmode-invariants.test.ts`
- * fails if those stop agreeing with this.
+ * 3. **Legacy clause — a confidence pool NOT yet stamped still plays WEEKLY**,
+ *    byte-for-byte the old behaviour. This is what makes the functions deploy
+ *    safe before the backfill has run: no unstamped pool changes mode for any
+ *    caller, UI or hand-crafted (codex r1 #3/#4 on the plan). Retire it once a
+ *    census shows zero confidence pools with `lockRuleVersion !== 2`.
+ *
+ * The server IMPORTS this function (`functions/src/nflPools.ts`,
+ * `functions/src/lib/pickReveal.ts`, `functions/src/poolExceptions.ts`) rather
+ * than restating it; `tests/nfl-lockmode-invariants.test.ts` fails if a
+ * hand-written copy ever comes back.
  */
+export const LOCK_RULE_VERSION = 2;
+
+/** True when the stamp is missing or stale — the pool plays the pre-plan rule. */
+export function isLegacyLockRule(settings: NFLLockModeSettings | undefined | null): boolean {
+  return settings?.lockRuleVersion !== LOCK_RULE_VERSION;
+}
+
 export function nflLockMode(
   poolType: string | undefined | null,
   settings: NFLLockModeSettings | undefined | null,
 ): NFLLockMode {
   if (usesWeeklyHardLock(poolType)) return 'WEEKLY';
-  return settings?.confidenceMode || settings?.lockMode === 'WEEKLY' ? 'WEEKLY' : 'PER_GAME';
+  if (settings?.confidenceMode && isLegacyLockRule(settings)) return 'WEEKLY';
+  return settings?.lockMode === 'WEEKLY' ? 'WEEKLY' : 'PER_GAME';
+}
+
+/**
+ * Does this pool's lock stop at KICKOFF no matter what (Kevin, 2026-09-10: "any
+ * confidence pick for a game that has started can not be changed under any
+ * circumstances")? A commissioner extension or a shrunk buffer moves a
+ * confidence game's deadline later only up to its kickoff, never past it.
+ * Straight Pick'em keeps today's semantics — an extension there CAN reopen a
+ * started game; that is the documented exception path ("Extend the deadline
+ * first if an exception is warranted"). Pool type is irrelevant: Survivor and
+ * Margin never reach an override in the first place.
+ */
+export function lockStopsAtKickoff(settings: NFLLockModeSettings | undefined | null): boolean {
+  return settings?.confidenceMode === true;
 }
 
 /** Convenience for the many call sites that only ask the yes/no question. */
@@ -99,9 +134,91 @@ export function gameLockAt(
   gameStartTime: number,
   bufferMinutes: number,
   overrideMs?: number,
+  /** Confidence pools: never later than kickoff (`lockStopsAtKickoff`). */
+  kickoffCeiling = false,
 ): number {
   const base = gameStartTime - bufferMinutes * 60_000;
-  return typeof overrideMs === 'number' ? Math.max(base, overrideMs) : base;
+  const at = typeof overrideMs === 'number' ? Math.max(base, overrideMs) : base;
+  return kickoffCeiling ? Math.min(at, gameStartTime) : at;
+}
+
+/** What the pool-aware helpers need off a game doc. Structural. */
+export interface NFLLockGame {
+  startTime: number;
+  /** `'SCHEDULED' | 'IN_PROGRESS' | 'FINAL' | 'CANCELLED'` on `nfl_games`. */
+  status?: string | null;
+}
+
+/**
+ * Has this game left the SCHEDULED state? In a confidence pool that alone
+ * locks it: `startTime` is feed data and can be corrected after real kickoff,
+ * and a lock computed from the clock alone would reopen a live game (codex r2
+ * #1 on the plan). Straight pools keep the clock-only rule they have today.
+ */
+export function gameStatusLocks(
+  settings: NFLLockModeSettings | undefined | null,
+  game: NFLLockGame,
+): boolean {
+  return lockStopsAtKickoff(settings) && typeof game.status === 'string' && game.status !== 'SCHEDULED';
+}
+
+/**
+ * When ONE game's pick closes in THIS pool, in epoch ms — buffer, override and
+ * the kickoff ceiling folded in from the pool doc. The one helper every
+ * per-game reader uses (pick sheet, Bento CTA, `nflPending`), mirrored on the
+ * server by `effectiveGameLockAt`; `tests/nfl-lockmode-invariants.test.ts`
+ * holds the two to one table of cases.
+ */
+export function gameLockAtFor(
+  pool: NFLLockPool | undefined | null,
+  week: number,
+  game: NFLLockGame,
+): number {
+  return gameLockAt(
+    game.startTime,
+    lockBufferMinutesFor(pool),
+    weekLockOverrideFor(pool, week),
+    lockStopsAtKickoff(pool?.settings),
+  );
+}
+
+/**
+ * Is this game closed to edits in THIS pool at `now`? Folds in the mode: on a
+ * WEEKLY pool every game closes at the week deadline, on a PER_GAME pool each
+ * at its own. Status wins over the clock in a confidence pool (above).
+ */
+export function isGameLockedFor(
+  pool: NFLLockPool | undefined | null,
+  week: number,
+  game: NFLLockGame,
+  weekGames: readonly NFLLockGame[],
+  now: number,
+): boolean {
+  if (gameStatusLocks(pool?.settings, game)) return true;
+  if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY') {
+    return isWeekLockedFor(pool, week, weekGames, now);
+  }
+  return now >= gameLockAtFor(pool, week, game);
+}
+
+/**
+ * Is the WEEK closed at `now`? Time rule from `weekLockAtFor`, plus — in a
+ * confidence pool — any game that has left SCHEDULED closes a WEEKLY week
+ * (its first kickoff has, by definition, happened).
+ */
+export function isWeekLockedFor(
+  pool: NFLLockPool | undefined | null,
+  week: number,
+  weekGames: readonly NFLLockGame[],
+  now: number,
+): boolean {
+  if (weekGames.length === 0) return false;
+  if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY'
+      && weekGames.some((g) => gameStatusLocks(pool?.settings, g))) {
+    return true;
+  }
+  const at = weekLockAtFor(pool, week, weekGames.map((g) => g.startTime));
+  return at !== null && now >= at;
 }
 
 /** What the lock helpers need off a pool doc. Structural, so tests need no fixture. */
@@ -110,6 +227,7 @@ export interface NFLLockPool {
   settings?: {
     lockMode?: string;
     confidenceMode?: boolean;
+    lockRuleVersion?: number;
     lockBufferMinutes?: number;
     weekLockOverrides?: Record<string | number, unknown>;
   };
@@ -148,7 +266,10 @@ export function weekLockAtFor(
     return resolveHardWeekLock(frozenHardLockFor(pool, week), computed);
   }
   const override = weekLockOverrideFor(pool, week);
-  return typeof override === 'number' ? Math.max(computed, override) : computed;
+  const at = typeof override === 'number' ? Math.max(computed, override) : computed;
+  // Confidence pools: the week can be extended, but never past the kickoff it
+  // is measured from (the first on WEEKLY, the last on PER_GAME).
+  return lockStopsAtKickoff(pool?.settings) ? Math.min(at, reference) : at;
 }
 
 /**
@@ -170,8 +291,9 @@ export function nextLockAtFor(
   if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY') return weekLockAt;
   const buffer = lockBufferMinutesFor(pool);
   const override = weekLockOverrideFor(pool, week);
+  const ceiling = lockStopsAtKickoff(pool?.settings);
   const upcoming = gameStartTimes
-    .map((t) => gameLockAt(t, buffer, override))
+    .map((t) => gameLockAt(t, buffer, override, ceiling))
     .filter((at) => at > now);
   return upcoming.length > 0 ? Math.min(...upcoming) : weekLockAt;
 }
@@ -197,13 +319,67 @@ export function dropStaleLockedPicks(
   savedPicks: Readonly<Record<string, string>>,
   isLocked: (gameId: string) => boolean,
 ): { picks: Record<string, string>; droppedGameIds: string[] } {
+  const r = dropStaleLockedValues(gameIds, picks, savedPicks, isLocked);
+  return { picks: r.values, droppedGameIds: r.droppedGameIds };
+}
+
+/**
+ * The same rule for a confidence WEIGHT map (PLAN-CONFIDENCE-PER-GAME-LOCK):
+ * `submitNFLPicks` refuses a locked game whose weight CHANGED
+ * (`CONFIDENCE_LOCKED`), and refuses the whole submission when it does.
+ */
+export function dropStaleLockedWeights(
+  gameIds: readonly string[],
+  confidence: Readonly<Record<string, number>>,
+  savedConfidence: Readonly<Record<string, number>>,
+  isLocked: (gameId: string) => boolean,
+): { confidence: Record<string, number>; droppedGameIds: string[] } {
+  const r = dropStaleLockedValues(gameIds, confidence, savedConfidence, isLocked);
+  return { confidence: r.values, droppedGameIds: r.droppedGameIds };
+}
+
+function dropStaleLockedValues<T extends string | number>(
+  gameIds: readonly string[],
+  values: Readonly<Record<string, T>>,
+  saved: Readonly<Record<string, T>>,
+  isLocked: (gameId: string) => boolean,
+): { values: Record<string, T>; droppedGameIds: string[] } {
   const droppedGameIds = gameIds.filter(
-    (id) => isLocked(id) && picks[id] !== undefined && picks[id] !== savedPicks[id],
+    (id) => isLocked(id) && values[id] !== undefined && values[id] !== saved[id],
   );
-  if (droppedGameIds.length === 0) return { picks: { ...picks }, droppedGameIds };
+  if (droppedGameIds.length === 0) return { values: { ...values }, droppedGameIds };
   const dropped = new Set(droppedGameIds);
   return {
-    picks: Object.fromEntries(Object.entries(picks).filter(([id]) => !dropped.has(id))),
+    values: Object.fromEntries(Object.entries(values).filter(([id]) => !dropped.has(id))) as Record<string, T>,
     droppedGameIds,
+  };
+}
+
+/**
+ * The confidence slate and range for ONE entry in a PER_GAME confidence pool
+ * (PLAN-CONFIDENCE-PER-GAME-LOCK D2, codex r2 #5). Pure; shared with the
+ * server's `validatePerGameConfidence` so the sheet and the callable agree on
+ * which values a member may still use.
+ *
+ * - A CANCELLED game the member never picked leaves the slate: not pickable,
+ *   not the member's miss, and nobody could have used its value.
+ * - A locked game the member never picked is a MISS: it stays in N and adds
+ *   one to k, and the member forfeits the top k values (Kevin: "for a 16 game
+ *   week, they would lose 16").
+ * - Range: `[17 − N .. 16 − k]`.
+ */
+export function confidenceSlateFor<G extends NFLLockGame & { id: string }>(
+  games: readonly G[],
+  storedPicks: Readonly<Record<string, string>>,
+  isLocked: (game: G) => boolean,
+): { slateIds: string[]; missedIds: string[]; minValue: number; maxValue: number } {
+  const slate = games.filter((g) => !(g.status === 'CANCELLED' && storedPicks[g.id] === undefined));
+  const missedIds = slate.filter((g) => isLocked(g) && storedPicks[g.id] === undefined).map((g) => g.id);
+  const N = slate.length;
+  return {
+    slateIds: slate.map((g) => g.id),
+    missedIds,
+    minValue: 17 - N,
+    maxValue: 16 - missedIds.length,
   };
 }

@@ -22,6 +22,7 @@ import { buildProxyTeamGameIndex, proxyPickPayload, proxyTeamOptions } from '../
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
+import { nflLockMode, isWeekLockedFor } from '@shared/nflLockMode';
 import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
 import { WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
 import { hybridSplitProblem } from '@shared/hybridSplit';
@@ -372,7 +373,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   // Pick'em-specific
   const [confidenceMode, setConfidenceMode] = useState<boolean>(settings.confidenceMode ?? false);
-  const [lockMode, setLockMode] = useState<'PER_GAME' | 'WEEKLY'>(settings.lockMode ?? 'PER_GAME');
+  // The EFFECTIVE mode, not the raw stored value: a legacy (unstamped) confidence
+  // pool stores the wizard default PER_GAME while it plays weekly, so showing the
+  // stored value would offer a save that changes nothing the member can see.
+  // Showing what the pool actually plays means a save writes what the
+  // commissioner saw (PLAN-CONFIDENCE-PER-GAME-LOCK §3.5).
+  const [lockMode, setLockMode] = useState<'PER_GAME' | 'WEEKLY'>(
+    pool.type === 'NFL_PICKEM' ? nflLockMode(pool.type, settings) : (settings.lockMode ?? 'PER_GAME'),
+  );
   // Survivor/Margin use a hard weekly deadline whose only knob is this buffer, and
   // the server snaps it to {60,30,5} — so show a legacy value (e.g. 10) as the
   // preset the server would actually apply rather than a value the picker cannot
@@ -487,10 +495,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [cancelReason, setCancelReason] = useState('');
   const [isCanceling, setIsCanceling] = useState(false);
 
-  // Force weekly lock when confidence mode is on
-  useEffect(() => {
-    if (confidenceMode) setLockMode('WEEKLY');
-  }, [confidenceMode]);
+  // (The effect that forced WEEKLY whenever confidence mode was on is GONE —
+  // PLAN-CONFIDENCE-PER-GAME-LOCK, Kevin 2026-09-10: the manager's Lock Mode is
+  // honoured for confidence pools too.)
 
   // --- Weekly Games ---
   const weeklyGames = useMemo(() => gamesForPoolWeek(games, castPool, week), [games, castPool, week]);
@@ -839,6 +846,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   };
 
   const handleSaveSettings = async () => {
+    // D4 (PLAN-CONFIDENCE-PER-GAME-LOCK, Kevin 2026-09-10): NO server guard on a
+    // mid-week lock-mode change — but the commissioner is told what it does.
+    // A WEEKLY→PER_GAME flip on a week whose first kickoff has passed reopens
+    // every game not yet started, on a week where members have already seen
+    // each other's sheets. A warning, not a gate: the save proceeds on OK.
+    if (type === 'NFL_PICKEM' && lockMode !== nflLockMode(castPool.type, castPool.settings)
+        && isWeekLockedFor(castPool, week, weeklyGames, serverNow())) {
+      const reopens = weeklyGames.filter(g => g.status === 'SCHEDULED' && g.startTime > serverNow()).length;
+      const msg = lockMode === 'PER_GAME'
+        ? `Week ${week} has already locked. Switching to per-game lock reopens ${reopens} ${reopens === 1 ? 'game' : 'games'} that have not kicked off — members can change those picks${confidenceMode ? ' and weights' : ''}, and they have already seen each other's sheets for this week. Games that have started stay locked. Continue?`
+        : `Week ${week} is in progress. Switching to weekly lock closes every remaining game in it right now. Continue?`;
+      if (!window.confirm(msg)) return;
+    }
     setIsSavingSettings(true);
     setSettingsFeedback(null);
     try {
@@ -1431,14 +1451,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <FieldLabel tone="muted" helpId="settings.lockMode">Lock Mode</FieldLabel>
                   <select
                     value={lockMode}
-                    disabled={confidenceMode}
                     onChange={e => setLockMode(e.target.value as 'PER_GAME' | 'WEEKLY')}
-                    className={`w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui ${confidenceMode ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   >
                     <option value="PER_GAME">Per-Game (each game locks at kickoff)</option>
                     <option value="WEEKLY">Weekly (all locks at first kickoff)</option>
                   </select>
-                  {confidenceMode && <p className="font-body text-[10px] text-gold-600 dark:text-gold-400 font-bold mt-1">* Forced Weekly in Confidence Mode</p>}
+                  {confidenceMode && (
+                    <p className="font-body text-[10px] text-muted mt-1">
+                      {lockMode === 'PER_GAME'
+                        ? 'Per game: each pick and its weight lock at that game’s kickoff, and a game a member misses forfeits the highest weight.'
+                        : 'Weekly: every pick and weight is set before the first kickoff.'}
+                    </p>
+                  )}
                 </div>
 
                 <div>

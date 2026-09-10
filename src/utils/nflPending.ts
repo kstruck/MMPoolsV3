@@ -1,5 +1,6 @@
 import type { NFLGame } from '../types';
 import { now as serverNow } from './serverClock';
+import { isGameLockedFor, isWeekLockedFor, type NFLLockPool } from '@shared/nflLockMode';
 
 /**
  * Shared "what does this member still owe?" logic for NFL pools.
@@ -133,8 +134,17 @@ export function isWeekLockedNow(
     lockBufferMinutes: number,
     lockMode: 'WEEKLY' | 'PER_GAME' = 'WEEKLY',
     weekLockOverrideMs?: number,
+    /**
+     * PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a: when the caller has the pool doc,
+     * the ONE pool-aware reader decides — buffer, extension, the confidence
+     * kickoff ceiling and game status folded in, exactly as the server does.
+     * The arithmetic below stays for callers that only hold the numbers.
+     */
+    pool?: NFLLockPool,
+    week?: number,
 ): boolean {
     if (weekGames.length === 0) return false;
+    if (pool && typeof week === 'number') return isWeekLockedFor(pool, week, weekGames, serverNow());
     const bufferMs = lockBufferMinutes * 60 * 1000;
     const kickoffs = weekGames.map(g => g.startTime);
     const reference = lockMode === 'PER_GAME' ? Math.max(...kickoffs) : Math.min(...kickoffs);
@@ -164,15 +174,19 @@ export function getWeekStatus(
      * half-fix this function had for `lockMode`.
      */
     weekLockOverrideMs?: number,
+    /** With the pool doc, per-game closure goes through `isGameLockedFor` (see `isWeekLockedNow`). */
+    pool?: NFLLockPool,
 ): WeekStatus {
     if (weekGames.length === 0) return 'no-games';
     const bufferMs = lockBufferMinutes * 60 * 1000;
     const deadline = weekDeadline(weekGames, lockBufferMinutes, lockMode, weekLockOverrideMs)!;
     // A game is closed to this member once its OWN lock has passed — per game,
     // or all together on a weekly pool.
-    const gameClosed = (g: NFLGame) => lockMode === 'WEEKLY'
-        ? serverNow() >= deadline
-        : serverNow() >= Math.max(g.startTime - bufferMs, weekLockOverrideMs ?? Number.NEGATIVE_INFINITY);
+    const gameClosed = (g: NFLGame) => pool
+        ? isGameLockedFor(pool, week, g, weekGames, serverNow())
+        : lockMode === 'WEEKLY'
+            ? serverNow() >= deadline
+            : serverNow() >= Math.max(g.startTime - bufferMs, weekLockOverrideMs ?? Number.NEGATIVE_INFINITY);
     const complete = isWeekComplete(poolType, entry, weekGames, week, gameClosed);
     const weekStarted = serverNow() >= deadline;
 

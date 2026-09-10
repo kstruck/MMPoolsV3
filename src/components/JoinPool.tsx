@@ -12,6 +12,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
 import { effectiveMaxEntriesPerUser } from '@shared/multiEntry';
+import { nflLockMode } from '@shared/nflLockMode';
 import { PayoutsPanel } from './PayoutsPanel';
 import { Button } from './ui';
 
@@ -258,7 +259,11 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               {pool.type === 'NFL_PICKEM' && (() => {
                 const s = castPool?.settings || {};
                 const isConfidence = !!s.confidenceMode;
-                const lockMode = s.lockMode ?? 'PER_GAME';
+                // The ONE lock rule (`shared/nflLockMode.ts`), never `s.lockMode`
+                // read raw: a legacy confidence pool stores PER_GAME while it
+                // plays weekly, and this preview was the seventh copy of the old
+                // "confidence forces weekly" clause (PLAN-CONFIDENCE-PER-GAME-LOCK).
+                const lockMode = nflLockMode(pool.type, s);
                 // `s.pointsPerPick` and `s.primetimeBonus` USED TO BE READ HERE
                 // and are not any more. Neither has ever been read by anything
                 // that scores — `scorePickemEntry` awards exactly 1 point per
@@ -285,11 +290,11 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                       <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       Lock Mode:{' '}
                       <strong className="text-[color:var(--text)] font-bold ml-1">
-                        {isConfidence
-                          ? 'Weekly (required by Confidence Mode)'
-                          : lockMode === 'PER_GAME'
-                            ? 'Per-Game (each game locks at kickoff)'
-                            : 'Weekly (all picks lock at first kickoff)'}
+                        {lockMode === 'PER_GAME'
+                          ? (isConfidence
+                              ? 'Per-Game (each pick and its weight lock at that game’s kickoff)'
+                              : 'Per-Game (each game locks at kickoff)')
+                          : 'Weekly (all picks lock at first kickoff)'}
                       </strong>
                     </li>
                   </ul>

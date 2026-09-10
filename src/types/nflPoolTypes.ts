@@ -100,7 +100,9 @@ export interface NFLPickemPool {
     isListedPublic: boolean;
     payouts: PayoutSettings;
     confidenceMode: boolean;
-    lockMode: 'PER_GAME' | 'WEEKLY'; // WEEKLY is forced if confidenceMode is true
+    lockMode: 'PER_GAME' | 'WEEKLY'; // honoured for confidence pools too once stamped (lockRuleVersion 2)
+    /** Server-written stamp (PLAN-CONFIDENCE-PER-GAME-LOCK); absent = legacy rule. */
+    lockRuleVersion?: number;
     lockBufferMinutes: number; // grace period buffer (default: 5)
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
     pickMode: 'STRAIGHT' | 'ATS'; // ATS scored vs game.spread (push = 0 points)

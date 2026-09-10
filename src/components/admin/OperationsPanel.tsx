@@ -227,6 +227,27 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
 };
 
 /**
+ * Confidence lock-mode backfill (PLAN-CONFIDENCE-PER-GAME-LOCK D1). Same paging
+ * shape as the publishedWeeks backfill: one click covers every NFL Pick'em pool,
+ * and the dry run's `plannedWrites` carries each pool's stored lock mode so the
+ * report is the evidence Kevin reads before going live. Idempotent.
+ */
+const runConfidenceLockModeBackfill = async (dryRun: boolean) => {
+  let cursor: string | undefined;
+  let pages = 0;
+  const agg = { dryRun, poolsScanned: 0, poolsChanged: 0, plannedWrites: [] as any[], failures: [] as any[] };
+  do {
+    const r: any = await call('backfillConfidenceLockMode', { dryRun, limit: 200, ...(cursor ? { startAfter: cursor } : {}) });
+    addReportPage(agg, r);
+    if (Array.isArray(r.plannedWrites)) agg.plannedWrites.push(...r.plannedWrites);
+    if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
+    cursor = r.nextCursor || undefined;
+    pages++;
+  } while (cursor && pages < 100);
+  return agg;
+};
+
+/**
  * Payment-truth reconciliation (PLAN-PAYMENT-TRUTH P2). Same paging shape as
  * the publishedWeeks backfill: counters aggregate across pages; the capped
  * plannedFixes list makes the dry run reviewable evidence, and per Q5 the dry
@@ -427,6 +448,24 @@ const ACTIONS: OpAction[] = [
     destructive: true,
     icon: Wrench,
     run: () => runPublishedWeeksBackfill(false),
+  },
+  {
+    id: 'backfillConfidenceLockMode:dry',
+    label: 'Backfill Confidence Lock Mode (dry run)',
+    description: 'Report every confidence Pick\'em pool not yet stamped with the lock-rule version, with the lock mode each one currently stores. Read the plannedWrites list — it shows what each pool held — before running it live. Writes nothing.',
+    blastRadius: 'Read-only — no writes. Reports plannedWrites per pool with storedLockMode.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runConfidenceLockModeBackfill(true),
+  },
+  {
+    id: 'backfillConfidenceLockMode',
+    label: 'Backfill Confidence Lock Mode',
+    description: 'Stamp settings.lockRuleVersion = 2 and settings.lockMode = WEEKLY on every legacy confidence Pick\'em pool — the mode those pools have always played. After this, a confidence pool\'s Lock Mode setting is honoured (per-game locks each game\'s pick AND weight at its own kickoff), so a commissioner can switch a pool to per-game from Settings. Idempotent: a second run reports zero.',
+    blastRadius: 'Writes settings.lockMode, settings.lockRuleVersion and a settings.lockRevision bump on legacy confidence Pick\'em pools. Nothing else on the doc; no entries, standings or leases. No pool changes the mode it plays.',
+    destructive: true,
+    icon: Wrench,
+    run: () => runConfidenceLockModeBackfill(false),
   },
   {
     id: 'runNFLSpreadFreeze:dry',

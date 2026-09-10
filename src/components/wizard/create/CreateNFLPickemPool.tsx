@@ -67,7 +67,7 @@ function StepPickemRules() {
         label="Weekly tie-breaker"
         options={[...WEEKLY_TIEBREAKER_OPTIONS]}
       />
-      <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; forces weekly lock)" />
+      <CheckboxField name="settings.confidenceMode" label="Confidence points (rank picks; per game, each pick and its weight lock at that game's kickoff)" />
       <MultiEntryFields />
     </div>
   );

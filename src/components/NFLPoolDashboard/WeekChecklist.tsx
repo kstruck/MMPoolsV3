@@ -88,7 +88,7 @@ export const WeekChecklist: React.FC<WeekChecklistProps> = ({ pool, entryKnown, 
         // reads as missed at its original deadline while the sheet still takes
         // picks (qodo #9).
         const overrideMs = weekLockOverrideFor(castPool, week);
-        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs);
+        const status = getWeekStatus(pool.type, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs, castPool);
         // `lockMode` rides along because the banners below have to SAY which of
         // the two things their timestamp is — see `weekLockCaption`.
         //

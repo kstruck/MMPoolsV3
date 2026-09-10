@@ -20,21 +20,23 @@
 
 import {
   effectiveLockSettings,
-  effectiveGameLockAt,
+  isGameLockedForGame,
   weekLockDecision,
-  usesWeeklyHardLock,
   type LockSettings,
 } from './effectiveLock';
+import { nflLockMode } from '../shared/nflLockMode';
 
 export interface RevealPool {
   type?: string;
-  settings?: LockSettings & { lockMode?: string; confidenceMode?: boolean };
+  settings?: LockSettings & { lockMode?: string; confidenceMode?: boolean; lockRuleVersion?: number };
   hardLockByWeek?: Record<string | number, unknown>;
 }
 
 export interface RevealGame {
   id: string;
   startTime: number;
+  /** Status-aware reveal in confidence pools (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a). */
+  status?: string | null;
 }
 
 export interface WeekReveal {
@@ -55,20 +57,20 @@ export interface WeekReveal {
  * settings write cannot downgrade it), and a WEEKLY-lockMode pick'em pool has
  * opted into the same shape. Everything else is PER_GAME.
  *
- * ⚠️ `confidenceMode` COUNTS AS WEEKLY, and it is easy to miss because the pool's
- * `lockMode` may still read `'PER_GAME'`. `submitNFLPicksInternal` derives the
- * submission lock as `settings.confidenceMode || settings.lockMode === 'WEEKLY'`
- * (nflPools.ts) — a confidence sheet has to be ranked as a whole, so the whole
- * week freezes at the earliest deadline. Reading it per game would hold a
- * commissioner out of a sheet that has been immutable for hours, and withhold
- * the weekly tiebreaker until the last kickoff. This predicate must mirror that
- * expression exactly; if the submit path's definition moves, move this one with
- * it. (codex r4 on the commissioner-blind-picks PR.)
+ * ⚠️ This predicate and the submit path's are ONE FUNCTION — `nflLockMode` in
+ * `shared/nflLockMode.ts`, imported here — never a restated expression. Until
+ * PLAN-CONFIDENCE-PER-GAME-LOCK (2026-09-10) confidence mode forced weekly and
+ * this file carried its own copy of that clause, which the invariant test
+ * pinned as text; the test now fails if a hand copy comes back. A confidence
+ * pool reveals weekly only while it is unstamped (legacy) or its `lockMode`
+ * says so; a stamped PER_GAME confidence pool reveals game by game — picks
+ * AND weights — as each game locks (status-aware, `isGameLockedForGame`).
  */
 export function revealMode(pool: RevealPool | undefined): 'WEEK' | 'PER_GAME' {
-  if (usesWeeklyHardLock(pool?.type)) return 'WEEK';
-  const s = pool?.settings;
-  return (s?.confidenceMode || s?.lockMode === 'WEEKLY') ? 'WEEK' : 'PER_GAME';
+  // ONE rule, imported — the submit path and the client read the same function
+  // (PLAN-CONFIDENCE-PER-GAME-LOCK T2). A confidence pool reveals weekly only
+  // while it is unstamped (legacy) or its lockMode says so.
+  return nflLockMode(pool?.type, pool?.settings) === 'WEEKLY' ? 'WEEK' : 'PER_GAME';
 }
 
 /**
@@ -105,7 +107,7 @@ export function weekRevealFor(
 
   const settings = effectiveLockSettings(pool?.settings, pool?.type);
   const revealedGameIds = games
-    .filter(g => now >= effectiveGameLockAt(g.startTime, week, settings))
+    .filter(g => isGameLockedForGame(now, g, week, settings))
     .map(g => g.id);
   return {
     mode,

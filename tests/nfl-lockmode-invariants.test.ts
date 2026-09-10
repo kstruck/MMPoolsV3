@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { nflLockMode, usesWeeklyLock, weekLockOverrideFor, gameLockAt, weekLockAtFor, nextLockAtFor, dropStaleLockedPicks } from '../shared/nflLockMode';
+import {
+  nflLockMode, usesWeeklyLock, weekLockOverrideFor, gameLockAt, weekLockAtFor, nextLockAtFor,
+  dropStaleLockedPicks, dropStaleLockedWeights, isGameLockedFor, isWeekLockedFor, confidenceSlateFor,
+  LOCK_RULE_VERSION,
+} from '../shared/nflLockMode';
+// The server's copy of the arithmetic. `functions/src/shared/` is the copy-shared
+// output, so this resolves after `node functions/scripts/copy-shared.mjs` (which
+// `npm test` runs first).
+import * as server from '../functions/src/lib/effectiveLock';
 
 /**
  * The lock rule, and the guard that it stays the SAME rule on both sides.
@@ -35,10 +43,25 @@ describe('nflLockMode — the rule', () => {
     expect(nflLockMode('NFL_PICKEM', { lockMode: 'WEEKLY' })).toBe('WEEKLY');
   });
 
-  it("confidence mode forces WEEKLY even while lockMode still reads PER_GAME", () => {
-    // The clause two server copies had already dropped. A confidence pool's
-    // stored lockMode is untouched, so reading lockMode alone gets it wrong.
+  it('LEGACY: an unstamped confidence pool still forces WEEKLY while lockMode reads PER_GAME', () => {
+    // PLAN-CONFIDENCE-PER-GAME-LOCK: the old rule survives for any confidence
+    // pool the backfill has not stamped, so the functions deploy is safe before
+    // the backfill runs (codex r1 #3). Absent, stale, or junk stamps all count.
     expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: true })).toBe('WEEKLY');
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: true, lockRuleVersion: 1 })).toBe('WEEKLY');
+    expect(nflLockMode('NFL_PICKEM', { confidenceMode: true, lockRuleVersion: 2 as never, lockMode: undefined })).toBe('PER_GAME');
+  });
+
+  it("STAMPED: a confidence pool honours the manager's lockMode — per game locks each pick AND weight", () => {
+    expect(LOCK_RULE_VERSION).toBe(2);
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: true, lockRuleVersion: 2 })).toBe('PER_GAME');
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'WEEKLY', confidenceMode: true, lockRuleVersion: 2 })).toBe('WEEKLY');
+    // The stamp changes nothing for a straight pool.
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: false })).toBe('PER_GAME');
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: false, lockRuleVersion: 2 })).toBe('PER_GAME');
+    // Nor for the hard-lock types, stamped or not.
+    expect(nflLockMode('NFL_SURVIVOR', { lockMode: 'PER_GAME', lockRuleVersion: 2 })).toBe('WEEKLY');
+    expect(nflLockMode('NFL_MARGIN', { lockMode: 'PER_GAME', confidenceMode: true, lockRuleVersion: 2 })).toBe('WEEKLY');
   });
 
   it('an absent lockMode is PER_GAME, matching the server default', () => {
@@ -93,6 +116,106 @@ describe('gameLockAt', () => {
     expect(gameLockAt(10 * 60_000, 5, 9 * 60_000)).toBe(9 * 60_000);
     expect(gameLockAt(10 * 60_000, 5, 1 * 60_000)).toBe(5 * 60_000);
   });
+
+  it('with the kickoff ceiling an override stops AT kickoff (confidence pools, plan §3.2a)', () => {
+    // Kevin, 2026-09-10: "any confidence pick for a game that has started can
+    // not be changed under any circumstances" — so the exception path that lets
+    // a straight pool reopen a started game is capped at kickoff here.
+    expect(gameLockAt(10 * 60_000, 5, 30 * 60_000, true)).toBe(10 * 60_000);
+    expect(gameLockAt(10 * 60_000, 5, 30 * 60_000, false)).toBe(30 * 60_000);
+    // Below kickoff the ceiling is inert: a shrunk buffer still moves the lock later.
+    expect(gameLockAt(10 * 60_000, 0, undefined, true)).toBe(10 * 60_000);
+    expect(gameLockAt(10 * 60_000, 5, 8 * 60_000, true)).toBe(8 * 60_000);
+  });
+});
+
+describe('isGameLockedFor / isWeekLockedFor — the pool-aware readers', () => {
+  const NOW = 100 * 60_000;
+  const g = (id: string, startTime: number, status = 'SCHEDULED') => ({ id, startTime, status });
+  const conf = (lockMode: string, extra: Record<string, unknown> = {}) => ({
+    type: 'NFL_PICKEM',
+    settings: { confidenceMode: true, lockRuleVersion: 2, lockMode, lockBufferMinutes: 5, ...extra },
+  });
+
+  it('PER_GAME confidence: each game on its own clock', () => {
+    const wed = g('wed', NOW - 60_000);
+    const sun = g('sun', NOW + 60 * 60_000);
+    const pool = conf('PER_GAME');
+    expect(isGameLockedFor(pool, 1, wed, [wed, sun], NOW)).toBe(true);
+    expect(isGameLockedFor(pool, 1, sun, [wed, sun], NOW)).toBe(false);
+    expect(isWeekLockedFor(pool, 1, [wed, sun], NOW)).toBe(false); // week closes at the LAST kickoff
+  });
+
+  it('WEEKLY confidence: the first kickoff closes every game', () => {
+    const wed = g('wed', NOW - 60_000);
+    const sun = g('sun', NOW + 60 * 60_000);
+    const pool = conf('WEEKLY');
+    expect(isGameLockedFor(pool, 1, sun, [wed, sun], NOW)).toBe(true);
+    expect(isWeekLockedFor(pool, 1, [wed, sun], NOW)).toBe(true);
+  });
+
+  it('status beats the clock in a confidence pool, and only there (codex r2 #1)', () => {
+    const live = g('live', NOW + 2 * 60 * 60_000, 'IN_PROGRESS'); // feed moved it LATER
+    const pool = conf('PER_GAME');
+    expect(isGameLockedFor(pool, 1, live, [live], NOW)).toBe(true);
+    expect(isWeekLockedFor(conf('WEEKLY'), 1, [live], NOW)).toBe(true);
+    const straight = { type: 'NFL_PICKEM', settings: { lockMode: 'PER_GAME', lockBufferMinutes: 5 } };
+    expect(isGameLockedFor(straight, 1, live, [live], NOW)).toBe(false);
+  });
+
+  it('an extension cannot reopen a started game in a confidence pool (codex r1 #1)', () => {
+    const wed = g('wed', NOW - 60_000);
+    const thu = g('thu', NOW + 24 * 60 * 60_000);
+    const pool = conf('PER_GAME', { weekLockOverrides: { 1: NOW + 48 * 60 * 60_000 } });
+    expect(isGameLockedFor(pool, 1, wed, [wed, thu], NOW)).toBe(true);   // started: stays shut
+    expect(isGameLockedFor(pool, 1, thu, [wed, thu], NOW + 25 * 60 * 60_000)).toBe(true); // ceiling at ITS kickoff
+    expect(isGameLockedFor(pool, 1, thu, [wed, thu], NOW + 23 * 60 * 60_000)).toBe(false);
+  });
+});
+
+describe('confidenceSlateFor — D2: a missed game forfeits the HIGHEST weight', () => {
+  const games = Array.from({ length: 16 }, (_, i) => ({ id: `g${i}`, startTime: i, status: 'SCHEDULED' }));
+  const lockedIds = (ids: string[]) => (game: { id: string }) => ids.includes(game.id);
+
+  it('full slate, nothing missed → 1..16', () => {
+    const s = confidenceSlateFor(games, {}, lockedIds([]));
+    expect(s).toMatchObject({ missedIds: [], minValue: 1, maxValue: 16 });
+    expect(s.slateIds).toHaveLength(16);
+  });
+
+  it('one locked game never picked → the 16 is gone (Kevin: "they would lose 16")', () => {
+    const s = confidenceSlateFor(games, {}, lockedIds(['g0']));
+    expect(s).toMatchObject({ missedIds: ['g0'], minValue: 1, maxValue: 15 });
+  });
+
+  it('two missed of 16 → 1..14; 12-game week, one missed → 5..15', () => {
+    expect(confidenceSlateFor(games, {}, lockedIds(['g0', 'g1']))).toMatchObject({ minValue: 1, maxValue: 14 });
+    const twelve = games.slice(0, 12);
+    expect(confidenceSlateFor(twelve, {}, lockedIds(['g0']))).toMatchObject({ minValue: 5, maxValue: 15 });
+  });
+
+  it('a locked game the member DID pick is not a miss', () => {
+    const s = confidenceSlateFor(games, { g0: 'SEA' }, lockedIds(['g0']));
+    expect(s).toMatchObject({ missedIds: [], minValue: 1, maxValue: 16 });
+  });
+
+  it('a CANCELLED game nobody picked leaves the slate; a picked one stays (codex r2 #5)', () => {
+    const withCancel = games.map((g) => (g.id === 'g3' ? { ...g, status: 'CANCELLED' } : g));
+    const unpicked = confidenceSlateFor(withCancel, {}, lockedIds(['g3']));
+    expect(unpicked.slateIds).not.toContain('g3');
+    expect(unpicked).toMatchObject({ missedIds: [], minValue: 2, maxValue: 16 }); // 15 games, k = 0
+    const picked = confidenceSlateFor(withCancel, { g3: 'KC' }, lockedIds(['g3']));
+    expect(picked.slateIds).toContain('g3');
+    expect(picked).toMatchObject({ missedIds: [], minValue: 1, maxValue: 16 });
+  });
+});
+
+describe('dropStaleLockedWeights mirrors dropStaleLockedPicks', () => {
+  it('drops a locked weight that differs from the saved one, keeps a matching one', () => {
+    const r = dropStaleLockedWeights(['a', 'b', 'c'], { a: 16, b: 15, c: 14 }, { a: 16, b: 1 }, (id) => id !== 'c');
+    expect(r.confidence).toEqual({ a: 16, c: 14 });
+    expect(r.droppedGameIds).toEqual(['b']);
+  });
 });
 
 /**
@@ -104,39 +227,78 @@ describe('gameLockAt', () => {
  * throughout the entire period the bug was live — the client was wrong, not the
  * rule. What was missing was anything comparing the two.
  */
-describe('the server still computes weekly locking the same way', () => {
-  const SUBMIT = 'functions/src/nflPools.ts';
-  const REVEAL = 'functions/src/lib/pickReveal.ts';
+describe('the server IMPORTS the rule instead of restating it (PLAN-CONFIDENCE-PER-GAME-LOCK T2)', () => {
+  // Until 2026-09-10 these three files each carried a hand-written copy of the
+  // expression and this test pinned the literal. Copies drift — two of them
+  // had already dropped a clause once — so the rule is imported now, and the
+  // guard flips: the literal must be ABSENT and the import PRESENT.
+  const SERVER_READERS = [
+    ['submit', 'functions/src/nflPools.ts'],
+    ['reveal', 'functions/src/lib/pickReveal.ts'],
+    ['proxyPick', 'functions/src/poolExceptions.ts'],
+  ] as const;
+  const HAND_COPIES = [
+    /confidenceMode\s*\|\|\s*(settings|s)\??\.lockMode\s*===\s*['"]WEEKLY['"]/,
+  ];
 
-  it('submitNFLPicks derives it as confidenceMode || lockMode === WEEKLY', () => {
-    const src = read(SUBMIT);
-    expect(
-      src,
-      `${SUBMIT} no longer derives weekly locking the way shared/nflLockMode.ts does. ` +
-        'If the server rule changed, change nflLockMode to match and update this guard — ' +
-        'do not delete it. A per-game Pick\'em pool shipped a whole-sheet lock for ' +
-        'months because nothing compared the two.',
-    ).toContain("const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';");
+  it.each(SERVER_READERS)('%s imports nflLockMode from the shared file', (_label, file) => {
+    const src = read(file);
+    expect(src, `${file} must import nflLockMode from ./shared/nflLockMode`).toMatch(
+      /import \{[^}]*\bnflLockMode\b[^}]*\} from ['"]\.{1,2}\/shared\/nflLockMode['"]/,
+    );
+    expect(src, `${file} must CALL nflLockMode(`).toContain('nflLockMode(');
   });
 
-  it('pickReveal derives it the same way', () => {
-    const src = read(REVEAL);
-    expect(src).toContain("(s?.confidenceMode || s?.lockMode === 'WEEKLY') ? 'WEEK' : 'PER_GAME'");
+  it.each(SERVER_READERS)('%s carries no hand-written copy of the rule', (_label, file) => {
+    const src = read(file);
+    for (const re of HAND_COPIES) {
+      expect(src, `${file} restates the lock rule by hand — import nflLockMode instead`).not.toMatch(re);
+    }
   });
 
-  /**
-   * The guard discriminates. Both assertions above are `toContain` on a literal,
-   * so a changed expression fails — proved here on a mutated copy rather than
-   * asserted in a comment.
-   */
-  it('would catch the confidenceMode clause being dropped', () => {
-    const mutated = read(SUBMIT).replace(
-      "const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';",
-      "const weeklyLockMode = settings.lockMode === 'WEEKLY';",
-    );
-    expect(mutated).not.toContain(
-      "const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';",
-    );
+  /** The guard discriminates: a re-introduced hand copy is caught. */
+  it('would catch a hand copy coming back', () => {
+    const mutated = read('functions/src/nflPools.ts')
+      + "\nconst weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';\n";
+    expect(HAND_COPIES.some((re) => re.test(mutated))).toBe(true);
+  });
+});
+
+/**
+ * READER PARITY (codex r2 #4 on the plan): the client's `gameLockAt` and the
+ * server's `effectiveGameLockAt` are two implementations of one instant. Run
+ * both over one table of cases — buffer, override, the kickoff ceiling — and
+ * fail on any disagreement.
+ */
+describe('client gameLockAt and server effectiveGameLockAt agree', () => {
+  const KICK = 1_000_000_000;
+  const cases: Array<{ name: string; buffer: number; override?: number; ceiling: boolean }> = [
+    { name: 'plain buffer', buffer: 5, ceiling: false },
+    { name: 'override later than buffer', buffer: 5, override: KICK - 60_000, ceiling: false },
+    { name: 'override past kickoff, no ceiling (straight pool reopens)', buffer: 5, override: KICK + 3_600_000, ceiling: false },
+    { name: 'override past kickoff, ceiling (confidence pool stops at kickoff)', buffer: 5, override: KICK + 3_600_000, ceiling: true },
+    { name: 'zero buffer, ceiling', buffer: 0, ceiling: true },
+    { name: 'wide buffer, ceiling', buffer: 60, ceiling: true },
+  ];
+  it.each(cases)('$name', ({ buffer, override, ceiling }) => {
+    const client = gameLockAt(KICK, buffer, override, ceiling);
+    const srv = server.effectiveGameLockAt(KICK, 3, {
+      lockBufferMinutes: buffer,
+      ...(override !== undefined ? { weekLockOverrides: { 3: override } } : {}),
+      kickoffCeiling: ceiling,
+    });
+    expect(client).toBe(srv);
+    if (ceiling) expect(client).toBeLessThanOrEqual(KICK);
+  });
+
+  it('status beats the clock on both sides in a confidence pool', () => {
+    const settings = { lockBufferMinutes: 5, kickoffCeiling: true };
+    const inProgressMovedLater = { startTime: Date.now() + 7_200_000, status: 'IN_PROGRESS' };
+    expect(server.isGameLockedForGame(Date.now(), inProgressMovedLater, 3, settings)).toBe(true);
+    const pool = { type: 'NFL_PICKEM', settings: { confidenceMode: true, lockRuleVersion: 2, lockMode: 'PER_GAME', lockBufferMinutes: 5 } };
+    expect(isGameLockedFor(pool, 3, inProgressMovedLater, [inProgressMovedLater], Date.now())).toBe(true);
+    // A straight pool keeps the clock rule.
+    expect(server.isGameLockedForGame(Date.now(), inProgressMovedLater, 3, { lockBufferMinutes: 5 })).toBe(false);
   });
 });
 
