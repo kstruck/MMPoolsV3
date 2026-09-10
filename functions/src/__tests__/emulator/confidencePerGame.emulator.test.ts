@@ -94,7 +94,9 @@ describe('T8 #1 / #14 — LEGACY: an unstamped confidence pool still locks the w
         await wStart({ data: { runId, scenarioId: 'cpg-legacy' }, auth: superAdmin } as never);
         // The wizard default — PER_GAME stored on a confidence pool, NO stamp.
         await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME' });
-        await wSeed({ data: { runId, games: slate(Date.now() - HOUR, { g1: { status: 'IN_PROGRESS' } }) }, auth: superAdmin } as never);
+        // The opener is LIVE but its feed startTime was corrected two hours into
+        // the future: status alone must close the week (codex r3 on the diff).
+        await wSeed({ data: { runId, games: slate(Date.now() + 2 * HOUR, { g1: { status: 'IN_PROGRESS' } }) }, auth: superAdmin } as never);
         await wJoin({ data: { poolId, runId, members: [{ uid: ALICE, name: 'Alice' }] }, auth: superAdmin } as never);
     }, 30000);
 
@@ -390,20 +392,30 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
 });
 
 describe('T8 #14 — createNFLPool stamps a new Pick\'em pool (codex r1 #4)', () => {
+    // A dedicated creator, NOT admin-1: pool creation writes managedPools /
+    // commissioner aggregates onto the creator's user doc, and leaving those on
+    // the shared admin user let a later suite's profile recompute change its
+    // role out from under every other file (measured: goldenArc then failed its
+    // beforeAll with "Sim harness callables are SUPER_ADMIN only").
+    const CREATOR = 'cpg-creator-1';
+    const creator = { uid: CREATOR, token: { role: 'PARTICIPANT' } } as any;
+
     it('a wizard-created confidence pool carries lockRuleVersion 2 and therefore plays its stored lockMode', async () => {
-        await seedAdmin();
+        await db.collection('users').doc(CREATOR).set({ role: 'PARTICIPANT', name: 'Creator' });
         const res: any = await wCreate({
             data: {
                 type: 'NFL_PICKEM', name: 'Stamp test', season: 2026, seasonType: 2,
                 settings: { entryFee: 0, confidenceMode: true, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', payoutMode: 'SEASON', payouts: { places: [], bonuses: [] } },
             },
-            auth: superAdmin,
+            auth: creator,
         } as never);
         const poolId = res?.poolId ?? res?.id;
         expect(typeof poolId).toBe('string');
         const doc = (await db.collection('pools').doc(poolId).get()).data()!;
         expect(doc.settings.lockRuleVersion).toBe(2);
         expect(doc.settings.lockMode).toBe('PER_GAME');
-        await db.collection('pools').doc(poolId).delete();
+        await db.recursiveDelete(db.collection('pools').doc(poolId));
+        await db.recursiveDelete(db.collection('users').doc(CREATOR));
+        await db.recursiveDelete(db.collection('publicProfiles').doc(CREATOR));
     }, 60000);
 });

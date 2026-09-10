@@ -96,7 +96,13 @@ export function weekRevealFor(
     // cannot widen the buffer to move their own reveal later either — the
     // reveal and the members' deadline are literally the same number.
     const { lockAt } = weekLockDecision(pool, week, games.map(g => g.startTime));
-    const open = now >= lockAt;
+    // Status wins over the clock in a confidence pool (§3.2a, codex r3): a live
+    // or final game closes — and therefore reveals — a WEEKLY week whatever the
+    // feed's corrected `startTime` says. Same predicate as the submit path.
+    const weekSettings = effectiveLockSettings(pool?.settings, pool?.type);
+    const statusClosed = weekSettings.kickoffCeiling === true
+      && games.some(g => typeof g.status === 'string' && g.status !== 'SCHEDULED');
+    const open = statusClosed || now >= lockAt;
     return {
       mode,
       revealedGameIds: open ? games.map(g => g.id) : [],

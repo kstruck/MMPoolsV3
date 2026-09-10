@@ -558,8 +558,13 @@ export async function submitNFLPicksInternal(
   const effectiveWeekLock = decision.freezeTo !== undefined
     ? await ensureHardLockFreeze(poolRef, db.runTransaction.bind(db) as never, week, decision.lockAt)
     : decision.lockAt;
-  // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
-  let weekLocked = now >= effectiveWeekLock;
+  // `effectiveWeekLock` is a fixed instant, so only the clock has to move — except
+  // in a confidence pool, where a game that has left SCHEDULED closes the week
+  // whatever the feed's `startTime` now says (PLAN-CONFIDENCE-PER-GAME-LOCK
+  // §3.2a, codex r3): the status half never moves either.
+  const weekStatusLocked = lockSettings.kickoffCeiling === true
+    && games.some(g => typeof g.status === 'string' && g.status !== 'SCHEDULED');
+  let weekLocked = weekStatusLocked || now >= effectiveWeekLock;
 
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Reads first (Firestore requires it) and the lease read first of all: a
@@ -569,7 +574,7 @@ export async function submitNFLPicksInternal(
     // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
     // and on a lease-busy retry, and every lock check below reads `now`.
     now = Date.now();
-    weekLocked = now >= effectiveWeekLock;
+    weekLocked = weekStatusLocked || now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
     // so a concurrent raise can only admit more) and `entryCount` is read off it.

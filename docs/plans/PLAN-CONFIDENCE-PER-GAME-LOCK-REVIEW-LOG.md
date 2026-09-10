@@ -53,3 +53,24 @@ regressions. 5 findings. Codex also confirmed the round-1 #5 rejection
 the IMPLEMENTATION diff (`codex exec review --base origin/main`), not on the
 prose again — two prose rounds have converged to reader-parity and edge-policy
 detail that the code will show better than the document.
+
+---
+
+## Round 3 — 2026-09-10 ~13:10 MDT, implementation diff @ `66f260e8` (`codex exec review --base origin/main`)
+
+2 findings, both P1, both accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | The WEEKLY branch of `submitNFLPicks` still read `weekLocked` from timestamps alone, and `weekRevealFor`'s WEEK branch likewise — so in a WEEKLY confidence pool a feed correction moving a live opener's `startTime` into the future reopened the whole sheet (and hid the reveal). The status-aware lock had only been wired into the PER_GAME paths. | **ACCEPT** | `nflPools.ts`: `weekStatusLocked = kickoffCeiling && games.some(status !== 'SCHEDULED')` folded into `weekLocked` at both the pre-transaction and per-attempt computations. `pickReveal.ts` WEEK branch: the same predicate on `open`. Tests: `pickReveal.test.ts` "status beats the clock in a WEEKLY confidence pool too"; the LEGACY emulator scenario now seeds the live opener with a FUTURE `startTime` and still expects `WEEK_LOCKED`. |
+| 2 | P1 | A weight the member set on a game they then missed (locked, no saved pick) is dropped by the submit path, but the sheet still counted it in `confidenceOwners` and the duplicate audit — so its value was greyed out on every open game and, if inside the reduced range, the member could never complete the sheet. | **ACCEPT** | `PickemPickEntry.tsx`: both the duplicate audit and `confidenceValueOwners` exclude `confidenceSlate.missedIds`; `canSubmit` already only asks for weights on weightable games. |
+
+Also found while running the full emulator suite after round 3 (not a codex
+finding): `goldenArc`'s first `beforeAll` failed with "Sim harness callables are
+SUPER_ADMIN only" whenever the new emulator file ran earlier in the same
+process. Cause: the new `createNFLPool` scenario created a pool AS admin-1,
+which wrote `managedPools` / `commissionerAggregate` onto the shared admin user
+doc, and a later suite's profile recompute then changed that user's role.
+Fixed by giving the scenario its own creator user and deleting its subtree
+afterwards. The ordering dependency in `goldenArc` (beforeAll before the
+seeding beforeEach) is pre-existing and untouched.

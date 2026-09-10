@@ -243,10 +243,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     const seen = new Set<number>();
     const duplicates = new Set<number>();
 
+    // A weight the member set on a game they then MISSED (locked with no saved
+    // pick) is a stale draft: the submit path drops it, so it must not hold a
+    // value hostage here or in the dropdowns (codex r3 on the diff).
+    const missed = new Set(confidenceSlate.missedIds);
     Object.entries(confidence).forEach(([gameId, value]) => {
       // Only audit games playing in this active week
       const gamePlaying = games.some(g => g.id === gameId);
-      if (!gamePlaying) return;
+      if (!gamePlaying || missed.has(gameId)) return;
 
       if (seen.has(value)) {
         duplicates.add(value);
@@ -255,15 +259,17 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     });
 
     return duplicates;
-  }, [confidence, confidenceMode, games]);
+  }, [confidence, confidenceMode, games, confidenceSlate]);
 
   // Which weight each game already holds — drives the grayed-out options below.
   // Scoped to THIS week's games, same as the duplicate audit: `confidence` is
   // keyed by gameId across the whole entry, so folding in other weeks would
   // gray out weights nothing on screen is using.
   const confidenceOwners = useMemo(
-    () => (confidenceMode ? confidenceValueOwners(games.map(g => g.id), confidence) : new Map<number, Set<string>>()),
-    [games, confidence, confidenceMode],
+    () => (confidenceMode
+      ? confidenceValueOwners(games.map(g => g.id).filter(id => !confidenceSlate.missedIds.includes(id)), confidence)
+      : new Map<number, Set<string>>()),
+    [games, confidence, confidenceMode, confidenceSlate],
   );
 
   /**

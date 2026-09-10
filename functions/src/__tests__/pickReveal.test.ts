@@ -61,6 +61,20 @@ describe('revealMode', () => {
     expect(r.revealedGameIds).toEqual(['live']);
   });
 
+  it('status beats the clock in a WEEKLY confidence pool too (codex r3 on the diff)', () => {
+    const pool = { type: 'NFL_PICKEM', settings: { confidenceMode: true, lockMode: 'WEEKLY', lockRuleVersion: 2, lockBufferMinutes: 5 } };
+    const now = 1_000_000_000;
+    const live = { id: 'live', startTime: now + 7_200_000, status: 'IN_PROGRESS' };
+    const later = { id: 'later', startTime: now + 9_000_000, status: 'SCHEDULED' };
+    const r = weekRevealFor(pool, 3, [live, later], now);
+    expect(r.mode).toBe('WEEK');
+    expect(r.weekRevealed).toBe(true);
+    expect(r.revealedGameIds.sort()).toEqual(['later', 'live']);
+    // A straight WEEKLY pool keeps the clock rule.
+    const straight = { type: 'NFL_PICKEM', settings: { lockMode: 'WEEKLY', lockBufferMinutes: 5 } };
+    expect(weekRevealFor(straight, 3, [live, later], now).weekRevealed).toBe(false);
+  });
+
   it('cannot be downgraded on a hard-lock pool by a settings write', () => {
     // The whole point of deriving it from the TYPE: a Survivor pool whose
     // settings claim PER_GAME still reveals wholesale at the weekly deadline.
