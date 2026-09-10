@@ -257,7 +257,45 @@ export interface LifecycleReadable {
   isLocked?: boolean;
   isFinal?: boolean;
   closedVia?: string;
+  /**
+   * Stamped by the NFL season finalizer (functions/src/nflFinalize.ts,
+   * `maybeFinalizeNFLPool`) as a Firestore serverTimestamp. Typed `unknown`
+   * because the client sees a Timestamp, a functions test sees a FieldValue
+   * sentinel, and a fixture may carry a number — only presence matters here.
+   */
+  finalizedAt?: unknown;
   scores?: { gameStatus?: string };
+}
+
+/**
+ * Pool statuses that mean "settled". Mirrors TERMINAL_POOL_STATUSES in
+ * functions/src/lib/autoScoreDecisions.ts (`isRetiredPool`), which is the
+ * server's answer to the same question. Compared case-insensitively because
+ * the casing is inconsistent across writers (`cancelPool` writes `CANCELED`,
+ * `archivePool` writes `archived`).
+ */
+const TERMINAL_POOL_STATUSES = new Set(['FINAL', 'CANCELED', 'COMPLETED', 'ARCHIVED']);
+
+/**
+ * Has this pool been settled by ANY writer? Named so the terminal rule reads as
+ * one thing rather than a chain of ORs (qodo on #682).
+ *
+ * Shares three signals with the server's `isTerminalPool`
+ * (functions/src/lib/autoScoreDecisions.ts): `isFinal`, non-null `finalizedAt`,
+ * and the same case-insensitive status set. It is NOT identical: the client
+ * ALSO treats any truthy `closedVia` as terminal (pre-existing T2 behaviour —
+ * `closePool`/`autoClosePools` dual-write `closedVia`), which the server scorer
+ * does not read. So a pool carrying only a non-admin `closedVia` is final to
+ * every client consumer of this reader but still scoreable server-side (qodo
+ * r2 on #682). `closedVia === 'ADMIN_CLOSE'` is handled BEFORE this by the
+ * caller so admin-close keeps its own `closed` label.
+ */
+function hasTerminalMarker(pool: LifecycleReadable): boolean {
+  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
+  if (TERMINAL_POOL_STATUSES.has(status)) return true;
+  if (pool.closedVia) return true;
+  if (pool.isFinal) return true;
+  return pool.finalizedAt !== undefined && pool.finalizedAt !== null;
 }
 
 /**
@@ -267,14 +305,40 @@ export interface LifecycleReadable {
  * NOTE: terminal transitions for the string-status types are written by the
  * `closePool`/`autoClosePools` work (ticket T2); this reader is already
  * status-aware so those pools chip correctly the moment T2 ships.
+ *
+ * FINALIZATION (2026-09-08). The NFL season finalizer writes NO status — it
+ * leaves whatever `status` the pool already had (typically OPEN or LOCKED)
+ * untouched and only stamps `finalizedAt` (nflFinalize.ts:411, "finalizedAt is
+ * terminal, so nothing retracts it"). Other paths may still change the status
+ * afterwards — `backfillPools` can stamp `status: 'FINAL'`, cancel/archive
+ * write their own values, the archive path lowercase `archived` — so
+ * `finalizedAt` must be honoured independently of whatever `status` says.
+ * Before this the reader honoured none of the three, so a finished season pool
+ * chipped Open in GameOps and counted as active in `isActiveManagedPool`.
+ * Codex r1 on #677 found it; the browse card carried a local wrapper until the
+ * shared rule landed here. The functions-side `isFinishedPool`
+ * (lib/poolInclusion.ts) does NOT yet read `finalizedAt`/`FINAL` — that is a
+ * separate change because `backfillMemberRecords` gates on it.
+ *
+ * Verified 2026-09-09 (re-run before trusting; outputs as measured):
+ *   grep -n "status:" functions/src/nflFinalize.ts
+ *     # only :599/:658/:735 — heartbeat/audit `status: "error"|"success"`,
+ *     # never a pool status; the finalizer writes no pool status.
+ *   grep -n "finalizedAt: admin" functions/src/nflFinalize.ts
+ *     # :411 finalizedAt: admin.firestore.FieldValue.serverTimestamp()
+ *   grep -n "'FINAL'" functions/src/backfill.ts
+ *     # :137 updates.status = pool.isLocked ? 'LOCKED' : (pool.isFinal ? 'FINAL' : 'DRAFT')
+ *   grep -rn "'archived'" functions/src/lib/poolInclusion.ts functions/src/reminders.ts
+ *     # poolInclusion.ts:36 and reminders.ts:924 both treat it as finished
  */
 export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleState {
   // Admin-closed pools get a distinct `closed` state so the UI can show/filter
   // them separately from natural finals. Raw stored status stays COMPLETED —
   // this is a derived label only, not a status migration.
   if (pool.closedVia === 'ADMIN_CLOSE') return 'closed';
-  // Terminal for every other type: canceled/completed/otherwise-closed pools are done (T2).
-  if (pool.status === 'CANCELED' || pool.status === 'COMPLETED' || pool.closedVia || pool.isFinal) return 'final';
+  // Terminal for every other type: canceled/completed/final/archived/otherwise-closed
+  // pools are done (T2), and so is anything the NFL finalizer has stamped.
+  if (hasTerminalMarker(pool)) return 'final';
 
   if (pool.type === 'SQUARES') {
     const gs = pool.scores?.gameStatus;
@@ -282,8 +346,8 @@ export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleSta
     if (gs === 'in') return 'live';
     return pool.isLocked ? 'locked' : 'open';
   }
-  // String-status types.
-  const status = pool.status;
+  // String-status types, compared case-insensitively like the terminal set.
+  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
   if (status === 'LIVE') return 'live';
   if (status === 'LOCKED' || pool.isLocked) return 'locked';
   return 'open';
@@ -298,9 +362,10 @@ export function getPoolLifecycleState(pool: LifecycleReadable): PoolLifecycleSta
 export function isActiveManagedPool(
   pool: LifecycleReadable & { id?: string; slug?: string; simRunId?: string; season?: string },
 ): boolean {
+  // `archived` (any case) now resolves to `final` inside the reader, so the
+  // former explicit `status === 'archived'` check here is covered by this line.
   const state = getPoolLifecycleState(pool);
   if (state === 'final' || state === 'closed') return false;
-  if (pool.status === 'archived') return false;
   // Test Pools: the persisted simRunId field (or sim- season) is the trust anchor —
   // callable-created sim pools have server-generated doc IDs, so the id/slug prefix
   // check alone excludes nothing (PLAN-NFL-SIM-HARNESS Phase 0.4).

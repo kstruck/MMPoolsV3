@@ -12,6 +12,19 @@ describe('isActiveManagedPool', () => {
     expect(isActiveManagedPool({ type: 'NFL_PICKEM', status: 'CANCELED', id: 'p1' })).toBe(false);
     expect(isActiveManagedPool({ type: 'NFL_PICKEM', status: 'OPEN', closedVia: 'ADMIN_CLOSE', id: 'p1' })).toBe(false);
     expect(isActiveManagedPool({ type: 'NFL_PICKEM', status: 'archived', id: 'p1' })).toBe(false);
+    expect(isActiveManagedPool({ type: 'NFL_PICKEM', status: 'ARCHIVED', id: 'p1' })).toBe(false);
+    expect(isActiveManagedPool({ type: 'NFL_PICKEM', status: 'FINAL', id: 'p1' })).toBe(false);
+  });
+
+  // The NFL finalizer stamps `finalizedAt` and never changes status, so before
+  // the reader honoured it a finished Survivor pool kept counting toward the
+  // commissioner's active roster / stats / hub (PLAN-COMMISSIONER-DASH step 13
+  // says "not finished"). The functions-side mirror (lib/poolInclusion.ts
+  // isFinishedPool) does not read finalizedAt yet — tracked separately.
+  it('excludes a scorer-finalized NFL pool even though its status is still OPEN', () => {
+    const stamp = { toMillis: () => 1_700_000_000_000 };
+    expect(isActiveManagedPool({ type: 'NFL_SURVIVOR', status: 'OPEN', finalizedAt: stamp, id: 'p1' })).toBe(false);
+    expect(isActiveManagedPool({ type: 'NFL_SURVIVOR', status: 'OPEN', finalizedAt: null, id: 'p1' })).toBe(true);
   });
 
   it('agrees with the canonical isSimPool on an ARRAY season — the divergence the copy carried', () => {
