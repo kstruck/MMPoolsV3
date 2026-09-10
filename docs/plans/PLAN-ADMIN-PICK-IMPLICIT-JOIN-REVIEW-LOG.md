@@ -131,3 +131,12 @@ Round-2 findings all `✓ Resolved`. Three NEW findings, all on the census scrip
 
 Severity is now script hygiene; per the skill's stop rule this is the last qodo
 round chased. Round 4 codex below covers the new lines.
+
+### Round 4 — codex `gpt-5.6-terra`, `--base origin/main`, on `ccaa8577` (census-script fixes)
+
+Clean. Verbatim: "The changed membership and capacity paths are transactionally
+consistent, and the added tests cover the relevant bypass, capacity, replay,
+and removal-race cases." No findings; no usage-limit line. Four codex rounds
+total, three qodo rounds (8 + 3 + 3 findings, 13 absorbed, 1 rejected and
+dismissed by qodo). Stopping here: qodo reported and every finding is resolved
+or rejected in writing on the PR; codex clean on the final diff; own read agrees.
