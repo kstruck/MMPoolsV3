@@ -110,3 +110,13 @@ Emulator scenario #4's expectation changed from `DUPLICATE_CONFIDENCE_VALUES`
 to "refused" (`OUT_OF_RANGE|DUPLICATE`): with frozen values excluded from the
 open games' list, moving the Wednesday 16 onto Sunday is caught by the range
 check first. Same refusal, earlier check.
+
+---
+
+## Round 6 — 2026-09-10 ~15:50 MDT, implementation diff @ `2c42403c`
+
+1 finding, P1, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | `PickemPickEntry` hydrates the entry's whole-season `picks`/`confidence` maps and resends them on every save, so a Week-2 save on a stamped PER_GAME confidence pool carries Week-1 keys — and the PER_GAME loop refuses them as `Game … not found`. Every Week-2+ save would fail. | **ACCEPT** | Verified: the sheet's state IS the whole map (`PickemPickEntry.tsx` hydration) and nothing filtered it. (This means straight PER_GAME pools were exposed to the same refusal on Week 2+ before this branch — the loop is pre-existing — unless a resend happened to carry no prior keys; the fix below covers them too.) Server: `onlyThisWeek()` — a key for another week that the entry already holds is history being resent and is IGNORED (never rewritten, never refused); a key the entry does not hold and the slate does not contain is still refused. Applied to picks and weights, in both branches, and to the entry write, so a stale prior-week draft can no longer overwrite a prior week. Client: the payload is filtered to this week's ids as well. Emulator: the r5 scenario now seeds a prior-week pick+weight on the entry, resends them (changed, even) and asserts they are untouched; a never-held junk key is still refused. |

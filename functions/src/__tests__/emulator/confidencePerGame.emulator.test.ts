@@ -331,6 +331,8 @@ describe('codex r5 — a frozen 16 is grandfathered after a later miss, and lock
     const poolId = `pool-${runId}`;
     const FRANK = `sim-${runId}-frank`;
     const g = (n: number) => `sim-${runId}-g${n}`;
+    /** A game id from a PRIOR week — on the entry, not in this week's slate. */
+    const OLD = `sim-${runId}-w0`;
 
     beforeAll(async () => {
         await seedAdmin();
@@ -340,7 +342,9 @@ describe('codex r5 — a frozen 16 is grandfathered after a later miss, and lock
         // in time and never picked g2.
         await wSeed({ data: { runId, games: slate(Date.now() - 4 * 24 * HOUR - HOUR, { g1: { status: 'FINAL', scores: { home: 20, away: 10 } }, g2: { status: 'IN_PROGRESS' }, g3: { startTime: Date.now() + 24 * HOUR } }) }, auth: superAdmin } as never);
         await wJoin({ data: { poolId, runId, members: [{ uid: FRANK, name: 'Frank' }] }, auth: superAdmin } as never);
-        await seedEntry(poolId, FRANK, { [g(1)]: 'SEA' }, { [g(1)]: 16 });
+        // Plus a PRIOR week's pick and weight on the entry — the sheet resends
+        // the whole-season map on every save (codex r6).
+        await seedEntry(poolId, FRANK, { [g(1)]: 'SEA', [OLD]: 'NE' }, { [g(1)]: 16, [OLD]: 16 });
     }, 30000);
 
     it('the 16 stays; the miss costs the 15; Monday may take 14 — and the frozen 16 is still on the entry after the write', async () => {
@@ -349,13 +353,20 @@ describe('codex r5 — a frozen 16 is grandfathered after a later miss, and lock
             data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC' }, confidence: { [g(3)]: 15 } }, auth: superAdmin,
         } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE/);
         // The client drops a stale locked weight before sending — so the payload
-        // carries NO weight for g1. The stored 16 must survive the write.
+        // carries NO weight for g1. The stored 16 must survive the write. The
+        // prior week's key is resent (a stale draft of it, even) and must be
+        // ignored, not rewritten and not refused (codex r6).
         await wSubmit({
-            data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC' }, confidence: { [g(3)]: 14 } }, auth: superAdmin,
+            data: { poolId, runId, subjectUid: FRANK, week: 1,
+                picks: { [g(3)]: 'KC', [OLD]: 'SEA' }, confidence: { [g(3)]: 14, [OLD]: 3 } }, auth: superAdmin,
         } as never);
         const e = await entry(poolId, FRANK);
-        expect(e.picks).toEqual({ [g(1)]: 'SEA', [g(3)]: 'KC' });
-        expect(e.confidence).toEqual({ [g(1)]: 16, [g(3)]: 14 });
+        expect(e.picks).toEqual({ [g(1)]: 'SEA', [g(3)]: 'KC', [OLD]: 'NE' });
+        expect(e.confidence).toEqual({ [g(1)]: 16, [g(3)]: 14, [OLD]: 16 });
+        // A key the entry has never held and this week does not contain is still junk.
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC', 'sim-junk-g9': 'KC' }, confidence: { [g(3)]: 14 } }, auth: superAdmin,
+        } as never)).rejects.toThrow(/not found/);
     }, 30000);
 
     it('cleans up', async () => {

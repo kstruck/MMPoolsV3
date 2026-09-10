@@ -467,6 +467,13 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
         )
       : { confidence, droppedGameIds: [] as string[] };
     const droppedGameIds = Array.from(new Set([...droppedPickIds, ...droppedWeightIds]));
+    // THIS WEEK'S KEYS ONLY. The sheet's state is the entry's whole-season map
+    // (hydrated above), so without this a Week-2 save would carry Week-1 keys
+    // — the server ignores a resent prior-week key, but sending it is noise and
+    // a stale prior-week draft must never leave this device (codex r6).
+    const thisWeek = new Set(games.map(g => g.id));
+    const weekPicks = Object.fromEntries(Object.entries(submittablePicks).filter(([id]) => thisWeek.has(id)));
+    const weekWeights = Object.fromEntries(Object.entries(submittableWeights).filter(([id]) => thisWeek.has(id)));
     if (droppedGameIds.length > 0) {
       // Never silently: the pick disappears off their sheet on the next load,
       // and a member who is not told will read that as the app losing it.
@@ -482,11 +489,11 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     const payload = {
       poolId: pool.id,
       week,
-      picks: submittablePicks,
+      picks: weekPicks,
       // The whole week's weights, locked ones included: the server COMPARES a
       // locked weight and keeps it, so sending it costs nothing and keeps the
       // payload a straight picture of the sheet (same reasoning as picks).
-      confidence: confidenceMode ? submittableWeights : undefined,
+      confidence: confidenceMode ? weekWeights : undefined,
       // Omitted under NONE — the sheet never asked, so sending the default 40
       // would store a prediction the member did not make. `submitNFLPicks`
       // already writes nothing for an absent value, so this is a no-op on the

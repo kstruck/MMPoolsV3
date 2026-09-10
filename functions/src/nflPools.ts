@@ -641,6 +641,26 @@ export async function submitNFLPicksInternal(
       // game(s); computed inside the tiebreak block below, read after it.
       let tiebreakTargetLockedNow = false;
 
+      // THIS WEEK'S KEYS ONLY (codex r6 on the diff). The pick sheet hydrates the
+      // entry's whole-season `picks` / `confidence` maps and sends them back on
+      // every save, so a Week-2 submission carries Week-1 keys. A key for another
+      // week that the entry already holds is history being resent — ignored,
+      // never rewritten (a stale draft of a prior week must not overwrite it).
+      // A key the entry does NOT hold and this slate does not contain is junk,
+      // and is refused as before.
+      const onlyThisWeek = <T>(map: Record<string, T>, stored: Record<string, T>): Record<string, T> => {
+        const out: Record<string, T> = {};
+        for (const [k, v] of Object.entries(map)) {
+          if (weekGameIds.has(k)) out[k] = v;
+          else if (stored[k] === undefined) throw new HttpsError('invalid-argument', `Game ${k} not found.`);
+        }
+        return out;
+      };
+      const weekPicks: Record<string, string> = onlyThisWeek(picks as Record<string, string>, (existingEntry?.picks ?? {}) as Record<string, string>);
+      const weekWeights: Record<string, number> = settings.confidenceMode
+        ? onlyThisWeek((confidence || {}) as Record<string, number>, (existingEntry?.confidence ?? {}) as Record<string, number>)
+        : {};
+
       // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
       // the first submission, once per pool-week, and hold every later
       // submission to it. The canonical list is computed HERE from the schedule
@@ -763,7 +783,7 @@ export async function submitNFLPicksInternal(
 
         // Validate unique confidence set if enabled
         if (settings.confidenceMode) {
-          const confResult = validateConfidenceValues(picks, confidence || {}, games);
+          const confResult = validateConfidenceValues(weekPicks, weekWeights, games);
           if (!confResult.valid) {
             throw new HttpsError('invalid-argument', confResult.error ?? 'Invalid confidence values.');
           }
@@ -773,7 +793,7 @@ export async function submitNFLPicksInternal(
         // that has left SCHEDULED is locked whatever the clock says
         // (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a).
         const lockedNow = (g: NFLGame) => isGameLockedForGame(now, g, week, lockSettings);
-        for (const [gameId, pickedTeam] of Object.entries(picks)) {
+        for (const [gameId, pickedTeam] of Object.entries(weekPicks)) {
           const game = games.find(g => g.id === gameId);
           if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
           const oldPick = existingEntry?.picks?.[gameId];
@@ -787,7 +807,7 @@ export async function submitNFLPicksInternal(
         // the entry holds after this write — is judged as a whole over the
         // confidence slate (a CANCELLED game nobody picked is not in it).
         if (settings.confidenceMode) {
-          const submittedWeights: Record<string, number> = confidence || {};
+          const submittedWeights: Record<string, number> = weekWeights;
           const storedPicks = (existingEntry?.picks ?? {}) as Record<string, string>;
           const storedWeights = (existingEntry?.confidence ?? {}) as Record<string, number>;
           // Every weight key names a game in THIS week's slate (codex r1 #7):
@@ -848,14 +868,14 @@ export async function submitNFLPicksInternal(
         entryIndex,
         ...(entryName ? { entryName } : {}),
         userName: subjectName || existingEntry?.userName || 'Participant',
-        picks: { ...(existingEntry?.picks || {}), ...picks },
+        picks: { ...(existingEntry?.picks || {}), ...weekPicks },
         // The MERGED map, explicitly: the validator judged `stored ∪ submitted`,
         // so that is what gets persisted. Relying on `{ merge: true }` to
         // deep-merge the nested map would leave a weight the client dropped as
         // stale (locked, changed, unsaved) at the mercy of the merge semantics —
         // and a locked weight that vanished would score that pick 0 (codex r5).
         ...(settings.confidenceMode && confidence
-          ? { confidence: { ...((existingEntry?.confidence ?? {}) as Record<string, number>), ...confidence } }
+          ? { confidence: { ...((existingEntry?.confidence ?? {}) as Record<string, number>), ...weekWeights } }
           : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
@@ -875,7 +895,7 @@ export async function submitNFLPicksInternal(
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
 
-      committedPickForWeek = Object.keys(picks).some(gameId => weekGameIds.has(gameId));
+      committedPickForWeek = Object.keys(weekPicks).length > 0;
       writtenPicks = pickemEntry.picks;
 
     } else if (type === 'NFL_SURVIVOR') {
