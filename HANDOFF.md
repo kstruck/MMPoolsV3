@@ -1,5 +1,34 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-09-10 — **PR #687 OPEN: confidence pools may lock per game (PLAN-CONFIDENCE-PER-GAME-LOCK). NOT MERGED, NOT DEPLOYED, BACKFILL NOT RUN, DONKEYS NOT FLIPPED.**
+>
+> - Kevin's ruling 2026-09-10 (six decisions in the plan header): a confidence
+>   Pick'em pool may lock PER GAME; a started game's pick AND weight are
+>   immutable by every path; a missed game forfeits the highest weight still
+>   open; Week 1 of "Donkeys 2026" (`ubHD4bgszL05oURYubrn`, 22 entries, $550
+>   weekly pot, host Jim Lenz — aware) is to be REOPENED once live.
+> - What ships: `shared/nflLockMode.ts` is the one rule, imported by submit,
+>   reveal and proxyPick; `settings.lockRuleVersion: 2` stamp (server-written,
+>   creators stamp new pools, backfill stamps legacy); `backfillConfidenceLockMode`
+>   op + Operations-panel cards; kickoff ceiling + status-aware lock in
+>   confidence pools; `CONFIDENCE_LOCKED`, `TIEBREAK_LOCKED`,
+>   `PROXY_CONFIDENCE_UNSUPPORTED`, `CONFIDENCE_MODE_LOCKED_AFTER_SUBMISSIONS`,
+>   `SETTINGS_CHANGED`. Review: 10 codex rounds (the cap), qodo pending at open.
+> - **Deploy order once merged (CLAUDE.md §3):** `git pull` → `npm --prefix
+>   functions ci` → `npx firebase deploy --only functions` (verify
+>   `functions:list | Select-String backfillConfidenceLockMode`) → SuperAdmin →
+>   Operations → **Backfill Confidence Lock Mode** dry run, read
+>   `plannedWrites` (Donkeys WILL appear, with its stored lock mode), then live,
+>   then live again → 0 → Coolify www redeploy (needle `CONFIDENCE_LOCKED` in
+>   the crawled chunks) → Donkeys: Manager → Settings → Lock Mode → Per-Game →
+>   confirm the mid-week dialog → Save.
+> - **Standing rule from this change:** never `git checkout --detach` in a
+>   worktree while a `codex exec review` is running there — it reviewed an
+>   empty diff (round 4 had to be re-run).
+> - Pre-existing, filed as a task chip: `goldenArc.emulator.test.ts` fails its
+>   first `beforeAll` when `autoScore`/`fixtureMatrix` precede it (reproduced on
+>   origin/main `59deb790`).
+
 > ## 🟢 2026-09-08 — **HANDOFF.md CUT FROM 4,206 LINES TO A HANDOFF. HISTORY MOVED TO `docs/archive/`, VERBATIM. NO CODE, NO DEPLOY, NO PROD DATA TOUCHED.**
 >
 > - Everything older than the 2026-08-26 box — the 2026-08-25 launch-day box
