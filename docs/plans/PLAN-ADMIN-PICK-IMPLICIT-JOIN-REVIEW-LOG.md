@@ -56,7 +56,7 @@ file fails all three cases and the assertions name the defect:
 
 With the branch's file, run 2026-09-10: 3 passed.
 
-### qodo round 1 — PR #686, Code Review posted 2026-09-10T15:18:34Z, 8 inline findings at the time of the validity pass (watcher settle recorded below when it lands)
+### qodo round 1 — PR #686, Code Review posted 2026-09-10T15:18:34Z, 8 inline findings (watcher settled `QODO REPORTED — 8 inline finding(s)` on the third arming, 2026-09-10 ~15:30Z — the complete set)
 
 | # | Finding | Verdict | Action |
 |---|---|---|---|
@@ -70,3 +70,29 @@ With the branch's file, run 2026-09-10: 3 passed.
 | 8 | Replay: capacity gate ran before the `lastRequestId` no-op; and a replay should repair missing roster indexes | SPLIT | Ordering half VALID — `assertJoinCapacity` moved after the replay return; emulator test seeds a landed request in a full pool, expects `{ success: true }`. Repair-on-replay half REJECTED: a replay is a client resend within seconds, and the only roster-less replay is one whose first landing predates this deploy; making a documented no-op path write would change its contract for a window that is the deploy itself. The next real submission enrolls. |
 
 Every fix here is code codex has not seen — round 2 below.
+
+### Round 2 — codex `gpt-5.6-terra`, `--base origin/main`, on `9da2d006` (all qodo fixes in)
+
+Clean. Verbatim: "The transaction now enrolls implicitly admitted submitters
+atomically with their entry and member record, while applying the existing
+capacity rules and preserving replay behavior. Type checking passes; the
+targeted Vitest run could not start in this environment because Vite failed to
+spawn a subprocess (EPERM)." No findings. The `usage limit` grep hit once — on
+this log's own round-1 sentence quoted in the diff, not on a codex message.
+Codex's own vitest attempt failed in its sandbox; the suites were run here
+instead (below).
+
+### Gates on `9da2d006`, 2026-09-10
+
+| Gate | Result |
+|---|---|
+| `npx vitest run` | 3193 passed (172 files) |
+| `npm --prefix functions test` | 2203 passed (134 files) — 2200 + the 3 new precedence cases; a concurrent run showed one file failing to LOAD under three-suite contention, 13/13 alone |
+| `npm --prefix functions run test:emulator` | 613 passed, 2 expected fail, 10 skipped — `adminImplicitJoin` 6/6; the 3 qodo-round cases FAIL on round-1 code (`951b6847`'s `nflPools.ts` swapped in: 3 failed / 3 passed) |
+| `npx tsc -b && npm run build` | clean, built in 10.86s |
+| `npm --prefix functions run typecheck` / `build` | clean |
+| `npm run lint` | 1862 warnings / 0 errors — equals `origin/main` (1862), delta 0 |
+
+Stopping rule: qodo reported and every finding absorbed or rejected in writing
+(above, and on the PR); codex round 2 clean on the final diff; own read agrees.
+Two codex rounds total.
