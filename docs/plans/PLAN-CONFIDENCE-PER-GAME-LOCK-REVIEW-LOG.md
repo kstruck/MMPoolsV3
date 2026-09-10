@@ -269,6 +269,26 @@ Over the eight forced/over-cap rounds the findings narrowed from rollout
 guarantees (r14 #1) to a single client/server consistency edge on cancellations
 (r15); no round found a defect in the plan's design.
 
+---
+
+## Round 16 — 2026-09-10 ~22:40 MDT, KEVIN-AUTHORIZED ("Go with round 16"), diff @ `6fb75dfc`
+
+1 finding, P2 (copy), accepted. **No code defect** — the round-15 clause move
+is clean.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P2 | The wizard's confidence checkbox label promised per-game locking unconditionally; a commissioner choosing Weekly above it would read a false promise. | **ACCEPT** | Label now says the weight locks with the lock mode chosen above — per game at that game's kickoff, or weekly at the first. |
+
+Kevin also confirmed (2026-09-10) that "lose 12 in a 12-game week" was a typo
+for the 5..16 range — the implemented rule ("lose the highest value still
+open") is the intended one.
+
+**Final stopping state:** 16 codex rounds (2 plan, 8 code to the cap, 5
+§2b-forced, 1 Kevin-authorized); qodo 12 findings, 7 fixed, 5 rejected with
+reasoning on the PR; CI green on the PR including emulator-tests; own read of
+the diff agrees. The three-condition gate is satisfied.
+
 Pattern for the record: rounds 3–10 each found exactly one to three defects in
 the code written to close the previous round — never in the plan's design, and
 each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That
