@@ -163,6 +163,15 @@ describe('isGameLockedFor / isWeekLockedFor — the pool-aware readers', () => {
     expect(isGameLockedFor(straight, 1, live, [live], NOW)).toBe(false);
   });
 
+  it('PER_GAME week is closed when EVERY game is, status included (codex r8)', () => {
+    const pool = conf('PER_GAME');
+    const doneEarly = g('a', NOW - 60_000, 'FINAL');
+    const liveMovedLater = g('b', NOW + 2 * 60 * 60_000, 'IN_PROGRESS');
+    expect(isWeekLockedFor(pool, 1, [doneEarly, liveMovedLater], NOW)).toBe(true);
+    const stillOpen = g('c', NOW + 60 * 60_000);
+    expect(isWeekLockedFor(pool, 1, [doneEarly, liveMovedLater, stillOpen], NOW)).toBe(false);
+  });
+
   it('an extension cannot reopen a started game in a confidence pool (codex r1 #1)', () => {
     const wed = g('wed', NOW - 60_000);
     const thu = g('thu', NOW + 24 * 60 * 60_000);

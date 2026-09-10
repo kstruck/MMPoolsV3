@@ -213,12 +213,15 @@ export function isWeekLockedFor(
   now: number,
 ): boolean {
   if (weekGames.length === 0) return false;
-  if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY'
-      && weekGames.some((g) => gameStatusLocks(pool?.settings, g))) {
-    return true;
+  if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY') {
+    if (weekGames.some((g) => gameStatusLocks(pool?.settings, g))) return true;
+    const at = weekLockAtFor(pool, week, weekGames.map((g) => g.startTime));
+    return at !== null && now >= at;
   }
-  const at = weekLockAtFor(pool, week, weekGames.map((g) => g.startTime));
-  return at !== null && now >= at;
+  // PER_GAME: the week is closed when EVERY game is — the same per-game
+  // predicate the sheet uses, so a status-locked last game whose feed time
+  // moved later still closes the week (codex r8 on the diff).
+  return weekGames.every((g) => gameStatusLocks(pool?.settings, g) || now >= gameLockAtFor(pool, week, g));
 }
 
 /** What the lock helpers need off a pool doc. Structural, so tests need no fixture. */

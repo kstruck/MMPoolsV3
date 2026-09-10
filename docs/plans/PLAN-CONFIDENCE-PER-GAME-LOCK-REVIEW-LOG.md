@@ -124,16 +124,29 @@ check first. Same refusal, earlier check.
 Row 1 detail: verified — the sheet's state IS the whole-season map
 (`PickemPickEntry.tsx` hydration) and nothing filtered it, so straight PER_GAME
 pools were exposed to the same refusal on Week 2+ before this branch. Fix,
-server: `onlyThisWeek()` — any key outside this week's slate is IGNORED, never
-validated, never written (a first cut REFUSED a key the entry had never held;
-that broke `blindPicks.emulator.test.ts` "picks whose games belong to another
-week do not mark this week", which documents the WEEKLY branch's long-standing
-tolerance, so PER_GAME now matches it). Applied to picks and weights, both
-branches, and the entry write, so a stale prior-week draft can never overwrite
-a prior week. Client: the payload is filtered to this week's ids as well.
-Emulator: the r5 scenario seeds a prior-week pick+weight, resends them changed,
-and asserts they are untouched; a never-held junk key is ignored and not
-written; scenario #7 now asserts a stray weight key is dropped, not refused.
+server: `onlyThisWeek()` — a key outside this week's slate is never validated
+and never written; a key the entry ALREADY HOLDS (history being resent, even a
+stale draft of it) is ignored in both branches; a key the entry has never held
+keeps each branch's long-standing contract — WEEKLY ignores it
+(`blindPicks.emulator.test.ts` "picks whose games belong to another week do not
+mark this week"), PER_GAME refuses it (`hofDressRehearsal` "REJECTS a pick on
+the regular-season game — it is not in this pool's week"). Two cuts were needed
+to land on that: the first refused every never-held key (broke blindPicks), the
+second ignored every other-week key (broke hofDressRehearsal); the branch-aware
+rule is the one that preserves both. Client: the payload is filtered to this
+week's ids as well. Emulator: the r5 scenario seeds a prior-week pick+weight,
+resends them changed, and asserts they are untouched; a never-held junk key is
+still refused on the PER_GAME pool.
+
+---
+
+## Round 8 — 2026-09-10 ~17:15 MDT, implementation diff @ `498eebac`
+
+1 finding, P2, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P2 | `isWeekLockedFor` applied the status check only on WEEKLY pools; on a PER_GAME confidence pool whose LAST game left SCHEDULED and then had its `startTime` corrected forward, the per-game predicate locked the game but the week helper said open — CTA/checklist would show a slate as due that the server refuses. | **ACCEPT** | `shared/nflLockMode.ts`: on PER_GAME the week is closed when EVERY game is, by the same per-game predicate (status or clock). Unit case added. |
 
 ---
 

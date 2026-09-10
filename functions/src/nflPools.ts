@@ -657,21 +657,33 @@ export async function submitNFLPicksInternal(
 
       // THIS WEEK'S KEYS ONLY (codex r6 on the diff). The pick sheet hydrates the
       // entry's whole-season `picks` / `confidence` maps and sends them back on
-      // every save, so a Week-2 submission carries Week-1 keys. Any key outside
-      // this week's slate is IGNORED — never validated, never written. A resent
-      // prior week (even a stale draft of it) therefore cannot overwrite that
-      // week, and a stray key cannot land under `merge`. Ignoring rather than
-      // refusing keeps the WEEKLY branch's long-standing tolerance (a pick for
-      // another week's game never marked this week, and never failed the save —
-      // `blindPicks.emulator.test.ts`), and makes PER_GAME match it.
-      const onlyThisWeek = <T>(map: Record<string, T>): Record<string, T> => {
+      // every save, so a Week-2 submission carries Week-1 keys. A key outside
+      // this week's slate is never validated and never written; a resent prior
+      // week (even a stale draft of it) therefore cannot overwrite that week,
+      // and a stray key cannot land under `merge`. Whether it is REFUSED or
+      // IGNORED keeps each branch's long-standing contract:
+      //   - WEEKLY tolerated any other-week key (a pick for another week's game
+      //     never marked this week and never failed the save —
+      //     `blindPicks.emulator.test.ts`);
+      //   - PER_GAME refused an id not on this week's slate ("Game … not found"
+      //     — `hofDressRehearsal`: a preseason pool must not see the
+      //     regular-season slate), and still does for a key the entry has never
+      //     held. A key the entry already holds is history being resent, and is
+      //     ignored.
+      const onlyThisWeek = <T>(map: Record<string, T>, stored: Record<string, T>): Record<string, T> => {
         const out: Record<string, T> = {};
-        for (const [k, v] of Object.entries(map)) if (weekGameIds.has(k)) out[k] = v;
+        for (const [k, v] of Object.entries(map)) {
+          if (weekGameIds.has(k)) out[k] = v;
+          else if (!weeklyLockMode && stored[k] === undefined) {
+            throw new HttpsError('invalid-argument', `Game ${k} not found.`);
+          }
+        }
         return out;
       };
-      const weekPicks: Record<string, string> = onlyThisWeek(picks as Record<string, string>);
+      const weekPicks: Record<string, string> = onlyThisWeek(
+        picks as Record<string, string>, (existingEntry?.picks ?? {}) as Record<string, string>);
       const weekWeights: Record<string, number> = settings.confidenceMode
-        ? onlyThisWeek((confidence || {}) as Record<string, number>)
+        ? onlyThisWeek((confidence || {}) as Record<string, number>, (existingEntry?.confidence ?? {}) as Record<string, number>)
         : {};
 
       // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
