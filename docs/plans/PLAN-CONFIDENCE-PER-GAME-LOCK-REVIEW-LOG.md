@@ -30,3 +30,26 @@ WEEKLY pools, Survivor, Margin, or scoring. 10 findings.
 Plan moves to v3 (`lockRuleVersion` stamp; kickoff ceiling; proxy refusal;
 confidence-key validation; `confidenceMode` gate; six more emulator scenarios).
 Round 2 runs on v3.
+
+---
+
+## Round 2 — 2026-09-10 ~10:40 MDT, plan v3 @ `b0766234`
+
+Prompt: re-review v3 with the round-1 absorptions; focus on the stamp design,
+whether the kickoff ceiling closes every reader, the D2 range edges
+(cancellation, moved `startTime`, k from stored vs merged), the rejected #5, and
+regressions. 5 findings. Codex also confirmed the round-1 #5 rejection
+("cursor semantics are sound … correctly rejected").
+
+| # | Sev | Finding (condensed) | Verdict | Evidence / what changed |
+|---|---|---|---|---|
+| 1 | P0 | The ceiling and "has started" both read the mutable `game.startTime`; a feed correction that moves `startTime` LATER after real kickoff reopens the game in submit, reveal and the client. | **ACCEPT (as P1; fix = status-aware lock)** | `NFLGame.status` is `'SCHEDULED' \| 'IN_PROGRESS' \| 'FINAL' \| 'CANCELLED'` (`nflPoolTypes.ts:32`) and the scorer already trusts it (`isTerminalGame`, `lib/weekCompletion.ts:27`). In a confidence pool a game is locked when `status !== 'SCHEDULED'` OR the time rule says so — one helper, pool-aware (`gameLockAtFor` / `isGameLockedFor` in `shared/nflLockMode.ts`), used by every reader (#4). A persisted first-observed kickoff is NOT added: status covers the realistic failure (the feed moves a time while the game is live/final) without a new write path. T8 #18 moves `startTime` forward on an `IN_PROGRESS` game and asserts it stays locked. |
+| 2 | P1 | `lockRuleVersion` is stamped only by `createNFLPool`; the generic `createPool` (`poolOps.ts:318+`) accepts any type and would leave an NFL_PICKEM pool unstamped; and a manager can write `settings.lockRuleVersion` through `flattenSettingsPatch` because it is not in `SERVER_OWNED_SETTINGS_KEYS` (`poolUpdate.ts:99`). | **ACCEPT** | Verified: `createPool` validates only `name` and type-specific fields (`poolOps.ts:330-348`), so an NFL type goes through. Fix: one `stampLockRuleVersion(newPool)` helper called in BOTH creators for every NFL type; `lockRuleVersion` joins `SERVER_OWNED_SETTINGS_KEYS` (a manager save carrying it is refused, as `weekLockOverrides` is). The manager UI builds its payload from explicit state fields (`NFLManagerView.tsx:862-872`), so it never sends the key. T11 widened; T8 #14 gains the generic-create case and an attempted downgrade. |
+| 3 | P1 | T8 #8 and §7 step 3 say only `PER_GAME`/absent pools change, but the v3 predicate matches every unstamped confidence pool including stored-WEEKLY ones; as written the test would leave WEEKLY legacy pools unstamped forever. | **ACCEPT** | Plan text error. T8 #8 now: all three confidence pools are stamped (the stored-WEEKLY one with a no-op `lockMode` write), the straight pool untouched; `plannedWrites` reports `storedLockMode` for every matched pool; §7 says Donkeys WILL appear in the dry run whatever its stored value. |
+| 4 | P1 | The ceiling is promised for every client reader but T6 names only `PickemPickEntry`; `NFLUserBentoDashboard.tsx:386-389` calls `gameLockAt` itself, `nflPending.ts:173-175` hand-rolls the same arithmetic, and `pickReveal.ts:106-109` calls `effectiveGameLockAt` directly. | **ACCEPT** | One pool-aware helper pair in `shared/nflLockMode.ts` — `gameLockAtFor(pool, week, game)` / `isGameLockedFor(pool, week, game, now)` — folding buffer, override, the kickoff ceiling and game status; every reader routes through it: `PickemPickEntry`, `NFLUserBentoDashboard`, `nflPending.getWeekStatus`, `WeekChecklist`/`nflStatusService` (via nflPending), and the server's `effectiveGameLockAt` gains the same `kickoffCeiling`/status inputs so submit, proxy, reveal and the scorer's `gameLockClosed` agree. A reader-parity unit test compares the shared and server helpers on a table of cases. T6 lists the files. |
+| 5 | P1 | D2 has no cancellation policy: a game `CANCELLED` before kickoff is terminal and scores VOID, yet the time-only lock leaves it "open" — members must pick and weight an unscorable game, and it consumes a value. | **ACCEPT** | With #1 a CANCELLED game is LOCKED (status-aware). Policy, scoped to the PER_GAME confidence validator: a cancelled game with NO stored pick leaves the slate for range and completeness (it is neither pickable nor the member's fault — it is NOT counted in k, and N excludes it); a cancelled game WITH a stored pick keeps its weight frozen and scores 0, exactly as today's documented behaviour ("confidence points lost, not reassigned"). Worked example: 16 games, one cancelled unpicked → 15 games, range 1..15 with k=0 (the 16 is simply not in play — no one could have used it). A postponed game (status still SCHEDULED, later `startTime`) is open and editable — that is within Kevin's rule. A game re-slotted to another WEEK leaves the slate; stored weights on it are a pre-existing class and stay out of scope. T8 #19–#20. |
+
+**Round 2 result:** 5 accepted, 0 rejected. Plan moves to v4. Round 3 runs on
+the IMPLEMENTATION diff (`codex exec review --base origin/main`), not on the
+prose again — two prose rounds have converged to reader-parity and edge-policy
+detail that the code will show better than the document.
