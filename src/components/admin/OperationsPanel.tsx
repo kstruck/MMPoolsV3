@@ -463,7 +463,7 @@ const ACTIONS: OpAction[] = [
   {
     id: 'backfillConfidenceLockMode:dry',
     label: 'Backfill Confidence Lock Mode (dry run)',
-    description: 'Report every confidence Pick\'em pool not yet stamped with the lock-rule version, with the lock mode each one currently stores. Read the plannedWrites list — it shows what each pool held — before running it live. Writes nothing.',
+    description: 'Report every NFL Pick\'em pool not yet stamped with the lock-rule version (confidence or not), with the lock mode each one currently stores. Read the plannedWrites list — it shows what each pool held — before running it live. Writes nothing.',
     blastRadius: 'Read-only — no writes. Reports plannedWrites per pool with storedLockMode.',
     destructive: false,
     icon: CheckCircle2,
@@ -472,8 +472,8 @@ const ACTIONS: OpAction[] = [
   {
     id: 'backfillConfidenceLockMode',
     label: 'Backfill Confidence Lock Mode',
-    description: 'Stamp settings.lockRuleVersion = 2 and settings.lockMode = WEEKLY on every legacy confidence Pick\'em pool — the mode those pools have always played. After this, a confidence pool\'s Lock Mode setting is honoured (per-game locks each game\'s pick AND weight at its own kickoff), so a commissioner can switch a pool to per-game from Settings. Idempotent: a second run reports zero.',
-    blastRadius: 'Writes settings.lockMode, settings.lockRuleVersion and a settings.lockRevision bump on legacy confidence Pick\'em pools. Nothing else on the doc; no entries, standings or leases. No pool changes the mode it plays.',
+    description: 'Stamp settings.lockRuleVersion = 2 on every NFL Pick\'em pool not yet stamped; a confidence pool also gets settings.lockMode = WEEKLY (the mode it has always played), a straight pool keeps its stored lock mode. After this, a confidence pool\'s Lock Mode setting is honoured (per-game locks each game\'s pick AND weight at its own kickoff), so a commissioner can switch a pool to per-game from Settings. Idempotent: a second run reports zero.',
+    blastRadius: 'Writes settings.lockRuleVersion (and settings.lockMode on confidence pools) plus a settings.lockRevision bump on unstamped NFL Pick\'em pools. Nothing else on the doc; no entries, standings or leases. No pool changes the mode it plays.',
     destructive: true,
     icon: Wrench,
     run: () => runConfidenceLockModeBackfill(false),

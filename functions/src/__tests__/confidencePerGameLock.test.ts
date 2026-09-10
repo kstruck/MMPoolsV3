@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stampLockRuleVersion, needsConfidenceLockModeBackfill, LOCK_RULE_VERSION } from '../lib/lockRuleVersion';
+import { stampLockRuleVersion, needsConfidenceLockModeBackfill, backfillLockModeFor, LOCK_RULE_VERSION } from '../lib/lockRuleVersion';
 import { confidenceModeRefusal, confidenceModeEditNeedsEntries, touchesConfidenceModeSetting } from '../lib/confidenceModeGate';
 import { validatePerGameConfidence } from '../nflScoringEngine';
 import { confidenceSlateFor } from '../shared/nflLockMode';
@@ -32,20 +32,26 @@ describe('lockRuleVersion stamp', () => {
     expect(() => flattenSettingsPatch({ settings: { lockRuleVersion: 1, entryFee: 5 } }, 'NFL_PICKEM')).toThrow(/lockRuleVersion/);
   });
 
-  describe('backfill predicate (codex r2 #3: stored-WEEKLY legacy pools are stamped too)', () => {
+  describe('backfill predicate (codex r2 #3, r14 #3: every unstamped Pick\'em pool is stamped)', () => {
     const conf = (settings: Record<string, unknown>) => ({ type: 'NFL_PICKEM', settings });
-    it('matches every UNSTAMPED confidence Pick\'em pool, whatever lockMode it stores', () => {
+    it('matches every UNSTAMPED Pick\'em pool, confidence or not, whatever lockMode it stores', () => {
       expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: true, lockMode: 'PER_GAME' }))).toBe(true);
       expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: true }))).toBe(true);
       expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: true, lockMode: 'WEEKLY' }))).toBe(true);
       expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: true, lockMode: 'WEEKLY', lockRuleVersion: 1 }))).toBe(true);
+      expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: false, lockMode: 'PER_GAME' }))).toBe(true);
+      expect(needsConfidenceLockModeBackfill(conf({}))).toBe(true);
     });
-    it('skips stamped pools, straight pools, and other types (codex r1 #4)', () => {
+    it('skips stamped pools and other types (codex r1 #4)', () => {
       expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 }))).toBe(false);
-      expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: false, lockMode: 'PER_GAME' }))).toBe(false);
-      expect(needsConfidenceLockModeBackfill(conf({}))).toBe(false);
+      expect(needsConfidenceLockModeBackfill(conf({ confidenceMode: false, lockMode: 'PER_GAME', lockRuleVersion: 2 }))).toBe(false);
       expect(needsConfidenceLockModeBackfill({ type: 'NFL_SURVIVOR', settings: { confidenceMode: true } })).toBe(false);
       expect(needsConfidenceLockModeBackfill(undefined)).toBe(false);
+    });
+    it('writes WEEKLY only for a confidence pool; a straight pool keeps its stored lockMode', () => {
+      expect(backfillLockModeFor(conf({ confidenceMode: true, lockMode: 'PER_GAME' }))).toBe('WEEKLY');
+      expect(backfillLockModeFor(conf({ confidenceMode: false, lockMode: 'PER_GAME' }))).toBeUndefined();
+      expect(backfillLockModeFor(conf({}))).toBeUndefined();
     });
   });
 });

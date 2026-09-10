@@ -24,14 +24,22 @@ export function stampLockRuleVersion(newPool: { type?: string; settings?: Record
 }
 
 /**
- * Does the backfill need to touch this pool? Every unstamped confidence
- * Pick'em pool — INCLUDING one that already stores `WEEKLY` (it still needs
- * the stamp; its lockMode write is a no-op) — codex r2 #3. Re-evaluated inside
- * the write transaction so a pool stamped between pages is skipped.
+ * Does the backfill need to touch this pool? EVERY unstamped Pick'em pool —
+ * confidence or not (codex r14 #3): a straight pool that later enables
+ * confidence mode and picks PER_GAME must not be stuck on the legacy weekly
+ * rule with no path to the stamp (managers cannot write it). A confidence pool
+ * that already stores `WEEKLY` still matches — it needs the stamp; its
+ * lockMode write is a no-op (codex r2 #3). Re-evaluated inside the write
+ * transaction so a pool stamped between pages is skipped.
  */
 export function needsConfidenceLockModeBackfill(pool: Record<string, unknown> | undefined): boolean {
   if (!pool || pool.type !== 'NFL_PICKEM') return false;
-  const settings = (pool.settings ?? {}) as { confidenceMode?: unknown; lockRuleVersion?: unknown };
-  if (settings.confidenceMode !== true) return false;
+  const settings = (pool.settings ?? {}) as { lockRuleVersion?: unknown };
   return isLegacyLockRule(settings as { lockRuleVersion?: number });
+}
+
+/** What the backfill writes for `lockMode`: WEEKLY for a confidence pool (what it has always played); a straight pool keeps its stored value. */
+export function backfillLockModeFor(pool: Record<string, unknown> | undefined): 'WEEKLY' | undefined {
+  const settings = (pool?.settings ?? {}) as { confidenceMode?: unknown };
+  return settings.confidenceMode === true ? 'WEEKLY' : undefined;
 }

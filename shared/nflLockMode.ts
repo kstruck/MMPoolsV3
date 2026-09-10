@@ -94,7 +94,11 @@ export function nflLockMode(
  * Margin never reach an override in the first place.
  */
 export function lockStopsAtKickoff(settings: NFLLockModeSettings | undefined | null): boolean {
-  return settings?.confidenceMode === true;
+  // STAMPED pools only (codex r14): an unstamped legacy confidence pool keeps
+  // every old semantic — clock-only lock, extensions past kickoff — until the
+  // backfill reaches it. That is the rollout guarantee `nflLockMode` makes,
+  // and the ceiling and the status lock are part of the same guarantee.
+  return settings?.confidenceMode === true && !isLegacyLockRule(settings);
 }
 
 /** Convenience for the many call sites that only ask the yes/no question. */

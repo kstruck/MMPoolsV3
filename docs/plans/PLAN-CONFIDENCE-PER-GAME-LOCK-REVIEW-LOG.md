@@ -239,6 +239,18 @@ codex had not seen → **round 11, §2b-forced, recorded in the PR body** (CLAUD
 | 1 | P1 | `weekLockAtFor` still takes a WEEKLY confidence week's reference from the earliest game even when that game is CANCELLED, so the sheet closes (and reveals) at a cancelled opener's original time. | **REJECT — pre-existing, every weekly pool, out of scope.** The weekly deadline has always been "the first scheduled kickoff, cancelled or not", on the client (`weekLockAtFor`), the server (`weekLockDecision` → `effectiveWeekLockAt`, `Math.min` over every start time) and the hard-lock freeze. This PR's cancellation policy (r2 #5) is about the PER_GAME confidence SLATE — which games a member must weight — not about where a WEEKLY deadline sits. Moving the weekly reference off cancelled games would change every WEEKLY, Survivor and Margin pool's deadline and the frozen-deadline protocol; that is its own change with its own plan. Recorded as deferred. |
 | 2 | P1 | The tiebreaker-target lock read the pre-transaction `games` object although the transaction had just fetched fresh status into `liveById`. | **ACCEPT** | `live(g)` in the target check. |
 
+---
+
+## Round 14 — 2026-09-10 ~21:05 MDT, §2b-forced, diff @ `4c313d4b`
+
+3 findings (2 P1, 1 P2), all accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | `lockStopsAtKickoff` keyed on `confidenceMode` alone, so an UNSTAMPED legacy confidence pool gained the kickoff ceiling and the status lock at deploy — before the backfill — contradicting the "legacy pools unchanged until stamped" guarantee. | **ACCEPT** | `lockStopsAtKickoff` requires the stamp too; the LEGACY emulator scenario now proves clock-only behaviour on an unstamped pool. |
+| 2 | P1 | The transactional re-read merged only `status`; a still-SCHEDULED game rescheduled since the pre-read was judged on its old `startTime`. | **ACCEPT** | `startTime` merged into `liveById` alongside `status`. |
+| 3 | P2 | The backfill stamped only confidence pools, so a straight Pick'em pool that later enables confidence mode and picks PER_GAME would stay on the legacy weekly rule with no path to the stamp. | **ACCEPT** | The backfill stamps EVERY unstamped Pick'em pool; a confidence pool also gets `lockMode: WEEKLY`, a straight pool keeps its stored value. Predicate + `backfillLockModeFor` unit-tested; emulator #8 now stamps all four seeded pools; panel copy updated. |
+
 Pattern for the record: rounds 3–10 each found exactly one to three defects in
 the code written to close the previous round — never in the plan's design, and
 each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That

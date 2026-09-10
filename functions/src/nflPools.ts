@@ -716,7 +716,15 @@ export async function submitNFLPicksInternal(
         for (const s of snaps) {
           const d = s.data() as Partial<NFLGame> | undefined;
           const base = games.find(g => g.id === s.id);
-          if (base && d && typeof d.status === 'string') liveById.set(s.id, { ...base, status: d.status as NFLGame['status'] });
+          // Status AND kickoff (codex r14): a still-SCHEDULED game rescheduled
+          // since the pre-read must be judged on its new time, not the old.
+          if (base && d) {
+            liveById.set(s.id, {
+              ...base,
+              ...(typeof d.status === 'string' ? { status: d.status as NFLGame['status'] } : {}),
+              ...(typeof d.startTime === 'number' ? { startTime: d.startTime } : {}),
+            });
+          }
         }
       }
       const live = (g: NFLGame): NFLGame => liveById.get(g.id) ?? g;

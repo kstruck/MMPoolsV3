@@ -28,7 +28,7 @@ import * as admin from "firebase-admin";
 import { validated } from "../lib/validated";
 import { writeAdminAudit } from "../lib/adminAudit";
 import { backfillConfidenceLockModeSchema } from "../schemas/migrations";
-import { needsConfidenceLockModeBackfill, LOCK_RULE_VERSION } from "../lib/lockRuleVersion";
+import { needsConfidenceLockModeBackfill, backfillLockModeFor, LOCK_RULE_VERSION } from "../lib/lockRuleVersion";
 import { readLockRevision } from "../lib/scoringLease";
 
 export const backfillConfidenceLockMode = validated(
@@ -76,8 +76,12 @@ export const backfillConfidenceLockMode = validated(
                         // Re-judged on the transactional read: a pool stamped
                         // between the page read and here is left alone.
                         if (!needsConfidenceLockModeBackfill(fresh)) return;
+                        // A confidence pool is stamped WEEKLY (what it has always
+                        // played); a straight pool keeps its stored lockMode and
+                        // only gains the stamp (codex r14 #3).
+                        const lockMode = backfillLockModeFor(fresh);
                         tx.update(doc.ref, {
-                            'settings.lockMode': 'WEEKLY',
+                            ...(lockMode ? { 'settings.lockMode': lockMode } : {}),
                             'settings.lockRuleVersion': LOCK_RULE_VERSION,
                             'settings.lockRevision': readLockRevision(fresh as never) + 1,
                             updatedAt: admin.firestore.Timestamp.now(),

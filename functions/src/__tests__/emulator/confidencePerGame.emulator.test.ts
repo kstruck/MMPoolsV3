@@ -94,9 +94,10 @@ describe('T8 #1 / #14 — LEGACY: an unstamped confidence pool still locks the w
         await wStart({ data: { runId, scenarioId: 'cpg-legacy' }, auth: superAdmin } as never);
         // The wizard default — PER_GAME stored on a confidence pool, NO stamp.
         await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME' });
-        // The opener is LIVE but its feed startTime was corrected two hours into
-        // the future: status alone must close the week (codex r3 on the diff).
-        await wSeed({ data: { runId, games: slate(Date.now() + 2 * HOUR, { g1: { status: 'IN_PROGRESS' } }) }, auth: superAdmin } as never);
+        // An UNSTAMPED pool keeps the old rule byte for byte — clock only, no
+        // status lock, no kickoff ceiling (codex r14 #1). The opener kicked off
+        // an hour ago by the clock, which is what closed the week yesterday too.
+        await wSeed({ data: { runId, games: slate(Date.now() - HOUR, { g1: { status: 'IN_PROGRESS' } }) }, auth: superAdmin } as never);
         await wJoin({ data: { poolId, runId, members: [{ uid: ALICE, name: 'Alice' }] }, auth: superAdmin } as never);
     }, 30000);
 
@@ -467,13 +468,14 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
         (await wBackfill({ data, auth: superAdmin } as never)) as BackfillReport;
     const mine = (r: BackfillReport) => r.plannedWrites.filter((w) => ids.includes(w.poolId));
 
-    it('dry run lists the THREE confidence pools with their stored lock mode, writes nothing', async () => {
+    it('dry run lists ALL FOUR unstamped Pick\'em pools with their stored lock mode, writes nothing (codex r14 #3)', async () => {
         const r = await backfill({ dryRun: true, limit: 200 });
         const planned = mine(r);
-        expect(planned.map((w) => w.poolId).sort()).toEqual([ids[0], ids[1], ids[2]].sort());
+        expect(planned.map((w) => w.poolId).sort()).toEqual([...ids].sort());
         expect(planned.find((w) => w.poolId === ids[0])!.storedLockMode).toBe('PER_GAME');
         expect(planned.find((w) => w.poolId === ids[1])!.storedLockMode).toBeNull();
         expect(planned.find((w) => w.poolId === ids[2])!.storedLockMode).toBe('WEEKLY');
+        expect(planned.find((w) => w.poolId === ids[3])!.storedLockMode).toBe('PER_GAME');
         for (const id of ids) {
             expect((await db.collection('pools').doc(id).get()).data()!.settings.lockRuleVersion).toBeUndefined();
         }
@@ -495,9 +497,9 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
         expect(scanned).toBeGreaterThanOrEqual(4);
     }, 60000);
 
-    it('live run stamps all three (lockMode WEEKLY, a no-op on the third), bumps lockRevision, leaves the straight pool alone', async () => {
+    it('live run stamps all four: confidence pools get lockMode WEEKLY (a no-op on the third), the straight pool keeps PER_GAME; lockRevision bumped', async () => {
         const r = await backfill({ dryRun: false, limit: 200 });
-        expect(mine(r)).toHaveLength(3);
+        expect(mine(r)).toHaveLength(4);
         for (const id of [ids[0], ids[1], ids[2]]) {
             const s = (await db.collection('pools').doc(id).get()).data()!.settings;
             expect(s.lockMode).toBe('WEEKLY');
@@ -506,7 +508,7 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
         expect((await db.collection('pools').doc(ids[2]).get()).data()!.settings.lockRevision).toBe(4);
         const straight = (await db.collection('pools').doc(ids[3]).get()).data()!.settings;
         expect(straight.lockMode).toBe('PER_GAME');
-        expect(straight.lockRuleVersion).toBeUndefined();
+        expect(straight.lockRuleVersion).toBe(2);
     }, 30000);
 
     it('a second live run changes nothing', async () => {
