@@ -67,7 +67,7 @@
 >
 > Codex's frontend attack-surface audit scored 1/6; every FAIL was re-verified
 > live and against the code before anything was written —
-> [PLAN-FRONTEND-SECURITY-AUDIT.md](PLAN-FRONTEND-SECURITY-AUDIT.md) §1 has the
+> [PLAN-FRONTEND-SECURITY-AUDIT.md](docs/plans/PLAN-FRONTEND-SECURITY-AUDIT.md) §1 has the
 > verdict table, §6 the D1–D5 decisions (Kevin approved as recommended,
 > 2026-09-06). **PR A (#671)** = shared `setSecurityHeaders()` on the three
 > HTML-serving functions (`emailUnsubscribe`, `manageEmailPrefs`, `joinPreview`
