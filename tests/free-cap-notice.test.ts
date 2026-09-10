@@ -53,7 +53,7 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     // back — a guard that looked like a guard and was not, which is the whole
     // reason this file mutation-tests itself.
     const GATES: ReadonlyArray<readonly [string, string]> = [
-      ['functions/src/nflPools.ts', 'participantIds.length >= FREE_PLAN_PARTICIPANT_CAP'],
+      ['functions/src/nflPools.ts', 'participantCount >= FREE_PLAN_PARTICIPANT_CAP'],
       ['functions/src/bracketEntries.ts', 'currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP'],
       ['functions/src/playoffPools.ts', 'entries || {}).length >= FREE_PLAN_PARTICIPANT_CAP'],
       ['functions/src/propBets.ts', 'currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP'],
@@ -125,7 +125,12 @@ describe('the wizard tells the commissioner what happens at the wall', () => {
     expect(src).toContain("    : 'entries';");
 
     // The claim behind the split, measured at both kinds of gate.
-    expect(read('functions/src/nflPools.ts')).toContain('participantIds.length >= FREE_PLAN_PARTICIPANT_CAP');
+    // PLAN-ADMIN-PICK-IMPLICIT-JOIN hoisted the comparison into assertJoinCapacity;
+    // both callers (the explicit join and the implicit one in submitNFLPicks) hand
+    // it the DISTINCT-PARTICIPANT count, which is the claim this test measures.
+    expect(read('functions/src/nflPools.ts')).toContain('participantCount >= FREE_PLAN_PARTICIPANT_CAP');
+    expect(read('functions/src/nflPools.ts')).toContain('assertJoinCapacity(poolData, participantIds.length)');
+    expect(read('functions/src/nflPools.ts')).toContain('assertJoinCapacity(poolInTx, rosterInTx.length)');
     expect(read('functions/src/bracketEntries.ts')).toContain('currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP');
     expect(read('functions/src/propBets.ts')).toContain('currentEntriesCount >= FREE_PLAN_PARTICIPANT_CAP');
   });
