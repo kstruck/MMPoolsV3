@@ -761,7 +761,9 @@ export async function submitNFLPicksInternal(
         // of two Monday games, and once the first has started a member holding
         // the prediction open until the second locks would be revising a total
         // with half the outcome known.
-        tiebreakTargetLockedNow = targetGames.some(g => isGameLockedForGame(now, g, week, lockSettings));
+        // Transaction-fresh status (codex r13): the target may have kicked off
+        // since the pre-read, and `live()` already holds what this attempt saw.
+        tiebreakTargetLockedNow = targetGames.some(g => isGameLockedForGame(now, live(g), week, lockSettings));
         // Hoisted: both the rejection below and the freeze guard further down
         // are scoped to the ONE week whose meaning this release changed.
         const noMondayGame = games.every(g => g.isMonday !== true);

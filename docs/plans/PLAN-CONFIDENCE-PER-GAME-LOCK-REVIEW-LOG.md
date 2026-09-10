@@ -228,6 +228,17 @@ codex had not seen → **round 11, §2b-forced, recorded in the PR body** (CLAUD
 |---|---|---|---|---|
 | 1 | P2 | PER_GAME confidence: an earlier game that flipped to live after the pre-read, and that this save does not touch, was not re-read — its stale SCHEDULED status made the validator demand a pick for it ("incomplete") instead of treating it as a miss. | **ACCEPT** | Confidence pools re-read the WHOLE slate in the transaction in both modes (the changed-ids optimisation is gone; at most the week's games, confidence pools only). |
 
+---
+
+## Round 13 — 2026-09-10 ~20:30 MDT, §2b-forced, diff @ `feb65620`
+
+2 findings, both P1: 1 accepted, 1 rejected with evidence.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | `weekLockAtFor` still takes a WEEKLY confidence week's reference from the earliest game even when that game is CANCELLED, so the sheet closes (and reveals) at a cancelled opener's original time. | **REJECT — pre-existing, every weekly pool, out of scope.** The weekly deadline has always been "the first scheduled kickoff, cancelled or not", on the client (`weekLockAtFor`), the server (`weekLockDecision` → `effectiveWeekLockAt`, `Math.min` over every start time) and the hard-lock freeze. This PR's cancellation policy (r2 #5) is about the PER_GAME confidence SLATE — which games a member must weight — not about where a WEEKLY deadline sits. Moving the weekly reference off cancelled games would change every WEEKLY, Survivor and Margin pool's deadline and the frozen-deadline protocol; that is its own change with its own plan. Recorded as deferred. |
+| 2 | P1 | The tiebreaker-target lock read the pre-transaction `games` object although the transaction had just fetched fresh status into `liveById`. | **ACCEPT** | `live(g)` in the target check. |
+
 Pattern for the record: rounds 3–10 each found exactly one to three defects in
 the code written to close the previous round — never in the plan's design, and
 each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That
