@@ -11,9 +11,11 @@
 > | **D5** | New confidence pools default to per-game (recommendation). | §3.5. |
 > | **D6** | **Reopen Week 1. Jim is aware.** | §6 restated as a consequences list, not a recommendation against. |
 >
-> **STATUS: RULED ON; codex rounds 1 and 2 absorbed (14 accept / 1 reject,
-> see REVIEW-LOG). This is plan v4.** Implementation starts on v4; round 3 runs
-> on the code diff.
+> **STATUS: IMPLEMENTED on branch `claude/confidence-pool-lock-rules-dc69f4`
+> (2026-09-10). Plan v4; codex rounds 1–2 on the plan (14 accept / 1 reject),
+> rounds 3–4 on the code (3 P1, all fixed), round 5 pending at the time of
+> writing — see REVIEW-LOG. NOT deployed; the backfill has NOT run; Donkeys
+> has NOT been flipped.** Deploy + backfill + flip steps are §7 and the PR.
 >
 > **v4 additions from round 2** — the confidence lock is **status-aware** (a
 > game whose `status !== 'SCHEDULED'` is locked whatever its `startTime` says);

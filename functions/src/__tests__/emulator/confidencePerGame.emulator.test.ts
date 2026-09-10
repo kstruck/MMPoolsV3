@@ -162,13 +162,15 @@ describe('T8 #2–#7, #11–#13, #15–#16, #18 — STAMPED PER_GAME confidence 
         } as never)).rejects.toThrow(/GAME_LOCKED/);
     }, 30000);
 
-    it('#4 moving the Wednesday 16 onto Sunday → DUPLICATE_CONFIDENCE_VALUES (the frozen 16 still counts)', async () => {
+    it('#4 moving the Wednesday 16 onto Sunday is refused (the frozen 16 is not available to an open game)', async () => {
+        // The frozen value is excluded from the open games' available list, so the
+        // range check refuses it before the duplicate check would (codex r5).
         await expect(wSubmit({
             data: { poolId, runId, subjectUid: ALICE, week: 1,
                 picks: { [g(2)]: 'ATL', [g(3)]: 'KC' },
                 confidence: { [g(2)]: 16, [g(3)]: 15 } },
             auth: superAdmin,
-        } as never)).rejects.toThrow(/DUPLICATE_CONFIDENCE_VALUES/);
+        } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE|DUPLICATE_CONFIDENCE_VALUES/);
     }, 30000);
 
     it('#7 a weight keyed to a game outside this week → invalid-argument', async () => {
@@ -317,6 +319,43 @@ describe('T8 #19 / #20 — cancellation policy (codex r2 #5)', () => {
         } as never);
         const e = await entry(poolId, DAVE);
         expect(e.confidence).toEqual({ [g(1)]: 15, [g(2)]: 16, [g(3)]: 14 });
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('codex r5 — a frozen 16 is grandfathered after a later miss, and locked weights survive the write', () => {
+    const runId = 'run-cpg-frozen';
+    const poolId = `pool-${runId}`;
+    const FRANK = `sim-${runId}-frank`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-frozen' }, auth: superAdmin } as never);
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 });
+        // g1 (Wed) FINAL, g2 (Sun) live, g3 (Mon) open. Frank locked g1 with the 16
+        // in time and never picked g2.
+        await wSeed({ data: { runId, games: slate(Date.now() - 4 * 24 * HOUR - HOUR, { g1: { status: 'FINAL', scores: { home: 20, away: 10 } }, g2: { status: 'IN_PROGRESS' }, g3: { startTime: Date.now() + 24 * HOUR } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: FRANK, name: 'Frank' }] }, auth: superAdmin } as never);
+        await seedEntry(poolId, FRANK, { [g(1)]: 'SEA' }, { [g(1)]: 16 });
+    }, 30000);
+
+    it('the 16 stays; the miss costs the 15; Monday may take 14 — and the frozen 16 is still on the entry after the write', async () => {
+        // 3-game slate → range 14..16. Frozen {16}, one miss → available {14}.
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC' }, confidence: { [g(3)]: 15 } }, auth: superAdmin,
+        } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE/);
+        // The client drops a stale locked weight before sending — so the payload
+        // carries NO weight for g1. The stored 16 must survive the write.
+        await wSubmit({
+            data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC' }, confidence: { [g(3)]: 14 } }, auth: superAdmin,
+        } as never);
+        const e = await entry(poolId, FRANK);
+        expect(e.picks).toEqual({ [g(1)]: 'SEA', [g(3)]: 'KC' });
+        expect(e.confidence).toEqual({ [g(1)]: 16, [g(3)]: 14 });
     }, 30000);
 
     it('cleans up', async () => {

@@ -199,6 +199,22 @@ describe('confidenceSlateFor — D2: a missed game forfeits the HIGHEST weight',
     expect(s).toMatchObject({ missedIds: [], minValue: 1, maxValue: 16 });
   });
 
+  it('a weight frozen on a locked pick is grandfathered; a later miss forfeits the top value still OPEN (codex r5)', () => {
+    // 16 locked in on Wednesday, then Sunday's early game missed: the 16 stays
+    // theirs, the 15 is what the miss costs, and the open games take 1..14.
+    const s = confidenceSlateFor(games, { g0: 'SEA' }, lockedIds(['g0', 'g1']), { g0: 16 });
+    expect(s.missedIds).toEqual(['g1']);
+    expect(s.frozenValues).toEqual([16]);
+    expect(s.availableValues[0]).toBe(14);
+    expect(s.availableValues).not.toContain(16);
+    expect(s.availableValues).not.toContain(15);
+    expect(s).toMatchObject({ minValue: 1, maxValue: 14 });
+    // No miss: the open games take everything but the frozen 16.
+    const noMiss = confidenceSlateFor(games, { g0: 'SEA' }, lockedIds(['g0']), { g0: 16 });
+    expect(noMiss.availableValues).toEqual([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+    expect(noMiss.maxValue).toBe(15);
+  });
+
   it('a CANCELLED game nobody picked leaves the slate; a picked one stays (codex r2 #5)', () => {
     const withCancel = games.map((g) => (g.id === 'g3' ? { ...g, status: 'CANCELLED' } : g));
     const unpicked = confidenceSlateFor(withCancel, {}, lockedIds(['g3']));

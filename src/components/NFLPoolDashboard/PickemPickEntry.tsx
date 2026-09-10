@@ -203,14 +203,19 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   // D2; `confidenceSlateFor` is shared with the server's validator). On a
   // weekly pool, or before anything locks, this is the old `[17 − N .. 16]`.
   const confidenceSlate = useMemo(
-    () => confidenceSlateFor(games, (entry?.picks ?? {}) as Record<string, string>, g => isGameLocked(g)),
+    () => confidenceSlateFor(
+      games,
+      (entry?.picks ?? {}) as Record<string, string>,
+      g => isGameLocked(g),
+      (entry?.confidence ?? {}) as Record<string, number>,
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [games, entry, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick],
   );
-  const availableConfidenceValues = useMemo(() => {
-    const { minValue, maxValue } = confidenceSlate;
-    return Array.from({ length: Math.max(0, maxValue - minValue + 1) }, (_, i) => maxValue - i); // high to low
-  }, [confidenceSlate]);
+  // What an OPEN game may still be given, high to low. A weight frozen on a
+  // locked pick is not in this list (it is that game's, and its dropdown is
+  // disabled showing it); a forfeited value is not in it either.
+  const availableConfidenceValues = confidenceSlate.availableValues;
 
   // Records and the crowd split — the two things Kevin's testers asked to see
   // WHILE picking rather than on another screen. Both derive from data the
@@ -305,11 +310,15 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
     // forfeit (D2) and is not asked for. Every weight lies in this entry's range
     // (a 16 held on an open game after a miss must be re-ranked) and none repeats.
     if (confidenceMode) {
-      const { slateIds, missedIds, minValue, maxValue } = confidenceSlate;
+      const { slateIds, missedIds, availableValues } = confidenceSlate;
       const missed = new Set(missedIds);
+      const available = new Set(availableValues);
       const weightable = slateIds.filter(id => !missed.has(id));
       if (!weightable.every(id => !!confidence[id])) return false;
-      if (weightable.some(id => confidence[id] < minValue || confidence[id] > maxValue)) return false;
+      // Only OPEN games are held to the available list — a frozen weight is
+      // grandfathered, whatever the range did after it locked.
+      const openIds = new Set(games.filter(g => !isGameLocked(g)).map(g => g.id));
+      if (weightable.some(id => openIds.has(id) && !available.has(confidence[id]))) return false;
       if (duplicateConfidenceValues.size > 0) return false;
     }
 
@@ -693,8 +702,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
           <AlertTriangle size={12} className="mt-0.5 shrink-0 text-gold-600 dark:text-gold-400" aria-hidden="true" />
           <span>
             {confidenceSlate.missedIds.length === 1
-              ? `One game locked before you picked it, so the ${confidenceSlate.maxValue + 1} is not available this week. Rank your other games ${confidenceSlate.minValue}–${confidenceSlate.maxValue}.`
-              : `${confidenceSlate.missedIds.length} games locked before you picked them, so weights above ${confidenceSlate.maxValue} are not available this week. Rank your other games ${confidenceSlate.minValue}–${confidenceSlate.maxValue}.`}
+              ? `One game locked before you picked it, so the highest weight you could still have used is gone this week. Your open games can take ${confidenceSlate.minValue}–${confidenceSlate.maxValue}.`
+              : `${confidenceSlate.missedIds.length} games locked before you picked them, so the ${confidenceSlate.missedIds.length} highest weights you could still have used are gone this week. Your open games can take ${confidenceSlate.minValue}–${confidenceSlate.maxValue}.`}
           </span>
         </div>
       )}
@@ -859,7 +868,14 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                           and Android's picker renders disabled entries at close
                           to full contrast — the word is what carries the reason
                           when the colour does not. */}
-                      {availableConfidenceValues.map(v => {
+                      {/* A locked game lists only the weight it holds (frozen — not in
+                          the available list any more); an open game lists what it may
+                          still take plus whatever it currently holds, so a stale value
+                          stays visible until the member re-ranks it. */}
+                      {(locked
+                        ? (confidence[game.id] ? [confidence[game.id]] : [])
+                        : Array.from(new Set([...(confidence[game.id] ? [confidence[game.id]] : []), ...availableConfidenceValues])).sort((a, b) => b - a)
+                      ).map(v => {
                         const taken = isConfidenceValueTaken(confidenceOwners, v, game.id);
                         return (
                           <option key={v} value={v} disabled={taken}>
@@ -960,8 +976,8 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                 : duplicateConfidenceValues.size > 0 ? 'Two games share a confidence weight'
                   : openGames.some(g => !picks[g.id])
                     ? `Pick all ${openGames.length} open ${openGames.length === 1 ? 'game' : 'games'} to submit`
-                    : confidenceSlate.slateIds.some(id => confidence[id] > confidenceSlate.maxValue)
-                      ? `Weights above ${confidenceSlate.maxValue} are no longer available this week — re-rank those games`
+                    : openGames.some(g => !!confidence[g.id] && !confidenceSlate.availableValues.includes(confidence[g.id]))
+                      ? `A weight you set is no longer available this week (highest now ${confidenceSlate.maxValue}) — re-rank that game`
                       : 'Set a confidence weight for every open game'
           }
           // 🔨 KEVIN 2026-08-27: tell the member a half-finished sheet is not

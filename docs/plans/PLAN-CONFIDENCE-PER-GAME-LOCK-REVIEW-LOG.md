@@ -93,3 +93,20 @@ running in the same worktree.)
 | # | Sev | Finding (condensed) | Verdict | What changed |
 |---|---|---|---|---|
 | 1 | P1 | The new tiebreaker guard used `every` over the target games, so a legacy `MNF_COMBINED` target (the SUM of two Monday games) stayed editable after the first game started — a member could revise a combined total with half the outcome known. | **ACCEPT** | `nflPools.ts`: `some` instead of `every`. Emulator scenario "a legacy MNF_COMBINED tiebreaker locks when the FIRST Monday game starts" (27/27 in the file). |
+
+---
+
+## Round 5 — 2026-09-10 ~15:10 MDT, implementation diff @ `f92fbd03`
+
+3 findings (2 P1, 1 P2), all accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | A member who froze a 16 early (locked pick) and later MISSED a game had `maxValue` drop to 15, and the validator re-checked the frozen 16 against that range — every later submission refused, and nothing they could do about it. | **ACCEPT** | The D2 rule is now stated precisely: a miss forfeits the top value **still open** — the range `[17−N .. 16]` minus the values frozen on locked picks, minus the top k of what is left. `confidenceSlateFor` takes the stored weights and returns `frozenValues` + `availableValues`; `validatePerGameConfidence` holds only OPEN games to `availableValues` and grandfathers frozen weights (uniqueness still enforced). The sheet's dropdowns list `availableValues` (a locked game lists only its frozen value). Tests: shared + unit grandfather cases; emulator "a frozen 16 is grandfathered after a later miss" (16 frozen, Sunday missed → 15 forfeited, Monday takes 14). |
+| 2 | P1 | The entry write persisted `{ confidence }` = the REQUEST map and leaned on `{ merge: true }` deep-merging the nested map. The client drops a stale locked weight before sending, so a locked weight the validator kept could vanish from Firestore and score that pick 0. | **ACCEPT** | The write now persists the MERGED map explicitly (`{ ...stored, ...submitted }`) — what the validator judged is what lands. Emulator: the r5 scenario sends no weight for the locked game and asserts the stored 16 is still on the entry. (Whether `merge: true` deep-merges maps is no longer load-bearing.) |
+| 3 | P2 | `getWeekStatus` computed `weekStarted` from the raw deadline while `gameClosed` used the pool-aware lock, so an extended or status-corrected confidence week could read as `due` and show a pick CTA the server would refuse. | **ACCEPT** | `nflPending.getWeekStatus`: with the pool doc, `weekStarted = isWeekLockedFor(...)`. |
+
+Emulator scenario #4's expectation changed from `DUPLICATE_CONFIDENCE_VALUES`
+to "refused" (`OUT_OF_RANGE|DUPLICATE`): with frozen values excluded from the
+open games' list, moving the Wednesday 16 onto Sunday is caught by the range
+check first. Same refusal, earlier check.

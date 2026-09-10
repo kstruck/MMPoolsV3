@@ -236,8 +236,12 @@ export function validateConfidenceValues(
  *     that leaves an open game unpicked while spending a high value elsewhere
  *     could become invalid under its own k later (§3.2);
  *  2. every picked game has a weight;
- *  3. weights lie in `[minValue .. maxValue]` = `[17−N .. 16−k]` — a missed
- *     game forfeits the top value (Kevin: "for a 16 game week, they would lose 16");
+ *  3. an OPEN game's weight is one of `slate.availableValues` — the week's
+ *     range minus what is frozen on locked picks, minus the top k of the rest,
+ *     so a missed game forfeits the highest value the member could still have
+ *     used (Kevin: "for a 16 game week, they would lose 16"). A weight frozen
+ *     on a locked pick is grandfathered: it is checked for uniqueness, never
+ *     against a range that shrank after it locked (codex r5 on the diff);
  *  4. no weight is used twice.
  *
  * Locked games are the caller's concern (`CONFIDENCE_LOCKED` / `GAME_LOCKED`
@@ -246,10 +250,11 @@ export function validateConfidenceValues(
  */
 export function validatePerGameConfidence(
   merged: { picks: Record<string, string>; confidence: Record<string, number> },
-  slate: { slateIds: readonly string[]; missedIds: readonly string[]; minValue: number; maxValue: number },
+  slate: { slateIds: readonly string[]; missedIds: readonly string[]; availableValues: readonly number[]; minValue: number; maxValue: number },
   openIds: ReadonlySet<string>,
 ): { valid: boolean; error?: string } {
   const missed = new Set(slate.missedIds);
+  const available = new Set(slate.availableValues);
   const assigned = new Set<number>();
   for (const gameId of slate.slateIds) {
     const pick = merged.picks[gameId];
@@ -264,7 +269,7 @@ export function validatePerGameConfidence(
     if (value === undefined || value === null) {
       return { valid: false, error: `INCOMPLETE_CONFIDENCE_SUBMISSION: Missing confidence value for game ${gameId}` };
     }
-    if (!Number.isInteger(value) || value < slate.minValue || value > slate.maxValue) {
+    if (openIds.has(gameId) && (!Number.isInteger(value) || !available.has(value))) {
       return { valid: false, error: `OUT_OF_RANGE_CONFIDENCE: Value ${value} must be between ${slate.minValue} and ${slate.maxValue}` };
     }
     if (assigned.has(value)) {

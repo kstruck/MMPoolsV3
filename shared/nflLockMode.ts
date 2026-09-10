@@ -365,21 +365,48 @@ function dropStaleLockedValues<T extends string | number>(
  *   not the member's miss, and nobody could have used its value.
  * - A locked game the member never picked is a MISS: it stays in N and adds
  *   one to k, and the member forfeits the top k values (Kevin: "for a 16 game
- *   week, they would lose 16").
- * - Range: `[17 − N .. 16 − k]`.
+ *   week, they would lose 16") — the top k values NOT already frozen on a
+ *   locked game they DID pick. A 16 locked in on Wednesday is theirs; a miss
+ *   on Sunday then costs the 15 (codex r5 on the diff).
+ * - `availableValues`: what an OPEN game may still be given, highest first —
+ *   `[17 − N .. 16]` minus the frozen values, minus the top k of what is left.
+ *   `minValue` is the floor of the week's range; `maxValue` the highest value
+ *   still assignable (the old `16 − k` when nothing is frozen).
  */
 export function confidenceSlateFor<G extends NFLLockGame & { id: string }>(
   games: readonly G[],
   storedPicks: Readonly<Record<string, string>>,
   isLocked: (game: G) => boolean,
-): { slateIds: string[]; missedIds: string[]; minValue: number; maxValue: number } {
+  storedWeights: Readonly<Record<string, number>> = {},
+): {
+  slateIds: string[];
+  missedIds: string[];
+  /** Weights frozen on locked games the member picked — theirs, whatever the range does. */
+  frozenValues: number[];
+  availableValues: number[];
+  minValue: number;
+  maxValue: number;
+} {
   const slate = games.filter((g) => !(g.status === 'CANCELLED' && storedPicks[g.id] === undefined));
   const missedIds = slate.filter((g) => isLocked(g) && storedPicks[g.id] === undefined).map((g) => g.id);
   const N = slate.length;
+  const minValue = 17 - N;
+  const frozen = new Set<number>();
+  for (const g of slate) {
+    if (isLocked(g) && storedPicks[g.id] !== undefined) {
+      const w = storedWeights[g.id];
+      if (typeof w === 'number') frozen.add(w);
+    }
+  }
+  const unfrozen: number[] = [];
+  for (let v = 16; v >= minValue; v--) if (!frozen.has(v)) unfrozen.push(v);
+  const availableValues = unfrozen.slice(missedIds.length);
   return {
     slateIds: slate.map((g) => g.id),
     missedIds,
-    minValue: 17 - N,
-    maxValue: 16 - missedIds.length,
+    frozenValues: [...frozen].sort((a, b) => b - a),
+    availableValues,
+    minValue,
+    maxValue: availableValues.length > 0 ? availableValues[0] : minValue - 1,
   };
 }

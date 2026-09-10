@@ -188,7 +188,11 @@ export function getWeekStatus(
             ? serverNow() >= deadline
             : serverNow() >= Math.max(g.startTime - bufferMs, weekLockOverrideMs ?? Number.NEGATIVE_INFINITY);
     const complete = isWeekComplete(poolType, entry, weekGames, week, gameClosed);
-    const weekStarted = serverNow() >= deadline;
+    // With the pool doc, "started" is the pool-aware week lock (kickoff ceiling
+    // and game status folded in) — otherwise an extended or status-corrected
+    // confidence week reads as `due` while the server refuses every pick
+    // (codex r5 on the diff).
+    const weekStarted = pool ? isWeekLockedFor(pool, week, weekGames, serverNow()) : serverNow() >= deadline;
 
     if (!weekStarted) {
         // Week is upcoming; "due" once it's the nearest unpicked week, "future" otherwise —

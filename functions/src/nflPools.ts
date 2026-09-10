@@ -798,7 +798,7 @@ export async function submitNFLPicksInternal(
           }
           // The slate first: a weight on a game that is not in play (a CANCELLED
           // game nobody picked) is a clearer refusal than "locked".
-          const slate = confidenceSlateFor(games, storedPicks, lockedNow);
+          const slate = confidenceSlateFor(games, storedPicks, lockedNow, storedWeights);
           const slateSet = new Set(slate.slateIds);
           for (const gameId of Object.keys(submittedWeights)) {
             if (!slateSet.has(gameId)) {
@@ -849,7 +849,14 @@ export async function submitNFLPicksInternal(
         ...(entryName ? { entryName } : {}),
         userName: subjectName || existingEntry?.userName || 'Participant',
         picks: { ...(existingEntry?.picks || {}), ...picks },
-        ...(settings.confidenceMode && confidence ? { confidence } : {}),
+        // The MERGED map, explicitly: the validator judged `stored ∪ submitted`,
+        // so that is what gets persisted. Relying on `{ merge: true }` to
+        // deep-merge the nested map would leave a weight the client dropped as
+        // stale (locked, changed, unsaved) at the mercy of the merge semantics —
+        // and a locked weight that vanished would score that pick 0 (codex r5).
+        ...(settings.confidenceMode && confidence
+          ? { confidence: { ...((existingEntry?.confidence ?? {}) as Record<string, number>), ...confidence } }
+          : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
           ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})

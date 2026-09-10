@@ -126,6 +126,19 @@ describe('validatePerGameConfidence (D2 range, open-set completeness)', () => {
     expect(validatePerGameConfidence({ picks: picks(ids), confidence: { ...w, g5: 5.5 } }, slate, open).error).toMatch(/OUT_OF_RANGE_CONFIDENCE/);
   });
 
+  it('a frozen 16 survives a later miss; the open games then take 1..14 (codex r5)', () => {
+    const stored = { g0: 'AWAY' };
+    const locked = (g: { id: string }) => g.id === 'g0' || g.id === 'g1';
+    const slate = confidenceSlateFor(games, stored, locked, { g0: 16 });
+    const open = new Set(ids.slice(2));
+    const rest = ids.slice(2);
+    const merged = { picks: { ...picks(rest), g0: 'AWAY' }, confidence: { ...weights(rest, 14), g0: 16 } };
+    expect(validatePerGameConfidence(merged, slate, open)).toEqual({ valid: true });
+    // Spending the forfeited 15 on an open game is refused; the frozen 16 never is.
+    const withFifteen = { picks: merged.picks, confidence: { ...merged.confidence, g2: 15 } };
+    expect(validatePerGameConfidence(withFifteen, slate, open).error).toMatch(/OUT_OF_RANGE_CONFIDENCE: Value 15/);
+  });
+
   it('a locked game the member DID pick contributes its frozen weight and is not asked again', () => {
     const stored = { g0: 'AWAY' };
     const locked = (g: { id: string }) => g.id === 'g0';
