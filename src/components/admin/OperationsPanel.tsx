@@ -227,6 +227,38 @@ const runPublishedWeeksBackfill = async (dryRun: boolean) => {
 };
 
 /**
+ * Confidence lock-mode backfill (PLAN-CONFIDENCE-PER-GAME-LOCK D1). Same paging
+ * shape as the publishedWeeks backfill: one click covers every NFL Pick'em pool,
+ * and the dry run's `plannedWrites` carries each pool's stored lock mode so the
+ * report is the evidence Kevin reads before going live. Idempotent.
+ */
+const runConfidenceLockModeBackfill = async (dryRun: boolean) => {
+  let cursor: string | undefined;
+  let pages = 0;
+  const agg = { dryRun, poolsScanned: 0, poolsChanged: 0, plannedWrites: [] as unknown[], failures: [] as unknown[] };
+  do {
+    const r = (await call('backfillConfidenceLockMode', { dryRun, limit: 200, ...(cursor ? { startAfter: cursor } : {}) })) as
+      Record<string, unknown> & { plannedWrites?: unknown[]; failures?: unknown[]; nextCursor?: string | null };
+    addReportPage(agg, r);
+    if (Array.isArray(r.plannedWrites)) agg.plannedWrites.push(...r.plannedWrites);
+    if (Array.isArray(r.failures)) agg.failures.push(...r.failures);
+    cursor = r.nextCursor || undefined;
+    pages++;
+  } while (cursor && pages < 100);
+  // A run with per-pool failures is NOT a success (qodo #6 on #687): the
+  // executor reads `ok`, and without it a partial migration renders green.
+  // The op is idempotent, so the remedy is the one the message says.
+  if (agg.failures.length > 0) {
+    return {
+      ...agg,
+      ok: false,
+      error: `${agg.failures.length} pool(s) failed to stamp — see failures. Run again: already-stamped pools are skipped, the failed ones are retried.`,
+    };
+  }
+  return agg;
+};
+
+/**
  * Payment-truth reconciliation (PLAN-PAYMENT-TRUTH P2). Same paging shape as
  * the publishedWeeks backfill: counters aggregate across pages; the capped
  * plannedFixes list makes the dry run reviewable evidence, and per Q5 the dry
@@ -427,6 +459,24 @@ const ACTIONS: OpAction[] = [
     destructive: true,
     icon: Wrench,
     run: () => runPublishedWeeksBackfill(false),
+  },
+  {
+    id: 'backfillConfidenceLockMode:dry',
+    label: 'Backfill Confidence Lock Mode (dry run)',
+    description: 'Report every NFL Pick\'em pool not yet stamped with the lock-rule version (confidence or not), with the lock mode each one currently stores. Read the plannedWrites list — it shows what each pool held — before running it live. Writes nothing.',
+    blastRadius: 'Read-only — no writes. Reports plannedWrites per pool with storedLockMode.',
+    destructive: false,
+    icon: CheckCircle2,
+    run: () => runConfidenceLockModeBackfill(true),
+  },
+  {
+    id: 'backfillConfidenceLockMode',
+    label: 'Backfill Confidence Lock Mode',
+    description: 'Stamp settings.lockRuleVersion = 2 on every NFL Pick\'em pool not yet stamped; a confidence pool also gets settings.lockMode = WEEKLY (the mode it has always played), a straight pool keeps its stored lock mode. After this, a confidence pool\'s Lock Mode setting is honoured (per-game locks each game\'s pick AND weight at its own kickoff), so a commissioner can switch a pool to per-game from Settings. Idempotent: a second run reports zero.',
+    blastRadius: 'Writes settings.lockRuleVersion (and settings.lockMode on confidence pools) plus a settings.lockRevision bump on unstamped NFL Pick\'em pools. Nothing else on the doc; no entries, standings or leases. No pool changes the mode it plays.',
+    destructive: true,
+    icon: Wrench,
+    run: () => runConfidenceLockModeBackfill(false),
   },
   {
     id: 'runNFLSpreadFreeze:dry',

@@ -85,6 +85,8 @@ export interface NFLPickemPool {
     payouts: PayoutSettings;
     confidenceMode: boolean;
     lockMode: 'PER_GAME' | 'WEEKLY';
+    /** Server-written stamp (PLAN-CONFIDENCE-PER-GAME-LOCK); absent = legacy rule. */
+    lockRuleVersion?: number;
     lockBufferMinutes: number;
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
     pickMode: 'STRAIGHT' | 'ATS';

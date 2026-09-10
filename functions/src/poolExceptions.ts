@@ -30,6 +30,7 @@ import { nextEntryRevision, ENTRY_REVISION_FIELD } from "./lib/entryRevision";
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shared/survivorReuse";
 import { extensionRefusal } from "./lib/publishedWeeks";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
+import { nflLockMode } from "./shared/nflLockMode";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -335,7 +336,17 @@ export const proxyPick = validated(
 
         if (type === "NFL_PICKEM") {
             const settings = pool.settings || {};
-            const weeklyLockMode = settings.confidenceMode || settings.lockMode === "WEEKLY";
+            // A confidence sheet is a pick AND a weight, and this callable carries
+            // only picks — so on a confidence pool it could only ever write half
+            // an entry (neither a ranked pick nor a missed game). Refused outright
+            // (PLAN-CONFIDENCE-PER-GAME-LOCK §3.3, codex r1 #6); weight support
+            // is the recorded follow-up.
+            if (settings.confidenceMode) {
+                throw new HttpsError("failed-precondition",
+                    "PROXY_CONFIDENCE_UNSUPPORTED: a confidence pool needs a weight with every pick, and a proxy pick cannot carry one. Ask the member to submit, or extend the deadline.");
+            }
+            // ONE rule, imported (T2) — never restated here again.
+            const weeklyLockMode = nflLockMode(type, settings) === "WEEKLY";
 
             // Validate each pick: game must exist this week, team must be playing in it.
             for (const [gameId, pickedTeam] of Object.entries(picks as Record<string, string>)) {

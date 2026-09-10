@@ -231,9 +231,9 @@ describe('touchesLockSettings — which saves must serialize with the scoring le
     expect(touchesLockSettings({ [`settings.${key}`]: 1 })).toBe(true);
   });
 
-  it('includes confidenceMode, which silently converts a pool to weekly locking', () => {
-    // Submission derives weekly-lock mode from
-    // `settings.confidenceMode || settings.lockMode === 'WEEKLY'`.
+  it('includes confidenceMode, which changes when picks lock (legacy weekly clause; kickoff ceiling)', () => {
+    // `shared/nflLockMode.ts` reads it: on an unstamped pool it forces weekly,
+    // on a stamped one it turns the kickoff ceiling on (PLAN-CONFIDENCE-PER-GAME-LOCK).
     expect(LOCK_AFFECTING_SETTINGS_KEYS).toContain('confidenceMode');
   });
 

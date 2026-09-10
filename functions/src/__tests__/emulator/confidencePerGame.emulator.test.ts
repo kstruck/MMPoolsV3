@@ -1,0 +1,551 @@
+/**
+ * PLAN-CONFIDENCE-PER-GAME-LOCK — T8, through the REAL callables against the
+ * emulator (sim harness real-path fidelity, ADR 0006).
+ *
+ * Kevin, 2026-09-10: "It is important that if we allow users to change picks of
+ * games that have already started, they are not able to change any confidence
+ * selection of a game that has already started. They should be allowed to
+ * change the team they picked and the confidence pick if that game has not
+ * started. Any confidence pick for a game that has started can not be changed
+ * under any circumstances."
+ *
+ * Run: `npm --prefix functions run test:emulator` (needs the Firestore emulator).
+ */
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import * as admin from 'firebase-admin';
+import ftest from 'firebase-functions-test';
+import {
+    simStartRun, simJoinMembers, simSubmitPicks, simSeedNFLGames, cleanupSimPool,
+} from '../../simHarness';
+import { proxyPick, extendWeekDeadline } from '../../poolExceptions';
+import { updatePoolSettings } from '../../poolOps';
+import { createNFLPool } from '../../nflPools';
+import { backfillConfidenceLockMode } from '../../migrations/backfillConfidenceLockMode';
+
+const test = ftest();
+const db = admin.firestore();
+
+const wStart = test.wrap(simStartRun);
+const wJoin = test.wrap(simJoinMembers);
+const wSubmit = test.wrap(simSubmitPicks);
+const wSeed = test.wrap(simSeedNFLGames);
+const wCleanup = test.wrap(cleanupSimPool);
+const wProxy = test.wrap(proxyPick);
+const wExtend = test.wrap(extendWeekDeadline);
+const wUpdate = test.wrap(updatePoolSettings);
+const wCreate = test.wrap(createNFLPool);
+const wBackfill = test.wrap(backfillConfidenceLockMode);
+
+const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN', email: 'admin@test.local' } } as never;
+
+const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
+const HOUR = 60 * 60 * 1000;
+const PRESEASON = 1;
+
+// The sim-harness guard confirms the claim against users/{uid}.role, and a
+// describe's beforeAll runs BEFORE any beforeEach — so the doc is seeded at the
+// top of every beforeAll too.
+const seedAdmin = () => db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN', name: 'Admin' }, { merge: true });
+beforeEach(seedAdmin);
+
+/** A Pick'em pool doc, seeded directly so the lock settings are exactly what the test says. */
+async function seedPool(poolId: string, runId: string, settings: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+    await db.collection('pools').doc(poolId).set({
+        name: `Conf ${poolId}`, type: 'NFL_PICKEM', league: 'NFL',
+        season: `sim-${runId}`, seasonType: PRESEASON, simRunId: runId,
+        ownerId: 'admin-1', managerUid: 'admin-1', createdByUid: 'admin-1', participantIds: ['admin-1'],
+        status: 'OPEN', isLocked: false, billing: { status: 'free' },
+        settings: { entryFee: 0, payoutMode: 'SEASON', pickMode: 'STRAIGHT', payouts: { places: [], bonuses: [] }, weeklyTiebreaker: 'NONE', ...settings },
+        ...overrides,
+    });
+}
+
+/** Three games: g1 (Wed), g2 (Sun), g3 (Mon). Ids are assigned by the harness as sim-<runId>-g<n>. */
+const slate = (wedStart: number, over: Record<string, Record<string, unknown>> = {}) => [
+    { week: 1, seasonType: PRESEASON, startTime: wedStart, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('SEA'), awayTeam: T('NE'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true }, ...(over.g1 ?? {}) },
+    { week: 1, seasonType: PRESEASON, startTime: wedStart + 4 * 24 * HOUR, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('PIT'), awayTeam: T('ATL'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true }, ...(over.g2 ?? {}) },
+    { week: 1, seasonType: PRESEASON, startTime: wedStart + 5 * 24 * HOUR, status: 'SCHEDULED', isMonday: true,
+      homeTeam: T('KC'), awayTeam: T('DEN'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true }, ...(over.g3 ?? {}) },
+];
+
+/** A complete pre-kickoff sheet, written the way submitNFLPicks stores one. */
+async function seedEntry(poolId: string, uid: string, picks: Record<string, string>, confidence: Record<string, number>) {
+    await db.collection('pools').doc(poolId).collection('entries').doc(uid).set({
+        id: uid, poolId, ownerUid: uid, entryIndex: 1, userName: uid, picks, confidence,
+        weeklyTiebreakers: {}, totalScore: 0, submittedAt: Date.now() - HOUR, paidStatus: 'UNPAID',
+    });
+}
+
+const entry = async (poolId: string, uid: string) =>
+    (await db.collection('pools').doc(poolId).collection('entries').doc(uid).get()).data()!;
+
+// ---------------------------------------------------------------------------
+
+describe('T8 #1 / #14 — LEGACY: an unstamped confidence pool still locks the whole week', () => {
+    const runId = 'run-cpg-legacy';
+    const poolId = `pool-${runId}`;
+    const ALICE = `sim-${runId}-alice`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-legacy' }, auth: superAdmin } as never);
+        // The wizard default — PER_GAME stored on a confidence pool, NO stamp.
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME' });
+        // An UNSTAMPED pool keeps the old rule byte for byte — clock only, no
+        // status lock, no kickoff ceiling (codex r14 #1). The opener kicked off
+        // an hour ago by the clock, which is what closed the week yesterday too.
+        await wSeed({ data: { runId, games: slate(Date.now() - HOUR, { g1: { status: 'IN_PROGRESS' } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: ALICE, name: 'Alice' }] }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('refuses a Sunday pick with WEEK_LOCKED once Wednesday has kicked off (the old rule, byte for byte)', async () => {
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1, picks: { [g(2)]: 'PIT', [g(3)]: 'KC' }, confidence: { [g(2)]: 15, [g(3)]: 14 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/WEEK_LOCKED/);
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('T8 #2–#7, #11–#13, #15–#16, #18 — STAMPED PER_GAME confidence pool, Wednesday game started', () => {
+    const runId = 'run-cpg-pergame';
+    const poolId = `pool-${runId}`;
+    const ALICE = `sim-${runId}-alice`;
+    const BOB = `sim-${runId}-bob`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+    const WED = Date.now() - HOUR;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-pergame' }, auth: superAdmin } as never);
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2, lockBufferMinutes: 10, weeklyTiebreaker: 'MNF_LAST_GAME' });
+        // Wednesday game is live. Its feed startTime is MOVED TWO HOURS INTO THE
+        // FUTURE on purpose (codex r2 #1): status must lock it, not the clock.
+        await wSeed({ data: { runId, games: slate(WED, { g1: { status: 'IN_PROGRESS', startTime: Date.now() + 2 * HOUR, scores: { home: 10, away: 3 } } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: ALICE, name: 'Alice' }, { uid: BOB, name: 'Bob' }] }, auth: superAdmin } as never);
+        // Alice submitted her full sheet before Wednesday kicked off.
+        await seedEntry(poolId, ALICE, { [g(1)]: 'SEA', [g(2)]: 'PIT', [g(3)]: 'KC' }, { [g(1)]: 16, [g(2)]: 15, [g(3)]: 14 });
+    }, 30000);
+
+    it('#2 Alice changes a Sunday pick AND weight (swapping 15/14 between Sun and Mon) — accepted; Wednesday untouched', async () => {
+        await wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never);
+        const e = await entry(poolId, ALICE);
+        expect(e.picks).toEqual({ [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' });
+        expect(e.confidence).toEqual({ [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 });
+    }, 30000);
+
+    it('#3 / #18 changing the Wednesday WEIGHT alone → CONFIDENCE_LOCKED (status beats a moved startTime)', async () => {
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 14, [g(2)]: 16, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/CONFIDENCE_LOCKED/);
+    }, 30000);
+
+    it('#3 changing the Wednesday PICK → GAME_LOCKED', async () => {
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'NE', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/GAME_LOCKED/);
+    }, 30000);
+
+    it('#4 moving the Wednesday 16 onto Sunday is refused (the frozen 16 is not available to an open game)', async () => {
+        // The frozen value is excluded from the open games' available list, so the
+        // range check refuses it before the duplicate check would (codex r5).
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(2)]: 16, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE|DUPLICATE_CONFIDENCE_VALUES/);
+    }, 30000);
+
+    it('#7 a weight keyed to a game this week does not have and the entry never held → refused (PER_GAME contract)', async () => {
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(2)]: 14, [g(3)]: 15, 'sim-other-g9': 13 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/not found/);
+        expect((await entry(poolId, ALICE)).confidence['sim-other-g9']).toBeUndefined();
+    }, 30000);
+
+    it('#5 late joiner Bob: missed Wednesday, so the 16 is gone — 15 and 14 pass, a 16 fails (D2)', async () => {
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: BOB, week: 1, picks: { [g(2)]: 'PIT', [g(3)]: 'DEN' }, confidence: { [g(2)]: 16, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE/);
+        await wSubmit({
+            data: { poolId, runId, subjectUid: BOB, week: 1, picks: { [g(2)]: 'PIT', [g(3)]: 'DEN' }, confidence: { [g(2)]: 15, [g(3)]: 14 } },
+            auth: superAdmin,
+        } as never);
+        const e = await entry(poolId, BOB);
+        expect(e.picks[g(1)]).toBeUndefined();
+        expect(e.confidence[g(1)]).toBeUndefined();
+        expect(e.confidence).toEqual({ [g(2)]: 15, [g(3)]: 14 });
+    }, 30000);
+
+    it('#6 leaving an OPEN game unpicked → INCOMPLETE_CONFIDENCE_SUBMISSION', async () => {
+        const CAROL = `sim-${runId}-carol`;
+        await wJoin({ data: { poolId, runId, members: [{ uid: CAROL, name: 'Carol' }] }, auth: superAdmin } as never);
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: CAROL, week: 1, picks: { [g(2)]: 'PIT' }, confidence: { [g(2)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/INCOMPLETE_CONFIDENCE_SUBMISSION/);
+    }, 30000);
+
+    it('#13 proxyPick on a confidence pool → PROXY_CONFIDENCE_UNSUPPORTED (codex r1 #6)', async () => {
+        await expect(wProxy({
+            data: { poolId, targetUid: BOB, week: 1, picks: { [g(2)]: 'ATL' }, reason: 'texted' },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/PROXY_CONFIDENCE_UNSUPPORTED/);
+    }, 30000);
+
+    it('#11 a deadline extension does NOT reopen the started Wednesday game (kickoff ceiling)', async () => {
+        await wExtend({ data: { poolId, week: 1, extraMinutes: 24 * 60, reason: 'test' }, auth: superAdmin } as never);
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 13, [g(2)]: 14, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/CONFIDENCE_LOCKED/);
+    }, 30000);
+
+    it('#12 shrinking the buffer to 0 does NOT reopen it either', async () => {
+        await wUpdate({ data: { poolId, updates: { settings: { lockBufferMinutes: 0 } } }, auth: superAdmin } as never);
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1, picks: { [g(1)]: 'NE' }, confidence: { [g(1)]: 16 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/GAME_LOCKED/);
+    }, 30000);
+
+    it('#15 confidenceMode cannot be flipped once anybody has submitted (T10)', async () => {
+        await expect(wUpdate({
+            data: { poolId, updates: { settings: { confidenceMode: false } } }, auth: superAdmin,
+        } as never)).rejects.toThrow(/CONFIDENCE_MODE_LOCKED_AFTER_SUBMISSIONS/);
+    }, 30000);
+
+    it('#21 a manager save cannot downgrade or set the stamp (server-owned)', async () => {
+        await expect(wUpdate({
+            data: { poolId, updates: { settings: { lockRuleVersion: 1 } } }, auth: superAdmin,
+        } as never)).rejects.toThrow(/lockRuleVersion/);
+        const doc = (await db.collection('pools').doc(poolId).get()).data()!;
+        expect(doc.settings.lockRuleVersion).toBe(2);
+    }, 30000);
+
+    it('#7 (D3) a CHANGED tiebreaker after the Monday target has started → TIEBREAK_LOCKED; unchanged resend OK', async () => {
+        // Alice records 40 while Monday is open (target = the last Monday game, g3).
+        await wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 }, tiebreakerPrediction: 40 },
+            auth: superAdmin,
+        } as never);
+        expect((await entry(poolId, ALICE)).weeklyTiebreakers?.['1']).toBe(40);
+        // Monday kicks off.
+        await db.collection('nfl_games').doc(g(3)).update({ status: 'IN_PROGRESS' });
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 }, tiebreakerPrediction: 41 },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/TIEBREAK_LOCKED/);
+        await wSubmit({
+            data: { poolId, runId, subjectUid: ALICE, week: 1,
+                picks: { [g(1)]: 'SEA', [g(2)]: 'ATL', [g(3)]: 'KC' },
+                confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 }, tiebreakerPrediction: 40 },
+            auth: superAdmin,
+        } as never);
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('T8 #19 / #20 — cancellation policy (codex r2 #5)', () => {
+    const runId = 'run-cpg-cancel';
+    const poolId = `pool-${runId}`;
+    const CAROL = `sim-${runId}-carol`;
+    const DAVE = `sim-${runId}-dave`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-cancel' }, auth: superAdmin } as never);
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 });
+        // g2 CANCELLED before anyone picked it; g1 and g3 open.
+        await wSeed({ data: { runId, games: slate(Date.now() + 24 * HOUR, { g2: { status: 'CANCELLED' } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: CAROL, name: 'Carol' }, { uid: DAVE, name: 'Dave' }] }, auth: superAdmin } as never);
+        // Dave had already weighted the game that was then cancelled.
+        await seedEntry(poolId, DAVE, { [g(1)]: 'SEA', [g(2)]: 'PIT', [g(3)]: 'KC' }, { [g(1)]: 14, [g(2)]: 16, [g(3)]: 15 });
+    }, 30000);
+
+    it('#19 the cancelled game leaves Carol\'s slate: two games, range 15..16; a weight on it is refused', async () => {
+        await wSubmit({
+            data: { poolId, runId, subjectUid: CAROL, week: 1, picks: { [g(1)]: 'SEA', [g(3)]: 'KC' }, confidence: { [g(1)]: 16, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never);
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: CAROL, week: 1, picks: { [g(1)]: 'SEA', [g(3)]: 'KC' }, confidence: { [g(1)]: 14, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE/);
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: CAROL, week: 1, picks: { [g(1)]: 'SEA', [g(3)]: 'KC' }, confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/not in play/);
+    }, 30000);
+
+    it('#20 Dave\'s 16 on the cancelled game stays frozen; he can still re-rank the open two around it', async () => {
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: DAVE, week: 1, picks: { [g(1)]: 'SEA', [g(3)]: 'KC' }, confidence: { [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 } },
+            auth: superAdmin,
+        } as never)).rejects.toThrow(/CONFIDENCE_LOCKED/);
+        await wSubmit({
+            data: { poolId, runId, subjectUid: DAVE, week: 1, picks: { [g(1)]: 'NE', [g(3)]: 'DEN' }, confidence: { [g(1)]: 15, [g(3)]: 14 } },
+            auth: superAdmin,
+        } as never);
+        const e = await entry(poolId, DAVE);
+        expect(e.confidence).toEqual({ [g(1)]: 15, [g(2)]: 16, [g(3)]: 14 });
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('codex r5 — a frozen 16 is grandfathered after a later miss, and locked weights survive the write', () => {
+    const runId = 'run-cpg-frozen';
+    const poolId = `pool-${runId}`;
+    const FRANK = `sim-${runId}-frank`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+    /** A game id from a PRIOR week — on the entry, not in this week's slate. */
+    const OLD = `sim-${runId}-w0`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-frozen' }, auth: superAdmin } as never);
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 });
+        // g1 (Wed) FINAL, g2 (Sun) live, g3 (Mon) open. Frank locked g1 with the 16
+        // in time and never picked g2.
+        await wSeed({ data: { runId, games: slate(Date.now() - 4 * 24 * HOUR - HOUR, { g1: { status: 'FINAL', scores: { home: 20, away: 10 } }, g2: { status: 'IN_PROGRESS' }, g3: { startTime: Date.now() + 24 * HOUR } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: FRANK, name: 'Frank' }] }, auth: superAdmin } as never);
+        // Plus a PRIOR week's pick and weight on the entry — the sheet resends
+        // the whole-season map on every save (codex r6).
+        await seedEntry(poolId, FRANK, { [g(1)]: 'SEA', [OLD]: 'NE' }, { [g(1)]: 16, [OLD]: 16 });
+    }, 30000);
+
+    it('the 16 stays; the miss costs the 15; Monday may take 14 — and the frozen 16 is still on the entry after the write', async () => {
+        // 3-game slate → range 14..16. Frozen {16}, one miss → available {14}.
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC' }, confidence: { [g(3)]: 15 } }, auth: superAdmin,
+        } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE/);
+        // The client drops a stale locked weight before sending — so the payload
+        // carries NO weight for g1. The stored 16 must survive the write. The
+        // prior week's key is resent (a stale draft of it, even) and must be
+        // ignored, not rewritten and not refused (codex r6).
+        await wSubmit({
+            data: { poolId, runId, subjectUid: FRANK, week: 1,
+                picks: { [g(3)]: 'KC', [OLD]: 'SEA' }, confidence: { [g(3)]: 14, [OLD]: 3 } }, auth: superAdmin,
+        } as never);
+        const e = await entry(poolId, FRANK);
+        expect(e.picks).toEqual({ [g(1)]: 'SEA', [g(3)]: 'KC', [OLD]: 'NE' });
+        expect(e.confidence).toEqual({ [g(1)]: 16, [g(3)]: 14, [OLD]: 16 });
+        // A key the entry has never held and this week does not contain is still refused on a PER_GAME pool.
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC', 'sim-junk-g9': 'KC' }, confidence: { [g(3)]: 14 } }, auth: superAdmin,
+        } as never)).rejects.toThrow(/not found/);
+        expect((await entry(poolId, FRANK)).picks['sim-junk-g9']).toBeUndefined();
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('D3 on a STRAIGHT per-game pool — the goldenArc shape (CI regression on #687)', () => {
+    const runId = 'run-cpg-straight-d3';
+    const poolId = `pool-${runId}`;
+    const GINA = `sim-${runId}-gina`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-straight-d3' }, auth: superAdmin } as never);
+        await seedPool(poolId, runId, { confidenceMode: false, lockMode: 'PER_GAME' });
+        await db.collection('pools').doc(poolId).update({ 'settings.weeklyTiebreaker': admin.firestore.FieldValue.delete() });
+        // The goldenArc slate: g1 open (Sunday-ish, kicks off in 2h), g3 the Monday
+        // target ALREADY LIVE. Nothing stored yet for Gina.
+        await wSeed({ data: { runId, games: slate(Date.now() - 5 * 24 * HOUR, { g1: { startTime: Date.now() + 2 * HOUR }, g2: { startTime: Date.now() + 3 * HOUR }, g3: { status: 'IN_PROGRESS', startTime: Date.now() - 2 * HOUR, scores: { home: 14, away: 7 } } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: GINA, name: 'Gina' }] }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('a FIRST prediction sent after the target started is dropped, and the open pick still saves', async () => {
+        await wSubmit({ data: { poolId, runId, subjectUid: GINA, week: 1, picks: { [g(1)]: 'SEA' }, tiebreakerPrediction: 38 }, auth: superAdmin } as never);
+        const e = await entry(poolId, GINA);
+        expect(e.picks[g(1)]).toBe('SEA');
+        expect(e.weeklyTiebreakers?.['1']).toBeUndefined();
+    }, 30000);
+
+    it('a changed pick on the started game is still GAME_LOCKED', async () => {
+        await expect(wSubmit({ data: { poolId, runId, subjectUid: GINA, week: 1, picks: { [g(3)]: 'KC' } }, auth: superAdmin } as never))
+            .rejects.toThrow(/GAME_LOCKED/);
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('codex r4 — a legacy MNF_COMBINED tiebreaker locks when the FIRST Monday game starts', () => {
+    const runId = 'run-cpg-combined';
+    const poolId = `pool-${runId}`;
+    const EVE = `sim-${runId}-eve`;
+    const g = (n: number) => `sim-${runId}-g${n}`;
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-combined' }, auth: superAdmin } as never);
+        // Legacy rule: no `weeklyTiebreaker` at all → MNF_COMBINED (sum of every Monday game).
+        await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 });
+        await db.collection('pools').doc(poolId).update({ 'settings.weeklyTiebreaker': admin.firestore.FieldValue.delete() });
+        // Two Monday games (g2 and g3), both open; g1 a Sunday game.
+        await wSeed({ data: { runId, games: slate(Date.now() + 24 * HOUR, { g2: { isMonday: true }, g3: { isMonday: true } }) }, auth: superAdmin } as never);
+        await wJoin({ data: { poolId, runId, members: [{ uid: EVE, name: 'Eve' }] }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('accepts a prediction while both Monday games are open, refuses a change once the first has started', async () => {
+        const picks = { [g(1)]: 'SEA', [g(2)]: 'PIT', [g(3)]: 'KC' };
+        const confidence = { [g(1)]: 16, [g(2)]: 15, [g(3)]: 14 };
+        await wSubmit({ data: { poolId, runId, subjectUid: EVE, week: 1, picks, confidence, tiebreakerPrediction: 44 }, auth: superAdmin } as never);
+        expect((await entry(poolId, EVE)).weeklyTiebreakers?.['1']).toBe(44);
+        await db.collection('nfl_games').doc(g(2)).update({ status: 'IN_PROGRESS' });
+        await expect(wSubmit({
+            data: { poolId, runId, subjectUid: EVE, week: 1, picks, confidence, tiebreakerPrediction: 45 }, auth: superAdmin,
+        } as never)).rejects.toThrow(/TIEBREAK_LOCKED/);
+        // Unchanged resend, with g3 still open, is fine.
+        await wSubmit({ data: { poolId, runId, subjectUid: EVE, week: 1, picks, confidence, tiebreakerPrediction: 44 }, auth: superAdmin } as never);
+    }, 30000);
+
+    it('cleans up', async () => {
+        await wCleanup({ data: { poolId, runId, deleteGames: true }, auth: superAdmin } as never);
+    }, 60000);
+});
+
+describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confidence pool, pages, and is idempotent', () => {
+    const runId = 'run-cpg-backfill';
+    const ids = ['a-pergame', 'b-absent', 'c-weekly', 'd-straight'].map((s) => `pool-${runId}-${s}`);
+
+    beforeAll(async () => {
+        await seedAdmin();
+        await wStart({ data: { runId, scenarioId: 'cpg-backfill' }, auth: superAdmin } as never);
+        await seedPool(ids[0], runId, { confidenceMode: true, lockMode: 'PER_GAME' });
+        await seedPool(ids[1], runId, { confidenceMode: true });
+        await seedPool(ids[2], runId, { confidenceMode: true, lockMode: 'WEEKLY', lockRevision: 3 });
+        await seedPool(ids[3], runId, { confidenceMode: false, lockMode: 'PER_GAME' });
+    }, 30000);
+
+    type BackfillReport = {
+        dryRun: boolean; poolsScanned: number; poolsChanged: number; nextCursor: string | null;
+        plannedWrites: Array<{ poolId: string; name: string; storedLockMode: string | null }>;
+        failures: Array<{ poolId: string; error: string }>;
+    };
+    const backfill = async (data: Record<string, unknown>): Promise<BackfillReport> =>
+        (await wBackfill({ data, auth: superAdmin } as never)) as BackfillReport;
+    const mine = (r: BackfillReport) => r.plannedWrites.filter((w) => ids.includes(w.poolId));
+
+    it('dry run lists ALL FOUR unstamped Pick\'em pools with their stored lock mode, writes nothing (codex r14 #3)', async () => {
+        const r = await backfill({ dryRun: true, limit: 200 });
+        const planned = mine(r);
+        expect(planned.map((w) => w.poolId).sort()).toEqual([...ids].sort());
+        expect(planned.find((w) => w.poolId === ids[0])!.storedLockMode).toBe('PER_GAME');
+        expect(planned.find((w) => w.poolId === ids[1])!.storedLockMode).toBeNull();
+        expect(planned.find((w) => w.poolId === ids[2])!.storedLockMode).toBe('WEEKLY');
+        expect(planned.find((w) => w.poolId === ids[3])!.storedLockMode).toBe('PER_GAME');
+        for (const id of ids) {
+            expect((await db.collection('pools').doc(id).get()).data()!.settings.lockRuleVersion).toBeUndefined();
+        }
+    }, 30000);
+
+    it('#17 pages: limit 2 returns a cursor and the second page finishes', async () => {
+        // Other tests' pools may be in the collection; what matters is the
+        // cursor contract: a full page carries one, and following it terminates.
+        let cursor: string | null = null;
+        let pages = 0;
+        let scanned = 0;
+        do {
+            const r = await backfill({ dryRun: true, limit: 2, ...(cursor ? { startAfter: cursor } : {}) });
+            scanned += r.poolsScanned;
+            cursor = r.nextCursor;
+            pages++;
+        } while (cursor && pages < 50);
+        expect(pages).toBeGreaterThan(1);
+        expect(scanned).toBeGreaterThanOrEqual(4);
+    }, 60000);
+
+    it('live run stamps all four: confidence pools get lockMode WEEKLY (a no-op on the third), the straight pool keeps PER_GAME; lockRevision bumped', async () => {
+        const r = await backfill({ dryRun: false, limit: 200 });
+        expect(mine(r)).toHaveLength(4);
+        for (const id of [ids[0], ids[1], ids[2]]) {
+            const s = (await db.collection('pools').doc(id).get()).data()!.settings;
+            expect(s.lockMode).toBe('WEEKLY');
+            expect(s.lockRuleVersion).toBe(2);
+        }
+        expect((await db.collection('pools').doc(ids[2]).get()).data()!.settings.lockRevision).toBe(4);
+        const straight = (await db.collection('pools').doc(ids[3]).get()).data()!.settings;
+        expect(straight.lockMode).toBe('PER_GAME');
+        expect(straight.lockRuleVersion).toBe(2);
+    }, 30000);
+
+    it('a second live run changes nothing', async () => {
+        const r = await backfill({ dryRun: false, limit: 200 });
+        expect(mine(r)).toHaveLength(0);
+    }, 30000);
+
+    it('cleans up', async () => {
+        for (const id of ids) await db.collection('pools').doc(id).delete();
+    }, 30000);
+});
+
+describe('T8 #14 — createNFLPool stamps a new Pick\'em pool (codex r1 #4)', () => {
+    // A dedicated creator, NOT admin-1: pool creation writes managedPools /
+    // commissioner aggregates onto the creator's user doc, and leaving those on
+    // the shared admin user let a later suite's profile recompute change its
+    // role out from under every other file (measured: goldenArc then failed its
+    // beforeAll with "Sim harness callables are SUPER_ADMIN only").
+    const CREATOR = 'cpg-creator-1';
+    const creator = { uid: CREATOR, token: { role: 'PARTICIPANT' } } as never;
+
+    it('a wizard-created confidence pool carries lockRuleVersion 2 and therefore plays its stored lockMode', async () => {
+        await db.collection('users').doc(CREATOR).set({ role: 'PARTICIPANT', name: 'Creator' });
+        const res: { poolId?: string; id?: string } = await wCreate({
+            data: {
+                type: 'NFL_PICKEM', name: 'Stamp test', season: 2026, seasonType: 2,
+                settings: { entryFee: 0, confidenceMode: true, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', payoutMode: 'SEASON', payouts: { places: [], bonuses: [] } },
+            },
+            auth: creator,
+        } as never);
+        const poolId = (res.poolId ?? res.id) as string;
+        expect(typeof poolId).toBe('string');
+        const doc = (await db.collection('pools').doc(poolId).get()).data()!;
+        expect(doc.settings.lockRuleVersion).toBe(2);
+        expect(doc.settings.lockMode).toBe('PER_GAME');
+        await db.recursiveDelete(db.collection('pools').doc(poolId));
+        await db.recursiveDelete(db.collection('users').doc(CREATOR));
+        await db.recursiveDelete(db.collection('publicProfiles').doc(CREATOR));
+    }, 60000);
+});

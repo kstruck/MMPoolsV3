@@ -6,7 +6,7 @@
 // anything that only wants the predicate. Pure + framework-free, so it is
 // unit-testable without an emulator.
 
-import { effectiveLockSettings, isGameLocked as isGameLockedAt } from './effectiveLock';
+import { effectiveLockSettings, isGameLockedForGame } from './effectiveLock';
 import { hasReportedScores } from '../nflScoringEngine';
 import type { NFLGame } from '../nflPoolTypes';
 
@@ -59,7 +59,11 @@ export function isWeekComplete(
   // finalizing a season off a slate it could not read (defect NFL7-5). Latent
   // rather than live — every caller today guards `games.length` itself — but the
   // failure would be silent and total, and the guard is one term.
+  // Status-aware in confidence pools (qodo #2 on #687): a FINAL game whose feed
+  // `startTime` was corrected into the future is still lock-closed there, so
+  // the week can complete and finalize instead of waiting on a clock that
+  // never mattered. Straight Pick'em keeps the clock rule.
   return games.length > 0 && games.every(g =>
-    isTerminalGame(g) && isGameLockedAt(now, g.startTime, week, lockSettings),
+    isTerminalGame(g) && isGameLockedForGame(now, g, week, lockSettings),
   );
 }

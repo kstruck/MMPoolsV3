@@ -14,7 +14,7 @@ import { nflWeekLabel } from "./shared/nflWeekLabel";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import { assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
-import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
+import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, isGameLockedForGame, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
 import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
 import {
   validateCreateInput,
@@ -35,6 +35,7 @@ import {
 import {
   scorePickemEntry,
   validateConfidenceValues,
+  validatePerGameConfidence,
   computeSurvivorWeekUpdate,
   computeMNFTiebreakerTotal,
   buildWeeklyRecap,
@@ -72,6 +73,8 @@ import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } fro
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
 import { rethrowOrInternal } from "./lib/safeError";
+import { stampLockRuleVersion } from "./lib/lockRuleVersion";
+import { nflLockMode, confidenceSlateFor } from "./shared/nflLockMode";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -190,6 +193,8 @@ export const createNFLPool = validated(
     // computed above the creation guard).
     if (simRunId) newPool.simRunId = simRunId;
     assertSeasonNotForgedSim(newPool.season, simRunId);
+    // PLAN-CONFIDENCE-PER-GAME-LOCK: a new pool's stored lockMode is the truth.
+    stampLockRuleVersion(newPool);
 
     const userRef = db.collection('users').doc(uid);
 
@@ -553,8 +558,16 @@ export async function submitNFLPicksInternal(
   const effectiveWeekLock = decision.freezeTo !== undefined
     ? await ensureHardLockFreeze(poolRef, db.runTransaction.bind(db) as never, week, decision.lockAt)
     : decision.lockAt;
-  // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
-  let weekLocked = now >= effectiveWeekLock;
+  // `effectiveWeekLock` is a fixed instant, so only the clock has to move — except
+  // in a confidence pool, where a game that has left SCHEDULED closes the week
+  // whatever the feed's `startTime` now says (PLAN-CONFIDENCE-PER-GAME-LOCK
+  // §3.2a, codex r3): the status half never moves either.
+  // STARTED (live or final) — not CANCELLED: a game cancelled before kickoff is
+  // locked by itself but is no evidence the week's first kickoff happened
+  // (codex r11).
+  const weekStatusLocked = lockSettings.kickoffCeiling === true
+    && games.some(g => g.status === 'IN_PROGRESS' || g.status === 'FINAL');
+  let weekLocked = weekStatusLocked || now >= effectiveWeekLock;
 
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Reads first (Firestore requires it) and the lease read first of all: a
@@ -564,7 +577,7 @@ export async function submitNFLPicksInternal(
     // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
     // and on a lease-busy retry, and every lock check below reads `now`.
     now = Date.now();
-    weekLocked = now >= effectiveWeekLock;
+    weekLocked = weekStatusLocked || now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
     // so a concurrent raise can only admit more) and `entryCount` is read off it.
@@ -622,8 +635,103 @@ export async function submitNFLPicksInternal(
     let frozenTargetWrite: Record<string, string[]> | null = null;
 
     if (type === 'NFL_PICKEM') {
-      const settings = pool.settings;
-      const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';
+      // The settings AS OF THIS ATTEMPT (codex r7): a manager enabling
+      // confidence mode can commit between the pre-transaction read and here,
+      // and Firestore then re-runs this body against the new pool doc. Reading
+      // the stale copy would write a confidence entry with no weights — and the
+      // confidence-mode gate would then refuse to correct the setting, because
+      // that entry now holds a pick. The lock instants above were computed from
+      // the pre-transaction settings, so a mode change mid-flight is refused
+      // rather than applied to arithmetic done under the other mode; the
+      // client's ordinary retry lands on a consistent read.
+      const settings = (poolInTx.settings ?? pool.settings) as typeof pool.settings;
+      // `lockRevision` covers the rest: every lock-affecting save bumps it
+      // (buffer, extension, mode), so one comparison catches a deadline edit
+      // that landed after the pre-transaction arithmetic (qodo #9 on #687).
+      if (settings.confidenceMode !== pool.settings?.confidenceMode
+          || settings.lockMode !== pool.settings?.lockMode
+          || settings.lockRuleVersion !== pool.settings?.lockRuleVersion
+          || (settings as { lockRevision?: number }).lockRevision !== (pool.settings as { lockRevision?: number } | undefined)?.lockRevision) {
+        throw new HttpsError('aborted', 'SETTINGS_CHANGED: the pool\'s lock settings changed while your picks were being saved. Please submit again.');
+      }
+      // ONE rule, imported (PLAN-CONFIDENCE-PER-GAME-LOCK T2) — never restated
+      // here again. A confidence pool plays weekly only while unstamped (legacy)
+      // or when its lockMode says so.
+      const weeklyLockMode = nflLockMode(type, settings) === 'WEEKLY';
+      // D3: on a PER_GAME pool the tiebreaker prediction closes with its TARGET
+      // game(s); computed inside the tiebreak block below, read after it.
+      let tiebreakTargetLockedNow = false;
+      // What actually lands in `weeklyTiebreakers[week]` — D3 may drop it.
+      let predictionToWrite: number | undefined = tiebreakerPrediction;
+
+      // THIS WEEK'S KEYS ONLY (codex r6 on the diff). The pick sheet hydrates the
+      // entry's whole-season `picks` / `confidence` maps and sends them back on
+      // every save, so a Week-2 submission carries Week-1 keys. A key outside
+      // this week's slate is never validated and never written; a resent prior
+      // week (even a stale draft of it) therefore cannot overwrite that week,
+      // and a stray key cannot land under `merge`. Whether it is REFUSED or
+      // IGNORED keeps each branch's long-standing contract:
+      //   - WEEKLY tolerated any other-week key (a pick for another week's game
+      //     never marked this week and never failed the save —
+      //     `blindPicks.emulator.test.ts`);
+      //   - PER_GAME refused an id not on this week's slate ("Game … not found"
+      //     — `hofDressRehearsal`: a preseason pool must not see the
+      //     regular-season slate), and still does for a key the entry has never
+      //     held. A key the entry already holds is history being resent, and is
+      //     ignored.
+      const onlyThisWeek = <T>(map: Record<string, T>, stored: Record<string, T>): Record<string, T> => {
+        const out: Record<string, T> = {};
+        for (const [k, v] of Object.entries(map)) {
+          if (weekGameIds.has(k)) out[k] = v;
+          else if (!weeklyLockMode && stored[k] === undefined) {
+            throw new HttpsError('invalid-argument', `Game ${k} not found.`);
+          }
+        }
+        return out;
+      };
+      const weekPicks: Record<string, string> = onlyThisWeek(
+        picks as Record<string, string>, (existingEntry?.picks ?? {}) as Record<string, string>);
+      const weekWeights: Record<string, number> = settings.confidenceMode
+        ? onlyThisWeek((confidence || {}) as Record<string, number>, (existingEntry?.confidence ?? {}) as Record<string, number>)
+        : {};
+
+      // FRESH STATUS FOR WHAT THIS SAVE CHANGES (qodo #5 on #687). The slate was
+      // read before the transaction; a game that flips SCHEDULED → IN_PROGRESS
+      // between that read and this commit is invisible to Firestore's conflict
+      // detection unless its doc is read HERE. In a confidence pool "started"
+      // is the whole rule, so the games whose pick or weight this save would
+      // change are re-read inside the transaction (reads precede every write
+      // below) and their live status overrides the pre-read copy. Straight
+      // pools keep the clock rule and need no read.
+      const liveById = new Map<string, NFLGame>();
+      if (lockSettings.kickoffCeiling === true) {
+        // The WHOLE slate, in either mode. WEEKLY: any game starting closes the
+        // sheet (codex r11). PER_GAME: a game that started since the pre-read
+        // and that this save does NOT touch still changes the confidence slate
+        // — it becomes a MISS, which shrinks the range — so judging the sheet
+        // on its stale SCHEDULED status would refuse a valid save as
+        // "incomplete" (codex r12). At most the week's games, confidence pools
+        // only; reads precede every write below.
+        const snaps = await Promise.all(games.map(g => transaction.get(db.collection('nfl_games').doc(g.id))));
+        for (const s of snaps) {
+          const d = s.data() as Partial<NFLGame> | undefined;
+          const base = games.find(g => g.id === s.id);
+          // Status AND kickoff (codex r14): a still-SCHEDULED game rescheduled
+          // since the pre-read must be judged on its new time, not the old.
+          if (base && d) {
+            liveById.set(s.id, {
+              ...base,
+              ...(typeof d.status === 'string' ? { status: d.status as NFLGame['status'] } : {}),
+              ...(typeof d.startTime === 'number' ? { startTime: d.startTime } : {}),
+            });
+          }
+        }
+      }
+      const live = (g: NFLGame): NFLGame => liveById.get(g.id) ?? g;
+      // Started — live or final — not merely non-SCHEDULED (a cancellation is
+      // not a kickoff; codex r11).
+      const liveStatusLocksWeek = lockSettings.kickoffCeiling === true
+        && games.some(g => { const s = live(g).status; return s === 'IN_PROGRESS' || s === 'FINAL'; });
 
       // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
       // the first submission, once per pool-week, and hold every later
@@ -649,6 +757,21 @@ export async function submitNFLPicksInternal(
         const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
         const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
         const authoritative = applyFrozenTarget(frozenTarget, games, tiebreakRule);
+        // D3 (PLAN-CONFIDENCE-PER-GAME-LOCK): the prediction is an answer about
+        // the TARGET game(s), so it closes when they do — when the week has no
+        // target, when the week's last game does. Pre-existing hole: the
+        // PER_GAME branch never checked it, so a member could rewrite the
+        // number after Monday night kicked off.
+        const targetGames = authoritative.length > 0
+          ? games.filter(g => authoritative.includes(g.id))
+          : [games.reduce((last, g) => (g.startTime > last.startTime ? g : last), games[0])];
+        // `some`, not `every` (codex r4): a legacy MNF_COMBINED target is the SUM
+        // of two Monday games, and once the first has started a member holding
+        // the prediction open until the second locks would be revising a total
+        // with half the outcome known.
+        // Transaction-fresh status (codex r13): the target may have kicked off
+        // since the pre-read, and `live()` already holds what this attempt saw.
+        tiebreakTargetLockedNow = targetGames.some(g => isGameLockedForGame(now, live(g), week, lockSettings));
         // Hoisted: both the rejection below and the freeze guard further down
         // are scoped to the ONE week whose meaning this release changed.
         const noMondayGame = games.every(g => g.isMonday !== true);
@@ -728,29 +851,90 @@ export async function submitNFLPicksInternal(
       }
 
       if (weeklyLockMode) {
-        if (weekLocked) {
+        if (weekLocked || liveStatusLocksWeek) {
           throw new HttpsError('failed-precondition', 'WEEK_LOCKED: All picks in weekly lock pools are locked.');
         }
 
         // Validate unique confidence set if enabled
         if (settings.confidenceMode) {
-          const confResult = validateConfidenceValues(picks, confidence || {}, games);
+          const confResult = validateConfidenceValues(weekPicks, weekWeights, games);
           if (!confResult.valid) {
             throw new HttpsError('invalid-argument', confResult.error ?? 'Invalid confidence values.');
           }
         }
       } else {
-        // PER_GAME lock checks
-        for (const [gameId, pickedTeam] of Object.entries(picks)) {
+        // PER_GAME lock checks — status-aware in a confidence pool, where a game
+        // that has left SCHEDULED is locked whatever the clock says
+        // (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a).
+        const lockedNow = (g: NFLGame) => isGameLockedForGame(now, live(g), week, lockSettings);
+        for (const [gameId, pickedTeam] of Object.entries(weekPicks)) {
           const game = games.find(g => g.id === gameId);
           if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
-
-          const isGameLocked = isGameLockedAt(now, game.startTime, week, lockSettings);
           const oldPick = existingEntry?.picks?.[gameId];
-
-          if (isGameLocked && oldPick !== pickedTeam) {
+          if (lockedNow(game) && oldPick !== pickedTeam) {
             throw new HttpsError('failed-precondition', `GAME_LOCKED: Pick for game ${gameId} is locked.`);
           }
+        }
+
+        // PER_GAME confidence (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2, D2): a locked
+        // game's WEIGHT is as immutable as its pick, and the merged sheet — what
+        // the entry holds after this write — is judged as a whole over the
+        // confidence slate (a CANCELLED game nobody picked is not in it).
+        if (settings.confidenceMode) {
+          const submittedWeights: Record<string, number> = weekWeights;
+          const storedPicks = (existingEntry?.picks ?? {}) as Record<string, string>;
+          const storedWeights = (existingEntry?.confidence ?? {}) as Record<string, number>;
+          // Every weight key names a game in THIS week's slate (codex r1 #7):
+          // the schema allows an independent map, and a stray key would be
+          // written under merge and never validated again.
+          for (const gameId of Object.keys(submittedWeights)) {
+            if (!weekGameIds.has(gameId)) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
+          }
+          // The slate first: a weight on a game that is not in play (a CANCELLED
+          // game nobody picked) is a clearer refusal than "locked".
+          const slate = confidenceSlateFor(games, storedPicks, lockedNow, storedWeights);
+          const slateSet = new Set(slate.slateIds);
+          for (const gameId of Object.keys(submittedWeights)) {
+            if (!slateSet.has(gameId)) {
+              throw new HttpsError('invalid-argument', `Game ${gameId} is not in play this week.`);
+            }
+          }
+          // Locked weight — whether or not a pick was sent alongside it.
+          for (const game of games) {
+            const sent = submittedWeights[game.id];
+            if (sent !== undefined && lockedNow(game) && sent !== storedWeights[game.id]) {
+              throw new HttpsError('failed-precondition', `CONFIDENCE_LOCKED: Confidence for game ${game.id} is locked.`);
+            }
+          }
+          const merged = { picks: {} as Record<string, string>, confidence: {} as Record<string, number> };
+          for (const id of slate.slateIds) {
+            const p = picks[id] ?? storedPicks[id];
+            if (p !== undefined) merged.picks[id] = p;
+            const w = submittedWeights[id] ?? storedWeights[id];
+            if (w !== undefined) merged.confidence[id] = w;
+          }
+          const openIds = new Set(games.filter(g => !lockedNow(g)).map(g => g.id));
+          const confResult = validatePerGameConfidence(merged, slate, openIds);
+          if (!confResult.valid) {
+            throw new HttpsError('invalid-argument', confResult.error ?? 'Invalid confidence values.');
+          }
+        }
+
+        // D3: once the tiebreak target has locked, a prediction the member
+        // already holds cannot CHANGE (refused, so they know); a prediction they
+        // never recorded cannot be recorded now (dropped, not refused — their
+        // open picks still save, and the number never lands). An unchanged
+        // resend is fine — the sheet always sends the number it holds.
+        // `goldenArc` submits a first pick on an open Sunday game with the
+        // Monday target already live; refusing the whole save there would block
+        // a valid pick over a number that is simply not taken.
+        if (tiebreakerPrediction !== undefined && tiebreakTargetLockedNow) {
+          const stored = existingEntry?.weeklyTiebreakers?.[week];
+          if (stored !== undefined && tiebreakerPrediction !== stored) {
+            throw new HttpsError('failed-precondition',
+              'TIEBREAK_LOCKED: the tiebreaker game has started, so the prediction can no longer be changed.');
+          }
+          if (stored === undefined) predictionToWrite = undefined;
         }
       }
 
@@ -767,11 +951,18 @@ export async function submitNFLPicksInternal(
         entryIndex,
         ...(entryName ? { entryName } : {}),
         userName: subjectName || existingEntry?.userName || 'Participant',
-        picks: { ...(existingEntry?.picks || {}), ...picks },
-        ...(settings.confidenceMode && confidence ? { confidence } : {}),
+        picks: { ...(existingEntry?.picks || {}), ...weekPicks },
+        // The MERGED map, explicitly: the validator judged `stored ∪ submitted`,
+        // so that is what gets persisted. Relying on `{ merge: true }` to
+        // deep-merge the nested map would leave a weight the client dropped as
+        // stale (locked, changed, unsaved) at the mercy of the merge semantics —
+        // and a locked weight that vanished would score that pick 0 (codex r5).
+        ...(settings.confidenceMode && confidence
+          ? { confidence: { ...((existingEntry?.confidence ?? {}) as Record<string, number>), ...weekWeights } }
+          : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
-          ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})
+          ...(predictionToWrite !== undefined ? { [week]: predictionToWrite } : {})
         },
         totalScore: existingEntry?.totalScore ?? 0,
         submittedAt: now,
@@ -787,7 +978,7 @@ export async function submitNFLPicksInternal(
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
 
-      committedPickForWeek = Object.keys(picks).some(gameId => weekGameIds.has(gameId));
+      committedPickForWeek = Object.keys(weekPicks).length > 0;
       writtenPicks = pickemEntry.picks;
 
     } else if (type === 'NFL_SURVIVOR') {
@@ -1493,7 +1684,10 @@ async function scoreWeekPass(
   }
 
   const lockSettings = effectiveLockSettings(pool?.settings, pool?.type);
-  const gameLockClosed = (g: NFLGame) => isGameLockedAt(now, g.startTime, week, lockSettings);
+  // Status-aware in a confidence pool (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a):
+  // a FINAL game whose feed `startTime` moved later is still closed, so its
+  // result is gradable and revealable — the same predicate the submit path uses.
+  const gameLockClosed = (g: NFLGame) => isGameLockedForGame(now, g, week, lockSettings);
   const revealed = (g: NFLGame) => isTerminalGame(g) && gameLockClosed(g);
 
   // Pick'em grades off this set. On a complete pass it IS `games`, so nothing

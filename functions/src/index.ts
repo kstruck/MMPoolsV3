@@ -131,6 +131,7 @@ export { backfillFrozenSpreads } from "./migrations/backfillFrozenSpreads";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 export { backfillProfileData } from "./migrations/backfillProfileData";
 export { backfillPublishedWeeks } from "./migrations/backfillPublishedWeeks";
+export { backfillConfidenceLockMode } from "./migrations/backfillConfidenceLockMode";
 export { reconcilePaymentTruth } from "./migrations/reconcilePaymentTruth";
 
 // --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---

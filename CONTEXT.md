@@ -146,7 +146,8 @@ The boundary is the **same instant the picker's own deadline was**, so nobody is
 | Pool shape | A pick reveals |
 |---|---|
 | Pick'em, per-game lock | per GAME, as each kicks off |
-| Pick'em in confidence or weekly-lock mode, Survivor, Margin | the whole WEEK at once, at its single deadline |
+| Pick'em in weekly-lock mode (confidence or not), Survivor, Margin | the whole WEEK at once, at its single deadline |
+| Pick'em, per-game lock, confidence points on | per GAME — pick AND weight — as each kicks off; a game that has started is closed by every path (`PLAN-CONFIDENCE-PER-GAME-LOCK`) |
 
 **Who may read a reveal:** any **proven Member** of the Pool (Kevin's ruling, 2026-08-14 — *"make it visible for all users if pool is locked"*), the Commissioner, and Super Admin. A non-member is refused. Membership for THIS read is a **canonical Member Record** — one carrying a server-stamped `joinedAt`, which no client path can write. `participantIds` is deliberately **not** accepted here, and is separately server-owned in `firestore.rules` because it is an authorization input.
 

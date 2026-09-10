@@ -6,7 +6,7 @@ import { BanterFeed } from './BanterFeed';
 import { PinnedMessageBand } from './PinnedMessageBand';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } from '../../utils/nflPending';
-import { nflLockMode, weekLockOverrideFor, gameLockAt } from '@shared/nflLockMode';
+import { nflLockMode, weekLockOverrideFor, isGameLockedFor } from '@shared/nflLockMode';
 import { now as serverNow } from '../../utils/serverClock';
 import { pickCtaFor } from '../../utils/pickCta';
 import { picksBlockedReason } from '../../utils/picksAvailability';
@@ -371,7 +371,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // "Picks Locked" during an extension the server still accepts.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, selectedWeek);
   const bufferMinutes = effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime));
-  const weekLocked = isWeekLockedNow(weeklyGames, bufferMinutes, lockMode, weekLockOverrideMs);
+  const weekLocked = isWeekLockedNow(weeklyGames, bufferMinutes, lockMode, weekLockOverrideMs, castPool, selectedWeek);
 
   // The SAME per-game closure rule the checklist and the status service use.
   // Without it this CTA says "Make Picks" to a member whose only unanswered game
@@ -383,9 +383,12 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // server clock, so a memo would freeze it across a game's lock.
   const weekPicksComplete = (() => {
     if (!myEntry || weeklyGames.length === 0) return false;
-    const isGameClosed = (g: { startTime: number }) => lockMode === 'WEEKLY'
+    // Per game through the ONE pool-aware reader (PLAN-CONFIDENCE-PER-GAME-LOCK
+    // §3.2a): buffer, extension, the confidence kickoff ceiling and game status
+    // all come from the pool and game docs, exactly as the pick sheet's do.
+    const isGameClosed = (g: { startTime: number; status?: string | null }) => lockMode === 'WEEKLY'
       ? weekLocked
-      : serverNow() >= gameLockAt(g.startTime, bufferMinutes, weekLockOverrideMs);
+      : isGameLockedFor(castPool, selectedWeek, g, weeklyGames, serverNow());
     return isWeekComplete(_pool.type, myEntry, weeklyGames, selectedWeek, isGameClosed);
   })();
   const hasAnyPickThisWeek = !!myEntry && (
