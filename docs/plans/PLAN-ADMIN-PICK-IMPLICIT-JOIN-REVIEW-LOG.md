@@ -109,3 +109,12 @@ written rejection stood). Three NEW findings, all documentation:
 | R2-6 | S1/S2 grep commands do not exclude tests and use basic-regex `\|` | VALID (doc) | Commands rewritten to the `grep -E` + `grep -vE "__tests__|\.test\.ts"` forms actually run; re-executed after the rewrite and they reproduce the tables. |
 
 New code in this round is one read-only census script — round 3 below.
+
+### Round 3 — codex `gpt-5.6-terra`, `--base origin/main`, on `74622ac1` (census script + glossary + sweep commands)
+
+Clean. Verbatim: "The implicit enrollment is transactionally coupled to the
+entry and member record, rechecks authorization against transactional state,
+and applies capacity limits without breaking idempotent replays." No findings.
+`usage limit` grep: hits only on this log's own earlier sentences in the diff.
+Gates re-run on `74622ac1`: root 3193 passed, lint 1862 / 0 (delta 0); CI green
+on `8b3c691e` (e2e-playwright included). Three codex rounds total.
