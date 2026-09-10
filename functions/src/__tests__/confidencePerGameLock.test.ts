@@ -139,6 +139,18 @@ describe('validatePerGameConfidence (D2 range, open-set completeness)', () => {
     expect(validatePerGameConfidence(withFifteen, slate, open).error).toMatch(/OUT_OF_RANGE_CONFIDENCE: Value 15/);
   });
 
+  it('a LOCKED legacy pick with no weight is grandfathered; an OPEN pick with no weight is not (codex r9)', () => {
+    const stored = { g0: 'AWAY' }; // proxy pick on a legacy pool — no weight ever
+    const locked = (g: { id: string }) => g.id === 'g0';
+    const slate = confidenceSlateFor(games, stored, locked, {});
+    const rest = ids.slice(1);
+    const merged = { picks: { ...picks(rest), g0: 'AWAY' }, confidence: weights(rest, 16) };
+    expect(validatePerGameConfidence(merged, slate, new Set(rest))).toEqual({ valid: true });
+    const openNoWeight = { picks: merged.picks, confidence: { ...merged.confidence } };
+    delete openNoWeight.confidence.g1;
+    expect(validatePerGameConfidence(openNoWeight, slate, new Set(rest)).error).toMatch(/Missing confidence value for game g1/);
+  });
+
   it('a locked game the member DID pick contributes its frozen weight and is not asked again', () => {
     const stored = { g0: 'AWAY' };
     const locked = (g: { id: string }) => g.id === 'g0';

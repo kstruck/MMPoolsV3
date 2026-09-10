@@ -242,39 +242,42 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
   const recordFor = (abbr: string): string | undefined =>
     recordsLoaded ? formatTeamRecord(teamRecords.get(abbr)) : undefined;
 
+  // THE WEIGHTS THAT COUNT, per game of this week: a LOCKED game counts what the
+  // server holds (a draft the member changed but never saved before the lock
+  // is dropped at submit and must not block the sheet — codex r9); a locked
+  // game with no saved pick (a MISS) counts nothing (codex r3); an open game
+  // counts the draft. Drives both audits and the dropdown of a locked game.
+  const auditWeights = useMemo(() => {
+    const out: Record<string, number> = {};
+    if (!confidenceMode) return out;
+    void lockTick;
+    for (const g of games) {
+      const v = isGameLocked(g) ? (entry?.confidence?.[g.id] as number | undefined) : confidence[g.id];
+      if (v) out[g.id] = v;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [games, confidence, entry, confidenceMode, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
+
   // Check for duplicate confidence selections
   const duplicateConfidenceValues = useMemo(() => {
     if (!confidenceMode) return new Set<number>();
     const seen = new Set<number>();
     const duplicates = new Set<number>();
-
-    // A weight the member set on a game they then MISSED (locked with no saved
-    // pick) is a stale draft: the submit path drops it, so it must not hold a
-    // value hostage here or in the dropdowns (codex r3 on the diff).
-    const missed = new Set(confidenceSlate.missedIds);
-    Object.entries(confidence).forEach(([gameId, value]) => {
-      // Only audit games playing in this active week
-      const gamePlaying = games.some(g => g.id === gameId);
-      if (!gamePlaying || missed.has(gameId)) return;
-
-      if (seen.has(value)) {
-        duplicates.add(value);
-      }
+    Object.values(auditWeights).forEach((value) => {
+      if (seen.has(value)) duplicates.add(value);
       seen.add(value);
     });
-
     return duplicates;
-  }, [confidence, confidenceMode, games, confidenceSlate]);
+  }, [auditWeights, confidenceMode]);
 
   // Which weight each game already holds — drives the grayed-out options below.
   // Scoped to THIS week's games, same as the duplicate audit: `confidence` is
   // keyed by gameId across the whole entry, so folding in other weeks would
   // gray out weights nothing on screen is using.
   const confidenceOwners = useMemo(
-    () => (confidenceMode
-      ? confidenceValueOwners(games.map(g => g.id).filter(id => !confidenceSlate.missedIds.includes(id)), confidence)
-      : new Map<number, Set<string>>()),
-    [games, confidence, confidenceMode, confidenceSlate],
+    () => (confidenceMode ? confidenceValueOwners(Object.keys(auditWeights), auditWeights) : new Map<number, Set<string>>()),
+    [auditWeights, confidenceMode],
   );
 
   /**
@@ -854,12 +857,12 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                   <div className="flex items-center gap-2 bg-page px-3 py-2 border border-line rounded-lg">
                     <span className="text-[9px] text-muted font-display font-bold uppercase tracking-[0.08em] shrink-0">Confidence Weight</span>
                     <select
-                      value={confidence[game.id] || ''}
+                      value={locked ? (auditWeights[game.id] ?? '') : (confidence[game.id] || '')}
                       disabled={locked}
                       onChange={e => handleConfidenceSelect(game.id, parseInt(e.target.value))}
                       aria-label={`Confidence weight for ${game.awayTeam.abbreviation} at ${game.homeTeam.abbreviation}`}
                       className={`bg-page text-[color:var(--text)] border border-line rounded-lg px-2 py-2 focus:outline-none text-xs font-body font-bold num flex-1 min-w-0 text-center ${
-                        duplicateConfidenceValues.has(confidence[game.id]) ? 'border-gold-500 focus:ring-gold-500' : ''
+                        duplicateConfidenceValues.has(auditWeights[game.id]) ? 'border-gold-500 focus:ring-gold-500' : ''
                       } ${locked ? 'opacity-85 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Set weight...</option>
@@ -880,7 +883,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                           still take plus whatever it currently holds, so a stale value
                           stays visible until the member re-ranks it. */}
                       {(locked
-                        ? (confidence[game.id] ? [confidence[game.id]] : [])
+                        ? (auditWeights[game.id] ? [auditWeights[game.id]] : [])
                         : Array.from(new Set([...(confidence[game.id] ? [confidence[game.id]] : []), ...availableConfidenceValues])).sort((a, b) => b - a)
                       ).map(v => {
                         const taken = isConfidenceValueTaken(confidenceOwners, v, game.id);
@@ -892,7 +895,7 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
                       })}
                     </select>
 
-                    {duplicateConfidenceValues.has(confidence[game.id]) && (
+                    {duplicateConfidenceValues.has(auditWeights[game.id]) && (
                       <span className="shrink-0 text-[9px] text-gold-600 dark:text-gold-400 font-body font-bold flex items-center gap-1">
                         <AlertTriangle size={9} aria-hidden="true" /> Duplicate value!
                       </span>

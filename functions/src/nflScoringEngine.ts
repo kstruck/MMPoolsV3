@@ -267,6 +267,12 @@ export function validatePerGameConfidence(
     }
     const value = merged.confidence[gameId];
     if (value === undefined || value === null) {
+      // A LOCKED pick with no weight is a pre-release artefact (a proxy pick on
+      // a legacy pool — proxyPick could never carry a weight). Nothing can be
+      // supplied for it now, it scores 0 exactly as it always has, and it must
+      // not hold the member's open games hostage (codex r9). An OPEN pick with
+      // no weight is the member's to fix.
+      if (!openIds.has(gameId)) continue;
       return { valid: false, error: `INCOMPLETE_CONFIDENCE_SUBMISSION: Missing confidence value for game ${gameId}` };
     }
     if (openIds.has(gameId) && (!Number.isInteger(value) || !available.has(value))) {

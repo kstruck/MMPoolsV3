@@ -150,6 +150,17 @@ still refused on the PER_GAME pool.
 
 ---
 
+## Round 9 — 2026-09-10 ~17:50 MDT, implementation diff @ post-r8 commit
+
+2 findings (P1, P2), both accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | A weight the member changed locally on a SAVED game and did not submit before that game locked is a stale draft; the submit path drops it, but the sheet's duplicate audit still counted it, so if it collided with an open game's value `canSubmit` stayed false and the locked dropdown could not be changed — the member could not save anything. | **ACCEPT** | `PickemPickEntry.tsx`: one `auditWeights` map — a locked game counts its SAVED weight, a missed game counts nothing, an open game counts the draft — feeds the duplicate audit, the owners map, the duplicate badge, and a locked game's dropdown value/option. Surface-invariant guard updated. |
+| 2 | P2 | A pre-release confidence entry holding a proxy pick with NO weight (proxyPick never carried one) would, once its pool is per-game, fail every later submission at "Missing confidence value" for a locked game nothing can supply. | **ACCEPT** | `validatePerGameConfidence`: a LOCKED pick with no weight is grandfathered (scores 0 as it always has); an OPEN pick with no weight is still the member's to fix. Unit case added. |
+
+---
+
 ## Round 7 — 2026-09-10 ~16:30 MDT, implementation diff @ post-r6 commit
 
 1 finding, P1, accepted.

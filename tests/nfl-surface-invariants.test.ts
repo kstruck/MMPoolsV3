@@ -490,7 +490,11 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     // folding a MISSED game in (locked, never picked — its draft weight is
     // dropped at submit) would gray out a value the member still needs
     // (PLAN-CONFIDENCE-PER-GAME-LOCK, codex r3 on the diff).
-    expect(code).toContain("confidenceValueOwners(games.map(g => g.id).filter(id => !confidenceSlate.missedIds.includes(id)), confidence)");
+    // `auditWeights` is this week's games only: a locked game counts its SAVED
+    // weight, a missed game counts nothing, an open game counts the draft
+    // (codex r3 and r9 on the diff).
+    expect(code).toContain('confidenceValueOwners(Object.keys(auditWeights), auditWeights)');
+    expect(code).toContain('isGameLocked(g) ? (entry?.confidence?.[g.id] as number | undefined) : confidence[g.id]');
   });
 
   it('the duplicate detection is still present and still blocks the submit', () => {
