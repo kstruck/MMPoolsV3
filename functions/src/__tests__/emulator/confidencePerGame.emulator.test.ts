@@ -42,9 +42,11 @@ const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 const HOUR = 60 * 60 * 1000;
 const PRESEASON = 1;
 
-beforeEach(async () => {
-    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN', name: 'Admin' }, { merge: true });
-});
+// The sim-harness guard confirms the claim against users/{uid}.role, and a
+// describe's beforeAll runs BEFORE any beforeEach — so the doc is seeded at the
+// top of every beforeAll too.
+const seedAdmin = () => db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN', name: 'Admin' }, { merge: true });
+beforeEach(seedAdmin);
 
 /** A Pick'em pool doc, seeded directly so the lock settings are exactly what the test says. */
 async function seedPool(poolId: string, runId: string, settings: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
@@ -88,6 +90,7 @@ describe('T8 #1 / #14 — LEGACY: an unstamped confidence pool still locks the w
     const g = (n: number) => `sim-${runId}-g${n}`;
 
     beforeAll(async () => {
+        await seedAdmin();
         await wStart({ data: { runId, scenarioId: 'cpg-legacy' }, auth: superAdmin } as never);
         // The wizard default — PER_GAME stored on a confidence pool, NO stamp.
         await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME' });
@@ -116,6 +119,7 @@ describe('T8 #2–#7, #11–#13, #15–#16, #18 — STAMPED PER_GAME confidence 
     const WED = Date.now() - HOUR;
 
     beforeAll(async () => {
+        await seedAdmin();
         await wStart({ data: { runId, scenarioId: 'cpg-pergame' }, auth: superAdmin } as never);
         await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2, lockBufferMinutes: 10, weeklyTiebreaker: 'MNF_LAST_GAME' });
         // Wednesday game is live. Its feed startTime is MOVED TWO HOURS INTO THE
@@ -275,6 +279,7 @@ describe('T8 #19 / #20 — cancellation policy (codex r2 #5)', () => {
     const g = (n: number) => `sim-${runId}-g${n}`;
 
     beforeAll(async () => {
+        await seedAdmin();
         await wStart({ data: { runId, scenarioId: 'cpg-cancel' }, auth: superAdmin } as never);
         await seedPool(poolId, runId, { confidenceMode: true, lockMode: 'PER_GAME', lockRuleVersion: 2 });
         // g2 CANCELLED before anyone picked it; g1 and g3 open.
@@ -322,6 +327,7 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
     const ids = ['a-pergame', 'b-absent', 'c-weekly', 'd-straight'].map((s) => `pool-${runId}-${s}`);
 
     beforeAll(async () => {
+        await seedAdmin();
         await wStart({ data: { runId, scenarioId: 'cpg-backfill' }, auth: superAdmin } as never);
         await seedPool(ids[0], runId, { confidenceMode: true, lockMode: 'PER_GAME' });
         await seedPool(ids[1], runId, { confidenceMode: true });
@@ -385,6 +391,7 @@ describe('T8 #8 / #17 — backfillConfidenceLockMode stamps every legacy confide
 
 describe('T8 #14 — createNFLPool stamps a new Pick\'em pool (codex r1 #4)', () => {
     it('a wizard-created confidence pool carries lockRuleVersion 2 and therefore plays its stored lockMode', async () => {
+        await seedAdmin();
         const res: any = await wCreate({
             data: {
                 type: 'NFL_PICKEM', name: 'Stamp test', season: 2026, seasonType: 2,

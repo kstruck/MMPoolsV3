@@ -787,18 +787,20 @@ export async function submitNFLPicksInternal(
           for (const gameId of Object.keys(submittedWeights)) {
             if (!weekGameIds.has(gameId)) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
           }
-          // Locked weight — whether or not a pick was sent alongside it.
-          for (const game of games) {
-            const sent = submittedWeights[game.id];
-            if (sent !== undefined && lockedNow(game) && sent !== storedWeights[game.id]) {
-              throw new HttpsError('failed-precondition', `CONFIDENCE_LOCKED: Confidence for game ${game.id} is locked.`);
-            }
-          }
+          // The slate first: a weight on a game that is not in play (a CANCELLED
+          // game nobody picked) is a clearer refusal than "locked".
           const slate = confidenceSlateFor(games, storedPicks, lockedNow);
           const slateSet = new Set(slate.slateIds);
           for (const gameId of Object.keys(submittedWeights)) {
             if (!slateSet.has(gameId)) {
               throw new HttpsError('invalid-argument', `Game ${gameId} is not in play this week.`);
+            }
+          }
+          // Locked weight — whether or not a pick was sent alongside it.
+          for (const game of games) {
+            const sent = submittedWeights[game.id];
+            if (sent !== undefined && lockedNow(game) && sent !== storedWeights[game.id]) {
+              throw new HttpsError('failed-precondition', `CONFIDENCE_LOCKED: Confidence for game ${game.id} is locked.`);
             }
           }
           const merged = { picks: {} as Record<string, string>, confidence: {} as Record<string, number> };
