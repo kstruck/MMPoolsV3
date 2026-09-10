@@ -5,8 +5,16 @@
 > `pools/{id}.participantIds`, the array `firestore.rules` and every roster
 > reader resolve membership from, and because the incident carries a one-off
 > production repair. Plan → review log (`PLAN-ADMIN-PICK-IMPLICIT-JOIN-REVIEW-LOG.md`)
+> → sweeps (`PLAN-ADMIN-PICK-IMPLICIT-JOIN-SWEEPS.md`: every writer and reader
+> of `participantIds`, the production census, the four behaviour changes)
 > → code, in the same PR: Kevin approved the fix in chat before the plan was
 > written, so §6 records decisions already made, not questions still open.
+>
+> **Revised after qodo round 1 on PR #686** (review log): membership is
+> re-asserted inside the transaction (a mid-flight removal is not undone),
+> `ownerId` is canonical over `createdByUid` in both the gate and the host
+> exemption, the seat gate runs after the replay no-op, and enrollment writes
+> share one helper (`stageEnrollment`) with the explicit join.
 >
 > **Provenance (Kevin, verbatim):** *"I have an entry in this pool
 > (https://www.marchmeleepools.com/pool/ubHD4bgszL05oURYubrn) but it is not

@@ -54,4 +54,19 @@ file fails all three cases and the assertions name the defect:
   AssertionError: expected [ 'implicit-join-member', …(8) ] to include 'implicit-join-host'
 ```
 
-With the branch's file: 3 passed.
+With the branch's file, run 2026-09-10: 3 passed.
+
+### qodo round 1 — PR #686, Code Review posted 2026-09-10T15:18:34Z, 8 inline findings at the time of the validity pass (watcher settle recorded below when it lands)
+
+| # | Finding | Verdict | Action |
+|---|---|---|---|
+| 1 | Participation mirror can carry `undefined` `name`/`type`; admin SDK has no `ignoreUndefinedProperties`, so the whole transaction would be rejected | VALID (low — `type` is dereferenced before the transaction and `name` is required at create, so no pool made through the callable hits it) | Absorbed via `stageEnrollment`: both fields `?? null`. Applies to the explicit join too, which had the same exposure. |
+| 2 | Member removed between the pre-transaction gate and the transaction is re-enrolled by "absent → join" | VALID — security | `assertNFLPickMembership(poolInTx, uid, ctx.actorRole)` re-run inside the transaction; only host / SUPER_ADMIN may be enrolled by a pick. Emulator test injects the removal through a Firestore proxy on `runTransaction`; fails on round-1 code, passes now. |
+| 3 | `createdByUid` treated coequal with `ownerId`; a stale creator gains durable membership | VALID — security | Both the gate and the host exemption now use `poolOps.isPoolOwnerOrManager` (`ownerId \|\| createdByUid`, `managerUid` separate). Unit + emulator tests for the disagreeing-fields case. Side effect, recorded in SWEEPS S4: `nflEntryRename` inherits the precedence. |
+| 4 | Test result in this log has no run date | VALID (doc) | Dated. |
+| 5 | Enrollment writes duplicated between explicit and implicit join | VALID (maintainability) | `stageEnrollment` — one definition, both callers. |
+| 6 | Plan-gated change has no sweep artifact | VALID (process) | `PLAN-ADMIN-PICK-IMPLICIT-JOIN-SWEEPS.md`, linked from the plan. |
+| 7 | Emulator suite leaves fixed-ID residue | VALID | `wipe()` in `beforeAll` and `afterAll` (recursiveDelete on the six pools and four users, delete the game), then `test.cleanup()`. |
+| 8 | Replay: capacity gate ran before the `lastRequestId` no-op; and a replay should repair missing roster indexes | SPLIT | Ordering half VALID — `assertJoinCapacity` moved after the replay return; emulator test seeds a landed request in a full pool, expects `{ success: true }`. Repair-on-replay half REJECTED: a replay is a client resend within seconds, and the only roster-less replay is one whose first landing predates this deploy; making a documented no-op path write would change its contract for a window that is the deploy itself. The next real submission enrolls. |
+
+Every fix here is code codex has not seen — round 2 below.

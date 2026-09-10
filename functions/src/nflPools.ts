@@ -4,7 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
-import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim, isPoolOwnerOrManager } from "./poolOps";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { validLaunchCouponCode } from "./lib/launchCoupon";
 import { normalizeAddonSelection } from "./lib/launchFields";
@@ -311,6 +311,36 @@ export function assertJoinCapacity(
 }
 
 /**
+ * EVERY write that enrolls `uid` as a participant, staged into the caller's
+ * transaction — one definition shared by the explicit join
+ * (`joinNFLPoolInternal`) and the implicit one (`submitNFLPicksInternal`), so
+ * the two paths cannot drift (qodo #5 on PR #686). The roster slot is returned
+ * as a PATCH rather than written, so each caller can merge it into the pool
+ * update it already issues (`entryCount` rides the same write). `name`/`type`
+ * are coalesced to `null`: firebase-admin here does not set
+ * `ignoreUndefinedProperties`, and an `undefined` field would reject the whole
+ * transaction — entry and Member Record included (qodo #1).
+ */
+export function stageEnrollment(
+  tx: admin.firestore.Transaction,
+  db: admin.firestore.Firestore,
+  poolId: string,
+  poolData: { name?: unknown; type?: unknown },
+  uid: string,
+  role: string,
+  joinedAt: number,
+): { participantIds: admin.firestore.FieldValue } {
+  tx.set(db.collection('users').doc(uid).collection('participations').doc(poolId), {
+    poolId,
+    joinedAt,
+    name: poolData.name ?? null,
+    type: poolData.type ?? null,
+    role,
+  }, { merge: true });
+  return { participantIds: FieldValue.arrayUnion(uid) };
+}
+
+/**
  * Join flow, extracted verbatim from the joinNFLPool callable (auth/maintenance
  * checks stay in the wrapper — they are auth-plane concerns). Enrolls the SUBJECT:
  * participantIds, participation doc, Member Record, join audit event.
@@ -384,19 +414,11 @@ export async function joinNFLPoolInternal(
       },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
 
-    // 1. Add participant to pool collection (+ the liable-entry count, D8)
+    // 1 + 2. Roster slot and the user-profile participation mirror — one
+    // shared definition (`stageEnrollment`), merged with the liable-entry count (D8).
     transaction.update(poolRef, {
-      participantIds: FieldValue.arrayUnion(uid),
+      ...stageEnrollment(transaction, db, poolId, poolData, uid, 'PARTICIPANT', Date.now()),
       ...entryCountWrite(poolData, membersForCount, stamp.liabilityDelta),
-    });
-
-    // 2. Add participation to user profile
-    transaction.set(userRef.collection('participations').doc(poolId), {
-      poolId,
-      joinedAt: Date.now(),
-      name: poolData.name,
-      type: poolData.type,
-      role: 'PARTICIPANT'
     });
   });
 
@@ -435,7 +457,12 @@ export function assertNFLPickMembership(
   tokenRole?: string,
 ): void {
   const isMember = Array.isArray(pool.participantIds) && pool.participantIds.includes(uid);
-  const isOwnerOrManager = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid;
+  // `ownerId` is canonical and `createdByUid` only a fallback when it is absent
+  // (poolOps `isPoolOwnerOrManager`, PLAN-CO-COMMISSIONERS D3). This gate used
+  // to treat the two as coequal, which admitted a stale creator on any pool
+  // whose two fields disagree — harmless-ish while a pick wrote no roster slot,
+  // durable membership once the implicit join landed (qodo #3 on PR #686).
+  const isOwnerOrManager = isPoolOwnerOrManager(pool, uid);
   if (!isMember && !isOwnerOrManager && tokenRole !== 'SUPER_ADMIN') {
     throw new HttpsError('permission-denied', 'NOT_POOL_MEMBER: Join this pool before submitting picks.');
   }
@@ -596,10 +623,18 @@ export async function submitNFLPicksInternal(
     // say so. The seat gates still apply to the bypass — a super admin joins a
     // full pool exactly as any other new participant would not (§D1); the
     // owner/manager is the host and is never counted against their own ceiling.
+    //
+    // RE-ASSERTED AGAINST THE IN-TRANSACTION DOC (qodo #2 on PR #686). The gate
+    // above ran on a snapshot read before this transaction opened. A member the
+    // commissioner removes in that window is absent from `poolInTx`'s roster,
+    // and reading that absence as "join" would recreate the slot, the Member
+    // Record and the mirror — undoing a completed removal. So an ordinary caller
+    // must still be on THIS roster; only the host and a confirmed SUPER_ADMIN may
+    // be enrolled by a pick. Same precedence as the gate: `ownerId` canonical.
+    assertNFLPickMembership(poolInTx, uid, ctx.actorRole);
     const rosterInTx: string[] = Array.isArray(poolInTx.participantIds) ? poolInTx.participantIds : [];
     const implicitJoin = !rosterInTx.includes(uid);
-    const isHost = poolInTx.ownerId === uid || poolInTx.managerUid === uid || poolInTx.createdByUid === uid;
-    if (implicitJoin && !isHost) assertJoinCapacity(poolInTx, rosterInTx.length);
+    const isHost = isPoolOwnerOrManager(poolInTx, uid);
     // Which doc is "entry n of uid" — deterministic id, owned-entries set, and
     // the auto-id fallback, all read in this transaction (lib/multiEntry.ts).
     const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
@@ -631,6 +666,11 @@ export async function submitNFLPicksInternal(
     if (requestId && existingEntry?.lastRequestId === requestId) {
       return;
     }
+    // Seat gates for the implicit join — AFTER the replay no-op above (qodo #8
+    // on PR #686): a replay of a request that already landed must stay a
+    // no-op success, never a capacity refusal, even for a caller whose first
+    // landing predates the implicit join and left them off the roster.
+    if (implicitJoin && !isHost) assertJoinCapacity(poolInTx, rosterInTx.length);
 
     // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
 
@@ -1031,18 +1071,13 @@ export async function submitNFLPicksInternal(
     // transaction as the entry and the Member Record: the roster can never say
     // "member" without the entry, or hold the entry without saying "member".
     // `arrayUnion` is idempotent, so a retry that re-runs this body is safe.
-    const poolPatch = { ...countPatch, ...(implicitJoin ? { participantIds: FieldValue.arrayUnion(uid) } : {}) };
+    const poolPatch = {
+      ...countPatch,
+      ...(implicitJoin
+        ? stageEnrollment(transaction, db, poolId, poolInTx, uid, existingMember?.role ?? (isHost ? 'MANAGER' : 'PARTICIPANT'), now)
+        : {}),
+    };
     if (Object.keys(poolPatch).length > 0) transaction.update(poolRef, poolPatch);
-    if (implicitJoin) {
-      // The user-side mirror joinNFLPoolInternal writes, same shape.
-      transaction.set(db.collection('users').doc(uid).collection('participations').doc(poolId), {
-        poolId,
-        joinedAt: now,
-        name: poolInTx.name,
-        type: poolInTx.type,
-        role: existingMember?.role ?? (isHost ? 'MANAGER' : 'PARTICIPANT'),
-      }, { merge: true });
-    }
     // Only a submission that actually PLAYED the week freezes its target — an
     // empty / wrong-week submission (schema-valid, PLAN-EMPTY-SUBMISSION-FEE)
     // must not pin a target before any real entrant has one (codex r3 on #452).

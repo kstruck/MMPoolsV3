@@ -77,3 +77,23 @@ describe('assertJoinCapacity', () => {
         expect(() => assertJoinCapacity({ billing: { status: 'trial' } }, 500)).not.toThrow();
     });
 });
+
+// qodo #3 on PR #686: `ownerId` is canonical, `createdByUid` a fallback ONLY when
+// it is absent (poolOps isPoolOwnerOrManager). A stale creator on a pool whose
+// two fields disagree is NOT a host — the implicit join would otherwise hand
+// them durable roster membership.
+describe('assertNFLPickMembership — host precedence', () => {
+    it('admits createdByUid only when ownerId is absent', () => {
+        expect(() => assertNFLPickMembership({ participantIds: [], createdByUid: 'creator' }, 'creator', undefined)).not.toThrow();
+        expect(() => assertNFLPickMembership({ participantIds: [], ownerId: '', createdByUid: 'creator' }, 'creator', undefined)).not.toThrow();
+    });
+
+    it('rejects a stale creator when a different ownerId is present', () => {
+        expect(() => assertNFLPickMembership({ participantIds: [], ownerId: 'owner-2', createdByUid: 'creator' }, 'creator', undefined))
+            .toThrowError(/NOT_POOL_MEMBER/);
+    });
+
+    it('managerUid is a separate principal, not dropped by an owner being present', () => {
+        expect(() => assertNFLPickMembership({ participantIds: [], ownerId: 'owner-2', createdByUid: 'creator', managerUid: 'mgr' }, 'mgr', undefined)).not.toThrow();
+    });
+});
