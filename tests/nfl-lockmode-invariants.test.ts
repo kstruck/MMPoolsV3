@@ -169,8 +169,11 @@ describe('isGameLockedFor / isWeekLockedFor — the pool-aware readers', () => {
     expect(isWeekLockedFor(conf('WEEKLY'), 1, [cancelled, open], NOW)).toBe(false);
     const started = g('z', NOW + 60 * 60_000, 'IN_PROGRESS');
     expect(isWeekLockedFor(conf('WEEKLY'), 1, [started, open], NOW)).toBe(true);
-    // The cancelled game itself is still locked (nothing to pick).
+    // The cancelled game itself is still locked on a PER_GAME pool (nothing to pick)…
     expect(isGameLockedFor(conf('PER_GAME'), 1, cancelled, [cancelled, open], NOW)).toBe(true);
+    // …but on a WEEKLY pool it stays editable until the week closes — the
+    // server's weekly validator still asks for every game in the slate (codex r15).
+    expect(isGameLockedFor(conf('WEEKLY'), 1, cancelled, [cancelled, open], NOW)).toBe(false);
   });
 
   it('PER_GAME week is closed when EVERY game is, status included (codex r8)', () => {

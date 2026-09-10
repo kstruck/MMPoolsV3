@@ -251,6 +251,24 @@ codex had not seen → **round 11, §2b-forced, recorded in the PR body** (CLAUD
 | 2 | P1 | The transactional re-read merged only `status`; a still-SCHEDULED game rescheduled since the pre-read was judged on its old `startTime`. | **ACCEPT** | `startTime` merged into `liveById` alongside `status`. |
 | 3 | P2 | The backfill stamped only confidence pools, so a straight Pick'em pool that later enables confidence mode and picks PER_GAME would stay on the legacy weekly rule with no path to the stamp. | **ACCEPT** | The backfill stamps EVERY unstamped Pick'em pool; a confidence pool also gets `lockMode: WEEKLY`, a straight pool keeps its stored value. Predicate + `backfillLockModeFor` unit-tested; emulator #8 now stamps all four seeded pools; panel copy updated. |
 
+---
+
+## Round 15 — 2026-09-10 ~21:45 MDT, §2b-forced, diff @ post-r14 commit — THE OVER-CAP CEILING (10 + 5)
+
+1 finding, P1, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | On a stamped WEEKLY confidence pool the sheet's `isGameLockedFor` locked a game CANCELLED before the first kickoff (status ≠ SCHEDULED) while the server's weekly validator (unchanged) still required every game in the slate — a member without a saved selection could neither pick it nor submit. | **ACCEPT** | `isGameLockedFor`: in WEEKLY mode the week rule alone decides; the per-game status lock applies to PER_GAME only. Unit case added. |
+
+**Stopping state.** Fifteen codex rounds — 2 on the plan, 8 on the code to the
+§2c cap, 5 §2b-forced after qodo's report (CLAUDE.md §2c exception, recorded
+in the PR body). The round-15 fix — one clause moved inside `isGameLockedFor`
+plus a unit case — is code codex has not reviewed. Past 15 needs Kevin's word.
+Over the eight forced/over-cap rounds the findings narrowed from rollout
+guarantees (r14 #1) to a single client/server consistency edge on cancellations
+(r15); no round found a defect in the plan's design.
+
 Pattern for the record: rounds 3–10 each found exactly one to three defects in
 the code written to close the previous round — never in the plan's design, and
 each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That

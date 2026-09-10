@@ -210,10 +210,15 @@ export function isGameLockedFor(
   weekGames: readonly NFLLockGame[],
   now: number,
 ): boolean {
-  if (gameStatusLocks(pool?.settings, game)) return true;
   if (nflLockMode(pool?.type, pool?.settings) === 'WEEKLY') {
+    // WEEKLY: the week rule alone. A game's own status (a CANCELLED game before
+    // the first kickoff) does not lock it individually — the server's weekly
+    // validator still asks for every game in the slate, so the sheet must keep
+    // it editable until the week closes (codex r15). A STARTED game closes the
+    // week via `isWeekLockedFor`.
     return isWeekLockedFor(pool, week, weekGames, now);
   }
+  if (gameStatusLocks(pool?.settings, game)) return true;
   return now >= gameLockAtFor(pool, week, game);
 }
 
