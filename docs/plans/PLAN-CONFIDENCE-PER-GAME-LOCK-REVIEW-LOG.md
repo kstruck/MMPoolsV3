@@ -161,6 +161,30 @@ still refused on the PER_GAME pool.
 
 ---
 
+## Round 10 — 2026-09-10 ~18:25 MDT, implementation diff @ post-r9 commit — THE CAP
+
+1 finding, P2, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P2 | `canSubmit` still read the raw draft `confidence` map for the weightable check, so a stale draft from another session that OMITS a weight saved before a game locked disabled submission — while the dropdown (from `auditWeights`) showed the saved weight and the server would have preserved it. | **ACCEPT** | `canSubmit` judges `weightable` on `auditWeights` (saved weight for a locked game, draft for an open one). Two-line change; `npx tsc -b` and the surface-invariant test pass. |
+
+**Stopping state (CLAUDE.md §2c).** Ten rounds spent — two on the plan, eight on
+the code. The round-10 fix is code codex has not reviewed. Per §2c the next
+round needs Kevin's say-so, unless qodo's report on the PR forces one under
+§2b (up to 5 past the cap, recorded in the PR body). The PR body names this
+as the one un-reviewed change. My own read of the diff: the round-10 change
+substitutes one map for another inside a check whose other branch already used
+that map; the risk is nil beyond what the type-check covers.
+
+Pattern for the record: rounds 3–10 each found exactly one to three defects in
+the code written to close the previous round — never in the plan's design, and
+each one narrower than the last (P1 → P1 → P1/P2 → P1 → P2 → P1/P2 → P2). That
+is the §2c shape ("round 1 finds defects in the code, rounds 2+ find defects in
+the fixes") on a change with many interacting readers of one rule.
+
+---
+
 ## Round 7 — 2026-09-10 ~16:30 MDT, implementation diff @ post-r6 commit
 
 1 finding, P1, accepted.

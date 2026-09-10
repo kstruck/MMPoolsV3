@@ -317,17 +317,20 @@ export const PickemPickEntry: React.FC<PickemPickEntryProps> = ({
       const missed = new Set(missedIds);
       const available = new Set(availableValues);
       const weightable = slateIds.filter(id => !missed.has(id));
-      if (!weightable.every(id => !!confidence[id])) return false;
+      // `auditWeights`, not the raw draft: a locked game is judged on what the
+      // server holds (a draft from another session may omit it), an open game
+      // on the draft (codex r10).
+      if (!weightable.every(id => !!auditWeights[id])) return false;
       // Only OPEN games are held to the available list — a frozen weight is
       // grandfathered, whatever the range did after it locked.
       const openIds = new Set(games.filter(g => !isGameLocked(g)).map(g => g.id));
-      if (weightable.some(id => openIds.has(id) && !available.has(confidence[id]))) return false;
+      if (weightable.some(id => openIds.has(id) && !available.has(auditWeights[id]))) return false;
       if (duplicateConfidenceValues.size > 0) return false;
     }
 
     return true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [games, picks, confidence, confidenceMode, confidenceSlate, duplicateConfidenceValues, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
+  }, [games, picks, confidence, auditWeights, confidenceMode, confidenceSlate, duplicateConfidenceValues, lockMode, isWeekLocked, bufferMinutes, weekLockOverrideMs, lockTick]);
 
   /** Games still open for editing — what the blocked-reason message counts. */
   const openGames = useMemo(() => {
