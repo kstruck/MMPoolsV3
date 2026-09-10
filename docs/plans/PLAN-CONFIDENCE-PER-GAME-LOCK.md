@@ -11,11 +11,13 @@
 > | **D5** | New confidence pools default to per-game (recommendation). | §3.5. |
 > | **D6** | **Reopen Week 1. Jim is aware.** | §6 restated as a consequences list, not a recommendation against. |
 >
-> **STATUS: IMPLEMENTED on branch `claude/confidence-pool-lock-rules-dc69f4`
-> (2026-09-10). Plan v4; codex rounds 1–2 on the plan (14 accept / 1 reject),
-> rounds 3–4 on the code (3 P1, all fixed), round 5 pending at the time of
-> writing — see REVIEW-LOG. NOT deployed; the backfill has NOT run; Donkeys
-> has NOT been flipped.** Deploy + backfill + flip steps are §7 and the PR.
+> **STATUS: IMPLEMENTED — PR #687 (2026-09-10). Plan v4; codex 15 rounds (2
+> plan, 8 code to the cap, 5 §2b-forced after qodo's 12 findings), all in the
+> REVIEW-LOG. NOT merged, NOT deployed; the backfill has NOT run; Donkeys has
+> NOT been flipped.** Deploy + backfill + flip steps are §7 and the PR.
+> Two v4→ship deltas: the backfill stamps EVERY unstamped Pick'em pool (a
+> straight pool keeps its stored lockMode) — codex r14; and the kickoff
+> ceiling / status lock apply to STAMPED confidence pools only — codex r14.
 >
 > **v4 additions from round 2** — the confidence lock is **status-aware** (a
 > game whose `status !== 'SCHEDULED'` is locked whatever its `startTime` says);
