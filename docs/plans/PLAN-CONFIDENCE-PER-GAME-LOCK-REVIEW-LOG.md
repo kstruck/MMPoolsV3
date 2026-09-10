@@ -119,4 +119,28 @@ check first. Same refusal, earlier check.
 
 | # | Sev | Finding (condensed) | Verdict | What changed |
 |---|---|---|---|---|
-| 1 | P1 | `PickemPickEntry` hydrates the entry's whole-season `picks`/`confidence` maps and resends them on every save, so a Week-2 save on a stamped PER_GAME confidence pool carries Week-1 keys — and the PER_GAME loop refuses them as `Game … not found`. Every Week-2+ save would fail. | **ACCEPT** | Verified: the sheet's state IS the whole map (`PickemPickEntry.tsx` hydration) and nothing filtered it. (This means straight PER_GAME pools were exposed to the same refusal on Week 2+ before this branch — the loop is pre-existing — unless a resend happened to carry no prior keys; the fix below covers them too.) Server: `onlyThisWeek()` — a key for another week that the entry already holds is history being resent and is IGNORED (never rewritten, never refused); a key the entry does not hold and the slate does not contain is still refused. Applied to picks and weights, in both branches, and to the entry write, so a stale prior-week draft can no longer overwrite a prior week. Client: the payload is filtered to this week's ids as well. Emulator: the r5 scenario now seeds a prior-week pick+weight on the entry, resends them (changed, even) and asserts they are untouched; a never-held junk key is still refused. |
+| 1 | P1 | `PickemPickEntry` hydrates the entry's whole-season `picks`/`confidence` maps and resends them on every save, so a Week-2 save on a stamped PER_GAME confidence pool carries Week-1 keys — and the PER_GAME loop refuses them as `Game … not found`. Every Week-2+ save would fail. | **ACCEPT** (see row) |
+
+Row 1 detail: verified — the sheet's state IS the whole-season map
+(`PickemPickEntry.tsx` hydration) and nothing filtered it, so straight PER_GAME
+pools were exposed to the same refusal on Week 2+ before this branch. Fix,
+server: `onlyThisWeek()` — any key outside this week's slate is IGNORED, never
+validated, never written (a first cut REFUSED a key the entry had never held;
+that broke `blindPicks.emulator.test.ts` "picks whose games belong to another
+week do not mark this week", which documents the WEEKLY branch's long-standing
+tolerance, so PER_GAME now matches it). Applied to picks and weights, both
+branches, and the entry write, so a stale prior-week draft can never overwrite
+a prior week. Client: the payload is filtered to this week's ids as well.
+Emulator: the r5 scenario seeds a prior-week pick+weight, resends them changed,
+and asserts they are untouched; a never-held junk key is ignored and not
+written; scenario #7 now asserts a stray weight key is dropped, not refused.
+
+---
+
+## Round 7 — 2026-09-10 ~16:30 MDT, implementation diff @ post-r6 commit
+
+1 finding, P1, accepted.
+
+| # | Sev | Finding (condensed) | Verdict | What changed |
+|---|---|---|---|---|
+| 1 | P1 | The Pick'em branch read `pool.settings` captured BEFORE the transaction. A manager enabling confidence mode can commit between that read and the retry; the retried body would then write picks with no weights against a now-confidence pool — and the new `confidenceMode` gate would refuse to correct the setting because that entry holds a pick. | **ACCEPT (narrow fix)** | The branch now reads `poolInTx.settings`, and if `confidenceMode`, `lockMode` or `lockRuleVersion` differ from the pre-transaction copy the submission is refused with `aborted` / `SETTINGS_CHANGED` — the lock instants above the transaction were computed under the other mode and must not be applied to this one; the client's ordinary retry lands on a consistent read. A full re-derivation of the lock arithmetic inside the transaction is NOT done: the freeze protocol (`ensureHardLockFreeze`, `weekLockDecision`) is deliberately pre-transaction and pre-existing, and lock-affecting settings edits already serialize with the scoring lease. Not emulator-testable as a race; the guard is a two-line equality check. | Verified: the sheet's state IS the whole map (`PickemPickEntry.tsx` hydration) and nothing filtered it. (This means straight PER_GAME pools were exposed to the same refusal on Week 2+ before this branch — the loop is pre-existing — unless a resend happened to carry no prior keys; the fix below covers them too.) Server: `onlyThisWeek()` — a key for another week that the entry already holds is history being resent and is IGNORED (never rewritten, never refused); a key the entry does not hold and the slate does not contain is still refused. Applied to picks and weights, in both branches, and to the entry write, so a stale prior-week draft can no longer overwrite a prior week. Client: the payload is filtered to this week's ids as well. Emulator: the r5 scenario now seeds a prior-week pick+weight on the entry, resends them (changed, even) and asserts they are untouched; a never-held junk key is still refused. |

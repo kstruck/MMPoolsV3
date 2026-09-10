@@ -173,13 +173,16 @@ describe('T8 #2–#7, #11–#13, #15–#16, #18 — STAMPED PER_GAME confidence 
         } as never)).rejects.toThrow(/OUT_OF_RANGE_CONFIDENCE|DUPLICATE_CONFIDENCE_VALUES/);
     }, 30000);
 
-    it('#7 a weight keyed to a game outside this week → invalid-argument', async () => {
-        await expect(wSubmit({
+    it('#7 a weight keyed to a game outside this week is ignored — never validated, never written', async () => {
+        await wSubmit({
             data: { poolId, runId, subjectUid: ALICE, week: 1,
                 picks: { [g(2)]: 'ATL', [g(3)]: 'KC' },
                 confidence: { [g(2)]: 14, [g(3)]: 15, 'sim-other-g9': 13 } },
             auth: superAdmin,
-        } as never)).rejects.toThrow(/not found/);
+        } as never);
+        const e = await entry(poolId, ALICE);
+        expect(e.confidence['sim-other-g9']).toBeUndefined();
+        expect(e.confidence).toEqual({ [g(1)]: 16, [g(2)]: 14, [g(3)]: 15 });
     }, 30000);
 
     it('#5 late joiner Bob: missed Wednesday, so the 16 is gone — 15 and 14 pass, a 16 fails (D2)', async () => {
@@ -363,10 +366,11 @@ describe('codex r5 — a frozen 16 is grandfathered after a later miss, and lock
         const e = await entry(poolId, FRANK);
         expect(e.picks).toEqual({ [g(1)]: 'SEA', [g(3)]: 'KC', [OLD]: 'NE' });
         expect(e.confidence).toEqual({ [g(1)]: 16, [g(3)]: 14, [OLD]: 16 });
-        // A key the entry has never held and this week does not contain is still junk.
-        await expect(wSubmit({
+        // A key the entry has never held and this week does not contain is ignored too — never written.
+        await wSubmit({
             data: { poolId, runId, subjectUid: FRANK, week: 1, picks: { [g(3)]: 'KC', 'sim-junk-g9': 'KC' }, confidence: { [g(3)]: 14 } }, auth: superAdmin,
-        } as never)).rejects.toThrow(/not found/);
+        } as never);
+        expect((await entry(poolId, FRANK)).picks['sim-junk-g9']).toBeUndefined();
     }, 30000);
 
     it('cleans up', async () => {
