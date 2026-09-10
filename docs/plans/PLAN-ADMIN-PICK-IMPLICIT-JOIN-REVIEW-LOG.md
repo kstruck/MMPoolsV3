@@ -118,3 +118,16 @@ and applies capacity limits without breaking idempotent replays." No findings.
 `usage limit` grep: hits only on this log's own earlier sentences in the diff.
 Gates re-run on `74622ac1`: root 3193 passed, lint 1862 / 0 (delta 0); CI green
 on `8b3c691e` (e2e-playwright included). Three codex rounds total.
+
+### qodo round 3 — re-review after the second toggle (Code Review updated 2026-09-10T15:47:36Z)
+
+Round-2 findings all `✓ Resolved`. Three NEW findings, all on the census script:
+
+| # | Finding | Verdict | Action |
+|---|---|---|---|
+| R3-1 | Emulator runs default to the production project id | VALID (hygiene; same shape as `censusPayoutRanks.mjs`, which has the identical default) | Emulator branch now defaults to `demo-mmp`, the id the test suites use; prod branch keeps `gridiron-gamble-uzuqo`. The sibling script is left as-is — out of this PR's scope. |
+| R3-2 | No runtime confirmation that no writes were made | VALID (low) | Prints `READ-ONLY CHECK COMPLETE — no Firestore writes were made.` at exit; the real proof is `grep -nE "\.(set\|update\|delete\|batch\|runTransaction)\(" functions/scripts/censusMembership.mjs` → empty, recorded in SWEEPS S3. |
+| R3-3 | `new Date(joinedAt).toISOString()` throws on an admin-SDK `Timestamp` — `participant.ts:384` writes `FieldValue.serverTimestamp()` | VALID — the census would abort on the first such record | `iso()` helper: `toDate()` for Timestamps, `new Date` otherwise, `unparseable:<v>` instead of a throw. |
+
+Severity is now script hygiene; per the skill's stop rule this is the last qodo
+round chased. Round 4 codex below covers the new lines.

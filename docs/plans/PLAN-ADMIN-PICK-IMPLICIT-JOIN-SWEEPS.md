@@ -54,6 +54,14 @@ Output on 2026-09-10 (before the repair), verbatim:
 ```
 scanned 4 NFL pools; 1 with Member Records missing from participantIds
 {"poolId":"ubHD4bgszL05oURYubrn","name":"Donkeys 2026","type":"NFL_PICKEM","status":"OPEN","members":22,"participantIds":21,"missing":[{"uid":"6C09waBoqiSavoBnPZrMkhxWt7x2","name":"Kevin Struck","role":"PARTICIPANT","joinedAt":"2026-09-09T04:07:26.830Z"}]}
+READ-ONLY CHECK COMPLETE — no Firestore writes were made.
+```
+
+Proof the script cannot write, beyond its own final line: it contains no
+mutation call.
+
+```
+grep -nE "\.(set|update|delete|batch|runTransaction)\(" functions/scripts/censusMembership.mjs   # empty, exit 1
 ```
 
 | Pool | Members | participantIds | Missing |
