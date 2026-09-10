@@ -25,3 +25,33 @@ clean AND my own read of the diff agrees.
 ## Rounds
 
 (filled in below as they run)
+
+### Round 1 — codex `gpt-5.6-terra`, `--base origin/main`, on `951b6847`
+
+Clean. Codex ran `npm run typecheck` and the membership unit test itself before
+answering. Verbatim: "The transaction now atomically records the implicit
+membership and profile participation mirror while applying the same capacity
+checks as explicit joins. The refactoring preserves the existing join-capacity
+behavior." No findings. Output checked for `usage limit` / `Review was
+interrupted`: neither present.
+
+Not in that diff: `582aeefa`, the one-line guard-test update in
+`tests/free-cap-notice.test.ts` (the source guard looked for the pre-hoist
+expression `participantIds.length >= FREE_PLAN_PARTICIPANT_CAP`). Test text
+only, no runtime code; left to qodo on the PR rather than a paid round.
+
+### Evidence the defect test is a defect test
+
+With `origin/main`'s `functions/src/nflPools.ts` swapped in, the new emulator
+file fails all three cases and the assertions name the defect:
+
+```
+× adds the admin to participantIds in the same write as the entry and Member Record
+  AssertionError: expected [ 'implicit-join-host' ] to include 'implicit-join-admin'
+× the bypass still honours the free-plan seat cap — nothing is written on refusal
+  AssertionError: promise resolved "{ success: true }" instead of rejecting
+× an ordinary member and the host are untouched by the gate
+  AssertionError: expected [ 'implicit-join-member', …(8) ] to include 'implicit-join-host'
+```
+
+With the branch's file: 3 passed.
