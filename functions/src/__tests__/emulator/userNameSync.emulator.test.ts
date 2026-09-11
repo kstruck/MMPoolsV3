@@ -4,6 +4,7 @@ import './setup';
 import { isCurrentProfileName, propagateUserName, resolveSubjectName, stampSearchName } from '../../lib/displayName';
 import { createUserProfileIfMissing } from '../../userSync';
 import { submitNFLPicksInternal } from '../../nflPools';
+import { resolvePropCardIdentity } from '../../propBets';
 
 /**
  * Display-name ownership, the half only a live Firestore can prove:
@@ -22,6 +23,9 @@ import { submitNFLPicksInternal } from '../../nflPools';
  *       `entryName`, and a deleted entry is not resurrected.
  *  P8 — prop-bet cards (`pools/{*}/propCards/*`, several per uid) follow the
  *       name (qodo #690 finding 2); a guest card is not a uid and is untouched.
+ *  P9 — a NEW prop card stamps the PROFILE name, not whatever the client sent
+ *       (qodo #691 finding 2), so a card bought after a profile fix is right
+ *       from the start and propagation has nothing to chase.
  *  P3 — `resolveSubjectName` prefers the PROFILE over the login token, so a
  *       fixed name no longer reverts on the next pick.
  */
@@ -187,11 +191,14 @@ describe('P2 — createUserProfileIfMissing (userSync.ts, the one Auth-create cr
     expect(u.registrationMethod).toBe('email');
     expect(u.provider).toBe('password');
     expect(u.picture).toBeNull();
-    expect(u.createdAt).toBeTruthy();
+    // createdAt is NUMERIC — the client contract (`User.createdAt?: number`, and
+    // `new Date(u.createdAt)` on the Members tab); a Firestore Timestamp there
+    // renders as an invalid date (qodo #691 finding 5).
+    expect(typeof u.createdAt).toBe('number');
+    expect(u.createdAt).toBeGreaterThan(1_700_000_000_000);
     expect(u.lastLogin).toBeTruthy();
-    // The retired participant.ts schema is gone: no `photoURL`, no numeric createdAt.
+    // The retired participant.ts schema is gone: no `photoURL`.
     expect('photoURL' in u).toBe(false);
-    expect(typeof u.createdAt).not.toBe('number');
   });
 
   it('uses the Auth display name when it is there', async () => {
@@ -307,6 +314,31 @@ describe('P8 — prop-bet cards follow the name (qodo #690 finding 2)', () => {
   it('is idempotent', async () => {
     await propagateUserName(db, UID, 'Ron Johnson');
     expect(await propagateUserName(db, UID, 'Ron Johnson')).toEqual({ members: 0, entries: 0, propCards: 0, playoffEntries: 0, superseded: false });
+  });
+});
+
+describe('P9 — a new prop card carries the profile name (qodo #691 finding 2)', () => {
+  const auth = (name?: string) => ({ uid: UID, token: { name, email: 'ron.johnson@example.com' } });
+
+  it('a signed-in buyer gets the profile name over both the supplied and the token name', async () => {
+    await db.collection('users').doc(UID).set({ name: 'Ron Johnson' });
+    expect(await resolvePropCardIdentity(db, auth('Old Token Name'), { userName: 'Stale Client Name' }))
+      .toEqual({ userId: UID, finalUserName: 'Ron Johnson', userEmail: 'ron.johnson@example.com' });
+  });
+
+  it('a placeholder profile yields to the supplied name, then the token, then Anonymous', async () => {
+    await db.collection('users').doc(UID).set({ name: 'New User' });
+    expect((await resolvePropCardIdentity(db, auth('Token Name'), { userName: 'Typed Name' })).finalUserName).toBe('Typed Name');
+    expect((await resolvePropCardIdentity(db, auth('Token Name'), {})).finalUserName).toBe('Token Name');
+    await db.collection('users').doc(UID).delete();
+    expect((await resolvePropCardIdentity(db, auth(undefined), {})).finalUserName).toBe('Anonymous');
+  });
+
+  it('a guest is keyed by email and keeps the typed name; name and email are both required', async () => {
+    expect(await resolvePropCardIdentity(db, undefined, { userName: 'Walk-in Guest', email: ' Guest@Example.com ' }))
+      .toEqual({ userId: 'guest:guest@example.com', finalUserName: 'Walk-in Guest', userEmail: ' Guest@Example.com ' });
+    await expect(resolvePropCardIdentity(db, undefined, { userName: 'No Email' })).rejects.toMatchObject({ code: 'unauthenticated' });
+    await expect(resolvePropCardIdentity(db, undefined, { email: 'x@y.z' })).rejects.toMatchObject({ code: 'unauthenticated' });
   });
 });
 

@@ -73,7 +73,15 @@ export async function createUserProfileIfMissing(
         }
         t.set(ref, {
             ...fields,
-            createdAt: FieldValue.serverTimestamp(),
+            // NUMERIC, like the client's own create path (`syncUserToFirestore`
+            // writes `createdAt: Date.now()`) and the `User.createdAt?: number`
+            // contract. This used to be `FieldValue.serverTimestamp()`, and the
+            // Members tab does `new Date(u.createdAt)` on the raw document — a
+            // Firestore Timestamp there renders as an invalid date. With this
+            // trigger now the ONLY server-side creator, every profile it wins
+            // the race for would have carried one (qodo #691 finding 5).
+            // `lastLogin` stays a server timestamp: the client type admits it.
+            createdAt: Date.now(),
             lastLogin: FieldValue.serverTimestamp(),
         });
         return 'created';
@@ -81,7 +89,13 @@ export async function createUserProfileIfMissing(
 }
 
 // v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
-export const onUserCreated = functions.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
+//
+// `failurePolicy: true` + rethrow: this is the ONLY server-side profile creator
+// now (qodo #691 finding 4), so a transient Firestore failure must be retried by
+// the platform rather than acknowledged and forgotten. The work is a
+// create-if-absent transaction, so a retry can never overwrite a profile the
+// client wrote in the meantime — it takes the merge path.
+export const onUserCreated = functions.runWith({ maxInstances: 10, failurePolicy: true }).auth.user().onCreate(async (user: UserRecord) => {
     const { uid, email } = user;
     try {
         const outcome = await createUserProfileIfMissing(admin.firestore(), user);
@@ -89,7 +103,8 @@ export const onUserCreated = functions.runWith({ maxInstances: 10 }).auth.user()
             ? `[UserSync] Created profile for ${uid} (${email}).`
             : `[UserSync] Profile for ${uid} already existed; refreshed index/login fields, name left alone.`);
     } catch (error) {
-        console.error(`[UserSync] Failed to sync user ${uid}:`, error);
+        console.error(`[UserSync] Failed to sync user ${uid}; rethrowing so the event is retried:`, error);
+        throw error;
     }
 });
 

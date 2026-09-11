@@ -38,7 +38,16 @@ describe("maxInstances caps", () => {
             // never follow `= `, so they don't trip this.
             const bare = text.match(/= (functions|v1)\.(auth|firestore)[.\s]/g) ?? [];
             expect(bare, `${f}: v1 trigger without runWith maxInstances: ${bare.join(", ")}`).toEqual([]);
-            expect(text, `${f}: expected at least one runWith maxInstances cap`).toMatch(/runWith\(\{ maxInstances: \d+ \}\)/);
+            expect(text, `${f}: expected at least one runWith maxInstances cap`).toMatch(/runWith\(\{ maxInstances: \d+[^}]*\}\)/);
         }
+    });
+
+    it("userSync's Auth-create trigger retries on failure (the only server-side profile creator since 2026-09-11)", () => {
+        const text = readFileSync(join(SRC, "userSync.ts"), "utf8");
+        expect(text).toMatch(/runWith\(\{ maxInstances: \d+, failurePolicy: true \}\)\.auth\.user\(\)\.onCreate/);
+        // ...and the handler rethrows rather than swallowing — a caught-and-logged
+        // failure acknowledges the event and nothing replays it.
+        const handler = text.slice(text.indexOf("auth.user().onCreate"));
+        expect(handler).toMatch(/catch \(error\) \{[\s\S]*?throw error;/);
     });
 });
