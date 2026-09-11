@@ -7,7 +7,7 @@ import type { Pool } from '../types';
 const CLOCK = 1_700_000_000_000;
 vi.mock('./serverClock', () => ({ now: () => CLOCK }));
 
-import { getPoolTabStatus, isCanceledPool, isMyEntryPool } from './rosterHub';
+import { getPoolTabStatus, isCanceledPool, isMyEntryPool, clockRefreshDelayMs, MAX_TIMEOUT_MS } from './rosterHub';
 
 const ME = 'uid-me';
 const OTHER = 'uid-other';
@@ -100,5 +100,17 @@ describe('rosterHub — codex r3 on PR #688: the clock is a parameter', () => {
         const bracket = pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK + 5_000 });
         expect(getPoolTabStatus(bracket)).toBe('open');
         expect(getPoolTabStatus(bracket, CLOCK + 5_000)).toBe('live');
+    });
+});
+
+describe('rosterHub — clockRefreshDelayMs (the roster re-reads the clock when the nearest deadline passes)', () => {
+    it('fires one second after a future deadline', () => {
+        expect(clockRefreshDelayMs(CLOCK + 30_000, CLOCK)).toBe(31_000);
+    });
+    it('a deadline already passed fires after the one-second grace, never a negative delay', () => {
+        expect(clockRefreshDelayMs(CLOCK - 5_000, CLOCK)).toBe(1_000);
+    });
+    it('clamps to the largest delay setTimeout honours instead of firing immediately', () => {
+        expect(clockRefreshDelayMs(CLOCK + 40 * 24 * 3_600_000, CLOCK)).toBe(MAX_TIMEOUT_MS);
     });
 });

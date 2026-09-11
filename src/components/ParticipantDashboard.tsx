@@ -8,7 +8,7 @@ import { formatDeadline } from '../utils/formatTime';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
 import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
-import { getPoolTabStatus, isMyEntryPool, isCanceledPool } from '../utils/rosterHub';
+import { getPoolTabStatus, isMyEntryPool, isCanceledPool, clockRefreshDelayMs } from '../utils/rosterHub';
 import { now as serverNow, syncServerClock } from '../utils/serverClock';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
@@ -124,12 +124,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return settingsService.subscribe(setSettings);
     }, []);
 
-    // The clock the tab reader classifies brackets against. Held in state, not
-    // read inline, because the server sync is async and only mutates module
-    // state: a first render before `getServerTime` resolves would classify on
-    // the device clock and nothing would re-render when the corrected offset
-    // arrived (codex r3 on PR #688). Re-read once the sync settles; every memo
-    // that calls `getPoolTabStatus` lists `nowMs`.
+    // The clock the pool-classifying memos read (`getPoolTabStatus`, the lock
+    // banner). Held in state so the two events that move it and change no other
+    // dependency still recompute the memos: the server clock sync resolving —
+    // it only mutates module state and re-renders nobody (codex r3 on PR #688)
+    // — and the nearest lock deadline passing while the page sits open (codex
+    // r4; the timer is below `earliestLock`). Every consumer lists `nowMs`.
     const [nowMs, setNowMs] = useState(() => serverNow());
     useEffect(() => {
         let cancelled = false;
@@ -436,14 +436,24 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             else if (p.type === 'NFL_PLAYOFFS') lockTime = new Date((p as any).lockDate).getTime() || 0;
             else if (p.type === 'SQUARES') lockTime = new Date((p as any).scores?.startTime).getTime() || 0;
 
-            if (lockTime > Date.now() && lockTime < earliest) {
+            if (lockTime > nowMs && lockTime < earliest) {
                 earliest = lockTime;
                 earliestPool = p;
             }
         });
 
         return earliestPool ? { pool: earliestPool, time: earliest } : null;
-    }, [myPools]);
+    }, [myPools, nowMs]);
+
+    // When the nearest deadline passes, move the clock so the tab memos
+    // re-classify (a bracket past `lockAt` is Live before the lock job flips
+    // its status). `earliestLock` then recomputes past that deadline and arms
+    // the next one; the delay maths lives in `clockRefreshDelayMs` (tested).
+    useEffect(() => {
+        if (!earliestLock) return;
+        const id = window.setTimeout(() => setNowMs(serverNow()), clockRefreshDelayMs(earliestLock.time, serverNow()));
+        return () => window.clearTimeout(id);
+    }, [earliestLock]);
 
     // Cumulative earnings trend (Recharts AreaChart).
     //
@@ -911,10 +921,13 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             const isSquares = pool.type === 'SQUARES';
                             const isPlayoff = pool.type === 'NFL_PLAYOFFS';
                             // Season-to-season retention: completed NFL season pools the user
-                            // commissions can be re-run via the wizard, pre-seeded (?cloneFrom=)
+                            // commissions can be re-run via the wizard, pre-seeded (?cloneFrom=).
+                            // Not a canceled one: it sorts under Completed for the tabs, but it
+                            // is a voided pool, not a finished season to clone (codex r4 on #688).
                             const canRerun =
                                 (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') &&
                                 (pool.ownerId === user.id || pool.managerUid === user.id) &&
+                                !isCanceledPool(pool) &&
                                 getPoolTabStatus(pool, nowMs) === 'completed';
 
                             let userEntryCount = 0;

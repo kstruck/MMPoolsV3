@@ -59,6 +59,18 @@ export function getPoolTabStatus(pool: Pool, nowMs: number = now()): RosterTabSt
 }
 
 /**
+ * How long the roster should wait before re-reading the clock so a pool whose
+ * deadline has just passed re-classifies (a bracket past `lockAt` is Live
+ * before the lock job flips its status). One second past the deadline, never
+ * negative, and clamped to the largest delay `setTimeout` honours — a value
+ * over 2^31-1 ms fires immediately and would spin (codex r4 / qodo r2 on #688).
+ */
+export const MAX_TIMEOUT_MS = 2_147_483_647;
+export function clockRefreshDelayMs(deadlineMs: number, nowMs: number): number {
+    return Math.min(Math.max(0, deadlineMs - nowMs) + 1_000, MAX_TIMEOUT_MS);
+}
+
+/**
  * Does this pool belong on the My Entries tab for `uid`? Membership is the
  * `participantIds` array, and a canceled pool drops out: there is no entry
  * left to play, and the member has already been emailed that it is gone.
