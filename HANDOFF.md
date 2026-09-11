@@ -40,8 +40,11 @@
 > `git -C D:\march-melee-pools pull --ff-only origin main` — if it does not
 > fast-forward, STOP and resolve before deploying; a deploy from a stale
 > checkout reports `Deploy complete!` and ships the old code. Then
-> `npm --prefix functions ci`, then `npx firebase deploy`. The trigger is a
-> NEW export — verify with
+> `npm --prefix functions ci`, then — functions BEFORE rules, per §3 —
+> `npx firebase deploy --only functions,firestore:indexes`, and only after
+> that finishes `npx firebase deploy --only firestore:rules` (this PR changes
+> no rules; the order still holds for anything pending from another PR). The
+> trigger is a NEW export — verify with
 > `npx firebase functions:list | Select-String "onUserNameChanged"`. The
 > index overrides ship in the same deploy (`firestore:indexes` target); until
 > the collection-group indexes are built the trigger FAILS and is RETRIED by
