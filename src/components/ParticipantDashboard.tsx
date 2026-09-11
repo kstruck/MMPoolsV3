@@ -357,6 +357,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         const paidWins: PaidWin[] = [];
 
         myPools.forEach(pool => {
+            // A canceled pool keeps its squares / entries / winner rows in the doc
+            // (cancelPool writes status only), and none of them are lifetime
+            // squares, wins, or winnings — the same rule as `enteredPoolCount`,
+            // or "0 Pools Entered" could sit beside non-zero wins (codex r1).
+            if (isCanceledPool(pool)) return;
             if (pool.type === 'SQUARES') {
                 const sPool = pool as GameState;
                 const userSquares = sPool.squares.filter(s => s.reservedByUid === user.id);

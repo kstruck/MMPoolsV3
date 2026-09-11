@@ -70,3 +70,10 @@ describe('rosterHub — the live/open/completed rules the component had are unch
         expect(isMyEntryPool(pool({ type: 'NFL_PICKEM', status: 'OPEN', participantIds: undefined }), ME)).toBe(false);
     });
 });
+
+describe('rosterHub — codex r1 absorptions', () => {
+    it('a legacy squares doc with no `type` and a finished game is still Completed', () => {
+        expect(getPoolTabStatus(pool({ type: undefined, scores: { gameStatus: 'post' }, isLocked: true }))).toBe('completed');
+        expect(getPoolTabStatus(pool({ type: undefined, scores: { gameStatus: 'in' }, isLocked: true }))).toBe('live');
+    });
+});

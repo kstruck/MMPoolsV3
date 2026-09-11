@@ -44,7 +44,12 @@ export function getPoolTabStatus(pool: Pool): RosterTabStatus {
         const isLive = bPool.status === 'LOCKED' || (bPool.lockAt > 0 && Date.now() >= bPool.lockAt);
         return isLive ? 'live' : 'open';
     }
-    return (pool as GameState).isLocked ? 'live' : 'open';
+    // Kept from the component: a non-bracket pool whose game is over is
+    // Completed even when it carries no `type` (legacy Squares docs), which
+    // `getPoolLifecycleState` only checks under `type === 'SQUARES'` (codex r1).
+    const squares = pool as GameState;
+    if (squares.scores?.gameStatus === 'post') return 'completed';
+    return squares.isLocked ? 'live' : 'open';
 }
 
 /**
