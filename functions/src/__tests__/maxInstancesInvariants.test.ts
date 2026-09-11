@@ -5,7 +5,10 @@ import { join } from "node:path";
 /**
  * 2026-08-23 cloud audit: nothing capped function fan-out, so a retry storm
  * could scale to the project default with an unbounded bill. The cap lives in
- * lib/globalOptions.ts (v2) + inline runWith on the three v1 triggers.
+ * lib/globalOptions.ts (v2) + inline runWith on the two v1 triggers
+ * (three until 2026-09-11, when participant.ts lost its Auth-create trigger —
+ * the file is checked below only for a v1 import so it cannot quietly grow one
+ * back uncapped).
  */
 const SRC = join(__dirname, "..");
 
@@ -21,8 +24,13 @@ describe("maxInstances caps", () => {
         expect(firstImport).toContain("./lib/globalOptions");
     });
 
+    it("participant.ts no longer imports firebase-functions/v1 (its Auth trigger was removed 2026-09-11)", () => {
+        const text = readFileSync(join(SRC, "participant.ts"), "utf8");
+        expect(text).not.toMatch(/firebase-functions\/v1/);
+    });
+
     it("every v1 trigger carries its own runWith maxInstances", () => {
-        for (const f of ["userSync.ts", "announcements.ts", "participant.ts"]) {
+        for (const f of ["userSync.ts", "announcements.ts"]) {
             const text = readFileSync(join(SRC, f), "utf8");
             // Definition sites are `= functions.<...>` / `= v1.<...>`; a bare one
             // (no runWith between the namespace and the trigger builder) is uncapped.

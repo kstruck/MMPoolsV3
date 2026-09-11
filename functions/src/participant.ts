@@ -2,13 +2,10 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
-import * as v1 from "firebase-functions/v1";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { createClaimCodeSchema, claimByCodeSchema } from "./schemas/participantOps";
-import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { UserRecord } from "firebase-functions/v1/auth";
 import { claimMySquaresSchema } from "./schemas/participantOps";
 
 // Types derived from frontend (simplified for backend)
@@ -21,57 +18,14 @@ interface ClaimCode {
     uses: number;
 }
 
-/**
- * Create the profile document ONLY if nothing has written it yet.
- *
- * 🛑 THIS USED TO BE AN UNCONDITIONAL `set()` WITH `name: displayName || "New User"`,
- * AND IT IS WHERE EVERY "New User" ON A STANDINGS PAGE CAME FROM (2026-09-10).
- * Three writers race on a fresh email+password signup: this Auth trigger,
- * `userSync.onUserCreated` (same event), and the client's `syncUserToFirestore`.
- * The Auth event fires the instant the account exists — BEFORE the client has
- * called `updateProfile({ displayName })` — so `displayName` is empty here for
- * every email signup, and whenever this trigger landed LAST it overwrote the
- * typed name (and the client's referral fields) with the placeholder. The pool
- * join then copied "New User" into the Member Record and every entry.
- *
- * Now: a transaction that creates when absent and does nothing when present.
- * The name fallback matches userSync (email prefix before any placeholder), so
- * the two triggers agree on what a doc they both might create looks like.
- */
-export async function createParticipantProfileIfMissing(
-    db: admin.firestore.Firestore,
-    user: Pick<UserRecord, 'uid' | 'email' | 'displayName' | 'photoURL' | 'providerData'>,
-): Promise<'created' | 'exists'> {
-    const { uid, email, displayName, photoURL } = user;
-    const ref = db.collection("users").doc(uid);
-    return db.runTransaction(async (t) => {
-        const snap = await t.get(ref);
-        if (snap.exists) return 'exists';
-        t.set(ref, {
-            id: uid,
-            email: email || "",
-            name: displayName || email?.split('@')[0] || "Unknown User",
-            photoURL: photoURL || null,
-            role: "MEMBER", // Default role (T6 canonical)
-            createdAt: Date.now(),
-            provider: user.providerData?.[0]?.providerId || "unknown",
-        });
-        return 'created';
-    });
-}
-
-// 1. onUserCreated: Create participant profile
-// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
-export const onUserCreated = v1.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
-    const { uid } = user;
-
-    try {
-        const outcome = await createParticipantProfileIfMissing(admin.firestore(), user);
-        logger.info(outcome === 'created' ? `Created user profile for ${uid}` : `User profile for ${uid} already existed; left untouched`);
-    } catch (error) {
-        logger.error(`Error creating user profile for ${uid}`, error);
-    }
-});
+// 1. (removed 2026-09-11) `onUserCreated` / `createParticipantProfile` — this
+// file used to export a SECOND Auth-create trigger that wrote `users/{uid}` with
+// its own schema (`photoURL`, `provider`, numeric `createdAt`, and once upon a
+// time `name: "New User"` — the 2026-09-10 standings bug). Two triggers on one
+// event, two schemas, one document. userSync.ts `onUserCreated` is the single
+// server-side creator now (`createUserProfileIfMissing`, transactional,
+// never overwrites); its schema carries `provider`, the one field the client
+// read from this one.
 
 // 2. createClaimCode: Generate a code for guest
 export const createClaimCode = validated(

@@ -11,54 +11,83 @@ import { pickPreferredName } from "./shared/displayName";
 
 
 
+type AuthUserLike = Pick<UserRecord, 'uid' | 'email' | 'displayName' | 'photoURL' | 'providerData'>;
+
+/**
+ * The ONE schema a server-created profile has. Pure, so it is unit-tested.
+ *
+ * Until 2026-09-11 two Auth-create triggers wrote this document with two
+ * different schemas — this file (`picture`, `registrationMethod`, `searchName`,
+ * timestamps) and participant.ts `createParticipantProfile` (`photoURL`,
+ * `provider`, numeric `createdAt`). Whichever landed first decided the shape.
+ * Consolidated here. `provider` is carried over because the client reads it
+ * (`user.provider === 'password'` gates the change-password panel and the
+ * verify-email banner) and the client only writes it on ITS create path,
+ * which loses the race to this trigger.
+ */
+export function newUserProfileFields(user: AuthUserLike): Record<string, unknown> {
+    return {
+        ...syncedUserFields(undefined, user),
+        provider: user.providerData?.[0]?.providerId || 'unknown',
+        role: 'MEMBER',
+    };
+}
+
+/**
+ * Create `users/{uid}` ONLY if nothing has written it yet; otherwise refresh
+ * the index/login fields and leave `name` alone.
+ *
+ * 🛑 NEVER OVERWRITE. Three writers race on a fresh email+password signup:
+ * this Auth trigger and the client's `syncUserToFirestore` (and, until
+ * 2026-09-11, a second trigger in participant.ts). The Auth event fires the
+ * instant the account exists — BEFORE the client has called
+ * `updateProfile({ displayName })` — so `displayName` is empty here for every
+ * email signup, and a plain `set()` landing LAST overwrote the typed name
+ * (and the client's referral fields) with a placeholder; the pool join then
+ * copied it into every standings page (the 2026-09-10 "New User" bug). The
+ * pre-transaction `get` + `set` this used to do had the same window, just
+ * narrower. A transaction closes it: the client's write between the read and
+ * the commit forces a retry that sees the document and takes the merge path.
+ *
+ * The merge path indexes whatever name the profile actually shows (the typed
+ * one), not the email prefix (codex r1 P1 on #690). `name` is never written
+ * on it.
+ */
+export async function createUserProfileIfMissing(
+    db: admin.firestore.Firestore,
+    user: AuthUserLike,
+): Promise<'created' | 'exists'> {
+    const ref = db.collection("users").doc(user.uid);
+    const fields = newUserProfileFields(user);
+    return db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        if (snap.exists) {
+            const indexed = pickPreferredName(snap.get('name'), fields.name) ?? (fields.name as string);
+            t.set(ref, {
+                email: fields.email, // Ensure email is up to date
+                searchEmail: fields.searchEmail,
+                searchName: indexed.toLowerCase(),
+                lastLogin: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'exists';
+        }
+        t.set(ref, {
+            ...fields,
+            createdAt: FieldValue.serverTimestamp(),
+            lastLogin: FieldValue.serverTimestamp(),
+        });
+        return 'created';
+    });
+}
+
 // v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
 export const onUserCreated = functions.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
-    const db = admin.firestore();
-    const { uid, email, displayName, photoURL } = user;
-
-    // Determine registration method
-    let method: 'google' | 'email' | 'unknown' = 'unknown';
-    if (user.providerData && user.providerData.length > 0) {
-        const providerId = user.providerData[0].providerId;
-        if (providerId === 'google.com') method = 'google';
-        else if (providerId === 'password') method = 'email';
-    }
-
-    const name = displayName || email?.split('@')[0] || 'Unknown User';
-
+    const { uid, email } = user;
     try {
-        const userRef = db.collection("users").doc(uid);
-        const doc = await userRef.get();
-
-        if (!doc.exists) {
-            await userRef.set({
-                id: uid,
-                name,
-                email: email || "",
-                searchEmail: (email || "").toLowerCase(), // lowercase for admin prefix search
-                searchName: name.toLowerCase(), // lowercase for admin name prefix search
-                picture: photoURL || null,
-                registrationMethod: method,
-                createdAt: FieldValue.serverTimestamp(),
-
-                lastLogin: FieldValue.serverTimestamp(),
-                role: 'MEMBER'
-            });
-            console.log(`[UserSync] Successfully synced user ${uid} (${email}) to Firestore.`);
-        } else {
-            console.log(`[UserSync] User ${uid} already exists in Firestore. Using merge just in case.`);
-            // The client may already have written the TYPED name here (the
-            // email-signup race); the Auth record at this instant carries none.
-            // Index whatever name the profile actually shows, not the email
-            // prefix (codex r1 P1). `name` is never written on this path.
-            const indexed = pickPreferredName(doc.get('name'), name) ?? name;
-            await userRef.set({
-                email: email || "", // Ensure email is up to date
-                searchEmail: (email || "").toLowerCase(),
-                searchName: indexed.toLowerCase(),
-                lastLogin: FieldValue.serverTimestamp()
-            }, { merge: true });
-        }
+        const outcome = await createUserProfileIfMissing(admin.firestore(), user);
+        console.log(outcome === 'created'
+            ? `[UserSync] Created profile for ${uid} (${email}).`
+            : `[UserSync] Profile for ${uid} already existed; refreshed index/login fields, name left alone.`);
     } catch (error) {
         console.error(`[UserSync] Failed to sync user ${uid}:`, error);
     }

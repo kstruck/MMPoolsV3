@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPlaceholderName, pickSubjectName, userNameChanged } from '../lib/displayName';
+import { isPlaceholderName, pickSubjectName, stalePlayoffEntryIds, userNameChanged } from '../lib/displayName';
 
 /**
  * The pure half of display-name ownership (lib/displayName.ts). The Firestore
@@ -69,5 +69,41 @@ describe('userNameChanged — the users/{uid} trigger gate', () => {
   });
   it('a change TO a placeholder still propagates — the copies must equal the profile', () => {
     expect(userNameChanged({ name: 'Ron' }, { name: 'Unknown' })).toBe('Unknown');
+  });
+});
+
+describe('stalePlayoffEntryIds — the NFL-playoff entries MAP on the pool document (qodo #690 finding 1)', () => {
+  const pool = {
+    name: 'Playoffs', type: 'NFL_PLAYOFF', participantIds: ['u1', 'u2'],
+    entries: {
+      'u1_1': { id: 'u1_1', userId: 'u1', userName: 'New User', entryName: 'New User', totalScore: 7 },
+      'u1_2': { id: 'u1_2', userId: 'u1', userName: 'Ron Johnson', entryName: 'Already right' },
+      'u1_3': { id: 'u1_3', userId: 'u1', entryName: 'No userName at all' },
+      'u2_1': { id: 'u2_1', userId: 'u2', userName: 'New User' },
+      'junk': 'not an entry',
+      'nul': null,
+    },
+  };
+
+  it('returns only this uid’s entries whose userName is a string that differs', () => {
+    expect(stalePlayoffEntryIds(pool, 'u1', 'Ron Johnson')).toEqual(['u1_1']);
+    expect(stalePlayoffEntryIds(pool, 'u2', 'Ron Johnson')).toEqual(['u2_1']);
+  });
+
+  it('is empty when every copy already matches, or the uid owns nothing here', () => {
+    expect(stalePlayoffEntryIds(pool, 'u2', 'New User')).toEqual([]);
+    expect(stalePlayoffEntryIds(pool, 'u3', 'Anyone')).toEqual([]);
+  });
+
+  it('is empty for a pool with no map, a non-object map, an array, or no data at all', () => {
+    expect(stalePlayoffEntryIds({ type: 'NFL_PICKEM' }, 'u1', 'Ron Johnson')).toEqual([]);
+    expect(stalePlayoffEntryIds({ entries: 'oops' }, 'u1', 'Ron Johnson')).toEqual([]);
+    expect(stalePlayoffEntryIds({ entries: [{ userId: 'u1', userName: 'x' }] }, 'u1', 'Ron Johnson')).toEqual([]);
+    expect(stalePlayoffEntryIds(undefined, 'u1', 'Ron Johnson')).toEqual([]);
+    expect(stalePlayoffEntryIds(null, 'u1', 'Ron Johnson')).toEqual([]);
+  });
+
+  it('keeps the entry id verbatim — ids are caller-supplied and may contain dots', () => {
+    expect(stalePlayoffEntryIds({ entries: { 'my.entry': { userId: 'u1', userName: 'Old' } } }, 'u1', 'New')).toEqual(['my.entry']);
   });
 });

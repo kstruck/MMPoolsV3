@@ -504,9 +504,9 @@ Cloud Run → the service named after the function (lowercased, e.g.
 
 ⚠️ **This repo still exports gen-1 functions, and they have no Cloud Run
 service to roll back.** Verified on disk: `functions/src/announcements.ts:1`,
-`functions/src/participant.ts:5,11`, and `functions/src/userSync.ts:2,5` all
-import `firebase-functions/v1` — that is `onAnnouncementCreated`,
-`onUserCreated`/`createParticipantProfile`, and the user-sync triggers. For any
+and `functions/src/userSync.ts:2,5` import `firebase-functions/v1` — that is
+`onAnnouncementCreated` and `onUserCreated` (`createParticipantProfile`, the
+second gen-1 Auth trigger in `participant.ts`, was removed 2026-09-11). For any
 of those, the Cloud Run console will simply not list a service by that name,
 and **the git-based redeploy above is the only rollback path.** Confirm which
 generation you are dealing with before reaching for this shortcut:
