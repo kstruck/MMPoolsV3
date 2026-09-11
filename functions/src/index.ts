@@ -16,6 +16,7 @@ export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdate
 export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
 export { onSystemConfigWritten } from "./systemConfigAudit";
 export { onUserCreated, syncAllUsers } from "./userSync";
+export { onUserNameChanged } from "./userNameSync"; // profile name -> every pool copy (members/entries)
 export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail, sendUserEmail } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { notifyPasswordReset } from "./securityNotices"; // PLAN-AUDIT-AUTH-HARDENING A3

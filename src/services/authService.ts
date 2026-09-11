@@ -17,6 +17,7 @@ import type { User } from "../types";
 import { emailService } from "./emailService";
 import { referralService } from "./referralService";
 import { logger } from '../utils/logger';
+import { pickNameOnSync } from '@shared/displayName';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -47,7 +48,17 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
 };
 
 // Sync user to Firestore 'users' collection
-const syncUserToFirestore = async (user: User): Promise<User> => {
+interface SyncOptions {
+  /**
+   * True only from `register`: the person just typed their name, so it beats
+   * whatever a server Auth-create trigger pre-wrote (often the email prefix,
+   * because that trigger runs before `updateProfile`). Every other caller is a
+   * sign-in, where the STORED profile name is the one to keep.
+   */
+  typedAtRegistration?: boolean;
+}
+
+const syncUserToFirestore = async (user: User, opts: SyncOptions = {}): Promise<User> => {
   const userRef = doc(db, 'users', user.id);
   const userSnap = await getDoc(userRef);
 
@@ -83,7 +94,12 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       }
     }
 
-    await setDoc(userRef, newUserData);
+    // MERGE, never replace. Two Auth triggers (`onUserCreated`,
+    // `createParticipantProfile`) create this same document server-side the
+    // instant the account exists, and the `getDoc` above can miss them by
+    // milliseconds. A plain `setDoc` here then wiped their fields
+    // (searchName / searchEmail / lastLogin); a merge keeps both writers' work.
+    await setDoc(userRef, newUserData, { merge: true });
     localStorage.removeItem(REFERRAL_STORAGE_KEY); // Clear after use
 
     // NEW USER: If Google user (auto-verified), send welcome email immediately
@@ -107,8 +123,18 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       welcomeSent = true;
     }
 
+    // 🛑 THE STORED PROFILE NAME WINS OVER THE AUTH `displayName` (2026-09-10).
+    // `user.name` here is Auth's `displayName` (or the email prefix). /profile
+    // and the super-admin Members tab write `users/{uid}.name` ONLY, so every
+    // sign-in used to put the OLD Auth name back — and `onUserNameChanged`
+    // would then push that revert into every pool. A real stored name is kept;
+    // Auth's name only fills a missing or placeholder one — except at
+    // registration, where the typed name wins over a pre-created email prefix
+    // (shared/displayName.ts `pickNameOnSync`).
+    const name = pickNameOnSync(existingData.name, user.name, opts.typedAtRegistration === true) || "Unknown";
+
     await setDoc(userRef, {
-      name: user.name || "Unknown",
+      name,
       picture: user.picture ?? null,
       emailVerified: user.emailVerified ?? false, // Sync Verification Status
       welcomeEmailSent: welcomeSent ?? false
@@ -116,7 +142,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
 
     return {
       ...existingData,
-      name: user.name,
+      name,
       picture: user.picture,
       role: existingData.role || 'MEMBER',
       provider: existingData.provider || 'password',
@@ -180,7 +206,7 @@ export const authService = {
       await authService.sendVerificationEmail(result.user);
 
       const user = mapUser({ ...result.user, displayName: name }) as User;
-      return await syncUserToFirestore(user);
+      return await syncUserToFirestore(user, { typedAtRegistration: true });
     } catch (error) {
       logger.error("Registration Error", error);
       throw error;

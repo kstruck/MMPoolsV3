@@ -1,5 +1,68 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-09-10 — **"NEW USER" IN STANDINGS: ROOT CAUSE CLOSED, PROFILE NAME NOW PROPAGATES TO EVERY POOL. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY OWED (FUNCTIONS + FIRESTORE INDEXES).**
+>
+> Kevin found members named **"New User"** on an NFL Pick'em standings page and
+> in its Payment Ledger, and after fixing their names on the super-admin
+> Members tab the pool pages did not change. Both were real, finished email
+> signups. Branch `claude/new-user-pool-deletion-d030bf`.
+>
+> **Root cause (three defects, all pre-existing):**
+> 1. `createParticipantProfile` (functions/src/participant.ts) did an
+>    unconditional `set()` with `name: displayName || "New User"`. It fires on
+>    the Auth create event, BEFORE the client calls `updateProfile`, so
+>    `displayName` is empty for every email signup; whenever it landed last it
+>    overwrote the typed name (and the client's referral fields). The pool
+>    join then copied "New User" into the Member Record and every entry.
+> 2. Nothing refreshed those copies. `/profile` and the Members tab write
+>    `users/{uid}.name` only; pick submissions stamped the LOGIN TOKEN's name
+>    first (`nflPools.ts`), so a fixed profile lost to the stale token on the
+>    next pick.
+> 3. Every sign-in wrote Auth's `displayName` back over the profile
+>    (`authService.ts` `syncUserToFirestore`), so a fixed name reverted at the
+>    next login.
+>
+> **What shipped on the branch:** `users/{uid}.name` is the ONE source of
+> truth. `shared/displayName.ts` (placeholder list + `pickPreferredName`, both
+> sides); `functions/src/lib/displayName.ts` (`resolveSubjectName` profile-first,
+> `propagateUserName` across `pools/*/members` + `pools/*/entries`,
+> `stampSearchName`); new trigger **`onUserNameChanged`** on `users/{uid}`
+> (`functions/src/userNameSync.ts`, exported); `createParticipantProfileIfMissing`
+> (transaction, never overwrites); `syncAllUsers` keeps a real stored name;
+> client sign-in keeps the stored name and merges the new-user write;
+> `firestore.indexes.json` gains collection-group field overrides on
+> `members.uid` and `entries.ownerUid` for the two propagation queries.
+> Tests: functions unit ×2 files, emulator `userNameSync.emulator.test.ts`,
+> root `displayNameShared.test.ts`. Codex: round 1 found 3 (all absorbed),
+> see the PR body for the final round count.
+>
+> **Deploy notes.** Step zero, always (CLAUDE.md §3):
+> `git -C D:\march-melee-pools pull --ff-only origin main` — if it does not
+> fast-forward, STOP and resolve before deploying; a deploy from a stale
+> checkout reports `Deploy complete!` and ships the old code. Then
+> `npm --prefix functions ci`, then — functions BEFORE rules, per §3 —
+> `npx firebase deploy --only functions,firestore:indexes`, and only after
+> that finishes `npx firebase deploy --only firestore:rules` (this PR changes
+> no rules; the order still holds for anything pending from another PR). The
+> trigger is a NEW export — verify with
+> `npx firebase functions:list | Select-String "onUserNameChanged"`. The
+> index overrides ship in the same deploy (`firestore:indexes` target); until
+> the collection-group indexes are built the trigger FAILS and is RETRIED by
+> the platform (`retry: true`; a name change in that window is not lost). The
+> emulator needs no index, so a green suite does not prove it shipped.
+>
+> **Not in scope, still true:** there is NO "remove member" callable for NFL
+> pools — the helpers in `lib/memberRecord.ts` have zero production callers
+> (measured at `97227933`:
+> `grep -rn "voidMemberRecord\|reconcileMembership" functions/src --include=*.ts | grep -v test`
+> returns only their definitions in `lib/memberRecord.ts` and two comment
+> mentions in `manualReminders.ts` / `setPaidStatus.ts`; #580 says the same); the
+> Payment Ledger's Delete is `deleteNFLEntry` and refuses once a week has
+> scored, for super admins too — by design (Kevin 2026-08-25). Names already
+> fixed BEFORE this deploys do not back-propagate: the trigger fires on a
+> CHANGE, so after the deploy edit the name to something else, save, then
+> set it back and save again — each save pushes into every pool copy.
+
 > ## 🟡 2026-09-10 — **PR #687 OPEN: confidence pools may lock per game (PLAN-CONFIDENCE-PER-GAME-LOCK). NOT MERGED, NOT DEPLOYED, BACKFILL NOT RUN, DONKEYS NOT FLIPPED.**
 >
 > - Kevin's ruling 2026-09-10 (six decisions in the plan header): a confidence
