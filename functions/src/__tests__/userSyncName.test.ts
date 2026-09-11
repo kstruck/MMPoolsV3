@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newUserProfileFields, syncedUserFields } from '../userSync';
+import { missingProfileIndexFields, newUserProfileFields, syncedUserFields } from '../userSync';
 
 /**
  * codex r1 P1 on the display-name PR: with `onUserNameChanged` pushing profile
@@ -70,5 +70,31 @@ describe('newUserProfileFields — the ONE schema a server-created profile has (
     expect(newUserProfileFields(auth()).name).toBe('Ron.Johnson');
     expect(newUserProfileFields(auth({ email: undefined })).name).toBe('Unknown');
     expect(newUserProfileFields(auth({ providerData: [] })).provider).toBe('unknown');
+  });
+});
+
+describe('missingProfileIndexFields — the exists-path of the Auth-create trigger FILLS, never overwrites', () => {
+  const fields = { name: 'ron.johnson', email: 'ron.johnson@example.com', searchEmail: 'ron.johnson@example.com', searchName: 'ron.johnson' };
+
+  it('a client-created doc (name + email, no indexes) gets searchEmail from ITS email, searchName from ITS name, and a lastLogin', () => {
+    const fill = missingProfileIndexFields({ name: 'Ron Johnson', email: 'Ron.Johnson@example.com' }, fields);
+    expect(Object.keys(fill).sort()).toEqual(['lastLogin', 'searchEmail', 'searchName']);
+    expect(fill.searchEmail).toBe('ron.johnson@example.com');
+    expect(fill.searchName).toBe('ron johnson');
+    expect(fill.lastLogin).toBeTruthy();
+  });
+
+  it('an empty stored email is filled from Auth; a real one is kept even when Auth disagrees', () => {
+    expect(missingProfileIndexFields({ email: '' }, fields).email).toBe('ron.johnson@example.com');
+    expect('email' in missingProfileIndexFields({ email: 'ron.new@example.com' }, { ...fields, email: 'old@example.com' })).toBe(false);
+  });
+
+  it('a fully indexed profile gets nothing — a replayed event is a no-op', () => {
+    expect(missingProfileIndexFields({ name: 'Ron Johnson', email: 'x@y.z', searchEmail: 'x@y.z', searchName: 'ron johnson', lastLogin: 1 }, fields)).toEqual({});
+  });
+
+  it('a placeholder stored name is indexed from the Auth name, a real one from itself', () => {
+    expect(missingProfileIndexFields({ name: 'New User', email: 'x@y.z', searchEmail: 'x@y.z', lastLogin: 1 }, fields).searchName).toBe('ron.johnson');
+    expect(missingProfileIndexFields({ email: 'x@y.z', searchEmail: 'x@y.z', lastLogin: 1 }, fields).searchName).toBe('ron.johnson');
   });
 });

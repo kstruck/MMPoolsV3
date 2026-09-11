@@ -201,6 +201,24 @@ describe('P2 — createUserProfileIfMissing (userSync.ts, the one Auth-create cr
     expect('photoURL' in u).toBe(false);
   });
 
+  it('a REPLAYED create event (failurePolicy retry) fills nothing over an edited profile', async () => {
+    // First delivery lands on a client-created doc and fills the index fields.
+    await db.collection('users').doc(UID).set({ id: UID, name: 'Ron Johnson', email: 'Ron.Johnson@example.com' });
+    expect(await createUserProfileIfMissing(db, authUser())).toBe('exists');
+    const first = (await db.collection('users').doc(UID).get()).data()!;
+    expect(first.searchEmail).toBe('ron.johnson@example.com');
+    expect(first.lastLogin).toBeTruthy();
+    // An admin then edits the email; the replay must not put the sign-up one back,
+    // nor re-stamp lastLogin, nor touch searchEmail (qodo #691 round 2, finding 3).
+    await db.collection('users').doc(UID).update({ email: 'ron.new@example.com', searchEmail: 'ron.new@example.com', lastLogin: 1234 });
+    expect(await createUserProfileIfMissing(db, authUser())).toBe('exists');
+    const after = (await db.collection('users').doc(UID).get()).data()!;
+    expect(after.email).toBe('ron.new@example.com');
+    expect(after.searchEmail).toBe('ron.new@example.com');
+    expect(after.lastLogin).toBe(1234);
+    expect(after.name).toBe('Ron Johnson');
+  });
+
   it('uses the Auth display name when it is there', async () => {
     await createUserProfileIfMissing(db, authUser({ displayName: 'Ron Johnson', providerData: [{ providerId: 'google.com' }] }));
     const u = (await db.collection('users').doc(UID).get()).data()!;

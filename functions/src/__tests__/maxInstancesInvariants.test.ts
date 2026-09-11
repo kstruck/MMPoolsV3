@@ -46,8 +46,15 @@ describe("maxInstances caps", () => {
         const text = readFileSync(join(SRC, "userSync.ts"), "utf8");
         expect(text).toMatch(/runWith\(\{ maxInstances: \d+, failurePolicy: true \}\)\.auth\.user\(\)\.onCreate/);
         // ...and the handler rethrows rather than swallowing — a caught-and-logged
-        // failure acknowledges the event and nothing replays it.
-        const handler = text.slice(text.indexOf("auth.user().onCreate"));
-        expect(handler).toMatch(/catch \(error\) \{[\s\S]*?throw error;/);
+        // failure acknowledges the event and nothing replays it. Bounded to the
+        // onCreate callback itself (up to its closing `});`), so a rethrow in
+        // some LATER handler cannot satisfy this on the creator's behalf
+        // (qodo #691 round 2, finding 4).
+        const start = text.indexOf("auth.user().onCreate");
+        expect(start).toBeGreaterThan(-1);
+        const end = text.indexOf("\n});", start);
+        expect(end).toBeGreaterThan(start);
+        const handler = text.slice(start, end);
+        expect(handler).toMatch(/catch \(error\) \{[\s\S]*?throw error;\s*\}/);
     });
 });

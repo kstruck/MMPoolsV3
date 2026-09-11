@@ -34,8 +34,30 @@ export function newUserProfileFields(user: AuthUserLike): Record<string, unknown
 }
 
 /**
- * Create `users/{uid}` ONLY if nothing has written it yet; otherwise refresh
- * the index/login fields and leave `name` alone.
+ * What the exists-path of `createUserProfileIfMissing` may write: only the
+ * index/login fields the profile does NOT already carry. Pure, unit-tested.
+ * `email` counts as missing when absent or empty (the client's create path
+ * always writes it, possibly as ""); the rest when absent.
+ */
+export function missingProfileIndexFields(
+    existing: Record<string, unknown>,
+    fields: Record<string, unknown>,
+): Record<string, unknown> {
+    const fill: Record<string, unknown> = {};
+    const hasEmail = typeof existing.email === 'string' && existing.email.trim() !== '';
+    if (!hasEmail && fields.email) fill.email = fields.email;
+    if (existing.searchEmail === undefined) fill.searchEmail = hasEmail ? (existing.email as string).toLowerCase() : fields.searchEmail;
+    if (existing.searchName === undefined) {
+        const indexed = pickPreferredName(existing.name, fields.name) ?? (fields.name as string);
+        fill.searchName = indexed.toLowerCase();
+    }
+    if (existing.lastLogin === undefined) fill.lastLogin = FieldValue.serverTimestamp();
+    return fill;
+}
+
+/**
+ * Create `users/{uid}` ONLY if nothing has written it yet; otherwise fill in
+ * the index/login fields it lacks and leave everything else alone.
  *
  * 🛑 NEVER OVERWRITE. Three writers race on a fresh email+password signup:
  * this Auth trigger and the client's `syncUserToFirestore` (and, until
@@ -49,9 +71,15 @@ export function newUserProfileFields(user: AuthUserLike): Record<string, unknown
  * narrower. A transaction closes it: the client's write between the read and
  * the commit forces a retry that sees the document and takes the merge path.
  *
- * The merge path indexes whatever name the profile actually shows (the typed
- * one), not the email prefix (codex r1 P1 on #690). `name` is never written
- * on it.
+ * The merge path FILLS, never overwrites (qodo #691 round 2, finding 3). With
+ * `failurePolicy: true` an Auth-create event can be re-delivered up to days
+ * later carrying the ORIGINAL snapshot, so merging its `email` / `searchEmail`
+ * unconditionally would put the sign-up email back over one an admin has since
+ * edited, and re-stamp `lastLogin` with the replay. So: `email` only when the
+ * profile has none, `searchEmail` / `searchName` / `lastLogin` only when
+ * absent. `searchName` is indexed from the name the profile actually shows
+ * (the typed one), not the email prefix (codex r1 P1 on #690), and
+ * `onUserNameChanged` keeps it current from then on. `name` is never written.
  */
 export async function createUserProfileIfMissing(
     db: admin.firestore.Firestore,
@@ -62,13 +90,8 @@ export async function createUserProfileIfMissing(
     return db.runTransaction(async (t) => {
         const snap = await t.get(ref);
         if (snap.exists) {
-            const indexed = pickPreferredName(snap.get('name'), fields.name) ?? (fields.name as string);
-            t.set(ref, {
-                email: fields.email, // Ensure email is up to date
-                searchEmail: fields.searchEmail,
-                searchName: indexed.toLowerCase(),
-                lastLogin: FieldValue.serverTimestamp(),
-            }, { merge: true });
+            const fill = missingProfileIndexFields(snap.data() ?? {}, fields);
+            if (Object.keys(fill).length > 0) t.set(ref, fill, { merge: true });
             return 'exists';
         }
         t.set(ref, {
