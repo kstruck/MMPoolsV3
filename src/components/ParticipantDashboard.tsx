@@ -9,6 +9,7 @@ import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
 import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
 import { getPoolTabStatus, isMyEntryPool, isCanceledPool } from '../utils/rosterHub';
+import { now as serverNow, syncServerClock } from '../utils/serverClock';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -121,6 +122,19 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     useEffect(() => {
         return settingsService.subscribe(setSettings);
+    }, []);
+
+    // The clock the tab reader classifies brackets against. Held in state, not
+    // read inline, because the server sync is async and only mutates module
+    // state: a first render before `getServerTime` resolves would classify on
+    // the device clock and nothing would re-render when the corrected offset
+    // arrived (codex r3 on PR #688). Re-read once the sync settles; every memo
+    // that calls `getPoolTabStatus` lists `nowMs`.
+    const [nowMs, setNowMs] = useState(() => serverNow());
+    useEffect(() => {
+        let cancelled = false;
+        void syncServerClock().then(() => { if (!cancelled) setNowMs(serverNow()); });
+        return () => { cancelled = true; };
     }, []);
 
     // Subscribe to the schedule of each distinct season among my NFL pools
@@ -495,7 +509,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
             if (!matchesSearch) return false;
 
-            const status = getPoolTabStatus(pool);
+            const status = getPoolTabStatus(pool, nowMs);
             if (activeTab === 'open') return status === 'open';
             if (activeTab === 'live') return status === 'live';
             if (activeTab === 'completed') return status === 'completed';
@@ -509,15 +523,15 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             const bPending = pendingByPool[b.id] ? 0 : 1;
             return aPending - bPending;
         });
-    }, [myPools, searchQuery, activeTab, pendingByPool]);
+    }, [myPools, searchQuery, activeTab, pendingByPool, nowMs, user.id]);
 
     const counts = useMemo(() => {
-        const open = myPools.filter(p => getPoolTabStatus(p) === 'open').length;
-        const completed = myPools.filter(p => getPoolTabStatus(p) === 'completed').length;
-        const live = myPools.filter(p => getPoolTabStatus(p) === 'live').length;
+        const open = myPools.filter(p => getPoolTabStatus(p, nowMs) === 'open').length;
+        const completed = myPools.filter(p => getPoolTabStatus(p, nowMs) === 'completed').length;
+        const live = myPools.filter(p => getPoolTabStatus(p, nowMs) === 'live').length;
         const entries = myPools.filter(p => isMyEntryPool(p, user.id)).length;
         return { all: myPools.length, open, live, completed, entries };
-    }, [myPools, user.id]);
+    }, [myPools, user.id, nowMs]);
 
     /**
      * The tab strip, built ONCE and used twice: rendered below, and published to
@@ -549,7 +563,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     const getStatusBadge = (pool: Pool) => {
         if (isCanceledPool(pool)) return <Badge status="canceled">Canceled</Badge>;
-        const tabStatus = getPoolTabStatus(pool);
+        const tabStatus = getPoolTabStatus(pool, nowMs);
 
         if (tabStatus === 'completed') return <Badge status="locked">Completed</Badge>;
         if (tabStatus === 'live') return <Badge status="live">Live Now</Badge>;
@@ -901,7 +915,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             const canRerun =
                                 (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') &&
                                 (pool.ownerId === user.id || pool.managerUid === user.id) &&
-                                getPoolTabStatus(pool) === 'completed';
+                                getPoolTabStatus(pool, nowMs) === 'completed';
 
                             let userEntryCount = 0;
                             let percentFull = 0;

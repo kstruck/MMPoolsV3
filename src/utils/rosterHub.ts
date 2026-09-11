@@ -28,7 +28,7 @@ export type RosterTabStatus = 'open' | 'live' | 'completed';
  * finalizer — is Completed, for every pool type. Only then do the per-type
  * open-vs-live rules apply, unchanged from the component they came from.
  */
-export function getPoolTabStatus(pool: Pool): RosterTabStatus {
+export function getPoolTabStatus(pool: Pool, nowMs: number = now()): RosterTabStatus {
     const lifecycle = getPoolLifecycleState(pool);
     if (lifecycle === 'final' || lifecycle === 'closed') return 'completed';
     // Kept from the component: a non-bracket pool whose game is over is
@@ -48,8 +48,12 @@ export function getPoolTabStatus(pool: Pool): RosterTabStatus {
         // A bracket whose lock time has passed is live even before the lock
         // job flips its status. Server-corrected clock, not the device's, so a
         // skewed phone does not move the pool between tabs (qodo #1 on PR #688).
+        // `nowMs` is a parameter so a caller can hold it in React state and
+        // re-evaluate once the clock sync resolves — `now()` alone returns the
+        // device clock until then and the sync never re-renders anyone
+        // (codex r3 on PR #688). The default keeps one-shot callers simple.
         const bPool = pool as BracketPool;
-        return bPool.lockAt > 0 && now() >= bPool.lockAt ? 'live' : 'open';
+        return bPool.lockAt > 0 && nowMs >= bPool.lockAt ? 'live' : 'open';
     }
     return 'open';
 }

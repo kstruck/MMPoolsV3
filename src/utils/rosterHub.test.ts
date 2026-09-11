@@ -94,3 +94,11 @@ describe('rosterHub — review absorptions on PR #688', () => {
         expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK + 1 }))).toBe('open');
     });
 });
+
+describe('rosterHub — codex r3 on PR #688: the clock is a parameter', () => {
+    it('an explicit nowMs overrides the module clock, so a caller can re-evaluate after the server sync resolves', () => {
+        const bracket = pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK + 5_000 });
+        expect(getPoolTabStatus(bracket)).toBe('open');
+        expect(getPoolTabStatus(bracket, CLOCK + 5_000)).toBe('live');
+    });
+});
