@@ -56,3 +56,17 @@ export function pickPreferredName(primary: unknown, secondary: unknown): string 
   if (b && !isPlaceholderName(b)) return b;
   return a || b || undefined;
 }
+
+/**
+ * The client's sign-in rule, with the one exception registration needs.
+ *
+ * Normally the STORED profile name is primary (an admin or the person set
+ * it; Auth's copy may be stale). At REGISTRATION the order flips: the person
+ * just typed their name, and the server's Auth-create triggers may have
+ * pre-created the profile with the EMAIL PREFIX (the Auth event predates the
+ * client's `updateProfile`). That prefix is not a placeholder, so without
+ * this flip the typed name would lose to it for good (codex r2 P1).
+ */
+export function pickNameOnSync(stored: unknown, fromAuth: unknown, typedAtRegistration: boolean): string | undefined {
+  return typedAtRegistration ? pickPreferredName(fromAuth, stored) : pickPreferredName(stored, fromAuth);
+}

@@ -17,7 +17,7 @@ import type { User } from "../types";
 import { emailService } from "./emailService";
 import { referralService } from "./referralService";
 import { logger } from '../utils/logger';
-import { pickPreferredName } from '@shared/displayName';
+import { pickNameOnSync } from '@shared/displayName';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -48,7 +48,17 @@ const mapUser = (firebaseUser: FirebaseUser | null): User | null => {
 };
 
 // Sync user to Firestore 'users' collection
-const syncUserToFirestore = async (user: User): Promise<User> => {
+interface SyncOptions {
+  /**
+   * True only from `register`: the person just typed their name, so it beats
+   * whatever a server Auth-create trigger pre-wrote (often the email prefix,
+   * because that trigger runs before `updateProfile`). Every other caller is a
+   * sign-in, where the STORED profile name is the one to keep.
+   */
+  typedAtRegistration?: boolean;
+}
+
+const syncUserToFirestore = async (user: User, opts: SyncOptions = {}): Promise<User> => {
   const userRef = doc(db, 'users', user.id);
   const userSnap = await getDoc(userRef);
 
@@ -118,8 +128,10 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
     // and the super-admin Members tab write `users/{uid}.name` ONLY, so every
     // sign-in used to put the OLD Auth name back — and `onUserNameChanged`
     // would then push that revert into every pool. A real stored name is kept;
-    // Auth's name only fills a missing or placeholder one.
-    const name = pickPreferredName(existingData.name, user.name) || "Unknown";
+    // Auth's name only fills a missing or placeholder one — except at
+    // registration, where the typed name wins over a pre-created email prefix
+    // (shared/displayName.ts `pickNameOnSync`).
+    const name = pickNameOnSync(existingData.name, user.name, opts.typedAtRegistration === true) || "Unknown";
 
     await setDoc(userRef, {
       name,
@@ -194,7 +206,7 @@ export const authService = {
       await authService.sendVerificationEmail(result.user);
 
       const user = mapUser({ ...result.user, displayName: name }) as User;
-      return await syncUserToFirestore(user);
+      return await syncUserToFirestore(user, { typedAtRegistration: true });
     } catch (error) {
       logger.error("Registration Error", error);
       throw error;

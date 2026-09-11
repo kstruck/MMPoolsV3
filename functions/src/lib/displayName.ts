@@ -80,6 +80,8 @@ export function userNameChanged(
 export interface PropagateResult {
   members: number;
   entries: number;
+  /** True when the profile no longer carried `name` by commit time: nothing (more) was written. */
+  superseded: boolean;
 }
 
 /**
@@ -145,6 +147,15 @@ function underPools(ref: FirebaseFirestore.DocumentReference): boolean {
  * `entries.ownerUid`; both are declared in `firestore.indexes.json`
  * (fieldOverrides). The emulator needs no index, so a green emulator suite
  * does NOT prove the index shipped — verify after deploy.
+ *
+ * 🛑 SERIALIZED AGAINST THE PROFILE (codex r2 P2). Two quick edits fire two
+ * events that can overlap; a pre-check alone lets the OLDER one commit its
+ * stale name after the newer one has finished. So every chunk is a
+ * TRANSACTION that first reads `users/{uid}` and writes only if the profile
+ * still says `name`. Firestore's optimistic concurrency does the rest: if the
+ * profile changes between that read and the commit, the transaction retries,
+ * re-reads, sees the newer name, and stops. An older handler therefore cannot
+ * commit after a newer name change, whatever order the events ran in.
  */
 export async function propagateUserName(db: Firestore, uid: string, name: string): Promise<PropagateResult> {
   const [memberSnap, entrySnap] = await Promise.all([
@@ -152,28 +163,43 @@ export async function propagateUserName(db: Firestore, uid: string, name: string
     db.collectionGroup('entries').where('ownerUid', '==', uid).get(),
   ]);
 
-  const writes: FirebaseFirestore.DocumentReference[] = [];
-  const result: PropagateResult = { members: 0, entries: 0 };
-
+  const members: FirebaseFirestore.DocumentReference[] = [];
+  const entries: FirebaseFirestore.DocumentReference[] = [];
   for (const doc of memberSnap.docs) {
     if (!underPools(doc.ref)) continue;
     const current = doc.get('userName');
     if (typeof current !== 'string' || current === name) continue;
-    writes.push(doc.ref);
-    result.members += 1;
+    members.push(doc.ref);
   }
   for (const doc of entrySnap.docs) {
     if (!underPools(doc.ref)) continue;
     const current = doc.get('userName');
     if (typeof current !== 'string' || current === name) continue;
-    writes.push(doc.ref);
-    result.entries += 1;
+    entries.push(doc.ref);
   }
 
+  const profileRef = db.collection('users').doc(uid);
+  const writes = [...members, ...entries];
+  const result: PropagateResult = { members: 0, entries: 0, superseded: false };
+  let written = 0;
+
   for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
-    const batch = db.batch();
-    for (const ref of writes.slice(i, i + BATCH_LIMIT)) batch.update(ref, { userName: name });
-    await batch.commit();
+    const chunk = writes.slice(i, i + BATCH_LIMIT);
+    const committed = await db.runTransaction(async (t) => {
+      const profile = await t.get(profileRef);
+      if (!profile.exists || !profileNameIs(profile.get('name'), name)) return false;
+      for (const ref of chunk) t.update(ref, { userName: name });
+      return true;
+    });
+    if (!committed) {
+      result.superseded = true;
+      break;
+    }
+    written += chunk.length;
   }
+
+  // Counts reflect what was COMMITTED; members were queued first.
+  result.members = Math.min(written, members.length);
+  result.entries = Math.max(0, written - members.length);
   return result;
 }

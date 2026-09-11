@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { isPlaceholderName, pickPreferredName } from '@shared/displayName';
+import { isPlaceholderName, pickNameOnSync, pickPreferredName } from '@shared/displayName';
+
+describe('pickNameOnSync — registration flips the order once', () => {
+  it('at registration the typed name beats a server-pre-created email prefix (codex r2 P1)', () => {
+    expect(pickNameOnSync('ron.johnson', 'Ron Johnson', true)).toBe('Ron Johnson');
+  });
+  it('on an ordinary sign-in the stored name beats Auth', () => {
+    expect(pickNameOnSync('Ron Johnson', 'ron.johnson', false)).toBe('Ron Johnson');
+    expect(pickNameOnSync('Ron Johnson', 'Old Auth Name', false)).toBe('Ron Johnson');
+  });
+  it('a placeholder on either side still yields to the real name', () => {
+    expect(pickNameOnSync('New User', 'Ron Johnson', false)).toBe('Ron Johnson');
+    expect(pickNameOnSync('Ron Johnson', 'Unknown', true)).toBe('Ron Johnson');
+  });
+});
 
 /**
  * The client's login-time rule (src/services/authService.ts,

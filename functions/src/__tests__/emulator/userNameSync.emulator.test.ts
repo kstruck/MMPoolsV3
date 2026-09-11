@@ -56,9 +56,14 @@ async function seed() {
 beforeEach(async () => { await wipe(); await seed(); });
 
 describe('P1 — propagateUserName', () => {
+  // Propagation is serialized against the profile: it commits only while
+  // `users/{uid}.name` still equals the name being pushed. So the profile is
+  // the precondition, not a side detail.
+  beforeEach(async () => { await db.collection('users').doc(UID).set({ name: 'Ron Johnson' }); });
+
   it('rewrites userName on every member record and owned entry, across pools, and nothing else', async () => {
     const result = await propagateUserName(db, UID, 'Ron Johnson');
-    expect(result).toEqual({ members: 2, entries: 3 });
+    expect(result).toEqual({ members: 2, entries: 3, superseded: false });
 
     for (const p of [POOL_A, POOL_B]) {
       const m = (await db.collection('pools').doc(p).collection('members').doc(UID).get()).data()!;
@@ -99,11 +104,31 @@ describe('P1 — propagateUserName', () => {
 
   it('is idempotent — a second run writes nothing', async () => {
     await propagateUserName(db, UID, 'Ron Johnson');
-    expect(await propagateUserName(db, UID, 'Ron Johnson')).toEqual({ members: 0, entries: 0 });
+    expect(await propagateUserName(db, UID, 'Ron Johnson')).toEqual({ members: 0, entries: 0, superseded: false });
   });
 
   it('a uid with no pool copies is a no-op', async () => {
-    expect(await propagateUserName(db, 'dn_nobody', 'Nobody')).toEqual({ members: 0, entries: 0 });
+    expect(await propagateUserName(db, 'dn_nobody', 'Nobody')).toEqual({ members: 0, entries: 0, superseded: false });
+  });
+
+  it('SUPERSEDED — commits nothing when the profile no longer carries the event name (codex r2 P2)', async () => {
+    // The newer edit ("Ronald Johnson") has already landed on the profile; an
+    // older event still holding "Ron Johnson" must not write it anywhere.
+    await db.collection('users').doc(UID).set({ name: 'Ronald Johnson' });
+    const result = await propagateUserName(db, UID, 'Ron Johnson');
+    expect(result).toEqual({ members: 0, entries: 0, superseded: true });
+    for (const p of [POOL_A, POOL_B]) {
+      expect((await db.collection('pools').doc(p).collection('members').doc(UID).get()).data()!.userName).toBe('New User');
+      expect((await db.collection('pools').doc(p).collection('entries').doc(`${p}_${UID}_1`).get()).data()!.userName).toBe('New User');
+    }
+    // And the current name goes through.
+    expect(await propagateUserName(db, UID, 'Ronald Johnson')).toEqual({ members: 2, entries: 3, superseded: false });
+  });
+
+  it('a missing profile commits nothing either', async () => {
+    await db.collection('users').doc(UID).delete();
+    expect(await propagateUserName(db, UID, 'Ron Johnson')).toEqual({ members: 0, entries: 0, superseded: true });
+    expect((await db.collection('pools').doc(POOL_A).collection('members').doc(UID).get()).data()!.userName).toBe('New User');
   });
 });
 
