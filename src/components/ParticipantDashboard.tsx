@@ -8,6 +8,7 @@ import { formatDeadline } from '../utils/formatTime';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
 import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
+import { getPoolTabStatus, isMyEntryPool, isCanceledPool } from '../utils/rosterHub';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -147,6 +148,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         const map: Record<string, PoolPendingStatus> = {};
         for (const p of myPools) {
             if (!isNFLSeasonPool(p)) continue;
+            // A canceled pool has no picks due — without this it floated to the
+            // top of every list as "picks due" after the commissioner killed it.
+            if (isCanceledPool(p)) continue;
             const games = seasonGames[String((p as any).season)] ?? [];
             if (games.length === 0) continue;
             const status = computePendingStatus(p, myNflEntries[p.id] ?? null, games);
@@ -155,6 +159,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return map;
     }, [myPools, seasonGames, myNflEntries]);
 
+    // "Pools Entered" and the loyalty tier share one count: every pool on the
+    // roster that was not canceled (see utils/rosterHub.ts for why canceled drops).
+    const enteredPoolCount = useMemo(() => myPools.filter(p => !isCanceledPool(p)).length, [myPools]);
+
     const userLoyaltyTier = useMemo(() => {
         const tiers = settings?.loyaltyTiers || [
             { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
@@ -162,10 +170,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         ];
         // Sort descending by minPools so we match the highest matching tier
         const sorted = [...tiers].sort((a, b) => b.minPools - a.minPools);
-        const count = myPools.length;
+        // A canceled pool never ran, so it is not a lifetime entry.
+        const count = enteredPoolCount;
         const matched = sorted.find(t => count >= t.minPools);
         return matched || { name: 'Contender', description: 'Accrued based on lifetime pool entries' };
-    }, [settings?.loyaltyTiers, myPools.length]);
+    }, [settings?.loyaltyTiers, enteredPoolCount]);
 
     useEffect(() => {
         setIsLoading(true);
@@ -332,23 +341,6 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return () => { isMounted = false; };
     }, [myPools, user.id]);
 
-    const getPoolTabStatus = (pool: Pool): 'open' | 'live' | 'completed' => {
-        if (pool.type === 'BRACKET') {
-            const bPool = pool as BracketPool;
-            const isCompleted = bPool.status === 'COMPLETED';
-            const isLive = bPool.status === 'LOCKED' || (bPool.lockAt > 0 && Date.now() >= bPool.lockAt && !isCompleted);
-            if (isCompleted) return 'completed';
-            if (isLive) return 'live';
-            return 'open';
-        } else {
-            const isCompleted = (pool as GameState).scores?.gameStatus === 'post';
-            const isLocked = (pool as GameState).isLocked;
-            if (isCompleted) return 'completed';
-            if (isLocked) return 'live';
-            return 'open';
-        }
-    };
-
     const lifetimeStats = useMemo(() => {
         let totalSquares = 0;
         let totalWinnings = 0;
@@ -395,13 +387,13 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         });
 
         return {
-            totalPools: myPools.length,
+            totalPools: enteredPoolCount,
             totalSquares,
             totalWins,
             totalWinnings,
             paidWins
         };
-    }, [myPools, poolWinners, user.id, bracketEntryCounts]);
+    }, [myPools, poolWinners, user.id, bracketEntryCounts, enteredPoolCount]);
 
     // Data aggregation for Participation Split (Recharts PieChart).
     // Empty when the user has no pools — the chart is replaced with guidance
@@ -414,6 +406,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         let earliestPool: Pool | null = null;
 
         myPools.forEach(p => {
+            if (isCanceledPool(p)) return;
             let lockTime = 0;
             if (p.type === 'BRACKET') lockTime = (p as any).lockAt || 0;
             else if (p.type === 'NFL_PLAYOFFS') lockTime = new Date((p as any).lockDate).getTime() || 0;
@@ -495,7 +488,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             if (activeTab === 'live') return status === 'live';
             if (activeTab === 'completed') return status === 'completed';
             // My Entries: pools I participate in (membership), independent of ownership.
-            if (activeTab === 'entries') return (pool as any).participantIds?.includes(user.id) ?? false;
+            if (activeTab === 'entries') return isMyEntryPool(pool, user.id);
 
             return true;
         }).sort((a, b) => {
@@ -510,7 +503,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         const open = myPools.filter(p => getPoolTabStatus(p) === 'open').length;
         const completed = myPools.filter(p => getPoolTabStatus(p) === 'completed').length;
         const live = myPools.filter(p => getPoolTabStatus(p) === 'live').length;
-        const entries = myPools.filter(p => (p as any).participantIds?.includes(user.id)).length;
+        const entries = myPools.filter(p => isMyEntryPool(p, user.id)).length;
         return { all: myPools.length, open, live, completed, entries };
     }, [myPools, user.id]);
 
@@ -543,6 +536,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const offeredTabs = useMemo(() => tabStrip.map(t => t.id), [tabStrip]);
 
     const getStatusBadge = (pool: Pool) => {
+        if (isCanceledPool(pool)) return <Badge status="canceled">Canceled</Badge>;
         const tabStatus = getPoolTabStatus(pool);
 
         if (tabStatus === 'completed') return <Badge status="locked">Completed</Badge>;
