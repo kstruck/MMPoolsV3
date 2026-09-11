@@ -165,17 +165,38 @@ export async function propagateUserName(db: Firestore, uid: string, name: string
 
   const members: FirebaseFirestore.DocumentReference[] = [];
   const entries: FirebaseFirestore.DocumentReference[] = [];
+  const seenEntries = new Set<string>();
+  const memberPools: FirebaseFirestore.DocumentReference[] = [];
   for (const doc of memberSnap.docs) {
     if (!underPools(doc.ref)) continue;
+    memberPools.push(doc.ref.parent.parent!);
     const current = doc.get('userName');
     if (typeof current !== 'string' || current === name) continue;
     members.push(doc.ref);
   }
   for (const doc of entrySnap.docs) {
     if (!underPools(doc.ref)) continue;
+    seenEntries.add(doc.ref.path);
     const current = doc.get('userName');
     if (typeof current !== 'string' || current === name) continue;
     entries.push(doc.ref);
+  }
+
+  // ⚠️ THE `ownerUid` QUERY MISSES A PRE-MULTI-ENTRY `entries/{uid}` DOC THAT
+  // WAS NEVER STAMPED WITH ONE (the same gap userProfile.ts and multiEntry.ts
+  // read around; codex r3). Every pool this uid is a member of gets that one
+  // document read directly, and it is included when it exists, carries a
+  // `userName`, and has no `ownerUid` (one that does was in the query already).
+  if (memberPools.length > 0) {
+    const legacyRefs = memberPools.map(p => p.collection('entries').doc(uid));
+    const legacySnaps = await db.getAll(...legacyRefs);
+    for (const snap of legacySnaps) {
+      if (!snap.exists || seenEntries.has(snap.ref.path)) continue;
+      if (snap.get('ownerUid') !== undefined) continue;
+      const current = snap.get('userName');
+      if (typeof current !== 'string' || current === name) continue;
+      entries.push(snap.ref);
+    }
   }
 
   const profileRef = db.collection('users').doc(uid);

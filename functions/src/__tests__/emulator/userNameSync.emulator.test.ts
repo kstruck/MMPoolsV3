@@ -95,6 +95,17 @@ describe('P1 — propagateUserName', () => {
     expect(e.userName).toBe('Ron Johnson');
   });
 
+  it('reaches a pre-multi-entry entries/{uid} doc that has no ownerUid (codex r3)', async () => {
+    const legacy = db.collection('pools').doc(POOL_B).collection('entries').doc(UID);
+    await legacy.set({ poolId: POOL_B, userName: 'New User', picks: { g1: 'KC' }, totalScore: 1 });
+    const result = await propagateUserName(db, UID, 'Ron Johnson');
+    expect(result).toEqual({ members: 2, entries: 4, superseded: false });
+    const e = (await legacy.get()).data()!;
+    expect(e.userName).toBe('Ron Johnson');
+    expect(e.totalScore).toBe(1);
+    expect('ownerUid' in e).toBe(false);
+  });
+
   it('does not invent a userName on an entry that never carried one', async () => {
     await propagateUserName(db, UID, 'Ron Johnson');
     const e = (await db.collection('pools').doc(POOL_B).collection('entries').doc(`${POOL_B}_${UID}_bracket`).get()).data()!;
