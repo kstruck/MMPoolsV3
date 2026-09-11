@@ -1,5 +1,53 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-09-11 — **NFL PICK REMINDERS: ROSTER-BASED TARGETS + T-24h TIER (branch `claude/pre-lock-reminder-email-df6b07`). NOT MERGED, NOT DEPLOYED — the live job is still the entries-only one.**
+>
+> - **Why (measured, not inferred).** 2026 regular-season Week 1 (first kickoff
+>   Wed 2026-09-09 8:20 PM ET, lock 8:15 PM) produced **zero** `NFL_NONPICK_*`
+>   notification docs and zero reminder mail for all four live NFL pools
+>   (`ubHD4bgszL05oURYubrn` Donkeys 2026, 22 entries; `EJSGHCqc8Q8uv8godJKF`;
+>   `QwnpqM95ovc3nZuNhVjC`; `RXCaFRqa1buTau8uYoda` CANCELED). `runReminders`
+>   ran clean every 15 min through both windows — 28 passes Sep 8 12:04–18:49Z
+>   (T-36h band), 16 passes Sep 9 20:04Z–00:49Z (T-4h band), each logging
+>   `Found 8 pools`, no errors (Cloud Functions logs via `functions:log`). The
+>   50 `NFL_NONPICK_*` docs that exist are all preseason. Cause: an NFL entry
+>   document is created by the member's FIRST `submitNFLPicks`; `joinNFLPool`
+>   writes participantIds + Member Record, no entry. `checkNFLNonPickerReminders`
+>   iterated `entries` only, so "joined, never picked" — the person the reminder
+>   is for — did not exist to it. Donkeys had 5 members (`rev=1`, joined Sep
+>   2–4, first submit Sep 8–9) who were due a T-36h email and 2 (`TEMdI1xd`,
+>   `ZR5yc8a6`) due a T-4h email under the OLD tiers; survivor pool
+>   participantIds 10 vs entries 8 shows the same gap. `sendManualReminder` was
+>   fixed for this in #338 (`lib/reminderTargets.ts`); the automated job never was.
+> - **What ships:** `functions/src/lib/nflNonPickers.ts` (pure `nflReminderTier`
+>   24H/4H windows + `nflNonPickerUids` roster rule reusing
+>   `resolveReminderTargets`; MANAGER-with-no-entry skipped as hosting-only);
+>   `checkNFLNonPickerReminders` reads `members` + `entries`; T-36h tier
+>   REPLACED by T-24h (18–24h before the week's first game locks) per Kevin's
+>   "1 day before"; email says "Week N's first game locks" on per-game pools.
+>   Tests: `nflNonPickers.test.ts`, `reminderNonPickerRoster.test.ts`
+>   (in-memory Firestore double, asserts notification + mail docs).
+> - **Deploy once merged (CLAUDE.md §3):** `git pull` → `npm --prefix functions ci`
+>   → `npx firebase deploy --only functions:runReminders`. Nothing to arm — the
+>   job is live and has no kill switch. First real proof: Week 2 first kickoff
+>   Thu 2026-09-17 8:15 PM ET → T-24h window opens **Wed 2026-09-16 8:15 PM ET**;
+>   expect `notifications/NFL_NONPICK_24H:{poolId}:{uid}:2` docs for every
+>   roster member without complete Week 2 picks.
+> - **Correction to the 2026-09-08 box below:** "zero uploads after 2026-09-01"
+>   is stale. The Cloud Functions audit log shows `UpdateFunction` on
+>   `runReminders` by kstruck@gmail.com via FirebaseCLI/15.29.0 at
+>   **2026-09-09T14:24:37Z** (revision `runreminders-00186-miw`, hash
+>   `cd5231b1…`), i.e. a functions deploy happened Wed Sep 9 10:24 AM ET. What
+>   that deploy contained is NOT measured here (origin/main at that moment was
+>   `3fda50d7`, #677); re-check #654's deploy state with the timestamp method
+>   before relying on either claim.
+> - Tooling notes from this session: the census service account
+>   (`C:\keys\mmp-census.json`) can read Firestore but NOT Cloud Logging
+>   (`Permission denied for all log views`); `npx firebase functions:log
+>   --lines N` returns a different, arbitrary time window per N (400 → last
+>   4h, 600 → Sep 9–10, 1000 → Sep 8–9, 1500 → Sep 7–9), so loop over several
+>   N and union the files to cover a range; there is no `--since` flag.
+
 > ## 🟡 2026-09-10 — **"NEW USER" IN STANDINGS: ROOT CAUSE CLOSED, PROFILE NAME NOW PROPAGATES TO EVERY POOL. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY OWED (FUNCTIONS + FIRESTORE INDEXES).**
 >
 > Kevin found members named **"New User"** on an NFL Pick'em standings page and
