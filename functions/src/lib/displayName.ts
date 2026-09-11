@@ -92,12 +92,36 @@ export interface PropagateResult {
  */
 export async function stampSearchName(db: Firestore, uid: string, name: string): Promise<boolean> {
   const ref = db.collection('users').doc(uid);
-  const snap = await ref.get();
-  if (!snap.exists) return false;
-  const want = name.toLowerCase();
-  if (snap.get('searchName') === want) return false;
-  await ref.update({ searchName: want });
-  return true;
+  // Transactional, and conditioned on the profile STILL carrying `name`: two
+  // quick edits fire two events that may run out of order, and the older one
+  // must not put the older name back into the index (codex r1 P2).
+  return db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    if (!snap.exists) return false;
+    if (!profileNameIs(snap.get('name'), name)) return false;
+    const want = name.toLowerCase();
+    if (snap.get('searchName') === want) return false;
+    t.update(ref, { searchName: want });
+    return true;
+  });
+}
+
+/** True when a stored profile `name` (trimmed) equals `name`. */
+export function profileNameIs(stored: unknown, name: string): boolean {
+  return typeof stored === 'string' && stored.trim() === name;
+}
+
+/**
+ * The supersession check for the trigger (codex r1 P2): before pushing an
+ * event's name into every pool, confirm the profile still says so. When two
+ * edits land close together their events can run out of order or concurrently;
+ * the event whose value the profile no longer holds must stand down and let
+ * the newer one apply. A window remains between this read and the batch
+ * commits — narrow, and closed on the next name write either way.
+ */
+export async function isCurrentProfileName(db: Firestore, uid: string, name: string): Promise<boolean> {
+  const snap = await db.collection('users').doc(uid).get();
+  return snap.exists && profileNameIs(snap.get('name'), name);
 }
 
 const BATCH_LIMIT = 400;

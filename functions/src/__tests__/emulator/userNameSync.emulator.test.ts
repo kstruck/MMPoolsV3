@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import './setup';
-import { propagateUserName, resolveSubjectName, stampSearchName } from '../../lib/displayName';
+import { isCurrentProfileName, propagateUserName, resolveSubjectName, stampSearchName } from '../../lib/displayName';
 import { createParticipantProfileIfMissing } from '../../participant';
 
 /**
@@ -149,6 +149,20 @@ describe('P4 — stampSearchName keeps the admin name index on the new name', ()
     await db.collection('users').doc(UID).set({ name: 'Ron Johnson', searchName: 'ron johnson' });
     expect(await stampSearchName(db, UID, 'Ron Johnson')).toBe(false);
     expect(await stampSearchName(db, 'dn_nobody', 'Nobody')).toBe(false);
+  });
+  it('refuses a superseded name — the profile has moved on since this event', async () => {
+    await db.collection('users').doc(UID).set({ name: 'Ron Johnson', searchName: 'new user' });
+    expect(await stampSearchName(db, UID, 'Ron Johnso')).toBe(false);
+    expect((await db.collection('users').doc(UID).get()).data()!.searchName).toBe('new user');
+  });
+});
+
+describe('P5 — isCurrentProfileName is the supersession check the trigger runs first', () => {
+  it('true only while the profile still carries the event name (trimmed)', async () => {
+    await db.collection('users').doc(UID).set({ name: ' Ron Johnson ' });
+    expect(await isCurrentProfileName(db, UID, 'Ron Johnson')).toBe(true);
+    expect(await isCurrentProfileName(db, UID, 'Ron Johnso')).toBe(false);
+    expect(await isCurrentProfileName(db, 'dn_nobody', 'Nobody')).toBe(false);
   });
 });
 
