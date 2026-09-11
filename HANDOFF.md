@@ -32,6 +32,18 @@
 >    `maxInstancesInvariants.test.ts` now asserts participant.ts has NO v1
 >    import instead of expecting a cap there.
 >
+> 4. From the qodo cycle on the PR (rounds 2–3): `purchasePropCard` now
+>    stamps the PROFILE name on a signed-in buyer's card
+>    (`resolvePropCardIdentity`, profile-first via `resolveSubjectName`;
+>    guests unchanged); `onUserCreated` runs with `failurePolicy: true` and
+>    RETHROWS, so a transient failure in the now-sole profile creator is
+>    retried by the platform (the create-if-absent transaction makes a retry
+>    safe, and its exists-path FILLS missing index fields only — a replayed
+>    event never puts the sign-up email back over an admin edit); the server
+>    creator writes `createdAt: Date.now()` (numeric, per the client contract
+>    — a Firestore Timestamp there rendered as an invalid date on the Members
+>    tab).
+>
 > **Deploy notes — READ BEFORE `firebase deploy`.** Step zero, always
 > (CLAUDE.md §3): `git -C D:\march-melee-pools pull --ff-only origin main`,
 > then `npm --prefix functions ci`. Then, functions BEFORE rules:
