@@ -14,7 +14,13 @@ import {
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
-import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
+import {
+    effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreezeForPoolDoc,
+    effectiveWeekLockAt,
+} from "./lib/effectiveLock";
+import { nflReminderTier, nflNonPickerUids } from "./lib/nflNonPickers";
+import { usesWeeklyLock, gameHasStarted } from "./shared/nflLockMode";
+import type { MemberRecord } from "./shared/memberRecord";
 
 
 
@@ -132,7 +138,7 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 // --- SCHEDULED REMINDER LOGIC ---
 
 // Cadence: every 15 minutes. The reminder tiers are hour-granularity windows
-// (T-36h..T-30h and T-4h..T-0h), so 5-minute polling bought no earlier delivery
+// (T-24h..T-18h and T-4h..T-0h — lib/nflNonPickers.ts), so 5-minute polling bought no earlier delivery
 // — it just ran the whole-collection pool scan 3x as often. Kevin's call,
 // 2026-07-23, after #262 memoized the per-pool NFL week lookup. A 15-minute
 // cadence still lands every reminder inside its multi-hour window; see
@@ -903,9 +909,15 @@ async function loadWeekContext(
 
 /**
  * Targeted reminders for members who haven't completed their picks for the
- * upcoming NFL week. Two tiers: T-36h (30h-36h before the week lock) and
- * T-4h (0-4h before). Unlike the generic lock reminders, this only emails
- * the members who still have picks outstanding.
+ * upcoming NFL week. Two tiers: T-24h (18h-24h before the week's first game
+ * locks) and T-4h (0-4h before) — `nflReminderTier`. Unlike the generic lock
+ * reminders, this only emails the members who still have picks outstanding.
+ *
+ * WHO COUNTS AS A NON-PICKER is decided from the ROSTER (Member Records ∪
+ * entries), not from the entries collection alone — `nflNonPickerUids` says
+ * why. A member who joined and never submitted has no entry document, and
+ * until 2026-09-10 that made them invisible to this reminder; Week 1 of the
+ * 2026 season went out with zero reminders to four live pools because of it.
  *
  * Default ON: pools without a reminders config still get these; commissioners
  * opt out via pool.reminders.lock.enabled === false.
@@ -959,14 +971,34 @@ export async function checkNFLNonPickerReminders(
         // does — otherwise a "last call" email could quote a deadline LATER than the
         // one the server enforces, telling members to pick after picks had closed.
         const settings = effectiveLockSettings(
-          pool.settings as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> } | undefined,
+          pool.settings as Parameters<typeof effectiveLockSettings>[0],
           (pool as unknown as { type?: string }).type,
-        ) as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> };
-        const lockBufferMs = (settings.lockBufferMinutes ?? 5) * 60 * 1000;
-        const weekLockOverride: number | undefined = settings.weekLockOverrides?.[week];
-        const computedLock = Math.min(...weekGames.map(g => g.startTime)) - lockBufferMs;
-        // Commissioner deadline extensions act as a floor on the computed lock
-        const rawLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedLock) : computedLock;
+        );
+        // The SAME helper the submit path enforces with: buffer, a commissioner
+        // extension as a floor, and — on a stamped confidence pool — the kickoff
+        // ceiling. Hand-rolling `max(override, kickoff - buffer)` here omitted the
+        // ceiling, so an extension past kickoff made the email quote a deadline
+        // the server would refuse (qodo on #689).
+        // Mirrors shared/nflLockMode `isWeekLockedFor`, mode by mode, so the email
+        // never quotes a deadline the server does not enforce:
+        //  - WEEKLY: the clock deadline is the week's earliest kickoff INCLUDING a
+        //    cancelled opener (`weekLockDecision` / `weekLockAtFor` take every game
+        //    — a Thursday cancellation does not reopen the sheet on Sunday; codex
+        //    r4), and a confidence week is closed once ANY game has STARTED even
+        //    while the feed still shows the earliest as SCHEDULED (qodo). A
+        //    CANCELLED game is not "started" (`gameHasStarted`).
+        //  - PER_GAME: the reminder is about the first PLAYABLE game — a cancelled
+        //    opener has nothing to pick and must not silence the week (codex r2) —
+        //    and only that game's own status can lock it early.
+        const playableGames = weekGames.filter(g => g.status !== 'CANCELLED');
+        if (playableGames.length === 0) return;
+        const weeklyLock = usesWeeklyLock(pool.type, pool.settings as Parameters<typeof usesWeeklyLock>[1]);
+        const clockGames = weeklyLock ? weekGames : playableGames;
+        const rawLock = effectiveWeekLockAt(clockGames.map(g => g.startTime), week, settings);
+        const firstPlayable = playableGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
+        const started = weeklyLock ? playableGames.some(gameHasStarted) : gameHasStarted(firstPlayable);
+        if (settings.kickoffCeiling && started) return;
+        if (now >= rawLock) return;
 
         // Hard-lock pools: fold in (and establish) the earliest-ever freeze. This
         // pass runs every 15 minutes and sees the week ~36h out, so it normally
@@ -979,33 +1011,45 @@ export async function checkNFLNonPickerReminders(
           ? resolveHardWeekLock(frozenHardLockFor(pool as { hardLockByWeek?: Record<string, unknown> }, week), rawLock)
           : rawLock;
 
-        // --- 3. Send windows: bail fast before touching entries ---
+        // --- 3. Send windows: bail fast before touching the roster ---
         const hoursUntilLock = (effectiveLock - now) / (1000 * 60 * 60);
-        let tier: '36H' | '4H' | null = null;
-        if (hoursUntilLock <= 36 && hoursUntilLock > 30) tier = '36H';
-        else if (hoursUntilLock <= 4 && hoursUntilLock > 0) tier = '4H';
+        const tier = nflReminderTier(hoursUntilLock);
         if (!tier) return;
 
-        // --- 4. Find non-pickers ---
-        const entriesSnap = await db.collection('pools').doc(pool.id).collection('entries').get();
-        if (entriesSnap.empty) return;
-
-        const weekGameIds = weekGames.map(g => g.id);
-        const nonPickerUids = new Set<string>();
-        for (const entryDoc of entriesSnap.docs) {
-            const entry = entryDoc.data() as NFLPickemEntry | SurvivorEntry | MarginEntry;
-            if (!entry.ownerUid) continue;
-
-            let hasPicked: boolean;
-            if (pool.type === 'NFL_PICKEM') {
-                const picks = (entry as NFLPickemEntry).picks || {};
-                hasPicked = weekGameIds.every(id => !!picks[id]);
-            } else {
-                if (pool.type === 'NFL_SURVIVOR' && (entry as SurvivorEntry).status === 'ELIMINATED') continue;
-                hasPicked = !!(entry as SurvivorEntry | MarginEntry).picks?.[week];
-            }
-            if (!hasPicked) nonPickerUids.add(entry.ownerUid);
-        }
+        // --- 4. Find non-pickers — from the ROSTER, not the entries collection ---
+        // Same two reads and the same canonical-record filter as
+        // sendManualReminder (manualReminders.ts): an entry document only exists
+        // once a member has submitted, so "entries without picks" can never name
+        // the member who has never picked at all. `joinedAt` is restated so the
+        // discriminator `resolveReminderTargets` reads cannot be dropped by a
+        // projection (the #344 lesson).
+        const poolRef = db.collection('pools').doc(pool.id);
+        const [membersSnap, entriesSnap] = await Promise.all([
+            poolRef.collection('members').get(),
+            poolRef.collection('entries').get(),
+        ]);
+        // Completion is judged on the PLAYABLE slate: a member who has picked every
+        // game that can still be picked is not chased for a cancelled one (codex r3).
+        const weekGameIds = playableGames.map(g => g.id);
+        const nonPickerUids = nflNonPickerUids({
+            poolType: pool.type,
+            week,
+            weekGameIds,
+            members: membersSnap.docs.map(d => {
+                const m = d.data() as MemberRecord;
+                return { id: d.id, role: m.role, userName: m.userName, joinedAt: m.joinedAt };
+            }),
+            entries: entriesSnap.docs.map(d => {
+                const e = d.data() as NFLPickemEntry | SurvivorEntry | MarginEntry;
+                return {
+                    id: d.id,
+                    ownerUid: e.ownerUid,
+                    userName: e.userName,
+                    picks: (e.picks ?? null) as Record<string, unknown> | null,
+                    status: (e as SurvivorEntry).status,
+                };
+            }),
+        });
         if (nonPickerUids.size === 0) return;
 
         const lockDateStr = new Date(effectiveLock).toLocaleString('en-US', {
@@ -1014,11 +1058,22 @@ export async function checkNFLNonPickerReminders(
         }) + ' ET';
         const hoursLeft = Math.max(1, Math.round(hoursUntilLock));
         const picksWord = pool.type === 'NFL_PICKEM' ? 'picks' : 'pick';
+        // A per-game pool (PLAN-CONFIDENCE-PER-GAME-LOCK / straight Pick'em) locks
+        // one game at a time, starting with this kickoff; a weekly pool locks the
+        // whole sheet then. Say which, so the email never promises a later
+        // deadline than the server enforces.
+        const lockLabel = weeklyLock ? `Week ${week} locks:` : `Week ${week}'s first game locks:`;
+        const lockNote = weeklyLock
+            ? `Don't get caught with an empty slate — lock in your ${picksWord} now.`
+            : `Every game locks at its own kickoff, so get your ${picksWord} in before the first one.`;
 
-        const subject = tier === '36H'
-            ? `You haven't picked yet — Week ${week} locks in ~${hoursLeft} hours`
-            : `Last call: Week ${week} locks soon — ${pool.name}`;
-        const title = tier === '36H' ? `Week ${week} Pick Reminder` : `Last Call: Week ${week}`;
+        // Subject and body must agree on WHAT locks (qodo on #689): a per-game
+        // member told "the week locks" would believe later games close too.
+        const whatLocks = weeklyLock ? `Week ${week}` : `Week ${week}'s first game`;
+        const subject = tier === '24H'
+            ? `You haven't picked yet — ${whatLocks} locks in ~${hoursLeft} hours`
+            : `Last call: ${whatLocks} locks soon — ${pool.name}`;
+        const title = tier === '24H' ? `Week ${week} Pick Reminder` : `Last Call: Week ${week}`;
 
         let sentCount = 0;
         for (const uid of nonPickerUids) {
@@ -1040,8 +1095,8 @@ export async function checkNFLNonPickerReminders(
 
             const body = `
                 <p>You haven't made your Week ${week} ${picksWord} in <strong>${escapeHtml(pool.name)}</strong> yet.</p>
-                <p><strong>Week ${week} locks:</strong> ${lockDateStr}</p>
-                <p>Don't get caught with an empty slate — lock in your ${picksWord} now.</p>
+                <p><strong>${lockLabel}</strong> ${lockDateStr}</p>
+                <p>${lockNote}</p>
             `;
             const html = renderEmailHtml(title, body, `${BASE_URL}/pool/${pool.id}`, 'Make Your Picks');
             await sendEmail(db, email, subject, html, { poolId: pool.id, category: 'reminders' }, tally);

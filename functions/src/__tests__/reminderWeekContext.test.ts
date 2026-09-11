@@ -67,7 +67,7 @@ function makeDb(games: Game[], counts: Counts) {
 const NOW = 1_700_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
 
-/** Kickoffs far enough out that no reminder tier fires (T-36h / T-4h). */
+/** Kickoffs far enough out that no reminder tier fires (T-24h / T-4h). */
 const GAMES: Game[] = [
     { id: 'g5a', season: '2026', seasonType: 2, week: 5, startTime: NOW + 30 * DAY },
     { id: 'g5b', season: '2026', seasonType: 2, week: 5, startTime: NOW + 31 * DAY },

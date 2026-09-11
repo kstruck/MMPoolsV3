@@ -39,7 +39,7 @@ Every fact below was verified against the repo at `D:\march-melee-pools` on 2026
 | Job | Schedule | What it does for NFL | Evidence |
 |---|---|---|---|
 | `syncNFLScoresJob` | `*/5 * * * *` (no timezone — fine, interval cron) | Refreshes `nfl_games` scores/status from ESPN for weeks with games starting ≤2h from now or non-FINAL/recently-final; detects flex-schedule moves (audits `SCHEDULE_FLEX`); **preserves locked spreads** on merge | nflSchedule.ts:221-293; exported index.ts:39 |
-| `runReminders` | every 15 minutes (was 5 min until #265, 2026-07-23) | NFL non-picker emails, two tiers: T-36h (30–36h before week lock) and T-4h (0–4h before); default ON, opt-out `pool.reminders.lock.enabled === false`; deduped via `notifications/NFL_NONPICK_{tier}:{poolId}:{uid}:{week}`. Tiers are multi-hour windows, so 15-min polling still delivers; BRACKET lock windows were widened to 24 min for the same reason (`bracketReminderTrigger`) | reminders.ts:132-144, 694-815; exported index.ts:16 |
+| `runReminders` | every 15 minutes (was 5 min until #265, 2026-07-23) | NFL non-picker emails, two tiers: **T-24h (18–24h before the week's FIRST game locks) and T-4h (0–4h before)** — `lib/nflNonPickers.ts` `nflReminderTier` (was T-36h until 2026-09-10; Kevin: "1 day before"). **Targets come from the ROSTER** (`members` ∪ `entries` via `resolveReminderTargets`, `nflNonPickerUids`) — an entry doc only exists after a member's first submit, and until 2026-09-10 the job read entries alone, so a member who joined and never picked was never reminded (2026 Week 1: 4 live pools, 0 reminders). Hosting-only commissioner (MANAGER record, no entry) is skipped. Default ON, opt-out `pool.reminders.lock.enabled === false`; deduped via `notifications/NFL_NONPICK_{tier}:{poolId}:{uid}:{week}`. Tiers are multi-hour windows, so 15-min polling still delivers; BRACKET lock windows were widened to 24 min for the same reason (`bracketReminderTrigger`) | reminders.ts (`checkNFLNonPickerReminders`), lib/nflNonPickers.ts; exported index.ts:16 |
 | `autoLockPools` | every 1 min | **Nothing for NFL** — only SQUARES + BRACKET pools (autoLock.ts:49-60). NFL locks are computed per-submit, never stored |
 | `autoClosePools` | daily 08:00 UTC, LIVE past dry-run as of 2026-07-06 | **Nothing for NFL** — candidates are `isFinal==true` or `scores.gameStatus=='post'` (autoClosePools.ts:51-52); NFL season pools never set either field. Season-end closure is manual `closePool` |
 
@@ -157,8 +157,8 @@ EXPECTED, concretely:
 - Then test rebuy: as the eliminated survivor member, execute the rebuy. EXPECTED strikesUsed back to 0, rebuysUsed 1, status ALIVE, `REBUY_DUE` ledger event.
 IF any number differs → STOP, this is an engine bug found for $0; write it up and fix via change control before week 1. Cross-check pure-logic expectations with `npx vitest run tests/nfl-scoring.test.ts` (10 tests) and `tests/nfl-integration.test.ts` (4 tests).
 
-**0.7 Reminder rehearsal**: 30–36h before preseason week 2's first kickoff, entries without week-2 picks should receive the T-36h email.
-EXPECTED: `notifications/NFL_NONPICK_36H:{poolId}:{uid}:2` docs + `mail` collection docs (Trigger Email extension; `delivery.state` semantics UNVERIFIED — check an actual doc). IF nothing → confirm pool isn't `status:'archived'` and `reminders.lock.enabled` isn't `false` (reminders.ts:698-700).
+**0.7 Reminder rehearsal**: 18–24h before preseason week 2's first kickoff, every roster member (Member Record OR entry) without complete week-2 picks should receive the T-24h email — including a member who joined and has never submitted (no entry doc).
+EXPECTED: `notifications/NFL_NONPICK_24H:{poolId}:{uid}:2` docs + `mail` collection docs (Trigger Email extension; `delivery.state` semantics UNVERIFIED — check an actual doc). IF nothing → confirm pool isn't `status:'archived'` and `reminders.lock.enabled` isn't `false` (`checkNFLNonPickerReminders`, reminders.ts). Pre-2026-09-10 rehearsals wrote `NFL_NONPICK_36H` keys and only reached members with an entry doc — do not read those as proof the roster path works.
 
 **PHASE 0 EXIT GATE**: all of 0.1–0.7 green, evidenced (screenshots/doc IDs in a dated note). Only then proceed to season automation decisions.
 
@@ -192,7 +192,7 @@ Live data will hit paths preseason couldn't. Standing checks for the first 3 reg
 
 Automated: the two-tier non-picker reminders ride the existing `runReminders` (already deployed, §1.1) — nothing to deploy. Manual: `sendManualReminder` nudges from the manager view. Post-game recap emails for NFL season pools: NOT built (recap docs are written by scoreNFLWeek; `onWeeklyRecapCreated` (aiCommissioner.ts) reacts to recap docs — whether it emails or only writes AI blurbs is UNVERIFIED; read `functions/src/aiCommissioner.ts:365+` before promising recap emails to anyone).
 
-GATE per week: reminder email count > 0 whenever non-pickers existed at T-36h; unsubscribe link works (`emailUnsubscribe` HTTP endpoint is deployed). Members who opted out of `reminders` category receive nothing.
+GATE per week: reminder email count > 0 whenever non-pickers existed at T-24h — count ROSTER members without complete picks, not entries without picks (the entries-only count was 0 for 2026 Week 1 while five Donkeys members had joined days earlier and not picked); unsubscribe link works (`emailUnsubscribe` HTTP endpoint is deployed). Members who opted out of `reminders` category receive nothing.
 
 ### Phase 5 — Season-start checklist (run the week before 2026 regular-season week 1)
 
