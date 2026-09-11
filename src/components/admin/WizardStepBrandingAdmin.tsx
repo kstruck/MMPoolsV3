@@ -4,6 +4,7 @@ import type { GameState, PoolTheme } from '../../types';
 // PLAN-HELP-SYSTEM T5. Direct, not through the `ui` barrel — the barrel does
 // not export it (see `ui/Field.tsx`, which imports it the same way).
 import { HelpTip } from '../ui/HelpTip';
+import { resolveLogoUrl } from '../../utils/logoUrl';
 
 interface WizardStepBrandingAdminProps {
     gameState: GameState;
@@ -101,7 +102,7 @@ export const WizardStepBrandingAdmin: React.FC<WizardStepBrandingAdminProps> = (
                             {gameState.branding?.logoUrl ? (
                                 <div className="relative group">
                                     <div className="w-32 h-32 bg-page rounded-lg flex items-center justify-center border border-line p-2">
-                                        <img src={gameState.branding.logoUrl} className="max-w-full max-h-full object-contain" alt="Pool Logo" />
+                                        <img src={resolveLogoUrl(gameState.branding.logoUrl)} className="max-w-full max-h-full object-contain" alt="Pool Logo" />
                                     </div>
                                     <button
                                         onClick={() => updateConfig({ branding: { ...gameState.branding, logoUrl: undefined } })}
@@ -165,7 +166,7 @@ export const WizardStepBrandingAdmin: React.FC<WizardStepBrandingAdminProps> = (
                                 style={{ backgroundColor: gameState.branding?.backgroundColor || '#0f172a' }}
                             >
                                 {gameState.branding?.logoUrl && (
-                                    <img src={gameState.branding.logoUrl} className="h-12 w-12 object-contain drop-shadow-lg" alt="Logo Preview" />
+                                    <img src={resolveLogoUrl(gameState.branding.logoUrl)} className="h-12 w-12 object-contain drop-shadow-lg" alt="Logo Preview" />
                                 )}
                                 <div className="absolute bottom-2 left-0 w-full text-center">
                                     <span className="text-[10px] text-white/50 font-bold uppercase tracking-widest">Your Pool</span>

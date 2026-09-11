@@ -41,6 +41,7 @@ import { PaymentLedger } from './PaymentLedger';
 import { ExportControls } from './ExportControls';
 import { useToast } from '../ui/Toast';
 import { YouPill } from '../ui';
+import { resolveLogoUrl } from '../../utils/logoUrl';
 
 type DashboardTab = 'dashboard' | 'standings' | 'entries' | 'brackets' | 'reports' | 'rules' | 'manager' | 'ledger';
 type BracketSubTab = 'poolwide' | 'history' | 'rootfor' | 'whatif' | 'compare' | 'chalk' | 'analytics' | 'insights';
@@ -1812,7 +1813,7 @@ export const BracketPoolDashboard: React.FC<BracketPoolDashboardProps> = ({ pool
                                                 {editBranding.logoUrl && (
                                                     <div className="mt-2">
                                                         <p className="text-xs text-faint mb-1">Preview</p>
-                                                        <img src={editBranding.logoUrl} alt="Pool logo" className="h-12 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
+                                                        <img src={resolveLogoUrl(editBranding.logoUrl)} alt="Pool logo" className="h-12 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
                                                     </div>
                                                 )}
                                             </div>
