@@ -1,6 +1,11 @@
 # HANDOFF — Session entry point
 
-> ## 🟡 2026-09-11 — **NFL PICK REMINDERS: ROSTER-BASED TARGETS + T-24h TIER (branch `claude/pre-lock-reminder-email-df6b07`). NOT MERGED, NOT DEPLOYED — the live job is still the entries-only one.**
+> ## 🟡 2026-09-11 — **NFL PICK REMINDERS: ROSTER-BASED TARGETS + T-24h TIER — PR [#689](https://github.com/kstruck/MMPoolsV3/pull/689) OPEN. NOT MERGED, NOT DEPLOYED — the live job is still the entries-only one.**
+>
+> - Review: 5 codex rounds (r2–r4 each found a cancelled-game / lock-mode
+>   divergence from the server's `weekLockDecision`, fixed in turn; r5 clean),
+>   qodo reported + re-reviewed twice — 11 items, 4 fixed, 2 deferred, 5
+>   rejected with reasoning on the PR. Merge needs `--admin` (sole author).
 >
 > - **Why (measured, not inferred).** 2026 regular-season Week 1 (first kickoff
 >   Wed 2026-09-09 8:20 PM ET, lock 8:15 PM) produced **zero** `NFL_NONPICK_*`
