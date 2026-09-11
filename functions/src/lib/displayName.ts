@@ -31,7 +31,7 @@
  * the token, and a real profile name is never overwritten by one.
  */
 import type { Firestore } from 'firebase-admin/firestore';
-import { isPlaceholderName, pickPreferredName } from '../shared/displayName';
+import { pickPreferredName } from '../shared/displayName';
 
 export { isPlaceholderName, PLACEHOLDER_DISPLAY_NAMES } from '../shared/displayName';
 
