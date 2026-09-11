@@ -1,5 +1,8 @@
 import type { Pool, GameState, BracketPool } from '../types';
-import { getPoolLifecycleState } from './poolSport';
+import { getPoolLifecycleState, isCanceledPool } from './poolSport';
+import { now } from './serverClock';
+
+export { isCanceledPool };
 
 /**
  * Pure helpers for the My Roster Hub page (ParticipantDashboard): which tab a
@@ -18,16 +21,6 @@ import { getPoolLifecycleState } from './poolSport';
 export type RosterTabStatus = 'open' | 'live' | 'completed';
 
 /**
- * `cancelPool` writes `CANCELED`; compared case-insensitively like poolSport's
- * terminal set. Takes `object` because `PlayoffPool` declares no `status` field,
- * so the `Pool` union does not satisfy a `{ status?: unknown }` weak type.
- */
-export function isCanceledPool(pool: object): boolean {
-    const status = (pool as { status?: unknown }).status;
-    return typeof status === 'string' && status.toUpperCase() === 'CANCELED';
-}
-
-/**
  * Which of the Open / Live / Completed tabs a pool belongs to.
  *
  * Anything the shared lifecycle reader calls settled — canceled, completed,
@@ -38,18 +31,27 @@ export function isCanceledPool(pool: object): boolean {
 export function getPoolTabStatus(pool: Pool): RosterTabStatus {
     const lifecycle = getPoolLifecycleState(pool);
     if (lifecycle === 'final' || lifecycle === 'closed') return 'completed';
-
-    if (pool.type === 'BRACKET') {
-        const bPool = pool as BracketPool;
-        const isLive = bPool.status === 'LOCKED' || (bPool.lockAt > 0 && Date.now() >= bPool.lockAt);
-        return isLive ? 'live' : 'open';
-    }
     // Kept from the component: a non-bracket pool whose game is over is
     // Completed even when it carries no `type` (legacy Squares docs), which
     // `getPoolLifecycleState` only checks under `type === 'SQUARES'` (codex r1).
-    const squares = pool as GameState;
-    if (squares.scores?.gameStatus === 'post') return 'completed';
-    return squares.isLocked ? 'live' : 'open';
+    // Checked BEFORE the live/locked mapping below: such a doc is usually still
+    // `isLocked`, which the reader reports as `locked`.
+    if (pool.type !== 'BRACKET' && (pool as GameState).scores?.gameStatus === 'post') return 'completed';
+    // The reader's `live` (status LIVE, or a squares game in progress) and
+    // `locked` (status LOCKED any case, or `isLocked`) are both "Live Now" on
+    // the roster — the roster has no separate locked tab. Consuming them here
+    // instead of re-reading `status`/`isLocked` keeps the case-insensitive rule
+    // in one place (qodo #5 on PR #688).
+    if (lifecycle === 'live' || lifecycle === 'locked') return 'live';
+
+    if (pool.type === 'BRACKET') {
+        // A bracket whose lock time has passed is live even before the lock
+        // job flips its status. Server-corrected clock, not the device's, so a
+        // skewed phone does not move the pool between tabs (qodo #1 on PR #688).
+        const bPool = pool as BracketPool;
+        return bPool.lockAt > 0 && now() >= bPool.lockAt ? 'live' : 'open';
+    }
+    return 'open';
 }
 
 /**

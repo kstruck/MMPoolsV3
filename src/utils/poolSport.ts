@@ -277,6 +277,23 @@ export interface LifecycleReadable {
 const TERMINAL_POOL_STATUSES = new Set(['FINAL', 'CANCELED', 'COMPLETED', 'ARCHIVED']);
 
 /**
+ * Was this pool canceled by its commissioner? `cancelPool`
+ * (functions/src/poolExceptions.ts) writes `status: 'CANCELED'` and nothing
+ * else, so the status string is the only signal; compared case-insensitively
+ * like the terminal set above. Lives here, beside that set, so the string is
+ * spelled in one file. It is a refinement WITHIN `final` — the lifecycle union
+ * deliberately collapses every settled state to `final`/`closed` and its
+ * consumers switch on that — so the roster asks this question separately for
+ * its badge and its My Entries membership rule (qodo #6 on PR #688).
+ * Takes `object` because `PlayoffPool` declares no `status` field, so the
+ * `Pool` union does not satisfy a `{ status?: unknown }` weak type.
+ */
+export function isCanceledPool(pool: object): boolean {
+  const status = (pool as { status?: unknown }).status;
+  return typeof status === 'string' && status.toUpperCase() === 'CANCELED';
+}
+
+/**
  * Has this pool been settled by ANY writer? Named so the terminal rule reads as
  * one thing rather than a chain of ORs (qodo on #682).
  *

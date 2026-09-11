@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { Pool } from '../types';
+
+// The roster's bracket rule compares `lockAt` against the server-corrected clock
+// (qodo #1 on PR #688). Pinning it keeps the assertions off the test machine's
+// wall clock and keeps Firebase out of the import graph, as nflPending.test does.
+const CLOCK = 1_700_000_000_000;
+vi.mock('./serverClock', () => ({ now: () => CLOCK }));
+
 import { getPoolTabStatus, isCanceledPool, isMyEntryPool } from './rosterHub';
 
 const ME = 'uid-me';
@@ -56,8 +63,8 @@ describe('rosterHub — the live/open/completed rules the component had are unch
     it('BRACKET: COMPLETED → completed, LOCKED or past lockAt → live, else open', () => {
         expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'COMPLETED', lockAt: 0 }))).toBe('completed');
         expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'LOCKED', lockAt: 0 }))).toBe('live');
-        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: Date.now() - 1000 }))).toBe('live');
-        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: Date.now() + 60_000 }))).toBe('open');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK - 1000 }))).toBe('live');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK + 60_000 }))).toBe('open');
     });
 
     it('an admin-closed pool (closedVia ADMIN_CLOSE) is Completed', () => {
@@ -71,9 +78,19 @@ describe('rosterHub — the live/open/completed rules the component had are unch
     });
 });
 
-describe('rosterHub — codex r1 absorptions', () => {
-    it('a legacy squares doc with no `type` and a finished game is still Completed', () => {
+describe('rosterHub — review absorptions on PR #688', () => {
+    it('codex r1: a legacy squares doc with no `type` and a finished game is still Completed', () => {
         expect(getPoolTabStatus(pool({ type: undefined, scores: { gameStatus: 'post' }, isLocked: true }))).toBe('completed');
         expect(getPoolTabStatus(pool({ type: undefined, scores: { gameStatus: 'in' }, isLocked: true }))).toBe('live');
+    });
+
+    it('qodo #5: a stored LIVE status, and a lowercase locked bracket, are Live — the lifecycle reader decides, not raw fields', () => {
+        expect(getPoolTabStatus(pool({ type: 'NFL_PLAYOFFS', status: 'LIVE' }))).toBe('live');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'locked', lockAt: CLOCK + 60_000 }))).toBe('live');
+    });
+
+    it('qodo #1: the bracket lockAt rule reads the server-corrected clock, so the exact boundary is live', () => {
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK }))).toBe('live');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: CLOCK + 1 }))).toBe('open');
     });
 });

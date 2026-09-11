@@ -128,9 +128,9 @@ describe('ParticipantDashboard charts — no fabricated data', () => {
         // The roster is known only when NO feed failed AND every feed answered.
         expect(source).toContain('const poolsKnown = !poolsFailed && poolsSettled;');
         // And winnings are known only when the roster is: `.every()` over
-        // myPools is vacuously true when a failed feed never delivered the
+        // enteredPools (the roster minus canceled pools, PR #688) is vacuously true when a failed feed never delivered the
         // user's Squares pool at all. (qodo re-review #6, High.)
-        expect(source).toContain('() => poolsKnown && myPools');
+        expect(source).toContain('() => poolsKnown && enteredPools');
         expect(source).toContain('earningsEmptyState(lifetimeStats.totalWinnings, winningsKnown)');
         expect(source).toContain('setPoolsFailed(true)');
         // Winner failures are keyed BY POOL, never one global boolean: stale

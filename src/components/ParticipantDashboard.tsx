@@ -159,9 +159,15 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return map;
     }, [myPools, seasonGames, myNflEntries]);
 
-    // "Pools Entered" and the loyalty tier share one count: every pool on the
-    // roster that was not canceled (see utils/rosterHub.ts for why canceled drops).
-    const enteredPoolCount = useMemo(() => myPools.filter(p => !isCanceledPool(p)).length, [myPools]);
+    // The roster minus canceled pools. EVERY "active entries" aggregate on this
+    // page reads this one collection — Pools Entered, the loyalty tier, lifetime
+    // squares/wins/winnings, the participation split and its centre total, the
+    // winnings-known gate, and the projected buy-in — so a canceled pool cannot
+    // be out of one number and in the next (qodo #2/#3/#4 on PR #688). The tab
+    // lists and "All Pools" keep `myPools`: a canceled pool is still shown there,
+    // under Completed, with its badge.
+    const enteredPools = useMemo(() => myPools.filter(p => !isCanceledPool(p)), [myPools]);
+    const enteredPoolCount = enteredPools.length;
 
     const userLoyaltyTier = useMemo(() => {
         const tiers = settings?.loyaltyTiers || [
@@ -356,12 +362,11 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         // handling sits behind unit tests instead of in this render path.
         const paidWins: PaidWin[] = [];
 
-        myPools.forEach(pool => {
-            // A canceled pool keeps its squares / entries / winner rows in the doc
-            // (cancelPool writes status only), and none of them are lifetime
-            // squares, wins, or winnings — the same rule as `enteredPoolCount`,
-            // or "0 Pools Entered" could sit beside non-zero wins (codex r1).
-            if (isCanceledPool(pool)) return;
+        // A canceled pool keeps its squares / entries / winner rows in the doc
+        // (cancelPool writes status only), and none of them are lifetime
+        // squares, wins, or winnings — hence `enteredPools`, not `myPools`, or
+        // "0 Pools Entered" could sit beside non-zero wins (codex r1).
+        enteredPools.forEach(pool => {
             if (pool.type === 'SQUARES') {
                 const sPool = pool as GameState;
                 const userSquares = sPool.squares.filter(s => s.reservedByUid === user.id);
@@ -398,12 +403,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             totalWinnings,
             paidWins
         };
-    }, [myPools, poolWinners, user.id, bracketEntryCounts, enteredPoolCount]);
+    }, [enteredPools, poolWinners, user.id, bracketEntryCounts, enteredPoolCount]);
 
     // Data aggregation for Participation Split (Recharts PieChart).
     // Empty when the user has no pools — the chart is replaced with guidance
     // rather than the placeholder slices this used to fabricate.
-    const poolTypeSplitData = useMemo(() => buildPoolTypeSplit(myPools), [myPools]);
+    const poolTypeSplitData = useMemo(() => buildPoolTypeSplit(enteredPools), [enteredPools]);
 
     // Earliest upcoming lock deadline (Countdown alerts)
     const earliestLock = useMemo<any>(() => {
@@ -448,10 +453,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     // user's Squares pool at all, so without `poolsKnown` a broken roster read
     // would still assert "No winnings yet". (qodo re-review #6, High.)
     const winningsKnown = useMemo(
-        () => poolsKnown && myPools
+        // Over `enteredPools`: a canceled Squares pool contributes nothing to the
+        // winnings total, so its winner feed failing must not blank the chart.
+        () => poolsKnown && enteredPools
             .filter(p => p.type === 'SQUARES')
             .every(p => poolWinners[p.id] !== undefined && !winnerErrors[p.id]),
-        [poolsKnown, myPools, poolWinners, winnerErrors]
+        [poolsKnown, enteredPools, poolWinners, winnerErrors]
     );
 
     const earningsEmpty = useMemo(
@@ -465,7 +472,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const projectedPotEarnings = useMemo(() => {
         let pot = 0;
         let entriesPaid = 0;
-        myPools.forEach(p => {
+        enteredPools.forEach(p => {
             const fee = (p as any).settings?.entryFee || (p as any).costPerSquare || 20;
             pot += fee * (bracketEntryCounts[p.id] || 1);
             if (p.type === 'BRACKET') {
@@ -474,7 +481,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             }
         });
         return { cost: pot, paid: entriesPaid };
-    }, [myPools, bracketEntryCounts, user.id]);
+    }, [enteredPools, bracketEntryCounts, user.id]);
 
     // Derived State for Filtering
     const filteredPools = useMemo(() => {
@@ -773,7 +780,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                             </ResponsiveContainer>
 
                                             <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                                                <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{myPools.length}</span>
+                                                <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{enteredPools.length}</span>
                                                 <span className="text-[7px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Total Pools</span>
                                             </div>
                                         </div>
