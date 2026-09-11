@@ -17,6 +17,7 @@ import type { User } from "../types";
 import { emailService } from "./emailService";
 import { referralService } from "./referralService";
 import { logger } from '../utils/logger';
+import { pickPreferredName } from '@shared/displayName';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -83,7 +84,12 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       }
     }
 
-    await setDoc(userRef, newUserData);
+    // MERGE, never replace. Two Auth triggers (`onUserCreated`,
+    // `createParticipantProfile`) create this same document server-side the
+    // instant the account exists, and the `getDoc` above can miss them by
+    // milliseconds. A plain `setDoc` here then wiped their fields
+    // (searchName / searchEmail / lastLogin); a merge keeps both writers' work.
+    await setDoc(userRef, newUserData, { merge: true });
     localStorage.removeItem(REFERRAL_STORAGE_KEY); // Clear after use
 
     // NEW USER: If Google user (auto-verified), send welcome email immediately
@@ -107,8 +113,16 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
       welcomeSent = true;
     }
 
+    // 🛑 THE STORED PROFILE NAME WINS OVER THE AUTH `displayName` (2026-09-10).
+    // `user.name` here is Auth's `displayName` (or the email prefix). /profile
+    // and the super-admin Members tab write `users/{uid}.name` ONLY, so every
+    // sign-in used to put the OLD Auth name back — and `onUserNameChanged`
+    // would then push that revert into every pool. A real stored name is kept;
+    // Auth's name only fills a missing or placeholder one.
+    const name = pickPreferredName(existingData.name, user.name) || "Unknown";
+
     await setDoc(userRef, {
-      name: user.name || "Unknown",
+      name,
       picture: user.picture ?? null,
       emailVerified: user.emailVerified ?? false, // Sync Verification Status
       welcomeEmailSent: welcomeSent ?? false
@@ -116,7 +130,7 @@ const syncUserToFirestore = async (user: User): Promise<User> => {
 
     return {
       ...existingData,
-      name: user.name,
+      name,
       picture: user.picture,
       role: existingData.role || 'MEMBER',
       provider: existingData.provider || 'password',

@@ -21,23 +21,53 @@ interface ClaimCode {
     uses: number;
 }
 
-// 1. onUserCreated: Create participant profile
-// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
-export const onUserCreated = v1.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
-    const db = admin.firestore();
+/**
+ * Create the profile document ONLY if nothing has written it yet.
+ *
+ * 🛑 THIS USED TO BE AN UNCONDITIONAL `set()` WITH `name: displayName || "New User"`,
+ * AND IT IS WHERE EVERY "New User" ON A STANDINGS PAGE CAME FROM (2026-09-10).
+ * Three writers race on a fresh email+password signup: this Auth trigger,
+ * `userSync.onUserCreated` (same event), and the client's `syncUserToFirestore`.
+ * The Auth event fires the instant the account exists — BEFORE the client has
+ * called `updateProfile({ displayName })` — so `displayName` is empty here for
+ * every email signup, and whenever this trigger landed LAST it overwrote the
+ * typed name (and the client's referral fields) with the placeholder. The pool
+ * join then copied "New User" into the Member Record and every entry.
+ *
+ * Now: a transaction that creates when absent and does nothing when present.
+ * The name fallback matches userSync (email prefix before any placeholder), so
+ * the two triggers agree on what a doc they both might create looks like.
+ */
+export async function createParticipantProfileIfMissing(
+    db: admin.firestore.Firestore,
+    user: Pick<UserRecord, 'uid' | 'email' | 'displayName' | 'photoURL' | 'providerData'>,
+): Promise<'created' | 'exists'> {
     const { uid, email, displayName, photoURL } = user;
-
-    try {
-        await db.collection("users").doc(uid).set({
+    const ref = db.collection("users").doc(uid);
+    return db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        if (snap.exists) return 'exists';
+        t.set(ref, {
             id: uid,
             email: email || "",
-            name: displayName || "New User",
+            name: displayName || email?.split('@')[0] || "Unknown User",
             photoURL: photoURL || null,
             role: "MEMBER", // Default role (T6 canonical)
             createdAt: Date.now(),
-            provider: user.providerData[0]?.providerId || "unknown",
+            provider: user.providerData?.[0]?.providerId || "unknown",
         });
-        logger.info(`Created user profile for ${uid}`);
+        return 'created';
+    });
+}
+
+// 1. onUserCreated: Create participant profile
+// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
+export const onUserCreated = v1.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
+    const { uid } = user;
+
+    try {
+        const outcome = await createParticipantProfileIfMissing(admin.firestore(), user);
+        logger.info(outcome === 'created' ? `Created user profile for ${uid}` : `User profile for ${uid} already existed; left untouched`);
     } catch (error) {
         logger.error(`Error creating user profile for ${uid}`, error);
     }

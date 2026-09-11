@@ -65,6 +65,7 @@ import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
 import { resolveGameSpreads } from './lib/frozenSpreads';
+import { resolveSubjectName } from './lib/displayName';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
@@ -370,7 +371,9 @@ export async function joinNFLPoolInternal(
   }
 
   const pool = poolSnap.data() as any;
-  const joinerName = ctx.subjectName || (await userRef.get()).data()?.name || 'Member';
+  // Profile first, token second (lib/displayName.ts): the profile is what the
+  // person or an admin last set; the token is what Auth knew at sign-in.
+  const joinerName = (await resolveSubjectName(db, uid, ctx.subjectName)) || 'Member';
 
   await db.runTransaction(async (transaction) => {
     const poolDoc = await transaction.get(poolRef);
@@ -519,17 +522,15 @@ export async function submitNFLPicksInternal(
 
   assertNFLPickMembership(pool, uid, ctx.actorRole);
 
-  // Display name for the rows this submission writes. The ID token's `name` is
-  // minted at sign-in and registration sets `displayName` AFTER that (
-  // src/services/authService.ts), so anyone who registers → joins → picks in one
-  // sitting has no token name for the life of that token (~1h) and every row they
-  // touched read "Participant". Same fallback chain joinNFLPoolInternal already
-  // uses; `undefined` when neither source has a name, so the call sites can prefer
-  // a name already stored over overwriting it with the placeholder. Read outside
-  // the transaction — it is not part of any invariant the transaction defends.
-  const subjectName: string | undefined = ctx.subjectName
-    || (await db.collection('users').doc(uid).get()).data()?.name
-    || undefined;
+  // Display name for the rows this submission writes. PROFILE FIRST, token
+  // second (lib/displayName.ts). The token's `name` is minted at sign-in: it is
+  // empty for the life of the token (~1h) when someone registers → joins → picks
+  // in one sitting, and it is STALE after a profile edit — which is how a fixed
+  // name kept reverting on the next pick (2026-09-10). `undefined` when neither
+  // source has a name, so the call sites can prefer a name already stored over
+  // overwriting it with the placeholder. Read outside the transaction — it is
+  // not part of any invariant the transaction defends.
+  const subjectName: string | undefined = await resolveSubjectName(db, uid, ctx.subjectName);
 
   const type = pool.type;
   // MUTABLE, and refreshed at the top of every transaction attempt below. The
