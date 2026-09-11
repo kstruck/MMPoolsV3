@@ -245,9 +245,11 @@ describe('P7 — the NFL-playoff entries MAP follows the name (qodo #690 finding
     expect(await propagateUserName(db, UID, 'Ron Johnson')).toEqual({ members: 0, entries: 0, propCards: 0, playoffEntries: 0, superseded: false });
   });
 
-  it('does not resurrect an entry deleted after the query — and never invents one', async () => {
-    // Only the other person's entry is left by the time the write runs: the
-    // transaction re-reads the pool and finds nothing of ours to update.
+  it('an entry that is already gone is neither rewritten nor invented', async () => {
+    // Only the other person's entry is left. The in-transaction re-read that
+    // guards the query→commit window (a delete landing in between) cannot be
+    // raced deterministically here; this pins the outcome it must produce —
+    // no dotted-path write creating `entries.<id>: { userName }`.
     await ref.update({ entries: { [EO]: { id: EO, userId: OTHER, userName: 'Other Person', rankings: {}, tiebreaker: 0, totalScore: 0, submittedAt: 3 } } });
     const result = await propagateUserName(db, UID, 'Ron Johnson');
     expect(result.playoffEntries).toBe(0);
