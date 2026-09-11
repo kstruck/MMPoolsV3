@@ -2,6 +2,8 @@ import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { getUnsubSecret, verifyUnsubToken, emailHash, getPrefs, EMAIL_CATEGORIES, EmailCategory, EmailCategoryPrefs } from "./emailPrefs";
+import { escapeHtml } from "./emailStyles";
+import { setSecurityHeaders } from "./lib/httpHeaders";
 
 /**
  * Email preference center — the tokenized link in every email footer
@@ -19,15 +21,6 @@ const CATEGORY_LABELS: Record<EmailCategory, { title: string; desc: string }> = 
     results: { title: "Results", desc: "Winner announcements, recaps, and post-game summaries" },
     announcements: { title: "Announcements", desc: "Commissioner broadcasts, waitlist openings, and invites" },
 };
-
-function escapeHtml(s: string): string {
-    return s
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
 
 const page = (title: string, body: string) => `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${title}</title></head>
@@ -71,6 +64,8 @@ ${rows}
 }
 
 export const manageEmailPrefs = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, async (req, res) => {
+    // First, so every branch below (400/403/405/200, form and result) carries the same set.
+    setSecurityHeaders(res, "page");
     const db = admin.firestore();
 
     const source = req.method === "POST" ? (req.body ?? {}) : req.query;

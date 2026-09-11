@@ -2,6 +2,8 @@ import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { getUnsubSecret, verifyUnsubToken, emailHash } from "./emailPrefs";
+import { escapeHtml } from "./emailStyles";
+import { setSecurityHeaders } from "./lib/httpHeaders";
 
 /** HTTP endpoint behind the unsubscribe link in every email footer. */
 
@@ -14,6 +16,8 @@ const page = (title: string, body: string) => `<!doctype html>
 </div></body></html>`;
 
 export const emailUnsubscribe = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, async (req, res) => {
+    // First, so every branch below (405/400/403/200) carries the same set.
+    setSecurityHeaders(res, "page");
     // Email-footer links are GETs (no List-Unsubscribe-Post header is sent).
     // HEAD is rejected too (codex r3): this endpoint mutates on request, and
     // link scanners commonly probe with HEAD. (A scanner GET still opts out —
@@ -44,6 +48,8 @@ export const emailUnsubscribe = onRequest({ timeoutSeconds: 15, memory: "256MiB"
 
     res.status(200).send(page(
         "You're unsubscribed",
-        `${email} will no longer receive emails from March Melee Pools. Note: your pool commissioner may still contact you directly about money owed or won. Changed your mind? Contact your commissioner or support to re-subscribe.`
+        // `email` is attacker-shaped input that passed an HMAC check, not a
+        // trusted value: a token for a hostile local-part is still a valid token.
+        `${escapeHtml(email)} will no longer receive emails from March Melee Pools. Note: your pool commissioner may still contact you directly about money owed or won. Changed your mind? Contact your commissioner or support to re-subscribe.`
     ));
 });
