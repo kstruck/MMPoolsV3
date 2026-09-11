@@ -114,3 +114,23 @@ describe('rosterHub — clockRefreshDelayMs (the roster re-reads the clock when 
         expect(clockRefreshDelayMs(CLOCK + 40 * 24 * 3_600_000, CLOCK)).toBe(MAX_TIMEOUT_MS);
     });
 });
+
+describe('rosterHub — qodo r3 on PR #688: legacy bracket deadlines stored as strings or Timestamps', () => {
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const ts = (ms: number) => ({ toMillis: () => ms });
+
+    it('an ISO-string lockAt classifies exactly like a number', () => {
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: iso(CLOCK - 1) }))).toBe('live');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: iso(CLOCK + 60_000) }))).toBe('open');
+    });
+
+    it('a Firestore-Timestamp-shaped lockAt classifies exactly like a number', () => {
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: ts(CLOCK - 1) }))).toBe('live');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: ts(CLOCK + 60_000) }))).toBe('open');
+    });
+
+    it('an unparseable or missing lockAt is Open, never Live', () => {
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: 'not a date' }))).toBe('open');
+        expect(getPoolTabStatus(pool({ type: 'BRACKET', status: 'OPEN', lockAt: undefined }))).toBe('open');
+    });
+});

@@ -1,5 +1,5 @@
 import type { Pool, GameState, BracketPool } from '../types';
-import { getPoolLifecycleState, isCanceledPool } from './poolSport';
+import { getPoolLifecycleState, getPoolLockTime, isCanceledPool } from './poolSport';
 import { now } from './serverClock';
 
 export { isCanceledPool };
@@ -19,6 +19,19 @@ export { isCanceledPool };
  */
 
 export type RosterTabStatus = 'open' | 'live' | 'completed';
+
+/**
+ * A bracket's lock deadline as epoch ms, or null when it has none or it is
+ * unparseable. Goes through `getPoolLockTime` because a legacy bracket may
+ * store `lockAt` as an ISO string or a Firestore Timestamp, which a numeric
+ * compare silently rejects (qodo r3 on #688). Only the two fields the reader
+ * needs are passed: `BracketPool.reminders` is a different shape from
+ * `LockTimeReadable.reminders`, so the whole pool does not type-check.
+ */
+export function bracketLockAtMs(pool: Pool): number | null {
+    if (pool.type !== 'BRACKET') return null;
+    return getPoolLockTime({ type: 'BRACKET', lockAt: (pool as BracketPool).lockAt });
+}
 
 /**
  * Which of the Open / Live / Completed tabs a pool belongs to.
@@ -52,8 +65,8 @@ export function getPoolTabStatus(pool: Pool, nowMs: number = now()): RosterTabSt
         // re-evaluate once the clock sync resolves — `now()` alone returns the
         // device clock until then and the sync never re-renders anyone
         // (codex r3 on PR #688). The default keeps one-shot callers simple.
-        const bPool = pool as BracketPool;
-        return bPool.lockAt > 0 && nowMs >= bPool.lockAt ? 'live' : 'open';
+        const lockAt = bracketLockAtMs(pool);
+        return lockAt !== null && nowMs >= lockAt ? 'live' : 'open';
     }
     return 'open';
 }

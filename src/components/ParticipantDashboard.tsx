@@ -8,7 +8,7 @@ import { formatDeadline } from '../utils/formatTime';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
 import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
-import { getPoolTabStatus, isMyEntryPool, isCanceledPool, clockRefreshDelayMs } from '../utils/rosterHub';
+import { getPoolTabStatus, isMyEntryPool, isCanceledPool, clockRefreshDelayMs, bracketLockAtMs } from '../utils/rosterHub';
 import { now as serverNow, syncServerClock } from '../utils/serverClock';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
@@ -432,7 +432,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         myPools.forEach(p => {
             if (isCanceledPool(p)) return;
             let lockTime = 0;
-            if (p.type === 'BRACKET') lockTime = (p as any).lockAt || 0;
+            // Normalised (number | ISO string | Timestamp), same reader as the
+            // tab rule, so the refresh timer and the classification agree on
+            // when a legacy bracket locks (qodo r3 on #688).
+            if (p.type === 'BRACKET') lockTime = bracketLockAtMs(p) ?? 0;
             else if (p.type === 'NFL_PLAYOFFS') lockTime = new Date((p as any).lockDate).getTime() || 0;
             else if (p.type === 'SQUARES') lockTime = new Date((p as any).scores?.startTime).getTime() || 0;
 
