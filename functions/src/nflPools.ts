@@ -363,7 +363,6 @@ export async function joinNFLPoolInternal(
   }
 
   const poolRef = db.collection('pools').doc(poolId);
-  const userRef = db.collection('users').doc(uid);
 
   const poolSnap = await poolRef.get();
   if (!poolSnap.exists) {
