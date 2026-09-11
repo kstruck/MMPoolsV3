@@ -94,11 +94,12 @@ const syncUserToFirestore = async (user: User, opts: SyncOptions = {}): Promise<
       }
     }
 
-    // MERGE, never replace. Two Auth triggers (`onUserCreated`,
-    // `createParticipantProfile`) create this same document server-side the
-    // instant the account exists, and the `getDoc` above can miss them by
-    // milliseconds. A plain `setDoc` here then wiped their fields
-    // (searchName / searchEmail / lastLogin); a merge keeps both writers' work.
+    // MERGE, never replace. The Auth trigger `onUserCreated` (userSync.ts;
+    // until 2026-09-11 a second one, `createParticipantProfile`, raced it too)
+    // creates this same document server-side the instant the account exists,
+    // and the `getDoc` above can miss it by milliseconds. A plain `setDoc` here
+    // then wiped its fields (searchName / searchEmail / lastLogin); a merge
+    // keeps both writers' work.
     await setDoc(userRef, newUserData, { merge: true });
     localStorage.removeItem(REFERRAL_STORAGE_KEY); // Clear after use
 

@@ -1,7 +1,8 @@
 /**
  * `onUserNameChanged` — when a profile's `name` changes, every pool copy of it
- * follows (`pools/{*}/members/{uid}.userName`, `pools/{*}/entries/*.userName`),
- * and the super-admin search index (`users/{uid}.searchName`) with it.
+ * follows (`pools/{*}/members/{uid}.userName`, `pools/{*}/entries/*.userName`,
+ * `pools/{*}/propCards/*.userName`, and the NFL-playoff `pools/{*}.entries`
+ * map), and the super-admin search index (`users/{uid}.searchName`) with it.
  *
  * Fires on every `users/{uid}` write, which includes the `lastLogin` stamp on
  * each sign-in — so the gate (`userNameChanged`) runs first and costs no reads.
@@ -47,7 +48,7 @@ export const onUserNameChanged = onDocumentWritten({ document: 'users/{uid}', re
   try {
     const result = await propagateUserName(db, uid, name);
     const searchStamped = await stampSearchName(db, uid, name);
-    logger.info(`[userNameSync] ${uid}: name -> ${JSON.stringify(name)}; members=${result.members} entries=${result.entries} superseded=${result.superseded} searchName=${searchStamped ? 'updated' : 'unchanged'}`);
+    logger.info(`[userNameSync] ${uid}: name -> ${JSON.stringify(name)}; members=${result.members} entries=${result.entries} propCards=${result.propCards} playoffEntries=${result.playoffEntries} superseded=${result.superseded} searchName=${searchStamped ? 'updated' : 'unchanged'}`);
   } catch (error) {
     logger.error(`[userNameSync] ${uid}: propagation failed; rethrowing so the event is retried`, error);
     throw error;

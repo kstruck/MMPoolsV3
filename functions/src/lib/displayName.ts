@@ -19,18 +19,21 @@
  *   2. `userNameChanged` — the gate for the `users/{uid}` trigger. Pure, so the
  *      trigger's decision is unit-testable without Firestore.
  *   3. `propagateUserName` — pushes a changed profile name into every Member
- *      Record and every entry the uid owns, across every pool, without touching
+ *      Record, every entry the uid owns, every prop card the uid bought, and
+ *      every NFL-playoff entry the uid owns (those live in the POOL DOCUMENT's
+ *      `entries` map, not a subcollection), across every pool, without touching
  *      anything else on those documents. `entryName` (a player's custom entry
  *      label) is NOT a copy of the profile name and is left alone.
  *
- * Placeholders. `New User` was written by `createParticipantProfile` when the
- * Auth trigger fired before the client had set a display name (the race is
- * closed in participant.ts); `Unknown` / `Unknown User` are the client's own
+ * Placeholders. `New User` was written by the old `createParticipantProfile`
+ * Auth trigger when it fired before the client had set a display name (the
+ * trigger is gone — userSync.ts `createUserProfileIfMissing` is the one
+ * server-side creator now); `Unknown` / `Unknown User` are the client's own
  * fallbacks; `Member` / `Participant` / `Host` / `Player` are server fallbacks
  * on pool copies. A placeholder in the profile never OUTRANKS a real name from
  * the token, and a real profile name is never overwritten by one.
  */
-import type { Firestore } from 'firebase-admin/firestore';
+import { FieldPath, type Firestore } from 'firebase-admin/firestore';
 import { pickPreferredName } from '../shared/displayName';
 
 export { isPlaceholderName, PLACEHOLDER_DISPLAY_NAMES } from '../shared/displayName';
@@ -86,8 +89,40 @@ export function userNameChanged(
 export interface PropagateResult {
   members: number;
   entries: number;
+  /** Prop-bet cards (`pools/{*}/propCards/*`) rewritten. */
+  propCards: number;
+  /** NFL-playoff entries rewritten inside pool documents' `entries` maps. */
+  playoffEntries: number;
   /** True when the profile no longer carried `name` by commit time: nothing (more) was written. */
   superseded: boolean;
+}
+
+/**
+ * The NFL-playoff half of propagation, kept pure so it is unit-testable.
+ *
+ * A playoff pool keeps its entries as a MAP on the pool document
+ * (`pools/{id}.entries[entryId] = { userId, userName, entryName, ... }`,
+ * playoffPools.ts), so no collection-group query can reach them. Given a pool
+ * document's data, return the ids of the entries that belong to `uid` and
+ * still carry a different `userName`. Same rules as the subcollection pass:
+ * only an entry that already HAS a string `userName` is a candidate, and
+ * `entryName` is never touched. Anything that is not a plain-object map — an
+ * NFL Pick'em pool (subcollection entries, no map), a corrupt value, an array —
+ * yields nothing.
+ */
+export function stalePlayoffEntryIds(pool: unknown, uid: string, name: string): string[] {
+  if (!pool || typeof pool !== 'object') return [];
+  const entries = (pool as Record<string, unknown>).entries;
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return [];
+  const ids: string[] = [];
+  for (const [id, entry] of Object.entries(entries as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const e = entry as Record<string, unknown>;
+    if (e.userId !== uid) continue;
+    if (typeof e.userName !== 'string' || e.userName === name) continue;
+    ids.push(id);
+  }
+  return ids;
 }
 
 /**
@@ -140,19 +175,25 @@ function underPools(ref: FirebaseFirestore.DocumentReference): boolean {
   return !!pool && pool.parent.id === 'pools' && pool.parent.parent === null;
 }
 
+type CopyKind = 'members' | 'entries' | 'propCards';
+
 /**
- * Push `name` into every `pools/{*}/members/{uid}.userName` and every
- * `pools/{*}/entries/*.userName` whose `ownerUid` is `uid`.
+ * Push `name` into every `pools/{*}/members/{uid}.userName`, every
+ * `pools/{*}/entries/*.userName` whose `ownerUid` is `uid`, every
+ * `pools/{*}/propCards/*.userName` whose `userId` is `uid`, and every
+ * `pools/{*}.entries.<id>.userName` (NFL playoff map) whose `userId` is `uid`.
  *
  * Only documents that already CARRY a `userName` are written — a bracket entry
  * has no such field and is not given one — and only when the stored value
  * differs, so a re-fired trigger is a no-op. `update` with the single field:
  * a Member Record carries paid state and a `set` here would be a clobber.
  *
- * Collection-group queries need collection-group indexes on `members.uid` and
- * `entries.ownerUid`; both are declared in `firestore.indexes.json`
- * (fieldOverrides). The emulator needs no index, so a green emulator suite
- * does NOT prove the index shipped — verify after deploy.
+ * Collection-group queries need collection-group indexes on `members.uid`,
+ * `entries.ownerUid` and `propCards.userId`; all three are declared in
+ * `firestore.indexes.json` (fieldOverrides). The emulator needs no index, so a
+ * green emulator suite does NOT prove the index shipped — verify after deploy.
+ * The playoff pass is a plain `pools` query on `participantIds`
+ * (array-contains, single-field index, nothing to ship).
  *
  * 🛑 SERIALIZED AGAINST THE PROFILE (codex r2 P2). Two quick edits fire two
  * events that can overlap; a pre-check alone lets the OLDER one commit its
@@ -164,13 +205,16 @@ function underPools(ref: FirebaseFirestore.DocumentReference): boolean {
  * commit after a newer name change, whatever order the events ran in.
  */
 export async function propagateUserName(db: Firestore, uid: string, name: string): Promise<PropagateResult> {
-  const [memberSnap, entrySnap] = await Promise.all([
+  const [memberSnap, entrySnap, cardSnap, playoffSnap] = await Promise.all([
     db.collectionGroup('members').where('uid', '==', uid).get(),
     db.collectionGroup('entries').where('ownerUid', '==', uid).get(),
+    db.collectionGroup('propCards').where('userId', '==', uid).get(),
+    db.collection('pools').where('participantIds', 'array-contains', uid).get(),
   ]);
 
   const members: FirebaseFirestore.DocumentReference[] = [];
   const entries: FirebaseFirestore.DocumentReference[] = [];
+  const propCards: FirebaseFirestore.DocumentReference[] = [];
   const seenEntries = new Set<string>();
   const memberPools: FirebaseFirestore.DocumentReference[] = [];
   for (const doc of memberSnap.docs) {
@@ -187,6 +231,19 @@ export async function propagateUserName(db: Firestore, uid: string, name: string
     if (typeof current !== 'string' || current === name) continue;
     entries.push(doc.ref);
   }
+  for (const doc of cardSnap.docs) {
+    if (!underPools(doc.ref)) continue;
+    const current = doc.get('userName');
+    if (typeof current !== 'string' || current === name) continue;
+    propCards.push(doc.ref);
+  }
+  // Playoff pools: the candidates are decided here from the query snapshot,
+  // then RE-DECIDED from a fresh read inside each transaction below — an entry
+  // deleted in between (`updatePlayoffEntry` action=delete) must not be
+  // resurrected as `{ userName }` by a dotted-path update.
+  const playoffPools = playoffSnap.docs
+    .filter(doc => stalePlayoffEntryIds(doc.data(), uid, name).length > 0)
+    .map(doc => doc.ref);
 
   // ⚠️ THE `ownerUid` QUERY MISSES A PRE-MULTI-ENTRY `entries/{uid}` DOC THAT
   // WAS NEVER STAMPED WITH ONE (the same gap userProfile.ts and multiEntry.ts
@@ -206,27 +263,54 @@ export async function propagateUserName(db: Firestore, uid: string, name: string
   }
 
   const profileRef = db.collection('users').doc(uid);
-  const writes = [...members, ...entries];
-  const result: PropagateResult = { members: 0, entries: 0, superseded: false };
-  let written = 0;
+  const writes: Array<{ ref: FirebaseFirestore.DocumentReference; kind: CopyKind }> = [
+    ...members.map(ref => ({ ref, kind: 'members' as const })),
+    ...entries.map(ref => ({ ref, kind: 'entries' as const })),
+    ...propCards.map(ref => ({ ref, kind: 'propCards' as const })),
+  ];
+  const result: PropagateResult = { members: 0, entries: 0, propCards: 0, playoffEntries: 0, superseded: false };
 
+  // Counts reflect what was COMMITTED.
   for (let i = 0; i < writes.length; i += BATCH_LIMIT) {
     const chunk = writes.slice(i, i + BATCH_LIMIT);
     const committed = await db.runTransaction(async (t) => {
       const profile = await t.get(profileRef);
       if (!profile.exists || !profileNameIs(profile.get('name'), name)) return false;
-      for (const ref of chunk) t.update(ref, { userName: name });
+      for (const { ref } of chunk) t.update(ref, { userName: name });
       return true;
     });
     if (!committed) {
       result.superseded = true;
-      break;
+      return result;
     }
-    written += chunk.length;
+    for (const { kind } of chunk) result[kind] += 1;
   }
 
-  // Counts reflect what was COMMITTED; members were queued first.
-  result.members = Math.min(written, members.length);
-  result.entries = Math.max(0, written - members.length);
+  // Playoff maps: one transaction per pool. It reads the profile (same guard
+  // as above) AND the pool, recomputes the stale ids from the live document,
+  // and updates `entries.<id>.userName` by FieldPath — an entry id is caller-
+  // supplied (`submitPlayoffEntry` accepts an `entryId`), so it is never
+  // spliced into a dotted string. The pool read puts the document in the
+  // transaction's read set: a concurrent entry delete forces a retry that
+  // re-reads and drops the deleted id instead of recreating it.
+  for (const poolRef of playoffPools) {
+    const written = await db.runTransaction(async (t) => {
+      const [profile, pool] = await Promise.all([t.get(profileRef), t.get(poolRef)]);
+      if (!profile.exists || !profileNameIs(profile.get('name'), name)) return -1;
+      if (!pool.exists) return 0;
+      const ids = stalePlayoffEntryIds(pool.data(), uid, name);
+      if (ids.length === 0) return 0;
+      const args: unknown[] = [];
+      for (const id of ids) args.push(new FieldPath('entries', id, 'userName'), name);
+      t.update(poolRef, args[0] as FieldPath, args[1], ...args.slice(2));
+      return ids.length;
+    });
+    if (written < 0) {
+      result.superseded = true;
+      return result;
+    }
+    result.playoffEntries += written;
+  }
+
   return result;
 }

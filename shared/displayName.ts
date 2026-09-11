@@ -7,7 +7,7 @@
  * `syncUserToFirestore` the login-time rule). Every placeholder below is a
  * value some code path writes ONTO A PROFILE when it has nothing better:
  *
- *   New User      — the old `createParticipantProfile` Auth trigger (race, fixed 2026-09-10)
+ *   New User      — the old `createParticipantProfile` Auth trigger (race fixed 2026-09-10; trigger removed 2026-09-11)
  *   Unknown       — client `syncUserToFirestore` existing-user branch; `syncAllUsers`
  *   Unknown User  — client `mapUser`, server triggers when even the email is missing
  *

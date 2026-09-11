@@ -23,7 +23,10 @@ export { notifyPasswordReset } from "./securityNotices"; // PLAN-AUDIT-AUTH-HARD
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
 export { autoClosePools } from "./autoClosePools"; // T2: daily stuck-pool close sweep (dry-run + kill-switch)
 export { onPoolLocked, recalculateGlobalStats, recomputeGlobalStatsDaily } from "./statsTrigger";
-export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
+// `createParticipantProfile` (a second Auth-create trigger with its own profile
+// schema) was removed 2026-09-11; `onUserCreated` in userSync.ts is the one
+// server-side profile creator. Deploy prompts to delete the old function.
+export { createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
 export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds, clearLegacyCoManagers } from "./poolOps";
 export { setPoolCoCommissioner } from "./coCommissioners";
 export { backfillPools } from "./backfill";
