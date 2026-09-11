@@ -1,5 +1,69 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY WILL PROMPT TO DELETE `createParticipantProfile`.**
+>
+> Branch `claude/name-sync-followup-690`. #690 merged 2026-09-11 with three
+> findings accepted and deferred; this is them.
+>
+> **What changed.**
+> 1. `propagateUserName` (functions/src/lib/displayName.ts) reaches two more
+>    copies of the name: **prop-bet cards** (`pools/{*}/propCards/*.userName`,
+>    collection-group on `userId`, new `propCards.userId` fieldOverride in
+>    `firestore.indexes.json`) and the **NFL-playoff `entries` MAP on the pool
+>    document** (`pools` query on `participantIds array-contains uid`, then one
+>    transaction per pool that re-reads the pool and updates
+>    `entries.<id>.userName` by `FieldPath` — so a deleted entry is never
+>    recreated and a dotted entry id is never mis-parsed). `entryName` is never
+>    touched. `PropagateResult` gains `propCards` / `playoffEntries`; the
+>    trigger log line shows both.
+> 2. **`createParticipantProfile` is GONE.** Two gen-1 Auth-create triggers
+>    used to write `users/{uid}` with two schemas. `userSync.ts onUserCreated`
+>    is the one creator now: `createUserProfileIfMissing`, a transaction that
+>    creates on the userSync schema (plus `provider`, which the client reads
+>    for the change-password panel / verify-email banner) and, when the doc
+>    exists, refreshes `email` / `searchEmail` / `searchName` / `lastLogin`
+>    and never `name`.
+> 3. Tests in the same PR: emulator `userNameSync.emulator.test.ts` P2 (now on
+>    the userSync creator, schema asserted), P7 (playoff map: only this uid's
+>    entries, `entryName` kept, deleted entry not resurrected, Pick'em pool
+>    skipped, supersession), P8 (prop cards: several per uid, guest card and
+>    other people's cards untouched, idempotent); unit `displayName.test.ts`
+>    (`stalePlayoffEntryIds`), `userSyncName.test.ts` (`newUserProfileFields`);
+>    `maxInstancesInvariants.test.ts` now asserts participant.ts has NO v1
+>    import instead of expecting a cap there.
+>
+> **Deploy notes — READ BEFORE `firebase deploy`.** Step zero, always
+> (CLAUDE.md §3): `git -C D:\march-melee-pools pull --ff-only origin main`,
+> then `npm --prefix functions ci`. Then, functions BEFORE rules:
+> `npx firebase deploy --only functions,firestore:indexes`.
+> ⚠️ **This deploy REMOVES a function.** The CLI will stop and ask
+> `The following functions are found in your project but do not exist in your
+> local source code: createParticipantProfile(us-central1) ... Would you like
+> to proceed with deletion?` — answer **`y`** (or pass `--force` to skip the
+> prompt). Deleting it is the point: with it gone, `onUserCreated` (userSync)
+> is the only server-side profile creator. If you answer `n`, the deploy
+> continues but the OLD trigger keeps running alongside the new code and keeps
+> writing its old schema — the split-brain this PR removes. Verify after:
+> `npx firebase functions:list | Select-String "createParticipantProfile"`
+> must print NOTHING, and `Select-String "onUserCreated"` must still print the
+> userSync one. The `propCards.userId` collection-group index ships in the same
+> command (`firestore:indexes` target); until it is built the trigger FAILS on
+> the prop-card query and is RETRIED by the platform (`retry: true`), same as
+> #690's two indexes — a name change in that window is not lost. The emulator
+> needs no index, so a green suite does not prove it shipped.
+>
+> **Known, not fixed here (scoring code, named for a follow-up):**
+> `scorePlayoffPools` (functions/src/playoffPools.ts ~L135) writes each
+> rescored entry back WHOLE (`entries.<id> = { ...entry, totalScore }`) from
+> its own pre-write read, so a name propagated between that read and its batch
+> commit is put back to the old value until the next name edit. Narrow window,
+> self-healing on the next edit; the fix is a `entries.<id>.totalScore` dotted
+> write, which touches scoring and takes its own PR.
+>
+> Names already fixed BEFORE this deploys do not back-propagate to playoff
+> maps / prop cards: the trigger fires on a CHANGE — after the deploy, edit the
+> name to something else, save, set it back, save again.
+
 > ## 🟡 2026-09-11 — **NFL PICK REMINDERS: ROSTER-BASED TARGETS + T-24h TIER — PR [#689](https://github.com/kstruck/MMPoolsV3/pull/689) OPEN. NOT MERGED, NOT DEPLOYED — the live job is still the entries-only one.**
 >
 > - Review: 5 codex rounds (r2–r4 each found a cancelled-game / lock-mode
