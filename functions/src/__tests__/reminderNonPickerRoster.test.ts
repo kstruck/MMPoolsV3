@@ -232,6 +232,31 @@ describe('checkNFLNonPickerReminders — roster-based, T-24h', () => {
         expect(mailTo(straight.store)).toEqual([]);
     });
 
+    it('a CANCELLED opener does not silence the week: the deadline moves to the first playable game (codex r2 on #689)', async () => {
+        // g1 cancelled before kickoff; g2 (3 days later) is now the first playable
+        // game. At NOW (20h before g1) nothing is due; 20h before g2 the 24H tier fires.
+        const cancelled = () => {
+            const f = seedPool('NFL_PICKEM', { confidenceMode: true, lockRuleVersion: 2, lockMode: 'PER_GAME' });
+            f.store.set('nfl_games/g1', { id: 'g1', season: '2026', seasonType: 2, week: WEEK, startTime: KICKOFF, status: 'CANCELLED' });
+            return f;
+        };
+        const early = cancelled();
+        await checkNFLNonPickerReminders(early.db, early.pool, NOW);
+        expect(notificationKeys(early.store)).toEqual([]);
+
+        const later = cancelled();
+        const g2Kickoff = KICKOFF + 3 * 24 * HOUR;
+        await checkNFLNonPickerReminders(later.db, later.pool, g2Kickoff - 5 * 60 * 1000 - 20 * HOUR);
+        expect(mailTo(later.store)).toEqual(['joined-never-picked@example.com', 'partial@example.com']);
+        expect(mailDocs(later.store)[0].message.subject).toContain('locks in ~20 hours');
+
+        // Every game cancelled: nothing to pick, nothing to send.
+        const none = cancelled();
+        none.store.set('nfl_games/g2', { id: 'g2', season: '2026', seasonType: 2, week: WEEK, startTime: g2Kickoff, status: 'CANCELLED' });
+        await checkNFLNonPickerReminders(none.db, none.pool, g2Kickoff - 5 * 60 * 1000 - 20 * HOUR);
+        expect(notificationKeys(none.store)).toEqual([]);
+    });
+
     it('a stamped confidence pool whose first game has left SCHEDULED is locked, whatever the moved startTime says', async () => {
         // Feed correction after real kickoff: startTime now reads 2h ahead (inside
         // the 4H window by the clock) but the game is IN_PROGRESS. Status wins.

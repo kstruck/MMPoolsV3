@@ -19,7 +19,7 @@ import {
     effectiveWeekLockAt, isGameLockedForGame,
 } from "./lib/effectiveLock";
 import { nflReminderTier, nflNonPickerUids } from "./lib/nflNonPickers";
-import { usesWeeklyLock } from "./shared/nflLockMode";
+import { usesWeeklyLock, gameHasStarted } from "./shared/nflLockMode";
 import type { MemberRecord } from "./shared/memberRecord";
 
 
@@ -979,11 +979,18 @@ export async function checkNFLNonPickerReminders(
         // ceiling. Hand-rolling `max(override, kickoff - buffer)` here omitted the
         // ceiling, so an extension past kickoff made the email quote a deadline
         // the server would refuse (qodo on #689).
-        const rawLock = effectiveWeekLockAt(weekGames.map(g => g.startTime), week, settings);
-        // Status-aware: in a confidence pool a game that has left SCHEDULED is
-        // locked whatever its stored startTime says (a feed correction after real
-        // kickoff must not reopen it). No reminder for a deadline that has passed.
-        const firstGame = weekGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
+        // A CANCELLED game has nothing to pick and is no evidence the week has
+        // begun (shared/nflLockMode `gameHasStarted`), so the reminder deadline is
+        // the first PLAYABLE game — otherwise a pre-kickoff cancellation of the
+        // slate's opener would silence every reminder for the week (codex r2).
+        const playableGames = weekGames.filter(g => g.status !== 'CANCELLED');
+        if (playableGames.length === 0) return;
+        const rawLock = effectiveWeekLockAt(playableGames.map(g => g.startTime), week, settings);
+        // Status-aware: in a confidence pool a game that has STARTED is locked
+        // whatever its stored startTime says (a feed correction after real kickoff
+        // must not reopen it). No reminder for a deadline that has passed.
+        const firstGame = playableGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
+        if (settings.kickoffCeiling && gameHasStarted(firstGame)) return;
         if (isGameLockedForGame(now, firstGame, week, settings)) return;
 
         // Hard-lock pools: fold in (and establish) the earliest-ever freeze. This
