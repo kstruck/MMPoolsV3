@@ -14,7 +14,10 @@ import {
 import { getSquarePrivateMap, getSquareEmails } from "./squarePrivate";
 import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
-import { effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreezeForPoolDoc } from "./lib/effectiveLock";
+import {
+    effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreezeForPoolDoc,
+    effectiveWeekLockAt, isGameLockedForGame,
+} from "./lib/effectiveLock";
 import { nflReminderTier, nflNonPickerUids } from "./lib/nflNonPickers";
 import { usesWeeklyLock } from "./shared/nflLockMode";
 import type { MemberRecord } from "./shared/memberRecord";
@@ -968,14 +971,20 @@ export async function checkNFLNonPickerReminders(
         // does — otherwise a "last call" email could quote a deadline LATER than the
         // one the server enforces, telling members to pick after picks had closed.
         const settings = effectiveLockSettings(
-          pool.settings as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> } | undefined,
+          pool.settings as Parameters<typeof effectiveLockSettings>[0],
           (pool as unknown as { type?: string }).type,
-        ) as { lockBufferMinutes?: number; weekLockOverrides?: Record<number, number> };
-        const lockBufferMs = (settings.lockBufferMinutes ?? 5) * 60 * 1000;
-        const weekLockOverride: number | undefined = settings.weekLockOverrides?.[week];
-        const computedLock = Math.min(...weekGames.map(g => g.startTime)) - lockBufferMs;
-        // Commissioner deadline extensions act as a floor on the computed lock
-        const rawLock = weekLockOverride !== undefined ? Math.max(weekLockOverride, computedLock) : computedLock;
+        );
+        // The SAME helper the submit path enforces with: buffer, a commissioner
+        // extension as a floor, and — on a stamped confidence pool — the kickoff
+        // ceiling. Hand-rolling `max(override, kickoff - buffer)` here omitted the
+        // ceiling, so an extension past kickoff made the email quote a deadline
+        // the server would refuse (qodo on #689).
+        const rawLock = effectiveWeekLockAt(weekGames.map(g => g.startTime), week, settings);
+        // Status-aware: in a confidence pool a game that has left SCHEDULED is
+        // locked whatever its stored startTime says (a feed correction after real
+        // kickoff must not reopen it). No reminder for a deadline that has passed.
+        const firstGame = weekGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
+        if (isGameLockedForGame(now, firstGame, week, settings)) return;
 
         // Hard-lock pools: fold in (and establish) the earliest-ever freeze. This
         // pass runs every 15 minutes and sees the week ~36h out, so it normally
@@ -1043,9 +1052,12 @@ export async function checkNFLNonPickerReminders(
             ? `Don't get caught with an empty slate — lock in your ${picksWord} now.`
             : `Every game locks at its own kickoff, so get your ${picksWord} in before the first one.`;
 
+        // Subject and body must agree on WHAT locks (qodo on #689): a per-game
+        // member told "the week locks" would believe later games close too.
+        const whatLocks = weeklyLock ? `Week ${week}` : `Week ${week}'s first game`;
         const subject = tier === '24H'
-            ? `You haven't picked yet — Week ${week} locks in ~${hoursLeft} hours`
-            : `Last call: Week ${week} locks soon — ${pool.name}`;
+            ? `You haven't picked yet — ${whatLocks} locks in ~${hoursLeft} hours`
+            : `Last call: ${whatLocks} locks soon — ${pool.name}`;
         const title = tier === '24H' ? `Week ${week} Pick Reminder` : `Last Call: Week ${week}`;
 
         let sentCount = 0;
