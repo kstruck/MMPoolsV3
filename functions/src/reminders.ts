@@ -16,7 +16,7 @@ import { withHeartbeat } from "./lib/heartbeat";
 import { reminderPassVerdict } from "./lib/heartbeatVerdicts";
 import {
     effectiveLockSettings, usesWeeklyHardLock, resolveHardWeekLock, frozenHardLockFor, ensureHardLockFreezeForPoolDoc,
-    effectiveWeekLockAt, isGameLockedForGame,
+    effectiveWeekLockAt,
 } from "./lib/effectiveLock";
 import { nflReminderTier, nflNonPickerUids } from "./lib/nflNonPickers";
 import { usesWeeklyLock, gameHasStarted } from "./shared/nflLockMode";
@@ -979,25 +979,26 @@ export async function checkNFLNonPickerReminders(
         // ceiling. Hand-rolling `max(override, kickoff - buffer)` here omitted the
         // ceiling, so an extension past kickoff made the email quote a deadline
         // the server would refuse (qodo on #689).
-        // A CANCELLED game has nothing to pick and is no evidence the week has
-        // begun (shared/nflLockMode `gameHasStarted`), so the reminder deadline is
-        // the first PLAYABLE game — otherwise a pre-kickoff cancellation of the
-        // slate's opener would silence every reminder for the week (codex r2).
+        // Mirrors shared/nflLockMode `isWeekLockedFor`, mode by mode, so the email
+        // never quotes a deadline the server does not enforce:
+        //  - WEEKLY: the clock deadline is the week's earliest kickoff INCLUDING a
+        //    cancelled opener (`weekLockDecision` / `weekLockAtFor` take every game
+        //    — a Thursday cancellation does not reopen the sheet on Sunday; codex
+        //    r4), and a confidence week is closed once ANY game has STARTED even
+        //    while the feed still shows the earliest as SCHEDULED (qodo). A
+        //    CANCELLED game is not "started" (`gameHasStarted`).
+        //  - PER_GAME: the reminder is about the first PLAYABLE game — a cancelled
+        //    opener has nothing to pick and must not silence the week (codex r2) —
+        //    and only that game's own status can lock it early.
         const playableGames = weekGames.filter(g => g.status !== 'CANCELLED');
         if (playableGames.length === 0) return;
-        const rawLock = effectiveWeekLockAt(playableGames.map(g => g.startTime), week, settings);
-        // Status-aware: in a confidence pool a game that has STARTED is locked
-        // whatever its stored startTime says (a feed correction after real kickoff
-        // must not reopen it). No reminder for a deadline that has passed.
-        const firstGame = playableGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
-        // Mirrors shared/nflLockMode `isWeekLockedFor`: a WEEKLY confidence week
-        // is closed once ANY game has started (the feed may still show the
-        // earliest as SCHEDULED); a PER_GAME reminder is about the first playable
-        // game, so only that game's status matters (qodo re-review on #689).
         const weeklyLock = usesWeeklyLock(pool.type, pool.settings as Parameters<typeof usesWeeklyLock>[1]);
-        const started = weeklyLock ? playableGames.some(gameHasStarted) : gameHasStarted(firstGame);
+        const clockGames = weeklyLock ? weekGames : playableGames;
+        const rawLock = effectiveWeekLockAt(clockGames.map(g => g.startTime), week, settings);
+        const firstPlayable = playableGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
+        const started = weeklyLock ? playableGames.some(gameHasStarted) : gameHasStarted(firstPlayable);
         if (settings.kickoffCeiling && started) return;
-        if (isGameLockedForGame(now, firstGame, week, settings)) return;
+        if (now >= rawLock) return;
 
         // Hard-lock pools: fold in (and establish) the earliest-ever freeze. This
         // pass runs every 15 minutes and sees the week ~36h out, so it normally

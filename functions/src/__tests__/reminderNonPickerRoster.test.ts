@@ -258,6 +258,21 @@ describe('checkNFLNonPickerReminders — roster-based, T-24h', () => {
         await checkNFLNonPickerReminders(playableDone.db, playableDone.pool, g2Kickoff - 5 * 60 * 1000 - 20 * HOUR);
         expect(mailTo(playableDone.store)).toEqual(['joined-never-picked@example.com']);
 
+        // WEEKLY pools are different (codex r4): the server's week deadline is the
+        // earliest kickoff INCLUDING the cancelled opener (weekLockDecision takes
+        // every game), so the reminder must fire before g1's deadline and stay
+        // silent afterwards — a Sunday reminder would arrive after the sheet closed.
+        const weeklyEarly = seedPool('NFL_PICKEM', { lockMode: 'WEEKLY' });
+        weeklyEarly.store.set('nfl_games/g1', { id: 'g1', season: '2026', seasonType: 2, week: WEEK, startTime: KICKOFF, status: 'CANCELLED' });
+        await checkNFLNonPickerReminders(weeklyEarly.db, weeklyEarly.pool, NOW);
+        expect(mailTo(weeklyEarly.store)).toEqual(['joined-never-picked@example.com', 'partial@example.com']);
+        expect(mailDocs(weeklyEarly.store)[0].message.subject).toContain('Week 1 locks in ~20 hours');
+
+        const weeklyLate = seedPool('NFL_PICKEM', { lockMode: 'WEEKLY' });
+        weeklyLate.store.set('nfl_games/g1', { id: 'g1', season: '2026', seasonType: 2, week: WEEK, startTime: KICKOFF, status: 'CANCELLED' });
+        await checkNFLNonPickerReminders(weeklyLate.db, weeklyLate.pool, g2Kickoff - 5 * 60 * 1000 - 20 * HOUR);
+        expect(notificationKeys(weeklyLate.store)).toEqual([]);
+
         // Every game cancelled: nothing to pick, nothing to send.
         const none = cancelled();
         none.store.set('nfl_games/g2', { id: 'g2', season: '2026', seasonType: 2, week: WEEK, startTime: g2Kickoff, status: 'CANCELLED' });
