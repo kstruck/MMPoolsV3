@@ -990,7 +990,13 @@ export async function checkNFLNonPickerReminders(
         // whatever its stored startTime says (a feed correction after real kickoff
         // must not reopen it). No reminder for a deadline that has passed.
         const firstGame = playableGames.reduce((a, b) => (b.startTime < a.startTime ? b : a));
-        if (settings.kickoffCeiling && gameHasStarted(firstGame)) return;
+        // Mirrors shared/nflLockMode `isWeekLockedFor`: a WEEKLY confidence week
+        // is closed once ANY game has started (the feed may still show the
+        // earliest as SCHEDULED); a PER_GAME reminder is about the first playable
+        // game, so only that game's status matters (qodo re-review on #689).
+        const weeklyLock = usesWeeklyLock(pool.type, pool.settings as Parameters<typeof usesWeeklyLock>[1]);
+        const started = weeklyLock ? playableGames.some(gameHasStarted) : gameHasStarted(firstGame);
+        if (settings.kickoffCeiling && started) return;
         if (isGameLockedForGame(now, firstGame, week, settings)) return;
 
         // Hard-lock pools: fold in (and establish) the earliest-ever freeze. This
@@ -1021,7 +1027,9 @@ export async function checkNFLNonPickerReminders(
             poolRef.collection('members').get(),
             poolRef.collection('entries').get(),
         ]);
-        const weekGameIds = weekGames.map(g => g.id);
+        // Completion is judged on the PLAYABLE slate: a member who has picked every
+        // game that can still be picked is not chased for a cancelled one (codex r3).
+        const weekGameIds = playableGames.map(g => g.id);
         const nonPickerUids = nflNonPickerUids({
             poolType: pool.type,
             week,
@@ -1053,7 +1061,6 @@ export async function checkNFLNonPickerReminders(
         // one game at a time, starting with this kickoff; a weekly pool locks the
         // whole sheet then. Say which, so the email never promises a later
         // deadline than the server enforces.
-        const weeklyLock = usesWeeklyLock(pool.type, pool.settings as Parameters<typeof usesWeeklyLock>[1]);
         const lockLabel = weeklyLock ? `Week ${week} locks:` : `Week ${week}'s first game locks:`;
         const lockNote = weeklyLock
             ? `Don't get caught with an empty slate — lock in your ${picksWord} now.`

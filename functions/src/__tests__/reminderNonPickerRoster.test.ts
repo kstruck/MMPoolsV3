@@ -250,11 +250,37 @@ describe('checkNFLNonPickerReminders — roster-based, T-24h', () => {
         expect(mailTo(later.store)).toEqual(['joined-never-picked@example.com', 'partial@example.com']);
         expect(mailDocs(later.store)[0].message.subject).toContain('locks in ~20 hours');
 
+        // Completion is judged on the PLAYABLE slate: 'partial' has picked g1 only,
+        // which is the cancelled game — still outstanding for g2. A member who has
+        // picked g2 (the only playable game) is complete and NOT chased for g1 (codex r3).
+        const playableDone = cancelled();
+        playableDone.store.set(`pools/${POOL_ID}/entries/partial`, { id: 'partial', ownerUid: 'partial', picks: { g2: 'KC' } });
+        await checkNFLNonPickerReminders(playableDone.db, playableDone.pool, g2Kickoff - 5 * 60 * 1000 - 20 * HOUR);
+        expect(mailTo(playableDone.store)).toEqual(['joined-never-picked@example.com']);
+
         // Every game cancelled: nothing to pick, nothing to send.
         const none = cancelled();
         none.store.set('nfl_games/g2', { id: 'g2', season: '2026', seasonType: 2, week: WEEK, startTime: g2Kickoff, status: 'CANCELLED' });
         await checkNFLNonPickerReminders(none.db, none.pool, g2Kickoff - 5 * 60 * 1000 - 20 * HOUR);
         expect(notificationKeys(none.store)).toEqual([]);
+    });
+
+    it('a WEEKLY confidence week is closed once ANY game has started, even if the earliest still reads SCHEDULED (qodo re-review on #689)', async () => {
+        // Mirrors shared/nflLockMode isWeekLockedFor. g2 is live; g1 (2h out by
+        // the clock, inside the 4H window) still says SCHEDULED. Weekly: silent.
+        const weekly = seedPool('NFL_PICKEM', { confidenceMode: true, lockRuleVersion: 2, lockMode: 'WEEKLY' });
+        weekly.store.set('nfl_games/g1', { id: 'g1', season: '2026', seasonType: 2, week: WEEK, startTime: NOW + 2 * HOUR, status: 'SCHEDULED' });
+        weekly.store.set('nfl_games/g2', { id: 'g2', season: '2026', seasonType: 2, week: WEEK, startTime: NOW + 2 * HOUR + 1, status: 'IN_PROGRESS' });
+        await checkNFLNonPickerReminders(weekly.db, weekly.pool, NOW);
+        expect(notificationKeys(weekly.store)).toEqual([]);
+
+        // PER_GAME: only the first playable game's own status matters — g1 is
+        // still open, so last call goes out for it.
+        const perGame = seedPool('NFL_PICKEM', { confidenceMode: true, lockRuleVersion: 2, lockMode: 'PER_GAME' });
+        perGame.store.set('nfl_games/g1', { id: 'g1', season: '2026', seasonType: 2, week: WEEK, startTime: NOW + 2 * HOUR, status: 'SCHEDULED' });
+        perGame.store.set('nfl_games/g2', { id: 'g2', season: '2026', seasonType: 2, week: WEEK, startTime: NOW + 2 * HOUR + 1, status: 'IN_PROGRESS' });
+        await checkNFLNonPickerReminders(perGame.db, perGame.pool, NOW);
+        expect(notificationKeys(perGame.store)).toHaveLength(2);
     });
 
     it('a stamped confidence pool whose first game has left SCHEDULED is locked, whatever the moved startTime says', async () => {
