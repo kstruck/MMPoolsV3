@@ -40,10 +40,14 @@ describe('pickPreferredName — stored profile name vs Auth displayName at sign-
     expect(pickPreferredName(null, undefined)).toBeUndefined();
   });
 
-  it('isPlaceholderName covers the fallbacks each writer uses', () => {
-    for (const n of ['New User', 'Unknown', 'Unknown User', 'Member', 'Participant', 'Host', 'Player', 'Anonymous']) {
+  it('isPlaceholderName covers only what a writer puts on a PROFILE', () => {
+    for (const n of ['New User', 'Unknown', 'Unknown User']) {
       expect(isPlaceholderName(n), n).toBe(true);
     }
     expect(isPlaceholderName('Kevin Struck')).toBe(false);
+    // Pool-copy fallbacks are legitimate profile names (qodo #690 finding 11).
+    for (const n of ['Host', 'Member', 'Participant', 'Player']) {
+      expect(isPlaceholderName(n), n).toBe(false);
+    }
   });
 });

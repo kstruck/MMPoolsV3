@@ -65,7 +65,7 @@ import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
 import { resolveGameSpreads } from './lib/frozenSpreads';
-import { resolveSubjectName } from './lib/displayName';
+import { pickSubjectName } from './lib/displayName';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
@@ -370,14 +370,20 @@ export async function joinNFLPoolInternal(
   }
 
   const pool = poolSnap.data() as any;
-  // Profile first, token second (lib/displayName.ts): the profile is what the
-  // person or an admin last set; the token is what Auth knew at sign-in.
-  const joinerName = (await resolveSubjectName(db, uid, ctx.subjectName)) || 'Member';
 
   await db.runTransaction(async (transaction) => {
     const poolDoc = await transaction.get(poolRef);
     // Member Record read (before any writes) so we can seed it without clobbering paid state.
     const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
+    // Profile first, token second (lib/displayName.ts): the profile is what the
+    // person or an admin last set; the token is what Auth knew at sign-in.
+    // READ IN THE TRANSACTION, so the profile is in its conflict set: a name
+    // edit (and its propagation) landing between a pre-transaction read and
+    // this commit would otherwise be overwritten by the captured, older value
+    // (qodo #690 finding 2). A concurrent edit now retries the transaction,
+    // which re-reads and stamps the newer name.
+    const profileSnap = await transaction.get(db.collection('users').doc(uid));
+    const joinerName = pickSubjectName(profileSnap.data()?.name, ctx.subjectName) || 'Member';
     const poolData = poolDoc.data();
     if (!poolData) throw new HttpsError('not-found', 'Pool data not found');
 
@@ -527,9 +533,13 @@ export async function submitNFLPicksInternal(
   // in one sitting, and it is STALE after a profile edit — which is how a fixed
   // name kept reverting on the next pick (2026-09-10). `undefined` when neither
   // source has a name, so the call sites can prefer a name already stored over
-  // overwriting it with the placeholder. Read outside the transaction — it is
-  // not part of any invariant the transaction defends.
-  const subjectName: string | undefined = await resolveSubjectName(db, uid, ctx.subjectName);
+  // overwriting it with the placeholder.
+  // ASSIGNED INSIDE THE TRANSACTION (qodo #690 finding 2): the profile read
+  // joins the transaction's conflict set, so a name edit landing between the
+  // read and the commit retries the attempt instead of stamping the older
+  // value over the newer propagated one. `retryWhileScoring` re-runs the
+  // callback, and each run re-reads — hence `let`, refreshed per attempt.
+  let subjectName: string | undefined;
 
   const type = pool.type;
   // MUTABLE, and refreshed at the top of every transaction attempt below. The
@@ -622,6 +632,8 @@ export async function submitNFLPicksInternal(
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
     // so a concurrent raise can only admit more) and `entryCount` is read off it.
     const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
+    // The display name, read in THIS attempt (see the `let` above).
+    subjectName = pickSubjectName((await transaction.get(db.collection('users').doc(uid))).data()?.name, ctx.subjectName);
     if (!poolInTx) throw new HttpsError('not-found', 'Pool not found.');
     // IMPLICIT JOIN (PLAN-ADMIN-PICK-IMPLICIT-JOIN). `assertNFLPickMembership`
     // admits three kinds of caller: a participant, the owner/manager, and a

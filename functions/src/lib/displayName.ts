@@ -55,11 +55,16 @@ export async function resolveSubjectName(db: Firestore, uid: string, tokenName: 
 }
 
 /**
- * The trigger gate. Returns the new name to propagate, or `null` when nothing
+ * The trigger gate. Returns the name to propagate, or `null` when nothing
  * should happen:
- *   - the document was created (no `before`): no pool copies can exist yet;
  *   - the document was deleted (no `after`): account deletion has its own path;
- *   - `name` did not change, or the new name is empty.
+ *   - the new name is empty;
+ *   - an update that did not change `name` (the `lastLogin` stamp on sign-in).
+ *
+ * A CREATE propagates (qodo #690 finding 9): a profile can be recreated for
+ * someone who already has pool copies — `syncAllUsers` re-materialises a
+ * missing `users/{uid}` — and those copies must follow. For a genuinely new
+ * signup the two collection-group reads find nothing and cost nothing more.
  *
  * A change TO a placeholder still propagates: the copies must equal the
  * profile, and a stale real name on a pool page would be a lie the profile
@@ -70,9 +75,10 @@ export function userNameChanged(
   before: Record<string, unknown> | undefined,
   after: Record<string, unknown> | undefined,
 ): string | null {
-  if (!before || !after) return null;
+  if (!after) return null;
   const next = typeof after.name === 'string' ? after.name.trim() : '';
   if (!next) return null;
+  if (!before) return next;
   const prev = typeof before.name === 'string' ? before.name.trim() : '';
   return next === prev ? null : next;
 }

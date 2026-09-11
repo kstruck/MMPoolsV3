@@ -7,17 +7,22 @@ import { isPlaceholderName, pickSubjectName, userNameChanged } from '../lib/disp
  * __tests__/emulator/userNameSync.emulator.test.ts.
  */
 describe('isPlaceholderName', () => {
-  it('treats every server/client fallback as a placeholder, case-insensitively', () => {
-    for (const n of ['New User', 'new user', 'Unknown', 'Unknown User', 'Member', 'Participant', 'Host', 'Player', 'Anonymous', '', '   ']) {
+  it('treats every value a writer puts on users/{uid}.name as a placeholder, case-insensitively', () => {
+    for (const n of ['New User', 'new user', 'Unknown', 'Unknown User', '', '   ']) {
       expect(isPlaceholderName(n), n).toBe(true);
     }
     expect(isPlaceholderName(undefined)).toBe(true);
     expect(isPlaceholderName(42)).toBe(true);
   });
 
-  it('accepts a real name', () => {
+  it('accepts a real name — including ones that happen to equal a POOL-COPY fallback (qodo #690 finding 11)', () => {
     expect(isPlaceholderName('Zach Even')).toBe(false);
     expect(isPlaceholderName('kevin')).toBe(false);
+    // "Host" / "Member" / "Participant" / "Player" are stamped on pool copies,
+    // never on a profile, so a person actually named one of them keeps it.
+    for (const n of ['Host', 'Member', 'Participant', 'Player', 'Anonymous']) {
+      expect(isPlaceholderName(n), n).toBe(false);
+    }
   });
 });
 
@@ -46,8 +51,12 @@ describe('userNameChanged — the users/{uid} trigger gate', () => {
   it('returns the new name when name changed on an update', () => {
     expect(userNameChanged({ name: 'New User' }, { name: 'Ron Johnson' })).toBe('Ron Johnson');
   });
-  it('ignores creates and deletes — no pool copies can exist / deletion has its own path', () => {
-    expect(userNameChanged(undefined, { name: 'Ron Johnson' })).toBeNull();
+  it('a CREATE propagates — a recreated profile may already have pool copies (qodo #690 finding 9)', () => {
+    expect(userNameChanged(undefined, { name: 'Ron Johnson' })).toBe('Ron Johnson');
+    expect(userNameChanged(undefined, { name: '' })).toBeNull();
+    expect(userNameChanged(undefined, {})).toBeNull();
+  });
+  it('ignores deletes — account deletion has its own path', () => {
     expect(userNameChanged({ name: 'Ron Johnson' }, undefined)).toBeNull();
   });
   it('ignores writes that did not touch the name (lastLogin stamps on every sign-in)', () => {

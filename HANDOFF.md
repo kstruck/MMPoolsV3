@@ -36,15 +36,24 @@
 > root `displayNameShared.test.ts`. Codex: round 1 found 3 (all absorbed),
 > see the PR body for the final round count.
 >
-> **Deploy notes.** The trigger is a NEW export — verify with
-> `npx firebase functions:list | Select-String "onUserNameChanged"` after
-> `npx firebase deploy` from `D:\march-melee-pools` at `origin/main`. The
+> **Deploy notes.** Step zero, always (CLAUDE.md §3):
+> `git -C D:\march-melee-pools pull --ff-only origin main` — if it does not
+> fast-forward, STOP and resolve before deploying; a deploy from a stale
+> checkout reports `Deploy complete!` and ships the old code. Then
+> `npm --prefix functions ci`, then `npx firebase deploy`. The trigger is a
+> NEW export — verify with
+> `npx firebase functions:list | Select-String "onUserNameChanged"`. The
 > index overrides ship in the same deploy (`firestore:indexes` target); until
-> they exist the trigger logs `collection-group index missing` and does NOT
-> retry. The emulator needs no index, so a green suite does not prove it.
+> the collection-group indexes are built the trigger FAILS and is RETRIED by
+> the platform (`retry: true`; a name change in that window is not lost). The
+> emulator needs no index, so a green suite does not prove it shipped.
 >
 > **Not in scope, still true:** there is NO "remove member" callable for NFL
-> pools (helpers in `lib/memberRecord.ts` have zero callers, #580); the
+> pools — the helpers in `lib/memberRecord.ts` have zero production callers
+> (measured at `97227933`:
+> `grep -rn "voidMemberRecord\|reconcileMembership" functions/src --include=*.ts | grep -v test`
+> returns only their definitions in `lib/memberRecord.ts` and two comment
+> mentions in `manualReminders.ts` / `setPaidStatus.ts`; #580 says the same); the
 > Payment Ledger's Delete is `deleteNFLEntry` and refuses once a week has
 > scored, for super admins too — by design (Kevin 2026-08-25). Names already
 > fixed BEFORE this deploys do not back-propagate: the trigger fires on a

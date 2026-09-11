@@ -8,36 +8,27 @@
  * The work itself lives in lib/displayName.ts, where the emulator suite can
  * drive it without a trigger harness.
  *
- * Ordering (codex r1 P2). Two quick edits produce two events that may run out
- * of order or at once. Before writing anything the handler re-reads the
- * profile and stands down unless it STILL carries this event's name — the
- * newer event is the one that applies. `stampSearchName` repeats that check
- * inside its transaction.
+ * Ordering (codex r1 P2 / r2 P2). Two quick edits produce two events that may
+ * run out of order or at once. The handler re-reads the profile and stands
+ * down unless it STILL carries this event's name, and every write chunk is a
+ * transaction on the profile that commits only while that stays true — so an
+ * older handler cannot commit after a newer edit.
  *
- * Retries (codex r1 P3). `retry: true`, and a failure is RETHROWN so the
- * platform re-delivers the event: the writes are idempotent (a copy already
- * equal to the profile is skipped), so a retry after a transient query or
- * batch failure is safe and is the only thing that stops a transient fault
- * from leaving pool copies stale until the next edit. The one failure that is
- * NOT transient — the collection-group index missing (FAILED_PRECONDITION) —
- * is logged and swallowed, because retrying it for the retry window would
- * burn invocations for nothing; the index lives in firestore.indexes.json and
- * ships with `npx firebase deploy`.
+ * Retries (codex r1 P3; qodo #690 finding 3). `retry: true`, and EVERY failure
+ * is rethrown so the platform re-delivers the event. The writes are idempotent
+ * (a copy already equal to the profile is skipped), so a retry after a
+ * transient query or batch failure is safe. That includes the one failure
+ * that is not transient on a given day — the collection-group index missing
+ * (FAILED_PRECONDITION) — because swallowing it ACKNOWLEDGES the event and
+ * nothing can replay it once the index exists; the copies would stay stale
+ * until the next edit. Retrying costs a handful of backed-off invocations
+ * during the index rollout window and nothing after it. The index lives in
+ * firestore.indexes.json and ships with `npx firebase deploy`.
  */
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { isCurrentProfileName, propagateUserName, stampSearchName, userNameChanged } from './lib/displayName';
-
-/** gRPC FAILED_PRECONDITION — what Firestore returns for a query with no index. */
-const FAILED_PRECONDITION = 9;
-
-export function isMissingIndexError(error: unknown): boolean {
-  const e = error as { code?: unknown; message?: unknown } | null;
-  if (!e) return false;
-  if (e.code === FAILED_PRECONDITION) return true;
-  return typeof e.message === 'string' && /requires an index/i.test(e.message);
-}
 
 export const onUserNameChanged = onDocumentWritten({ document: 'users/{uid}', retry: true }, async (event) => {
   const before = event.data?.before?.exists ? (event.data.before.data() as Record<string, unknown>) : undefined;
@@ -54,17 +45,11 @@ export const onUserNameChanged = onDocumentWritten({ document: 'users/{uid}', re
   }
 
   try {
-    const [result, searchStamped] = await Promise.all([
-      propagateUserName(db, uid, name),
-      stampSearchName(db, uid, name),
-    ]);
-    logger.info(`[userNameSync] ${uid}: name -> ${JSON.stringify(name)}; members=${result.members} entries=${result.entries} searchName=${searchStamped ? 'updated' : 'unchanged'}`);
+    const result = await propagateUserName(db, uid, name);
+    const searchStamped = await stampSearchName(db, uid, name);
+    logger.info(`[userNameSync] ${uid}: name -> ${JSON.stringify(name)}; members=${result.members} entries=${result.entries} superseded=${result.superseded} searchName=${searchStamped ? 'updated' : 'unchanged'}`);
   } catch (error) {
-    if (isMissingIndexError(error)) {
-      logger.error(`[userNameSync] ${uid}: collection-group index missing — deploy firestore.indexes.json; not retrying`, error);
-      return;
-    }
-    logger.error(`[userNameSync] ${uid}: propagation failed; rethrowing for retry`, error);
+    logger.error(`[userNameSync] ${uid}: propagation failed; rethrowing so the event is retried`, error);
     throw error;
   }
 });

@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import './setup';
 import { isCurrentProfileName, propagateUserName, resolveSubjectName, stampSearchName } from '../../lib/displayName';
 import { createParticipantProfileIfMissing } from '../../participant';
+import { submitNFLPicksInternal } from '../../nflPools';
 
 /**
  * Display-name ownership, the half only a live Firestore can prove:
@@ -25,7 +26,8 @@ const POOL_A = 'dn_pool_a';
 const POOL_B = 'dn_pool_b';
 
 async function wipe() {
-  for (const p of [POOL_A, POOL_B]) {
+  await db.collection('nfl_games').doc('dn_game_1').delete().catch(() => undefined);
+  for (const p of [POOL_A, POOL_B, 'dn_pool_c']) {
     const ref = db.collection('pools').doc(p);
     for (const sub of ['members', 'entries']) {
       const snap = await ref.collection(sub).get();
@@ -200,6 +202,51 @@ describe('P5 — isCurrentProfileName is the supersession check the trigger runs
     expect(await isCurrentProfileName(db, UID, 'Ron Johnso')).toBe(false);
     expect(await isCurrentProfileName(db, 'dn_nobody', 'Nobody')).toBe(false);
   });
+});
+
+describe('P6 — a pick submission stamps the PROFILE name, read inside its transaction (qodo #690 finding 2)', () => {
+  const POOL_C = 'dn_pool_c';
+  const GAME = 'dn_game_1';
+  const SEASON = 'dn-season';
+  const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
+
+  beforeEach(async () => {
+    await db.collection('nfl_games').doc(GAME).set({
+      id: GAME, espnGameId: GAME, season: SEASON, seasonType: 1, week: 1,
+      startTime: Date.now() + 4 * 60 * 60 * 1000, status: 'SCHEDULED', isMonday: false,
+      homeTeam: T('KC'), awayTeam: T('BUF'), scores: { home: 0, away: 0 }, spread: { value: -3, locked: true },
+    });
+    const ref = db.collection('pools').doc(POOL_C);
+    await ref.set({
+      name: POOL_C, type: 'NFL_PICKEM', league: 'NFL', season: SEASON, seasonType: 1,
+      ownerId: OTHER, participantIds: [OTHER, UID], status: 'OPEN', billing: { status: 'free' },
+      settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: false },
+    });
+    await ref.collection('members').doc(UID).set({
+      uid: UID, poolId: POOL_C, userName: 'New User', role: 'PARTICIPANT',
+      paidStatus: 'UNPAID', joinedAt: Date.now(), feeOwed: 25, feeOwedSource: 'LIVE', hasPlayableEntry: false,
+    });
+    await db.collection('users').doc(UID).set({ name: 'Ron Johnson' });
+  });
+
+  it('writes the profile name to the entry and the member record even when the login token carries an older one', async () => {
+    await submitNFLPicksInternal(db, { actorUid: UID, subjectUid: UID, subjectName: 'Old Token Name' } as never, {
+      poolId: POOL_C, week: 1, picks: { [GAME]: 'BUF' },
+    } as never);
+    const entries = await db.collection('pools').doc(POOL_C).collection('entries').where('ownerUid', '==', UID).get();
+    expect(entries.size).toBe(1);
+    expect(entries.docs[0].data().userName).toBe('Ron Johnson');
+    expect((await db.collection('pools').doc(POOL_C).collection('members').doc(UID).get()).data()!.userName).toBe('Ron Johnson');
+  }, 30000);
+
+  it('falls back to the token name when the profile holds a placeholder', async () => {
+    await db.collection('users').doc(UID).set({ name: 'New User' });
+    await submitNFLPicksInternal(db, { actorUid: UID, subjectUid: UID, subjectName: 'Typed Name' } as never, {
+      poolId: POOL_C, week: 1, picks: { [GAME]: 'BUF' },
+    } as never);
+    const entries = await db.collection('pools').doc(POOL_C).collection('entries').where('ownerUid', '==', UID).get();
+    expect(entries.docs[0].data().userName).toBe('Typed Name');
+  }, 30000);
 });
 
 describe('P3 — resolveSubjectName', () => {

@@ -5,26 +5,22 @@
  * `users/{uid}.name` is the source of truth for a person's display name
  * (functions/src/lib/displayName.ts carries the server rules; the client's
  * `syncUserToFirestore` the login-time rule). Every placeholder below is a
- * value some code path writes when it has nothing better:
+ * value some code path writes ONTO A PROFILE when it has nothing better:
  *
  *   New User      — the old `createParticipantProfile` Auth trigger (race, fixed 2026-09-10)
- *   Unknown       — client `syncUserToFirestore` existing-user branch
- *   Unknown User  — client `mapUser`, server `userSync` when even the email is missing
- *   Member        — `joinNFLPoolInternal`
- *   Participant   — pick / entry writes
- *   Host          — seeded pool owner (poolCreation)
- *   Player        — userProfile
- *   Anonymous     — NFL dashboard leaders strip
+ *   Unknown       — client `syncUserToFirestore` existing-user branch; `syncAllUsers`
+ *   Unknown User  — client `mapUser`, server triggers when even the email is missing
+ *
+ * ⚠️ ONLY profile-level fallbacks belong here (qodo #690 finding 11). "Host",
+ * "Member", "Participant", "Player", "Anonymous" are stamped on POOL COPIES
+ * (member records, entries, a display strip) and never written to a profile —
+ * and a person can legitimately be named "Host". Listing them here made such
+ * a typed name lose to a server-created email prefix at registration.
  */
 export const PLACEHOLDER_DISPLAY_NAMES: ReadonlySet<string> = new Set([
   'new user',
   'unknown',
   'unknown user',
-  'member',
-  'participant',
-  'host',
-  'player',
-  'anonymous',
 ]);
 
 /** True for a non-string, empty, whitespace-only, or known-placeholder name. */
