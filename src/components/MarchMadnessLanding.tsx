@@ -23,7 +23,7 @@ export const MarchMadnessLanding: React.FC<MarchMadnessLandingProps> = ({ user, 
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

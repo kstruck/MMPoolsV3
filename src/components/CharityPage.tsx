@@ -21,7 +21,7 @@ export const CharityPage: React.FC<CharityPageProps> = ({ user, isManager = fals
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

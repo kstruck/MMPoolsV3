@@ -34,7 +34,7 @@ export const GamedaySquaresLanding: React.FC<GamedaySquaresLandingProps> = ({ us
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

@@ -22,7 +22,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ user, isManager = false, o
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

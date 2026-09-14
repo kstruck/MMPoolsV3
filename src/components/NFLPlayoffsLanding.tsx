@@ -23,7 +23,7 @@ export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, is
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

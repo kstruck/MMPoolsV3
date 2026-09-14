@@ -384,6 +384,19 @@ describe('menu ACTIONS fire even though the menu closes on the same click', () =
     expect(burger.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('mobile drawer: the theme row switches theme and the drawer STAYS open', () => {
+    // The one row whose result you want to see (codex r2 on this fix: the
+    // shared close path collapsed it while the comment beside the drawer
+    // promised it would not).
+    renderWith(member, {});
+    const { burger, drawer } = openDrawer();
+    const before = document.documentElement.classList.contains('dark');
+    fireEvent.click(within(drawer).getByRole('button', { name: /Theme/ }));
+    expect(document.documentElement.classList.contains('dark')).toBe(!before);
+    expect(burger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(burger.getAttribute('aria-controls')!)).toBeTruthy();
+  });
+
   it('desktop account menu: Log Out signs the member out, and the menu closes', () => {
     const onLogout = vi.fn();
     renderWith(member, { onLogout });

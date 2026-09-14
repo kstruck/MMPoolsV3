@@ -175,13 +175,16 @@ const DrawerAction: React.FC<{
     onClick: () => void;
     icon: React.ReactNode;
     className?: string;
+    /** Leave the drawer open after the action — for the theme switch, whose
+        whole point is seeing the result. Default closes, like every row. */
+    keepOpen?: boolean;
     children: React.ReactNode;
-}> = ({ onClick, icon, className, children }) => {
+}> = ({ onClick, icon, className, keepOpen = false, children }) => {
     const close = useContext(DrawerCloseContext);
     return (
     <button
         type="button"
-        onClick={() => { onClick(); close(); }}
+        onClick={() => { onClick(); if (!keepOpen) close(); }}
         className={cn(
             'flex items-center gap-3 min-h-[44px] rounded-[10px] px-3 text-left font-display font-semibold uppercase text-[14px] tracking-[0.05em] text-white/80 transition-colors hover:bg-white/10 hover:text-white',
             className
@@ -636,7 +639,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                                 SuperAdmin
                                             </DrawerLink>
                                         )}
-                                        <DrawerAction onClick={toggleTheme} icon={theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}>
+                                        <DrawerAction onClick={toggleTheme} keepOpen icon={theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}>
                                             {theme === 'dark' ? 'Light Theme' : 'Dark Theme'}
                                         </DrawerAction>
                                         <DrawerAction onClick={onLogout} icon={<LogOut size={16} />}>
