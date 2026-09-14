@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
@@ -138,5 +138,48 @@ describe('Public Pools sits at the top level of the main menu', () => {
     const doc = src.slice(0, src.indexOf('interface HeaderProps'));
     expect(doc).toContain('Public Pools flat');
     expect(doc).not.toContain('(disclosure: browse / how it works / pricing)');
+  });
+});
+
+describe('every Header caller passes the auth MODE through', () => {
+  // 🛑 THE DEFECT THIS PINS (2026-09-14, codex rounds 2-3 on the dead-buttons
+  // fix). The header's Get Started asks for 'register'. Ten pages handed it a
+  // zero-argument login wrapper (`onOpenAuth={onLogin}`, or the inline
+  // `() => onOpenAuth('login')`), which silently dropped the argument — so the
+  // same button opened the sign-in form on /, /pricing and /contact and the
+  // register form everywhere else. TypeScript cannot catch it: a `() => void`
+  // is assignable to `(mode?) => void`. So it is pinned on the source.
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const full = resolve(dir, name);
+      return statSync(full).isDirectory() ? walk(full) : full.endsWith('.tsx') ? [full] : [];
+    });
+  const root = resolve(__dirname, '..', 'src/components');
+  const callers = walk(root)
+    .filter((f) => !f.endsWith('Header.tsx'))
+    .map((f) => ({ rel: f.slice(root.length + 1).replace(/\\/g, '/'), text: readFileSync(f, 'utf8') }))
+    .filter(({ text }) => /<Header[\s>]/.test(text));
+
+  it('finds the callers at all', () => {
+    expect(callers.length).toBeGreaterThan(10);
+  });
+
+  it.each(callers)('$rel', ({ rel, text }) => {
+    const values = [...text.matchAll(/onOpenAuth=\{([^}]*)\}/g)].map((m) => m[1].trim());
+    // `<Header {...props} />` forwards App's own handler untouched — that
+    // carries the mode by construction.
+    const spreads = /<Header\s+\{\.\.\.props\}/.test(text);
+    expect(values.length > 0 || spreads, `${rel} renders <Header> without onOpenAuth`).toBe(true);
+    for (const v of values) {
+      // A hard-coded mode is the bug, whichever way it is spelled.
+      expect(v, `${rel}: ${v}`).not.toMatch(/\((['"])(login|register)\1\)/);
+      // A bare handler name must be one that carries the mode. `onLogin` only
+      // qualifies when the page declares it mode-aware.
+      if (/^\w+$/.test(v)) {
+        const modeAware = ['onOpenAuth', 'handleOpenAuth'].includes(v)
+          || new RegExp(`\\b${v}\\??:\\s*\\(mode\\?:`).test(text);
+        expect(modeAware, `${rel}: onOpenAuth={${v}} drops the mode`).toBe(true);
+      }
+    }
   });
 });
