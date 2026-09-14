@@ -35,7 +35,7 @@ const heroCardCls = 'bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-
 const heroBtn =
   'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer';
 
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   const navigate = useNavigate();
   const canCreate = canAccessPoolCreation(user);
 
@@ -47,7 +47,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
       <Header
         user={user || null}
         isManager={isManager}
-        onOpenAuth={onLogin}
+        onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
         onLogout={onLogout || (() => { })}
         onCreatePool={onCreatePool}
       />

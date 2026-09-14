@@ -87,6 +87,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     user,
     isManager = false,
     onLogin,
+    onSignup,
     onLogout,
     onCreatePool
 }) => {
@@ -292,7 +293,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

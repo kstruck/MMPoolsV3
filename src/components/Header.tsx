@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import { Logo } from './Logo';
 import type { User } from '../types';
 import {
@@ -67,7 +67,7 @@ import { cn } from './ui/cn';
 interface HeaderProps {
     user: User | null;
     isManager?: boolean;
-    onOpenAuth: () => void;
+    onOpenAuth: (mode?: 'login' | 'register') => void;
     onLogout: () => void;
     onCreatePool?: () => void;
 }
@@ -130,6 +130,14 @@ const DrawerSection: React.FC<{ label: string; children: React.ReactNode }> = ({
     </div>
 );
 
+/* Lets a drawer row close the drawer AFTER its own handler runs. The drawer
+   used to close itself with an `onClickCapture` on its container, which
+   silently killed every BUTTON in it on phones (Log In, Get Started, Log Out,
+   theme) — see NavMenu for the mechanism. A bubble-phase handler on the
+   container is not the fix either: jsx-a11y rightly flags a click handler on
+   a static div. So each row closes the drawer itself. */
+const DrawerCloseContext = createContext<() => void>(() => {});
+
 /* One row in the mobile drawer. 44px min height — WCAG 2.2 SC 2.5.8 asks for
    24, but a thumb on a phone wants the platform 44. */
 const DrawerLink: React.FC<{
@@ -139,11 +147,14 @@ const DrawerLink: React.FC<{
     icon: React.ReactNode;
     className?: string;
     children: React.ReactNode;
-}> = ({ to, onClick, active, icon, className, children }) => (
+}> = ({ to, onClick, active, icon, className, children }) => {
+    const close = useContext(DrawerCloseContext);
+    return (
     <a
         href={to}
         aria-current={active ? 'page' : undefined}
         onClick={(e) => {
+            close();
             if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             e.preventDefault();
             onClick();
@@ -157,17 +168,23 @@ const DrawerLink: React.FC<{
         <span className="shrink-0 text-gold-400" aria-hidden="true">{icon}</span>
         {children}
     </a>
-);
+    );
+};
 
 const DrawerAction: React.FC<{
     onClick: () => void;
     icon: React.ReactNode;
     className?: string;
+    /** Leave the drawer open after the action — for the theme switch, whose
+        whole point is seeing the result. Default closes, like every row. */
+    keepOpen?: boolean;
     children: React.ReactNode;
-}> = ({ onClick, icon, className, children }) => (
+}> = ({ onClick, icon, className, keepOpen = false, children }) => {
+    const close = useContext(DrawerCloseContext);
+    return (
     <button
         type="button"
-        onClick={onClick}
+        onClick={() => { onClick(); if (!keepOpen) close(); }}
         className={cn(
             'flex items-center gap-3 min-h-[44px] rounded-[10px] px-3 text-left font-display font-semibold uppercase text-[14px] tracking-[0.05em] text-white/80 transition-colors hover:bg-white/10 hover:text-white',
             className
@@ -176,7 +193,8 @@ const DrawerAction: React.FC<{
         <span className="shrink-0 text-gold-400" aria-hidden="true">{icon}</span>
         {children}
     </button>
-);
+    );
+};
 
 export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenAuth, onLogout, onCreatePool }) => {
     const navigate = useNavigate();
@@ -188,6 +206,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
     // a phone screen and was one of the three stacked menus members complained
     // about; on mobile it now lives behind one hamburger.
     const [menuOpen, setMenuOpen] = useState(false);
+    const closeDrawer = useCallback(() => setMenuOpen(false), []);
 
     const isActive = (path: string) => location.pathname === path;
     const isAnyActive = (...paths: string[]) => paths.some(isActive);
@@ -395,13 +414,13 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <ThemeToggle compact />
                                 <HelpHeaderButton />
                                 <button
-                                    onClick={onOpenAuth}
+                                    onClick={() => onOpenAuth('login')}
                                     className={cn(chromeBtn, 'text-white/80 hover:text-white')}
                                 >
                                     Log In
                                 </button>
                                 <button
-                                    onClick={onOpenAuth}
+                                    onClick={() => onOpenAuth('register')}
                                     className={cn(chromeBtn, 'bg-brandred-600 text-white hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]')}
                                 >
                                     Get Started
@@ -518,8 +537,12 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             // and makes any hardcoded bar height wrong exactly
                             // for the users who have the most rows to scroll.
                             className="lg:hidden absolute left-0 right-0 top-full max-h-[80vh] overflow-y-auto bg-navy-900 border-b border-[rgba(230,206,150,0.16)] shadow-lg px-4 py-4 flex flex-col gap-5"
-                            onClickCapture={() => setMenuOpen(false)}
                         >
+                            {/* Rows close the drawer through DrawerCloseContext (see
+                                its comment). The theme toggle and Help button
+                                deliberately do NOT: switching theme is something
+                                you want to see, and Help opens over the top. */}
+                            <DrawerCloseContext.Provider value={closeDrawer}>
                             {!user ? (
                                 <>
                                     <DrawerSection label="Explore">
@@ -541,13 +564,13 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     </DrawerSection>
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={onOpenAuth}
+                                            onClick={() => { onOpenAuth('login'); closeDrawer(); }}
                                             className={cn(chromeBtn, 'flex-1 justify-center border border-white/20 text-white/80 hover:text-white')}
                                         >
                                             Log In
                                         </button>
                                         <button
-                                            onClick={onOpenAuth}
+                                            onClick={() => { onOpenAuth('register'); closeDrawer(); }}
                                             className={cn(chromeBtn, 'flex-1 justify-center bg-brandred-600 text-white hover:bg-brandred-500')}
                                         >
                                             Get Started
@@ -561,7 +584,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             ) : (
                                 <>
                                     <button
-                                        onClick={canCreate ? onCreatePool : undefined}
+                                        onClick={canCreate ? () => { onCreatePool?.(); closeDrawer(); } : undefined}
                                         disabled={!canCreate}
                                         className={cn(
                                             chromeBtn,
@@ -616,7 +639,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                                 SuperAdmin
                                             </DrawerLink>
                                         )}
-                                        <DrawerAction onClick={toggleTheme} icon={theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}>
+                                        <DrawerAction onClick={toggleTheme} keepOpen icon={theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}>
                                             {theme === 'dark' ? 'Light Theme' : 'Dark Theme'}
                                         </DrawerAction>
                                         <DrawerAction onClick={onLogout} icon={<LogOut size={16} />}>
@@ -629,6 +652,7 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     </div>
                                 </>
                             )}
+                            </DrawerCloseContext.Provider>
                         </div>
                     )}
                 </div>

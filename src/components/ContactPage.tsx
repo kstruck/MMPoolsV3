@@ -9,7 +9,8 @@ import { Input, Select, FieldLabel, Checkbox, Button } from './ui';
 
 interface ContactPageProps {
     user: User | null;
-    onLogin: () => void;
+    /** Mode-aware: the header's Get Started asks for 'register'. */
+    onLogin: (mode?: 'login' | 'register') => void;
     onLogout: () => void;
     onCreatePool: () => void;
 }
