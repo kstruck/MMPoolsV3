@@ -17,7 +17,7 @@ interface NFLPlayoffsLandingProps {
 /* Nav / hero / footer stay navy chrome in both themes; the content sections
    between them flip cream <-> navy via CSS-var surfaces (bg-page/surface/card). */
 
-export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
+export const NFLPlayoffsLanding: React.FC<NFLPlayoffsLandingProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool }) => {
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
             <Header

@@ -87,6 +87,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
     user,
     isManager = false,
     onLogin,
+    onSignup,
     onLogout,
     onCreatePool
 }) => {
