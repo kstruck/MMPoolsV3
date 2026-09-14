@@ -139,9 +139,19 @@ export const NavMenu: React.FC<{
                 <div
                     ref={panelRef}
                     id={panelId}
-                    // A click on any item closes the menu. Capture phase so it
-                    // runs even when the item's own handler navigates away.
-                    onClickCapture={() => setOpen(false)}
+                    // A click on any item closes the menu. BUBBLE phase, after
+                    // the item's own handler. Capture phase (the first cut)
+                    // closed the menu before the click reached the item: React
+                    // flushed `setOpen(false)`, the panel unmounted, and the
+                    // item's `onClick` was then dispatched against a button
+                    // that was no longer in the tree — so it never ran. Links
+                    // survived because the browser still followed their href
+                    // (as a full page load); the BUTTONS — Log Out, theme —
+                    // were dead for weeks (2026-09-14, multiple reports).
+                    // React collects the whole listener path before it runs
+                    // any of them, so this still fires when the item's handler
+                    // navigates away or unmounts the header.
+                    onClick={() => setOpen(false)}
                     className={cn(
                         'absolute top-full mt-2 z-50 min-w-[220px] rounded-[12px] p-1.5',
                         'bg-navy-800 border border-[rgba(230,206,150,0.22)]',

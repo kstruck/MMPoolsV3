@@ -21,6 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { flushSync } from 'react-dom';
 import { MemoryRouter } from 'react-router';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { Header } from '../components/Header';
@@ -308,5 +309,99 @@ describe('grouped header nav — mobile drawer', () => {
       expect(hrefs, `mobile drawer lost ${href}`).toContain(href);
     }
     expect(within(drawer as HTMLElement).getByRole('button', { name: /Log Out/ })).toBeTruthy();
+  });
+});
+
+describe('menu ACTIONS fire even though the menu closes on the same click', () => {
+  // 🛑 THE DEFECT THIS PINS (2026-09-14, multiple member reports: "Log In does
+  // nothing on my phone", "Log Out does nothing" — desktop too). Both panels
+  // closed themselves with an `onClickCapture` on the container. React flushes
+  // that state update before the click reaches the item — measured in Chrome
+  // against the dev server: by the time a native capture listener on the
+  // drawer ITSELF ran, `document.body.contains(drawer)` was already false — so
+  // the item's `onClick` was dispatched against an unmounted button and never
+  // ran. Links survived because the browser still followed their `href` (as a
+  // full page load, which is why nobody noticed for weeks); the BUTTONS — Log
+  // In, Get Started, Log Out, theme — were dead.
+  //
+  // jsdom dispatches every listener back-to-back with no microtask checkpoint
+  // between them, so `fireEvent.click` alone cannot reproduce the browser's
+  // ordering and the tests above stayed green through the outage. The native
+  // bubble listener below sits on the panel — between React's capture and
+  // bubble listeners on the root — and flushes pending React work at that
+  // point, which is exactly where the browser flushed it.
+  const flushBetweenPhases = (panel: Element) =>
+    panel.addEventListener('click', () => flushSync(() => {}));
+
+  const renderWith = (user: User | null, handlers: { onOpenAuth?: (mode?: 'login' | 'register') => void; onLogout?: () => void }) =>
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <Header
+            user={user}
+            onOpenAuth={handlers.onOpenAuth ?? (() => {})}
+            onLogout={handlers.onLogout ?? (() => {})}
+            onCreatePool={() => {}}
+          />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+  const openDrawer = () => {
+    const burger = screen.getByRole('button', { name: /Open menu/ });
+    fireEvent.click(burger);
+    const drawer = document.getElementById(burger.getAttribute('aria-controls')!)!;
+    flushBetweenPhases(drawer);
+    return { burger, drawer };
+  };
+
+  it('mobile drawer: Log In opens the auth modal in login mode, and the drawer closes', () => {
+    const onOpenAuth = vi.fn();
+    renderWith(null, { onOpenAuth });
+    const { burger, drawer } = openDrawer();
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Log In$/ }));
+    expect(onOpenAuth).toHaveBeenCalledTimes(1);
+    // `onClick={onOpenAuth}` handed the click EVENT to a `(mode) => void`, so
+    // App stored a SyntheticEvent as the auth mode. Pass the mode explicitly.
+    expect(onOpenAuth).toHaveBeenCalledWith('login');
+    expect(burger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('mobile drawer: Get Started opens the auth modal in REGISTER mode', () => {
+    const onOpenAuth = vi.fn();
+    renderWith(null, { onOpenAuth });
+    const { drawer } = openDrawer();
+    fireEvent.click(within(drawer).getByRole('button', { name: /Get Started/ }));
+    expect(onOpenAuth).toHaveBeenCalledWith('register');
+  });
+
+  it('mobile drawer: Log Out signs the member out, and the drawer closes', () => {
+    const onLogout = vi.fn();
+    renderWith(member, { onLogout });
+    const { burger, drawer } = openDrawer();
+    fireEvent.click(within(drawer).getByRole('button', { name: /Log Out/ }));
+    expect(onLogout).toHaveBeenCalledTimes(1);
+    expect(burger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('desktop account menu: Log Out signs the member out, and the menu closes', () => {
+    const onLogout = vi.fn();
+    renderWith(member, { onLogout });
+    const trigger = openMenu(/Account menu/);
+    const panel = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+    flushBetweenPhases(panel);
+    fireEvent.click(within(panel).getByRole('button', { name: /Log Out/ }));
+    expect(onLogout).toHaveBeenCalledTimes(1);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('desktop signed-out row: Log In is login, Get Started is register', () => {
+    const onOpenAuth = vi.fn();
+    renderWith(null, { onOpenAuth });
+    const row = document.querySelector('header div.hidden.items-center')!;
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: /^Log In$/ }));
+    expect(onOpenAuth).toHaveBeenLastCalledWith('login');
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: /Get Started/ }));
+    expect(onOpenAuth).toHaveBeenLastCalledWith('register');
   });
 });

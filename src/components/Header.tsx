@@ -67,7 +67,7 @@ import { cn } from './ui/cn';
 interface HeaderProps {
     user: User | null;
     isManager?: boolean;
-    onOpenAuth: () => void;
+    onOpenAuth: (mode?: 'login' | 'register') => void;
     onLogout: () => void;
     onCreatePool?: () => void;
 }
@@ -395,13 +395,13 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                 <ThemeToggle compact />
                                 <HelpHeaderButton />
                                 <button
-                                    onClick={onOpenAuth}
+                                    onClick={() => onOpenAuth('login')}
                                     className={cn(chromeBtn, 'text-white/80 hover:text-white')}
                                 >
                                     Log In
                                 </button>
                                 <button
-                                    onClick={onOpenAuth}
+                                    onClick={() => onOpenAuth('register')}
                                     className={cn(chromeBtn, 'bg-brandred-600 text-white hover:bg-brandred-500 shadow-[0_6px_16px_rgba(196,52,46,0.28)]')}
                                 >
                                     Get Started
@@ -518,7 +518,11 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                             // and makes any hardcoded bar height wrong exactly
                             // for the users who have the most rows to scroll.
                             className="lg:hidden absolute left-0 right-0 top-full max-h-[80vh] overflow-y-auto bg-navy-900 border-b border-[rgba(230,206,150,0.16)] shadow-lg px-4 py-4 flex flex-col gap-5"
-                            onClickCapture={() => setMenuOpen(false)}
+                            // Close on any item click — in the BUBBLE phase, after
+                            // the item's own handler has run. See NavMenu for why
+                            // capture phase silently killed every BUTTON in here
+                            // (Log In, Get Started, Log Out, theme) on phones.
+                            onClick={() => setMenuOpen(false)}
                         >
                             {!user ? (
                                 <>
@@ -541,13 +545,13 @@ export const Header: React.FC<HeaderProps> = ({ user, isManager = false, onOpenA
                                     </DrawerSection>
                                     <div className="flex items-center gap-2">
                                         <button
-                                            onClick={onOpenAuth}
+                                            onClick={() => onOpenAuth('login')}
                                             className={cn(chromeBtn, 'flex-1 justify-center border border-white/20 text-white/80 hover:text-white')}
                                         >
                                             Log In
                                         </button>
                                         <button
-                                            onClick={onOpenAuth}
+                                            onClick={() => onOpenAuth('register')}
                                             className={cn(chromeBtn, 'flex-1 justify-center bg-brandred-600 text-white hover:bg-brandred-500')}
                                         >
                                             Get Started
