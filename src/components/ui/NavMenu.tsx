@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from './cn';
 
@@ -139,19 +139,6 @@ export const NavMenu: React.FC<{
                 <div
                     ref={panelRef}
                     id={panelId}
-                    // A click on any item closes the menu. BUBBLE phase, after
-                    // the item's own handler. Capture phase (the first cut)
-                    // closed the menu before the click reached the item: React
-                    // flushed `setOpen(false)`, the panel unmounted, and the
-                    // item's `onClick` was then dispatched against a button
-                    // that was no longer in the tree — so it never ran. Links
-                    // survived because the browser still followed their href
-                    // (as a full page load); the BUTTONS — Log Out, theme —
-                    // were dead for weeks (2026-09-14, multiple reports).
-                    // React collects the whole listener path before it runs
-                    // any of them, so this still fires when the item's handler
-                    // navigates away or unmounts the header.
-                    onClick={() => setOpen(false)}
                     className={cn(
                         'absolute top-full mt-2 z-50 min-w-[220px] rounded-[12px] p-1.5',
                         'bg-navy-800 border border-[rgba(230,206,150,0.22)]',
@@ -160,12 +147,30 @@ export const NavMenu: React.FC<{
                         panelClassName,
                     )}
                 >
-                    {children}
+                    {/* Every item closes the menu itself, via this context,
+                        AFTER its own handler has run. The first cut closed it
+                        with an `onClickCapture` on this panel instead, and
+                        that silently killed every BUTTON in it: React flushed
+                        `setOpen(false)` before the click reached the item, the
+                        panel unmounted, and the item's `onClick` was then
+                        dispatched against a button no longer in the tree — so
+                        it never ran. Links survived because the browser still
+                        followed their href (as a full page load); Log Out and
+                        the theme toggle were dead for weeks (2026-09-14,
+                        multiple member reports). Not a bubble-phase handler on
+                        the panel either: jsx-a11y rightly flags a click
+                        handler on a static div. */}
+                    <NavMenuCloseContext.Provider value={close}>
+                        {children}
+                    </NavMenuCloseContext.Provider>
                 </div>
             )}
         </div>
     );
 };
+
+/** Lets an item close the panel it lives in. Provided by NavMenu. */
+const NavMenuCloseContext = createContext<() => void>(() => {});
 
 const itemBase =
     'w-full flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-left transition-colors ' +
@@ -184,11 +189,16 @@ export const NavMenuItem: React.FC<{
     hint?: string;
     className?: string;
     children: React.ReactNode;
-}> = ({ to, onClick, active = false, icon, hint, className, children }) => (
+}> = ({ to, onClick, active = false, icon, hint, className, children }) => {
+    const close = useContext(NavMenuCloseContext);
+    return (
     <a
         href={to}
         aria-current={active ? 'page' : undefined}
         onClick={(e) => {
+            // Close on ANY click, modified ones included — a cmd-click opens a
+            // tab, and the panel has no business staying open behind it.
+            close();
             if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             e.preventDefault();
             onClick();
@@ -209,7 +219,8 @@ export const NavMenuItem: React.FC<{
             {hint && <span className="font-body font-normal normal-case tracking-normal text-[11px] text-white/50">{hint}</span>}
         </span>
     </a>
-);
+    );
+};
 
 /** A command (not a destination) inside a NavMenu — logout, theme, etc. */
 export const NavMenuAction: React.FC<{
@@ -217,12 +228,19 @@ export const NavMenuAction: React.FC<{
     icon?: React.ReactNode;
     className?: string;
     children: React.ReactNode;
-}> = ({ onClick, icon, className, children }) => (
-    <button type="button" onClick={onClick} className={cn(itemBase, 'text-white/80 hover:bg-white/10 hover:text-white', className)}>
-        {icon && <span className="shrink-0 text-gold-400" aria-hidden="true">{icon}</span>}
-        {children}
-    </button>
-);
+}> = ({ onClick, icon, className, children }) => {
+    const close = useContext(NavMenuCloseContext);
+    return (
+        <button
+            type="button"
+            onClick={() => { onClick(); close(); }}
+            className={cn(itemBase, 'text-white/80 hover:bg-white/10 hover:text-white', className)}
+        >
+            {icon && <span className="shrink-0 text-gold-400" aria-hidden="true">{icon}</span>}
+            {children}
+        </button>
+    );
+};
 
 /** Hairline between groups of items inside a panel. */
 export const NavMenuSeparator: React.FC = () => (
