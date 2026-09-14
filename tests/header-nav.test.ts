@@ -154,9 +154,11 @@ describe('every Header caller passes the auth MODE through', () => {
       const full = resolve(dir, name);
       return statSync(full).isDirectory() ? walk(full) : full.endsWith('.tsx') ? [full] : [];
     });
-  const root = resolve(__dirname, '..', 'src/components');
+  // ALL of src, not just src/components: App.tsx renders <Header> directly on
+  // a dozen routes (qodo on #694).
+  const root = resolve(__dirname, '..', 'src');
   const callers = walk(root)
-    .filter((f) => !f.endsWith('Header.tsx'))
+    .filter((f) => !f.endsWith('Header.tsx') && !/[\\/]__tests__[\\/]/.test(f))
     .map((f) => ({ rel: f.slice(root.length + 1).replace(/\\/g, '/'), text: readFileSync(f, 'utf8') }))
     .filter(({ text }) => /<Header[\s>]/.test(text));
 
@@ -165,14 +167,25 @@ describe('every Header caller passes the auth MODE through', () => {
   });
 
   it.each(callers)('$rel', ({ rel, text }) => {
-    const values = [...text.matchAll(/onOpenAuth=\{([^}]*)\}/g)].map((m) => m[1].trim());
+    // One level of nested braces, so `() => { }` is captured whole.
+    const values = [...text.matchAll(/onOpenAuth=\{((?:[^{}]|\{[^{}]*\})*)\}/g)].map((m) => m[1].trim());
     // `<Header {...props} />` forwards App's own handler untouched — that
     // carries the mode by construction.
     const spreads = /<Header\s+\{\.\.\.props\}/.test(text);
     expect(values.length > 0 || spreads, `${rel} renders <Header> without onOpenAuth`).toBe(true);
     for (const v of values) {
+      // A no-op is honest on a surface that only renders signed in
+      // (ParticipantDashboard, TournamentSimulator): the signed-out header
+      // branch, and with it Log In / Get Started, never mounts there.
+      if (/^\(\)\s*=>\s*\{\s*\}$/.test(v)) continue;
       // A hard-coded mode is the bug, whichever way it is spelled.
       expect(v, `${rel}: ${v}`).not.toMatch(/\((['"])(login|register)\1\)/);
+      // An inline callback must take the mode and use it. `() => onLogin()`
+      // has no literal to catch and still drops it (qodo on #694).
+      if (v.includes('=>')) {
+        expect(v, `${rel}: inline onOpenAuth must take \`mode\``).toMatch(/^\(?\s*mode\b/);
+        expect(v, `${rel}: inline onOpenAuth must branch on \`mode\``).toMatch(/mode\s*===\s*(['"])register\1/);
+      }
       // A bare handler name must be one that carries the mode. `onLogin` only
       // qualifies when the page declares it mode-aware.
       if (/^\w+$/.test(v)) {
