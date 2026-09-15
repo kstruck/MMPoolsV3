@@ -187,12 +187,62 @@ export async function resolveScoreboardUrls(
 }
 
 /**
+ * Does this payload carry at least one event whose OWN metadata says it belongs
+ * to the requested season+type?
+ *
+ * ⚠️ EXPLICIT, NOT `eventMatchesSeason`. That guard fails OPEN on a MISSING
+ * field — deliberately, because degrading to a permissive import beats looking
+ * like an outage when ESPN changes shape. That trade is right for a DATE-BOUNDED
+ * request, where the dates already pin the season. It is wrong for the
+ * week/season/seasontype URL, which IGNORES `season` outright (measured:
+ * `week=1&season=2025&seasontype=2` returns the 2026 slate). Combine the two and
+ * a payload from another season with its `season` block absent is accepted,
+ * relabelled with the REQUESTED season by `parseScoreboardResponse`, and — since
+ * `eventWeekNumber` also fails open to the requested week — marks that week
+ * fetched in `importNFLSeason`, whose orphan sweep then deletes the real stored
+ * games. (qodo #2 on the fallback PR.)
+ *
+ * So the season-ignoring candidate must PROVE its season rather than merely not
+ * contradict it. `eventMatchesSeason` itself is untouched: the fail-open stays
+ * exactly as documented for every other caller and for the date-range candidate.
+ */
+function payloadProvesSeason(data: unknown, season: string, seasonType: 1 | 2 | 3): boolean {
+  // Narrowed rather than cast to `any`: the lint delta for this PR must be zero,
+  // and the shape needed here is two fields deep.
+  const events = (data as { events?: unknown } | null | undefined)?.events;
+  if (!Array.isArray(events)) return false;
+  return events.some((event) => {
+    const s = (event as { season?: { year?: unknown; type?: unknown } } | null | undefined)?.season;
+    return s?.year !== undefined && s?.type !== undefined
+      && String(s.year) === String(season) && String(s.type) === String(seasonType);
+  });
+}
+
+/**
  * Fetch a scoreboard payload, trying each candidate URL in order.
  *
- * Throws only when EVERY candidate failed, carrying the LAST status — the
+ * Throws only when EVERY candidate failed, carrying the LAST error — the
  * callers below turn a throw into an empty slate, which the heartbeat counts as
  * `slatesNotReconciled`. A candidate that answers non-OK is logged by URL so the
  * next incident can tell "ESPN changed its API" from "ESPN is down".
+ *
+ * ⚠️ HTTP 200 IS NOT ACCEPTANCE. Two ways an OK response is still not an answer
+ * about this slate, both of which would strand the healthy candidate behind it:
+ *
+ *  1. It carries no game for the requested week — an empty envelope, an error
+ *     envelope wearing a 200, or (at an overlapping calendar boundary) a
+ *     spillover-only response made entirely of the NEXT week's games. The
+ *     importer already treats that last shape as "this week was not fetched";
+ *     this is the fetch layer catching up to it. (qodo #3.)
+ *  2. It came from the season-ignoring week URL and cannot prove its season —
+ *     see `payloadProvesSeason`.
+ *
+ * (1) is a PREFERENCE, so an unusable payload is remembered and returned once no
+ * candidate does better: an empty slate is real information downstream
+ * (`slatesNotReconciled`, and the spillover games are still written), and
+ * discarding it would report a feed outage where there was none.
+ * (2) is a REFUSAL — that payload is never returned, because using it is how the
+ * orphan sweep deletes a good week.
  */
 async function fetchScoreboardPayload(
   week: number,
@@ -200,7 +250,13 @@ async function fetchScoreboardPayload(
   seasonType: 1 | 2 | 3,
 ): Promise<unknown> {
   const urls = await resolveScoreboardUrls(week, season, seasonType);
+  // The week/season/seasontype URL is the only season-ignoring one; identify it
+  // by construction rather than by sniffing the string.
+  const weekUrl = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
   let lastError: unknown = new Error('ESPN Scoreboard API returned no candidate URL');
+  /** An OK payload with nothing for this week — used only if nothing better arrives. */
+  let fallbackPayload: unknown | undefined;
+  let haveFallback = false;
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     const more = i < urls.length - 1 ? '; trying next candidate URL' : '';
@@ -211,7 +267,22 @@ async function fetchScoreboardPayload(
     // wording cannot go wrong if two candidates ever coincide.
     try {
       const resp = await fetch(url);
-      if (resp.ok) return await resp.json();
+      if (resp.ok) {
+        const data = await resp.json();
+        if (url === weekUrl && !payloadProvesSeason(data, season, seasonType)) {
+          lastError = new Error(
+            `ESPN Scoreboard week URL answered without proving season ${season}/${seasonType}; refusing it`);
+          console.warn(`[nflSchedule] ESPN scoreboard week URL for ${season}/${seasonType}/wk${week} returned no event carrying that season; REFUSED (this endpoint ignores \`season\`, so an unproven payload could relabel another season's games)${more}`);
+          continue;
+        }
+        if (parseScoreboardResponse(data, week, season, seasonType)
+          .some(g => Number(g.week) === Number(week))) {
+          return data;
+        }
+        if (!haveFallback) { fallbackPayload = data; haveFallback = true; }
+        console.warn(`[nflSchedule] ESPN scoreboard 200 for ${url} but no game for ${season}/${seasonType}/wk${week}${more}`);
+        continue;
+      }
       lastError = new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
       console.warn(`[nflSchedule] ESPN scoreboard ${resp.status} for ${url}${more}`);
     } catch (err) {
@@ -219,6 +290,7 @@ async function fetchScoreboardPayload(
       console.warn(`[nflSchedule] ESPN scoreboard fetch threw for ${url}${more}:`, err);
     }
   }
+  if (haveFallback) return fallbackPayload;
   throw lastError;
 }
 

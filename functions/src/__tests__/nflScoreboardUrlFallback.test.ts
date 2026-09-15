@@ -143,3 +143,80 @@ describe('the fetchers fall back past a 400 on the date-range URL', () => {
     expect(seen.some(u => u.includes('week='))).toBe(false);
   });
 });
+
+/**
+ * HTTP 200 is not acceptance (qodo #3), and the season-ignoring week URL must
+ * prove its season (qodo #2).
+ */
+describe('a 200 that says nothing about this slate is not an answer', () => {
+  beforeEach(() => { vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'log').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  /** Week 2 events returned by the week-1 fetch — the overlapping-calendar shape. */
+  const SPILLOVER = {
+    events: [{ ...PAYLOAD.events[0], id: '401872999', week: { number: 2 } }],
+  };
+
+  it('falls through an empty 200 envelope to the healthy week URL', async () => {
+    routeFetch((url) => {
+      if (url.includes('scoreboard?dates=')) return ok({ events: [] });
+      if (url.includes('week=')) return ok(PAYLOAD);
+      return ok(CAL);
+    });
+    const { games } = await fetchNFLWeekScheduleWithRaw(1, '2026', 2);
+    expect(games.map(g => g.id)).toEqual(['espn_401872656']);
+  });
+
+  it('falls through a SPILLOVER-ONLY 200 to the healthy week URL', async () => {
+    routeFetch((url) => {
+      if (url.includes('scoreboard?dates=')) return ok(SPILLOVER);
+      if (url.includes('week=')) return ok(PAYLOAD);
+      return ok(CAL);
+    });
+    const { games } = await fetchNFLWeekScheduleWithRaw(1, '2026', 2);
+    expect(games.map(g => g.id)).toEqual(['espn_401872656']);
+  });
+
+  it('REFUSES a week-URL payload that cannot prove its season', async () => {
+    // The corruption path: the week URL ignores `season`, `eventMatchesSeason`
+    // fails open on an absent field, and the parser would relabel these as 2026
+    // week 1 — enough for importNFLSeason to mark the week fetched and let the
+    // orphan sweep delete the real games.
+    const NO_SEASON = { events: [{ ...PAYLOAD.events[0], season: undefined, week: undefined }] };
+    routeFetch((url) => {
+      if (url.includes('scoreboard?dates=')) return fail(400);
+      if (url.includes('week=')) return ok(NO_SEASON);
+      return ok(CAL);
+    });
+    const { games, raw } = await fetchNFLWeekScheduleWithRaw(1, '2026', 2);
+    expect(games).toEqual([]);
+    // Refused, not merely unpreferred — it must never reach the caller.
+    expect(raw).toBeNull();
+  });
+
+  it('REFUSES a week-URL payload proving a DIFFERENT season', async () => {
+    const OTHER = { events: [{ ...PAYLOAD.events[0], season: { year: 2025, type: 2 } }] };
+    routeFetch((url) => {
+      if (url.includes('scoreboard?dates=')) return fail(400);
+      if (url.includes('week=')) return ok(OTHER);
+      return ok(CAL);
+    });
+    const { games, raw } = await fetchNFLWeekScheduleWithRaw(1, '2026', 2);
+    expect(games).toEqual([]);
+    expect(raw).toBeNull();
+  });
+
+  it('accepts an unusable-but-OK payload once nothing better exists', async () => {
+    // An empty week is real information downstream — slatesNotReconciled, and
+    // the spillover games still get written. Reporting it as a feed outage
+    // (raw: null) would be a different and wrong claim.
+    routeFetch((url) => {
+      if (url.includes('scoreboard?dates=')) return ok({ events: [] });
+      if (url.includes('week=')) return fail(500);
+      return ok(CAL);
+    });
+    const { games, raw } = await fetchNFLWeekScheduleWithRaw(1, '2026', 2);
+    expect(games).toEqual([]);
+    expect(raw).not.toBeNull();
+  });
+});
