@@ -115,18 +115,22 @@ export function scoresMissingMarker(
 }
 
 /**
- * Resolve the scoreboard URL for a week. Prefers an explicit date range taken
- * from ESPN's own calendar, because the naive week/season/seasontype form
- * silently falls back to the PRIOR season during the off-season. Extracted from
- * fetchNFLWeekSchedule so both fetch variants resolve identically.
+ * Resolve the scoreboard URLs for a week, best first. Prefers an explicit date
+ * range taken from ESPN's own calendar, because the naive week/season/seasontype
+ * form silently falls back to the PRIOR season during the off-season. Extracted
+ * from fetchNFLWeekSchedule so both fetch variants resolve identically.
+ *
+ * Returns one or two candidates — see the comment on the return statement for
+ * why the week URL is kept as a fallback rather than discarded.
  */
-async function resolveScoreboardUrl(
+export async function resolveScoreboardUrls(
   week: number,
   season: string,
   seasonType: 1 | 2 | 3,
-): Promise<string> {
+): Promise<string[]> {
     // Host lives in lib/espnHost.ts — read its comment before touching it.
-    let url = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    const weekUrl = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    let url = weekUrl;
 
     try {
       // 1. Fetch calendar to extract precise date range for the specified week of 2026 season.
@@ -161,7 +165,61 @@ async function resolveScoreboardUrl(
       console.warn("[nflSchedule] Failed to resolve dates via calendar, falling back to standard week scoreboard URL:", calErr);
     }
 
-    return url;
+    // ⚠️ ORDERED CANDIDATES, NOT ONE URL. The date-RANGE form is preferred but is
+    // NOT guaranteed to work: on 2026-09-15T21:55Z ESPN began answering EVERY
+    // `dates=YYYYMMDD-YYYYMMDD` request with `{"code":400,"message":"Failed to get
+    // events endpoint."}` — host-wide (mens-college-basketball too) and for past
+    // seasons' dates as well, so it is an ESPN API change, not our data. A single
+    // `dates=YYYYMMDD` still answers 200, and so does the week/season/seasontype
+    // form. The 5-minute score sync went dark ~2h before a Monday-night kickoff
+    // with `1 slate(s) returned no games`.
+    //
+    // So the range URL is TRIED, and the week URL is the fallback rather than a
+    // build-time alternative. Returning both keeps the calendar's off-season
+    // protection while it works and keeps the feed alive when it does not.
+    //
+    // The fallback is safe even though the week form IGNORES `season` (measured:
+    // `week=1&season=2025&seasontype=2` returns the 2026 slate) — which is the
+    // exact off-season trap the calendar lookup was added for. `eventMatchesSeason`
+    // in the parser fails CLOSED on a season mismatch, so a wrong-season payload
+    // yields zero games and `slatesNotReconciled`, never a wrong-season import.
+    return url === weekUrl ? [weekUrl] : [url, weekUrl];
+}
+
+/**
+ * Fetch a scoreboard payload, trying each candidate URL in order.
+ *
+ * Throws only when EVERY candidate failed, carrying the LAST status — the
+ * callers below turn a throw into an empty slate, which the heartbeat counts as
+ * `slatesNotReconciled`. A candidate that answers non-OK is logged by URL so the
+ * next incident can tell "ESPN changed its API" from "ESPN is down".
+ */
+async function fetchScoreboardPayload(
+  week: number,
+  season: string,
+  seasonType: 1 | 2 | 3,
+): Promise<unknown> {
+  const urls = await resolveScoreboardUrls(week, season, seasonType);
+  let lastError: unknown = new Error('ESPN Scoreboard API returned no candidate URL');
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const more = i < urls.length - 1 ? '; trying next candidate URL' : '';
+    // A THROW IS A FAILED CANDIDATE TOO, not a failed run. `fetch` rejects on a
+    // DNS failure, a reset socket or a body that will not parse, and an early
+    // `throw` here would skip the fallback on exactly the transport faults it
+    // exists for. Indexed rather than compared by value so the "trying next"
+    // wording cannot go wrong if two candidates ever coincide.
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) return await resp.json();
+      lastError = new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
+      console.warn(`[nflSchedule] ESPN scoreboard ${resp.status} for ${url}${more}`);
+    } catch (err) {
+      lastError = err;
+      console.warn(`[nflSchedule] ESPN scoreboard fetch threw for ${url}${more}:`, err);
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -174,14 +232,7 @@ export async function fetchNFLWeekSchedule(
   seasonType: 1 | 2 | 3
 ): Promise<NFLGame[]> {
   try {
-    const url = await resolveScoreboardUrl(week, season, seasonType);
-
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      throw new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
-    }
-
-    const data = await resp.json();
+    const data = await fetchScoreboardPayload(week, season, seasonType);
     return parseScoreboardResponse(data, week, season, seasonType);
   } catch (err) {
     console.error(`[nflSchedule] fetchNFLWeekSchedule failed for week ${week}, season ${season}:`, err);
@@ -200,10 +251,7 @@ export async function fetchNFLWeekScheduleWithRaw(
   seasonType: 1 | 2 | 3,
 ): Promise<{ games: NFLGame[]; raw: unknown | null }> {
   try {
-    const url = await resolveScoreboardUrl(week, season, seasonType);
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`ESPN Scoreboard API returned HTTP status ${resp.status}`);
-    const data = await resp.json();
+    const data = await fetchScoreboardPayload(week, season, seasonType);
     return { games: parseScoreboardResponse(data, week, season, seasonType), raw: data };
   } catch (err) {
     console.error(`[nflSchedule] fetchNFLWeekScheduleWithRaw failed for week ${week}, season ${season}:`, err);
@@ -297,7 +345,7 @@ export function parseScoreboardResponse(
       //     September game goes FINAL. Hit for real on 2026-07-19
       //     (espn_401872656, NE @ SEA).
       //  2. The naive week/season URL silently falls back to the PRIOR season
-      //     during the off-season — the calendar guard in resolveScoreboardUrl
+      //     during the off-season — the calendar guard in resolveScoreboardUrls
       //     is best-effort and swallows its own failures.
       // Checking the event's own season is the backstop for both.
       if (!eventMatchesSeason(event, season, seasonType)) continue;
@@ -953,7 +1001,7 @@ export async function syncScoresWindow(
 
     // ⚠️ SPLIT THE RESPONSE BY THE WEEK EACH GAME ACTUALLY BELONGS TO.
     //
-    // `resolveScoreboardUrl` queries a DATE RANGE from ESPN's calendar, and those
+    // `resolveScoreboardUrls` queries a DATE RANGE from ESPN's calendar, and those
     // calendar entries OVERLAP at the boundary — the 2026 "Hall of Fame Weekend"
     // entry runs 08-06..08-13 and "Preseason Week 1" starts on 08-13. So a slate
     // fetch legitimately returns games from the NEXT week, and since
