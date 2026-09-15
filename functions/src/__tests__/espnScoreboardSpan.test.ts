@@ -40,6 +40,27 @@ const rangeBreakResponse = (): Response =>
 
 const event = (id: string) => ({ id });
 
+/** Drop comments so prose about the broken range form is not read as code. */
+const stripComments = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+/**
+ * Every `dates=` query value in the source that contains a `-`, i.e. every
+ * remaining date RANGE. A single `YYYYMMDD` never contains a hyphen, so this
+ * catches `dates=${start}-${end}`, `dates=20260315-20260410`, and the
+ * near-miss `dates=${y}0315-${y}0410` alike — the first version of this guard
+ * matched only the first two and let the third through.
+ */
+function dateParamValues(src: string): string[] {
+    const offenders: string[] = [];
+    const re = /dates=([^&`\s)]*)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(stripComments(src))) !== null) {
+        if (m[1].includes('-')) offenders.push(m[0]);
+    }
+    return offenders;
+}
+
 describe('ESPN scoreboard URL shape (2026-09-15 range break)', () => {
     it('builds the single-date URL that ESPN still answers 200', () => {
         const url = buildScoreboardDayUrl({ leaguePath: NCAA, date: '20260317', limit: 200, groups: 100 });
@@ -63,10 +84,22 @@ describe('ESPN scoreboard URL shape (2026-09-15 range break)', () => {
         expect(url).toContain('?dates=20260305&limit=50&groups=8');
     });
 
+    it('the range guard itself catches every shape of range', () => {
+        // Proven by mutation: the FIRST version of this guard passed when a
+        // `dates=${y}0315-${y}0410` literal was pasted back into espnBracket.ts.
+        expect(dateParamValues('`?dates=${start}-${end}&limit=200`')).toHaveLength(1);
+        expect(dateParamValues('"?dates=20260315-20260410&limit=200"')).toHaveLength(1);
+        expect(dateParamValues('`?dates=${y}0315-${y}0410&limit=200`')).toHaveLength(1);
+        // ...and does not cry wolf on the single-date form or on prose.
+        expect(dateParamValues('`?dates=${date}&limit=200`')).toEqual([]);
+        expect(dateParamValues('`?dates=20260317&limit=200`')).toEqual([]);
+        expect(dateParamValues('// a range is ?dates=YYYYMMDD-YYYYMMDD and now 400s')).toEqual([]);
+        expect(dateParamValues('/* ?dates=20260315-20260410 used to work */')).toEqual([]);
+    });
+
     it('espnBracket.ts no longer builds a scoreboard date range', () => {
         const src = readFileSync(join(__dirname, '..', 'espnBracket.ts'), 'utf8');
-        expect(src).not.toMatch(/dates=\d{8}-\d{8}/);
-        expect(src).not.toMatch(/dates=\$\{[^}]*\}-\$\{[^}]*\}/);
+        expect(dateParamValues(src)).toEqual([]);
     });
 });
 
