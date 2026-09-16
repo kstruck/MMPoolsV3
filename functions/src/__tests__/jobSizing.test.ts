@@ -37,7 +37,9 @@ const KNOWN_UNSIZED = [
     "enforceBillingStatus",
     "gradeExpertProfilesJob",
     "lockNFLSpreadsJob",
-    "scheduledBracketSync",
+    // scheduledBracketSync SIZED 2026-09-15 (300s/512MiB, PR #696): the ESPN
+    // date-range break turned one request per tournament into 27, so the
+    // Gen-2 default 60s stopped being merely thin.
     "scheduledHealthCheck",
     "siteAveragesJob",
     "syncExpertPicksJob",
