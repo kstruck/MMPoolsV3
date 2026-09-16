@@ -2,6 +2,8 @@
 // Shared email styles matching the frontend Service (Light Theme)
 // Based on src/services/emailService.ts
 
+import { activeEmailPromo, renderEmailPromoHtml } from "./shared/emailPromo";
+
 export const BASE_URL = "https://www.marchmeleepools.com";
 export const LOGO_URL = `${BASE_URL}/email-logo.png`;
 
@@ -58,10 +60,7 @@ export const renderEmailHtml = (title: string, bodyContent: string, ctaLink?: st
                 <a href="${BASE_URL}" style="color: #94a3b8; text-decoration: none; font-size: 12px; margin-top: 10px; display: inline-block;">Sent by March Melee Pools</a>
             </p>
             
-            <hr style="border: 1px solid #eee; margin: 20px 0;" />
-            <p style="font-size: 12px; color: #666; text-align: center;">
-                Want to create and host your own pool? Go to <a href="${BASE_URL}" style="color: #4f46e5;">MarchMeleePools.com</a> and create a pool for your office, friends, or favorite charity today!
-            </p>
+            ${renderEmailPromoHtml(activeEmailPromo(Date.now()))}
             <p style="font-size: 11px; color: #999999; text-align: center; margin-top: 12px;">
                 Don't want these emails? <a href="{{UNSUB_URL}}" style="color: #999999;">Unsubscribe</a>
             </p>
