@@ -1338,7 +1338,7 @@ export const submitNFLPicks = validated(
   { schema: submitNFLPicksSchema, label: "submitNFLPicks", appCheck: "monitor" },
   async (input, request) => {
     await assertNotBannedLive(request.auth!.uid);
-    const token = request.auth!.token as { name?: string; role?: string; email?: string };
+    const token = request.auth!.token as { name?: string; role?: string };
     const db = admin.firestore();
     const committed: CommittedPickSave = {};
     const result = await submitNFLPicksInternal(
@@ -1365,7 +1365,6 @@ export const submitNFLPicks = validated(
     if (committed.entryId) {
       await sendNFLPickConfirmation(db, {
         uid: request.auth!.uid,
-        email: token?.email,
         poolId: input.poolId,
         week: input.week,
         saved: committed,

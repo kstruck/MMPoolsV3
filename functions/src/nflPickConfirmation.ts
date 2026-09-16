@@ -128,26 +128,26 @@ export interface CommittedPickSave {
 }
 
 /**
- * Reads the pool, profile and week's games, then queues the email. Never throws.
+ * Reads the recipient, pool, profile and week's games, then queues the email.
+ * Never throws.
+ *
+ * The recipient is the CURRENT Auth record's email, never the caller's ID-token
+ * claim: a token minted before an email change still carries the old address
+ * for up to an hour, and this email lists the member's picks (qodo #3 on #697).
  */
 export async function sendNFLPickConfirmation(
     db: admin.firestore.Firestore,
     args: {
         uid: string;
-        email?: string;
         poolId: string;
         week: number;
         saved: CommittedPickSave;
     },
 ): Promise<void> {
     try {
-        let email = args.email;
-        let displayName: string | undefined;
-        if (!email) {
-            const rec = await admin.auth().getUser(args.uid);
-            email = rec.email;
-            displayName = rec.displayName;
-        }
+        const rec = await admin.auth().getUser(args.uid);
+        const email = rec.email;
+        const displayName = rec.displayName;
         if (!email) return;
 
         const pool = (await db.collection('pools').doc(args.poolId).get()).data() as
