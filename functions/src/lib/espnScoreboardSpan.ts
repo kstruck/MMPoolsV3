@@ -149,19 +149,27 @@ export interface ScoreboardSpanDeps {
 }
 
 /**
- * One day's request, with a hard deadline.
+ * One day's events, with a hard deadline over the WHOLE exchange.
+ *
+ * ⚠️ The deadline covers reading the BODY, not just receiving the headers.
+ * The first version of this wrapped `fetch` alone and returned the `Response`,
+ * which clears the timer the moment ESPN sends headers — so a server that
+ * answers and then stalls mid-JSON left the worker waiting forever on
+ * `response.json()`, which is precisely the hang the deadline exists to stop
+ * (codex round 2 on PR #696). Everything that can block lives inside `work`.
  *
  * The deadline is enforced TWICE on purpose: the `AbortSignal` asks the
- * transport to give up (so a stalled socket is actually released rather than
- * left running), and the race guarantees this promise settles even if the
- * `fetchImpl` in play ignores signals. Belt and braces, because the failure this
- * guards against is "the run never finishes", which no retry can recover.
+ * transport to give up (so a stalled socket, headers or body, is actually
+ * released rather than left running), and the race guarantees this promise
+ * settles even if the `fetchImpl` in play ignores signals. Belt and braces,
+ * because the failure being guarded is "the run never finishes", which no retry
+ * can recover.
  */
-async function fetchWithDeadline(
+async function fetchDayEvents<TEvent>(
     fetchImpl: typeof fetch,
     url: string,
     timeoutMs: number,
-): Promise<Response> {
+): Promise<TEvent[]> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<never>((_resolve, reject) => {
@@ -170,8 +178,23 @@ async function fetchWithDeadline(
             reject(new Error(`ESPN scoreboard request timed out after ${timeoutMs}ms`));
         }, timeoutMs);
     });
+
+    const work = (async (): Promise<TEvent[]> => {
+        const response = await fetchImpl(url, { signal: controller.signal });
+        if (!response.ok) {
+            throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
+        }
+        const data = await response.json() as { events?: TEvent[] };
+        return data?.events ?? [];
+    })();
+    // If the deadline wins the race, `work` may still reject later (the abort
+    // lands on an in-flight read). Without a handler that is an unhandled
+    // rejection, which crashes the process under Node's default policy — a
+    // timeout must degrade to a failed day, never take the run down.
+    work.catch(() => { /* handled by the race */ });
+
     try {
-        return await Promise.race([fetchImpl(url, { signal: controller.signal }), deadline]);
+        return await Promise.race([work, deadline]);
     } finally {
         if (timer !== undefined) clearTimeout(timer);
     }
@@ -206,12 +229,7 @@ export async function fetchScoreboardSpanEvents<TEvent extends MinimalEvent>(
             const date = requestedDates[index];
             try {
                 const url = buildScoreboardDayUrl({ leaguePath, date, limit, groups });
-                const response = await fetchWithDeadline(fetchImpl, url, requestTimeoutMs);
-                if (!response.ok) {
-                    throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
-                }
-                const data = await response.json() as { events?: TEvent[] };
-                perDay[index] = data?.events ?? [];
+                perDay[index] = await fetchDayEvents<TEvent>(fetchImpl, url, requestTimeoutMs);
             } catch (error) {
                 failedDates.push(date);
                 onDayFailed?.(date, error);

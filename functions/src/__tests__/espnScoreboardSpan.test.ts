@@ -295,6 +295,57 @@ describe('fetchScoreboardSpanEvents', () => {
         expect(result.failedDates).toEqual(['20260316']);
     });
 
+    it('a stalled BODY hits the deadline too, not just stalled headers', async () => {
+        // codex round 2 on PR #696: the first deadline wrapped fetch() alone and
+        // returned the Response, so the timer was cleared the moment ESPN sent
+        // headers. A server that answers and then stalls mid-JSON left the
+        // worker on response.json() forever — the exact hang being guarded.
+        const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+            const date = /dates=(\d{8})/.exec(String(url))?.[1] ?? '';
+            if (date === '20260316') {
+                // Headers arrive immediately; the body never does.
+                return { ok: true, status: 200, statusText: 'OK', json: () => new Promise(() => { /* stalls */ }) } as unknown as Response;
+            }
+            return jsonResponse({ events: [event(`g-${date}`)] });
+        }) as unknown as typeof fetch;
+
+        const result = await fetchScoreboardSpanEvents<{ id: string }>(
+            { leaguePath: NCAA, start: '20260315', end: '20260317', limit: 200, groups: 100 },
+            { fetchImpl, requestTimeoutMs: 25 },
+        );
+
+        expect(result.events.map((e) => e.id)).toEqual(['g-20260315', 'g-20260317']);
+        expect(result.failedDates).toEqual(['20260316']);
+    });
+
+    it('a rejection landing AFTER the deadline does not escape as unhandled', async () => {
+        // The abort lands on an in-flight read, so `work` rejects after the race
+        // is already settled. Unhandled, that crashes the process under Node's
+        // default policy — a timeout must degrade to a failed day.
+        const unhandled: unknown[] = [];
+        const onUnhandled = (e: unknown) => unhandled.push(e);
+        process.on('unhandledRejection', onUnhandled);
+        try {
+            const fetchImpl = vi.fn(async () => {
+                await new Promise((r) => setTimeout(r, 40));
+                throw new Error('aborted mid-read');
+            }) as unknown as typeof fetch;
+
+            await expect(
+                fetchScoreboardSpanEvents<{ id: string }>(
+                    { leaguePath: NCAA, start: '20260315', end: '20260315', limit: 200, groups: 100 },
+                    { fetchImpl, requestTimeoutMs: 10 },
+                ),
+            ).rejects.toThrow(/failed on all 1 days/);
+
+            // Let the late rejection land.
+            await new Promise((r) => setTimeout(r, 80));
+            expect(unhandled).toEqual([]);
+        } finally {
+            process.off('unhandledRejection', onUnhandled);
+        }
+    });
+
     it('the deadline error says it timed out, and aborts the request', async () => {
         const signals: (AbortSignal | undefined)[] = [];
         const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
