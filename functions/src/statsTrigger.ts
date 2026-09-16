@@ -6,7 +6,7 @@ import * as admin from "firebase-admin";
 import { withHeartbeat, configReadFailedVerdict } from "./lib/heartbeat";
 
 import { sendEmail } from "./reminders";
-import { renderEmailHtml } from "./emailStyles";
+import { renderEmailHtml, escapeHtml } from "./emailStyles";
 import { getSquareEmails } from "./squarePrivate";
 import { isAdminCloseTransition, ADMIN_CLOSE } from "./lib/lifecycle";
 import { validated } from "./lib/validated";
@@ -236,10 +236,10 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
 
                 const html = renderEmailHtml(
                     "The Numbers Are Set!",
-                    `<p>The pool <strong>${after.name}</strong> has been locked and the numbers have been generated.</p>
+                    `<p>The pool <strong>${escapeHtml(after.name)}</strong> has been locked and the numbers have been generated.</p>
                      <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                        <p style="margin: 5px 0;"><strong>${after.homeTeam} (Row):</strong> ${homeNums}</p>
-                        <p style="margin: 5px 0;"><strong>${after.awayTeam} (Col):</strong> ${awayNums}</p>
+                        <p style="margin: 5px 0;"><strong>${escapeHtml(after.homeTeam)} (Row):</strong> ${homeNums}</p>
+                        <p style="margin: 5px 0;"><strong>${escapeHtml(after.awayTeam)} (Col):</strong> ${awayNums}</p>
                      </div>
                      <p>Good luck!</p>`,
                     `https://www.marchmeleepools.com/pool/${event.params.poolId}`,
