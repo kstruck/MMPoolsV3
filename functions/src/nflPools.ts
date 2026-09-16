@@ -493,12 +493,17 @@ export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
   payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] },
-): Promise<{ success: true; replayed?: true }> {
+  // Out-param for the callable wrapper's pick confirmation email. Set to the
+  // id of the entry this call WROTE; left unset on a requestId replay (a client
+  // resend of a save that already landed), so a resend emails nothing. An
+  // out-param rather than a new return field: the response shape is a contract
+  // the client and the emulator suites compare exactly.
+  committed?: { entryId?: string },
+): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
-  // True when the committed attempt was the requestId replay no-op below. The
-  // callable wrapper reads it so a client resend does not email a second
-  // confirmation for a save that already landed. Reset per attempt.
-  let replayed = false;
+  // The entry id written by the attempt that COMMITTED. Reset per attempt —
+  // the transaction body re-runs on retry, and a later attempt can be a replay.
+  let writtenEntryId: string | undefined;
   // deep clean input
   const data = JSON.parse(JSON.stringify(payload || {}));
   const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
@@ -632,7 +637,7 @@ export async function submitNFLPicksInternal(
     // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
     // and on a lease-busy retry, and every lock check below reads `now`.
     now = Date.now();
-    replayed = false;
+    writtenEntryId = undefined;
     weekLocked = weekStatusLocked || now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
@@ -695,9 +700,10 @@ export async function submitNFLPicksInternal(
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
     if (requestId && existingEntry?.lastRequestId === requestId) {
-      replayed = true;
       return;
     }
+    // Past the replay no-op: every path below either writes this entry or throws.
+    writtenEntryId = entryRef.id;
     // Seat gates for the implicit join — AFTER the replay no-op above (qodo #8
     // on PR #686): a replay of a request that already landed must stay a
     // no-op success, never a capacity refusal, even for a caller whose first
@@ -1308,7 +1314,8 @@ export async function submitNFLPicksInternal(
     console.error('[submitNFLPicks] consensus recompute failed:', e);
   }
 
-  return replayed ? { success: true, replayed: true } : { success: true };
+  if (committed && writtenEntryId) committed.entryId = writtenEntryId;
+  return { success: true };
 }
 
 /**
@@ -1322,6 +1329,7 @@ export const submitNFLPicks = validated(
     await assertNotBannedLive(request.auth!.uid);
     const token = request.auth!.token as { name?: string; role?: string; email?: string };
     const db = admin.firestore();
+    const committed: { entryId?: string } = {};
     const result = await submitNFLPicksInternal(
       db,
       {
@@ -1335,20 +1343,21 @@ export const submitNFLPicks = validated(
         requestId: input.requestId,
       },
       input,
+      committed,
     );
     // Pick confirmation email (nflPickConfirmation.ts). Only here — a member
     // saving their own picks — never in the Internal, which proxy picks and
-    // the sim harness also drive. Never throws; a replay sends nothing.
-    if (!result.replayed) {
+    // the sim harness also drive. Built from the SAVED entry, not the input:
+    // the server merges earlier picks and can drop a submitted tiebreaker
+    // (codex r1). Never throws; a requestId replay leaves entryId unset and
+    // sends nothing.
+    if (committed.entryId) {
       await sendNFLPickConfirmation(db, {
         uid: request.auth!.uid,
         email: token?.email,
         poolId: input.poolId,
         week: input.week,
-        picks: input.picks,
-        confidence: input.confidence,
-        tiebreakerPrediction: input.tiebreakerPrediction,
-        entryName: input.entryName,
+        entryId: committed.entryId,
       });
     }
     return result;
