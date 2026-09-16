@@ -45,6 +45,7 @@ import { isPinnableMessageId } from '@shared/pinnedMessage';
 import { poolTypeLabel, poolOptionLabels } from '../../utils/poolTypeLabel';
 import { weekValueFor, seasonCompare } from '../../utils/nflResults';
 import { NFL_KICKOFF_MS } from '../../config/season';
+import { resolveLogoUrl } from '../../utils/logoUrl';
 
 interface NFLPoolDashboardProps {
   pool: Pool;
@@ -914,7 +915,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           {brand.themed && (
             <div className="px-6 py-4 flex items-center gap-3 flex-wrap" style={brand.headerBand}>
               {branding.logoUrl && (
-                <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
+                <img src={resolveLogoUrl(branding.logoUrl)} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
               )}
               {/* The pool name is the way HOME (2026-08-23 redesign) — the
                   affordance every site header trains: click the title, land on
@@ -945,7 +946,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             {!brand.themed && (
               <div className="flex items-center gap-3 mb-1">
                 {branding.logoUrl && (
-                  <img src={branding.logoUrl} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
+                  <img src={resolveLogoUrl(branding.logoUrl)} className="h-12 w-auto object-contain drop-shadow" alt="Logo" />
                 )}
                 <h1 className="font-display font-extrabold uppercase text-2xl md:text-3xl text-[color:var(--text)] leading-none">
                   <button
