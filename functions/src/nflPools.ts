@@ -11,6 +11,7 @@ import { normalizeAddonSelection } from "./lib/launchFields";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
+import { sendNFLPickConfirmation } from "./nflPickConfirmation";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import { assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
@@ -492,8 +493,12 @@ export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
   payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] },
-): Promise<{ success: true }> {
+): Promise<{ success: true; replayed?: true }> {
   const uid = ctx.subjectUid;
+  // True when the committed attempt was the requestId replay no-op below. The
+  // callable wrapper reads it so a client resend does not email a second
+  // confirmation for a save that already landed. Reset per attempt.
+  let replayed = false;
   // deep clean input
   const data = JSON.parse(JSON.stringify(payload || {}));
   const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
@@ -627,6 +632,7 @@ export async function submitNFLPicksInternal(
     // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
     // and on a lease-busy retry, and every lock check below reads `now`.
     now = Date.now();
+    replayed = false;
     weekLocked = weekStatusLocked || now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
@@ -689,6 +695,7 @@ export async function submitNFLPicksInternal(
     // Idempotency: a retried submit (client resend after a lost response) whose
     // requestId already landed is a no-op success, not a duplicate write
     if (requestId && existingEntry?.lastRequestId === requestId) {
+      replayed = true;
       return;
     }
     // Seat gates for the implicit join — AFTER the replay no-op above (qodo #8
@@ -1301,7 +1308,7 @@ export async function submitNFLPicksInternal(
     console.error('[submitNFLPicks] consensus recompute failed:', e);
   }
 
-  return { success: true };
+  return replayed ? { success: true, replayed: true } : { success: true };
 }
 
 /**
@@ -1313,9 +1320,10 @@ export const submitNFLPicks = validated(
   { schema: submitNFLPicksSchema, label: "submitNFLPicks", appCheck: "monitor" },
   async (input, request) => {
     await assertNotBannedLive(request.auth!.uid);
-    const token = request.auth!.token as { name?: string; role?: string };
-    return submitNFLPicksInternal(
-      admin.firestore(),
+    const token = request.auth!.token as { name?: string; role?: string; email?: string };
+    const db = admin.firestore();
+    const result = await submitNFLPicksInternal(
+      db,
       {
         actorUid: request.auth!.uid,
         // Unconfirmed SUPER_ADMIN claims stripped (Phase 3) — feeds
@@ -1328,6 +1336,22 @@ export const submitNFLPicks = validated(
       },
       input,
     );
+    // Pick confirmation email (nflPickConfirmation.ts). Only here — a member
+    // saving their own picks — never in the Internal, which proxy picks and
+    // the sim harness also drive. Never throws; a replay sends nothing.
+    if (!result.replayed) {
+      await sendNFLPickConfirmation(db, {
+        uid: request.auth!.uid,
+        email: token?.email,
+        poolId: input.poolId,
+        week: input.week,
+        picks: input.picks,
+        confidence: input.confidence,
+        tiebreakerPrediction: input.tiebreakerPrediction,
+        entryName: input.entryName,
+      });
+    }
+    return result;
   },
 );
 
