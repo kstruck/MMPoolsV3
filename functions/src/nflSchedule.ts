@@ -123,13 +123,23 @@ export function scoresMissingMarker(
  * Returns one or two candidates — see the comment on the return statement for
  * why the week URL is kept as a fallback rather than discarded.
  */
+/**
+ * The week/season/seasontype scoreboard URL — the ONE season-ignoring candidate.
+ *
+ * One definition, because `fetchScoreboardPayload` decides whether to apply the
+ * season refusal by comparing a candidate against this exact string.
+ */
+function weekScoreboardUrl(week: number, season: string, seasonType: 1 | 2 | 3): string {
+  // Host lives in lib/espnHost.ts — read its comment before touching it.
+  return `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+}
+
 export async function resolveScoreboardUrls(
   week: number,
   season: string,
   seasonType: 1 | 2 | 3,
 ): Promise<string[]> {
-    // Host lives in lib/espnHost.ts — read its comment before touching it.
-    const weekUrl = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+    const weekUrl = weekScoreboardUrl(week, season, seasonType);
     let url = weekUrl;
 
     try {
@@ -251,8 +261,11 @@ async function fetchScoreboardPayload(
 ): Promise<unknown> {
   const urls = await resolveScoreboardUrls(week, season, seasonType);
   // The week/season/seasontype URL is the only season-ignoring one; identify it
-  // by construction rather than by sniffing the string.
-  const weekUrl = `${ESPN_SITE_API}/football/nfl/scoreboard?week=${week}&season=${season}&seasontype=${seasonType}`;
+  // by construction rather than by sniffing the string. Built by the SAME helper
+  // the resolver uses — two copies of the template would let a future edit to one
+  // of them silently stop matching, and the only visible symptom would be the
+  // season refusal below quietly never firing again.
+  const weekUrl = weekScoreboardUrl(week, season, seasonType);
   let lastError: unknown = new Error('ESPN Scoreboard API returned no candidate URL');
   /** An OK payload with nothing for this week — used only if nothing better arrives. */
   let fallbackPayload: unknown | undefined;
