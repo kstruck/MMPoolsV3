@@ -1002,7 +1002,21 @@ export const syncBracketTournament = validated(
 );
 
 // Scheduled task: Runs every 10 minutes during March Madness
-export const scheduledBracketSync = onSchedule("every 10 minutes", withHeartbeat('scheduledBracketSync', async () => {
+// ⚠️ timeoutSeconds MUST stay under the 10-minute cadence so two runs can never
+// overlap — same invariant nflAutoScoreJob documents. This job carried NO
+// explicit timeout and therefore ran on the v2 default of 60 SECONDS, alone
+// among the scheduled jobs in this repo. That was already thin and became
+// actively unsafe when the ESPN range break (PR #696) turned one request per
+// tournament into 27: the loop below is sequential, so a slow tournament used
+// to cost every later one its run. 300s with the per-request deadline in
+// lib/espnScoreboardSpan.ts bounds the worst case at ~50s per tournament.
+// Cadence is unchanged, so SCHEDULED_JOB_EXPECTATIONS needs no edit.
+// (qodo review of PR #696.)
+export const scheduledBracketSync = onSchedule({
+    schedule: "every 10 minutes",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+}, withHeartbeat('scheduledBracketSync', async () => {
     const db = admin.firestore();
     // Query all active (non-finalized) tournaments
     const activeTournaments = await db.collection('tournaments')

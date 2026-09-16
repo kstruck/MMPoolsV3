@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    SCOREBOARD_DAY_TIMEOUT_MS,
     SCOREBOARD_SPAN_MAX_DAYS,
     buildScoreboardDayUrl,
     enumerateScoreboardDates,
@@ -271,6 +272,67 @@ describe('fetchScoreboardSpanEvents', () => {
         );
 
         expect(result.events.map((e) => e.id)).toEqual(['g-20260315', 'g-20260316', 'g-20260317']);
+    });
+
+    it('a STALLED day hits its deadline and becomes a failed day, not a hung run', async () => {
+        // qodo review of PR #696: without a per-request deadline a stalled ESPN
+        // socket holds its worker until the CLOUD FUNCTION times out, and
+        // scheduledBracketSync loops tournaments sequentially, so one stall
+        // costs every later tournament its run.
+        const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+            const date = /dates=(\d{8})/.exec(String(url))?.[1] ?? '';
+            // Never settles on its own — only the deadline can end this.
+            if (date === '20260316') return new Promise<Response>(() => { /* stalls forever */ });
+            return jsonResponse({ events: [event(`g-${date}`)] });
+        }) as unknown as typeof fetch;
+
+        const result = await fetchScoreboardSpanEvents<{ id: string }>(
+            { leaguePath: NCAA, start: '20260315', end: '20260317', limit: 200, groups: 100 },
+            { fetchImpl, requestTimeoutMs: 25 },
+        );
+
+        expect(result.events.map((e) => e.id)).toEqual(['g-20260315', 'g-20260317']);
+        expect(result.failedDates).toEqual(['20260316']);
+    });
+
+    it('the deadline error says it timed out, and aborts the request', async () => {
+        const signals: (AbortSignal | undefined)[] = [];
+        const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+            signals.push(init?.signal ?? undefined);
+            return new Promise<Response>(() => { /* stalls forever */ });
+        }) as unknown as typeof fetch;
+
+        const errors: unknown[] = [];
+        await expect(
+            fetchScoreboardSpanEvents<{ id: string }>(
+                { leaguePath: NCAA, start: '20260315', end: '20260315', limit: 200, groups: 100 },
+                { fetchImpl, requestTimeoutMs: 25, onDayFailed: (_d, e) => errors.push(e) },
+            ),
+        ).rejects.toThrow(/failed on all 1 days/);
+
+        expect((errors[0] as Error).message).toMatch(/timed out after 25ms/);
+        // The transport is told to give up, so a stalled socket is released.
+        expect(signals[0]?.aborted).toBe(true);
+    });
+
+    it('a healthy span does not wait for the deadline', async () => {
+        const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+            const date = /dates=(\d{8})/.exec(String(url))?.[1] ?? '';
+            return jsonResponse({ events: [event(`g-${date}`)] });
+        }) as unknown as typeof fetch;
+
+        const started = Date.now();
+        const result = await fetchScoreboardSpanEvents<{ id: string }>(
+            { leaguePath: NCAA, start: '20260315', end: '20260317', limit: 200, groups: 100 },
+            { fetchImpl, requestTimeoutMs: 5_000 },
+        );
+
+        expect(result.failedDates).toEqual([]);
+        expect(Date.now() - started).toBeLessThan(5_000);
+    });
+
+    it('the default per-request deadline is the documented one', () => {
+        expect(SCOREBOARD_DAY_TIMEOUT_MS).toBe(10_000);
     });
 
     it('reports every requested date so a partial span is auditable', async () => {

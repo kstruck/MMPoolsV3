@@ -35,6 +35,20 @@ export const SCOREBOARD_SPAN_MAX_DAYS = 45;
 /** How many single-date requests are in flight at once. */
 const SPAN_FETCH_CONCURRENCY = 6;
 
+/**
+ * Per-request deadline. A span is 27 requests where it used to be 1, so a
+ * stalled ESPN socket is now 27x more likely to be the thing that ends the run:
+ * without a deadline it holds its worker until the CLOUD FUNCTION times out, and
+ * `scheduledBracketSync` loops over tournaments sequentially, so the stall costs
+ * every LATER tournament its run too (qodo review of PR #696).
+ *
+ * With this, a stall becomes an ordinary failed day: skipped, logged, and the
+ * other days still land. 10s is well clear of a healthy response — the live
+ * 2026-09-15 measurement returned each day in well under a second — and 5 waves
+ * of 10s worst case is 50s per tournament, inside the job's 300s budget.
+ */
+export const SCOREBOARD_DAY_TIMEOUT_MS = 10_000;
+
 const YYYYMMDD = /^\d{8}$/;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -130,6 +144,37 @@ export interface ScoreboardSpanDeps {
     fetchImpl?: typeof fetch;
     /** Injected in tests so a failing day is visible without a logger. */
     onDayFailed?: (date: string, error: unknown) => void;
+    /** Per-request deadline. See SCOREBOARD_DAY_TIMEOUT_MS. */
+    requestTimeoutMs?: number;
+}
+
+/**
+ * One day's request, with a hard deadline.
+ *
+ * The deadline is enforced TWICE on purpose: the `AbortSignal` asks the
+ * transport to give up (so a stalled socket is actually released rather than
+ * left running), and the race guarantees this promise settles even if the
+ * `fetchImpl` in play ignores signals. Belt and braces, because the failure this
+ * guards against is "the run never finishes", which no retry can recover.
+ */
+async function fetchWithDeadline(
+    fetchImpl: typeof fetch,
+    url: string,
+    timeoutMs: number,
+): Promise<Response> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`ESPN scoreboard request timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+    });
+    try {
+        return await Promise.race([fetchImpl(url, { signal: controller.signal }), deadline]);
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
+    }
 }
 
 interface MinimalEvent {
@@ -144,7 +189,7 @@ interface MinimalEvent {
  */
 export async function fetchScoreboardSpanEvents<TEvent extends MinimalEvent>(
     { leaguePath, start, end, limit, groups }: ScoreboardSpanParams,
-    { fetchImpl = fetch, onDayFailed }: ScoreboardSpanDeps = {},
+    { fetchImpl = fetch, onDayFailed, requestTimeoutMs = SCOREBOARD_DAY_TIMEOUT_MS }: ScoreboardSpanDeps = {},
 ): Promise<ScoreboardSpanResult<TEvent>> {
     const requestedDates = enumerateScoreboardDates(start, end);
 
@@ -161,7 +206,7 @@ export async function fetchScoreboardSpanEvents<TEvent extends MinimalEvent>(
             const date = requestedDates[index];
             try {
                 const url = buildScoreboardDayUrl({ leaguePath, date, limit, groups });
-                const response = await fetchImpl(url);
+                const response = await fetchWithDeadline(fetchImpl, url, requestTimeoutMs);
                 if (!response.ok) {
                     throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
                 }
