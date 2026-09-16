@@ -11,6 +11,7 @@ import { normalizeAddonSelection } from "./lib/launchFields";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
+import { sendNFLPickConfirmation, type CommittedPickSave } from "./nflPickConfirmation";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import { assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
@@ -492,8 +493,19 @@ export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
   payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] },
+  // Out-param for the callable wrapper's pick confirmation email. Set to the
+  // id of the entry this call WROTE; left unset on a requestId replay (a client
+  // resend of a save that already landed), so a resend emails nothing. An
+  // out-param rather than a new return field: the response shape is a contract
+  // the client and the emulator suites compare exactly.
+  committed?: CommittedPickSave,
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
+  // What the attempt that COMMITTED wrote, captured inside the transaction so
+  // the email describes THIS save — a read after commit could already see a
+  // concurrent later save (codex r2). Reset per attempt: the body re-runs on
+  // retry, and a later attempt can be a replay.
+  let written: CommittedPickSave | undefined;
   // deep clean input
   const data = JSON.parse(JSON.stringify(payload || {}));
   const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
@@ -627,6 +639,7 @@ export async function submitNFLPicksInternal(
     // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
     // and on a lease-busy retry, and every lock check below reads `now`.
     now = Date.now();
+    written = undefined;
     weekLocked = weekStatusLocked || now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
@@ -1062,6 +1075,15 @@ export async function submitNFLPicksInternal(
 
       committedPickForWeek = Object.keys(weekPicks).length > 0;
       writtenPicks = pickemEntry.picks;
+      // Confidence: the merged map when this save wrote one; otherwise the
+      // `merge: true` set leaves the stored map in place, so report that.
+      written = {
+        entryId: entryRef.id,
+        ...(entryName ? { entryName } : {}),
+        picks: pickemEntry.picks,
+        confidence: pickemEntry.confidence ?? (existingEntry?.confidence as Record<string, number> | undefined) ?? null,
+        tiebreaker: pickemEntry.weeklyTiebreakers?.[week] ?? null,
+      };
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
@@ -1162,6 +1184,7 @@ export async function submitNFLPicksInternal(
       survivorEntry.userName = subjectName || survivorEntry.userName || 'Participant';
 
       writtenPicks = survivorEntry.picks;
+      written = { entryId: entryRef.id, ...(entryName ? { entryName } : {}), picks: { ...survivorEntry.picks } as Record<string, string> };
       transaction.set(entryRef, {
         ...survivorEntry,
         entryIndex,
@@ -1227,6 +1250,7 @@ export async function submitNFLPicksInternal(
       marginEntry.userName = subjectName || marginEntry.userName || 'Participant';
 
       writtenPicks = marginEntry.picks;
+      written = { entryId: entryRef.id, ...(entryName ? { entryName } : {}), picks: { ...marginEntry.picks } as Record<string, string> };
       transaction.set(entryRef, {
         ...marginEntry,
         entryIndex,
@@ -1301,6 +1325,7 @@ export async function submitNFLPicksInternal(
     console.error('[submitNFLPicks] consensus recompute failed:', e);
   }
 
+  if (committed && written) Object.assign(committed, written);
   return { success: true };
 }
 
@@ -1314,8 +1339,10 @@ export const submitNFLPicks = validated(
   async (input, request) => {
     await assertNotBannedLive(request.auth!.uid);
     const token = request.auth!.token as { name?: string; role?: string };
-    return submitNFLPicksInternal(
-      admin.firestore(),
+    const db = admin.firestore();
+    const committed: CommittedPickSave = {};
+    const result = await submitNFLPicksInternal(
+      db,
       {
         actorUid: request.auth!.uid,
         // Unconfirmed SUPER_ADMIN claims stripped (Phase 3) — feeds
@@ -1327,7 +1354,23 @@ export const submitNFLPicks = validated(
         requestId: input.requestId,
       },
       input,
+      committed,
     );
+    // Pick confirmation email (nflPickConfirmation.ts). Only here — a member
+    // saving their own picks — never in the Internal, which proxy picks and
+    // the sim harness also drive. Built from what the transaction WROTE, not
+    // the input: the server merges earlier picks and can drop a submitted
+    // tiebreaker (codex r1). Never throws; a requestId replay leaves
+    // `committed` empty and sends nothing.
+    if (committed.entryId) {
+      await sendNFLPickConfirmation(db, {
+        uid: request.auth!.uid,
+        poolId: input.poolId,
+        week: input.week,
+        saved: committed,
+      });
+    }
+    return result;
   },
 );
 
