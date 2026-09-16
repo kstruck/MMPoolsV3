@@ -222,5 +222,27 @@ in `fetchScoreboardPayload` do.
 
 Tests: `functions/src/__tests__/nflScoreboardUrlFallback.test.ts`.
 
-⚠️ **`functions/src/espnBracket.ts` still uses the date-range form** for
-March Madness and will fail the same way until it is changed.
+### ⚠️ `functions/src/espnBracket.ts` still uses the date-range form
+
+March Madness will fail the same way until that module is changed. Both halves
+of that claim were measured, so a later reader can re-run them rather than
+trust the sentence.
+
+The source still constructs a range URL — `grep -n 'scoreboard?dates='
+functions/src/espnBracket.ts`, 2026-09-15:
+
+```
+1154:    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=100`; // group 100 is typically NCAA Tournament
+1173:    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=${groupId}`;
+```
+
+ESPN still rejects that shape, and accepts a single date. Probed
+**2026-09-16T00:15:52Z**:
+
+| Request | Result |
+|---|---|
+| `mens-college-basketball/scoreboard?dates=20260317-20260320&limit=200&groups=100` | **400** `{"code":400,"message":"Failed to get events endpoint."}` |
+| `mens-college-basketball/scoreboard?dates=20260317&limit=200&groups=100` | **200** |
+
+Re-run both before acting on this section — it is a point-in-time measurement,
+and the whole reason it exists is that ESPN changed this endpoint once already.
