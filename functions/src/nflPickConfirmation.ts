@@ -150,7 +150,8 @@ export async function sendNFLPickConfirmation(
         }
         if (!email) return;
 
-        const pool = (await db.collection('pools').doc(args.poolId).get()).data() as Record<string, any> | undefined;
+        const pool = (await db.collection('pools').doc(args.poolId).get()).data() as
+            { type?: unknown; name?: unknown; season?: unknown; seasonType?: unknown } | undefined;
         if (!pool) return;
 
         const profile = (await db.collection('users').doc(args.uid).get()).data();

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const sendEmailMock = vi.fn(async () => 'queued');
-vi.mock('../reminders', () => ({ sendEmail: (...a: unknown[]) => (sendEmailMock as any)(...a) }));
+const sendEmailMock = vi.fn<(...args: unknown[]) => Promise<string>>(async () => 'queued');
+vi.mock('../reminders', () => ({ sendEmail: (...a: unknown[]) => sendEmailMock(...a) }));
 const getUserMock = vi.fn();
 vi.mock('firebase-admin', () => ({ auth: () => ({ getUser: getUserMock }) }));
 
@@ -73,12 +73,17 @@ describe('buildPickConfirmationEmail', () => {
 });
 
 /** pools/{id}, users/{id}, and an nfl_games query. No entry reads exist to fake. */
-function fakeDb(pool: Record<string, unknown> | undefined, games = GAMES) {
+interface FakeQuery {
+    where: () => FakeQuery;
+    get: () => Promise<{ docs: { data: () => unknown }[] }>;
+    doc: (id: string) => { get: () => Promise<{ data: () => unknown }>; collection: () => never };
+}
+function fakeDb(pool: Record<string, unknown> | undefined, games = GAMES): Parameters<typeof sendNFLPickConfirmation>[0] {
     const snap = (data: unknown) => ({ data: () => data });
-    return {
+    const db = {
         collection: (name: string) => {
             if (name === 'entries') throw new Error('the sender must not re-read the entry (codex r2)');
-            const q: any = {
+            const q: FakeQuery = {
                 where: () => q,
                 get: async () => ({ docs: games.map(g => snap(g)) }),
                 doc: (id: string) => ({
@@ -88,7 +93,8 @@ function fakeDb(pool: Record<string, unknown> | undefined, games = GAMES) {
             };
             return q;
         },
-    } as any;
+    };
+    return db as unknown as Parameters<typeof sendNFLPickConfirmation>[0];
 }
 
 const POOL = { type: 'NFL_PICKEM', name: 'Office Pool', season: '2026', seasonType: 2 };
