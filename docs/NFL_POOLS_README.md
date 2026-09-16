@@ -156,3 +156,93 @@ To ensure all logic works perfectly before week 1:
 1. SuperAdmins can create test pools by setting `seasonType=1` (Preseason) during pool configuration.
 2. The entire app (wizards, dashboards, scoring engine) treats this as a valid 4-week season.
 3. Use the generated invite links to onboard test users, select games, and trigger live scoring events as preseason games conclude.
+
+---
+
+## 7. ESPN Feed — Scoreboard URL Resolution and Fallback
+
+Everything NFL reads from ESPN — `syncNFLScoresJob`, the deep score sweep,
+`importNFLSchedule` and the spread lock — goes through one resolver in
+`functions/src/nflSchedule.ts`. If this is broken, all four are broken at once.
+
+### Why there is more than one URL
+
+`resolveScoreboardUrls` returns **ordered candidates**, best first:
+
+1. `scoreboard?dates=<start>-<end>` — the date range for the week, taken from
+   ESPN's own calendar. Preferred, because the dates pin the season.
+2. `scoreboard?week=N&season=YYYY&seasontype=T` — the fallback.
+
+The fallback is second for a reason: **that endpoint ignores `season`.**
+Measured 2026-09-15 — `week=1&season=2025&seasontype=2` returns the **2026**
+slate. During the off-season it therefore serves the current season under
+whatever season you asked for, which is the trap the calendar lookup exists to
+avoid.
+
+When the calendar lookup produces no range, the list is the week URL alone.
+
+### Why the fallback exists at all
+
+On **2026-09-15T21:55Z** ESPN began answering every date-range request with
+`HTTP 400 {"code":400,"message":"Failed to get events endpoint."}` — host-wide
+(mens-college-basketball too) and for past seasons' dates as well, so it was an
+API change, not our data. Single dates and the week form kept working. The
+5-minute score sync went dark about two hours before a Monday-night kickoff,
+reporting `1 slate(s) returned no games`.
+
+### How a candidate is accepted
+
+`fetchScoreboardPayload` walks the candidates in order. **HTTP 200 is not
+acceptance.** A candidate is:
+
+- **REFUSED** — never returned, try the next — when it came from the
+  season-ignoring week URL and carries no event whose own `season.year` and
+  `season.type` are present and match what was asked for. `eventMatchesSeason`
+  fails OPEN on a *missing* field by design, and `eventWeekNumber` also falls
+  back to the requested week, so an unproven payload would be relabelled with
+  the requested season, mark that week fetched in `importNFLSeason`, and let the
+  orphan sweep delete the week's real stored games.
+- **DEPREFERRED** — remembered, try the next, use it only if nothing better
+  arrives — when it is OK but carries no game for the requested week: an empty
+  envelope, an error envelope wearing a 200, or a spillover-only response made
+  entirely of the neighbouring week's games.
+- **ACCEPTED** — when it parses to at least one game for the requested week.
+
+A candidate that returns a non-OK status **or throws** (DNS, reset socket,
+unparseable body) is simply a failed candidate; the next one is still tried.
+
+### When everything fails
+
+Only when no candidate is usable does the fetch throw. Both fetchers turn that
+into an empty slate (`raw: null` from `fetchNFLWeekScheduleWithRaw`), which
+`syncScoresWindow` counts as `slatesNotReconciled` and `scoreSyncHeartbeat`
+reports as `N slate(s) returned no games`. That message is the outage signal —
+it does not identify which URL failed. The per-candidate `console.warn` lines
+in `fetchScoreboardPayload` do.
+
+Tests: `functions/src/__tests__/nflScoreboardUrlFallback.test.ts`.
+
+### ⚠️ `functions/src/espnBracket.ts` still uses the date-range form
+
+March Madness will fail the same way until that module is changed. Both halves
+of that claim were measured, so a later reader can re-run them rather than
+trust the sentence.
+
+The source still constructs a range URL — `grep -n 'scoreboard?dates='
+functions/src/espnBracket.ts`, 2026-09-15:
+
+```
+1154:    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=100`; // group 100 is typically NCAA Tournament
+1173:    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=${groupId}`;
+```
+
+ESPN still rejects that shape, and accepts a single date. Probed
+**2026-09-16T00:15:52Z**:
+
+| Request | Result |
+|---|---|
+| `mens-college-basketball/scoreboard?dates=20260317-20260320&limit=200&groups=100` | **400** `{"code":400,"message":"Failed to get events endpoint."}` |
+| `mens-college-basketball/scoreboard?dates=20260317&limit=200&groups=100` | **200** |
+
+Re-run both before acting on this section — it is a point-in-time measurement,
+and the whole reason it exists is that ESPN changed this endpoint once already.
