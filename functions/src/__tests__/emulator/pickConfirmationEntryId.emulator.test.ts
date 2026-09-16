@@ -2,14 +2,15 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { submitNFLPicksInternal } from '../../nflPools';
+import type { CommittedPickSave } from '../../nflPickConfirmation';
 
 /**
- * Pick confirmation email — the `committed` out-param the submitNFLPicks
+ * Pick confirmation email — the `committed` out-param (CommittedPickSave) the submitNFLPicks
  * callable keys the email off (nflPickConfirmation.ts).
  *
  * - a real save reports the id of the entry it wrote, and that doc holds the
- *   MERGED picks the email reads (an earlier stored pick survives a save that
- *   omits it — the reason the email reads the doc, not the input);
+ *   MERGED picks the email is built from (an earlier stored pick survives a save that
+ *   omits it — the reason the email uses the save, not the input);
  * - a requestId replay reports nothing, so a client resend emails nothing;
  * - the response shape is unchanged: still exactly `{ success: true }`.
  */
@@ -56,26 +57,30 @@ describe('submitNFLPicksInternal reports the committed entry for the confirmatio
     await test.cleanup();
   }, 30000);
 
-  const submit = (picks: Record<string, string>, requestId: string, committed: { entryId?: string }) =>
+  const submit = (picks: Record<string, string>, requestId: string, committed: CommittedPickSave) =>
     submitNFLPicksInternal(db, { actorUid: MEMBER, subjectUid: MEMBER, subjectName: MEMBER, requestId }, {
       poolId: POOL, week: 1, picks,
     }, committed);
 
   it('a real save sets entryId to the written doc, which holds the merged picks', async () => {
-    const first: { entryId?: string } = {};
+    const first: CommittedPickSave = {};
     await expect(submit({ [G1]: 'KC' }, 'req-1', first)).resolves.toEqual({ success: true });
     expect(first.entryId).toBe(MEMBER);
 
-    const second: { entryId?: string } = {};
+    const second: CommittedPickSave = {};
     await submit({ [G2]: 'MIA' }, 'req-2', second);
     expect(second.entryId).toBe(MEMBER);
+    // The snapshot carries the MERGED picks — G1 survives a save that omitted it —
+    // and matches what landed in the doc.
+    expect(second.picks).toEqual({ [G1]: 'KC', [G2]: 'MIA' });
+    expect(second.confidence).toBeNull();
     const entry = (await db.collection('pools').doc(POOL).collection('entries').doc(second.entryId!).get()).data()!;
-    expect(entry.picks).toMatchObject({ [G1]: 'KC', [G2]: 'MIA' });
+    expect(entry.picks).toEqual(second.picks);
   });
 
   it('a requestId replay leaves entryId unset and still answers { success: true }', async () => {
-    const replay: { entryId?: string } = {};
+    const replay: CommittedPickSave = {};
     await expect(submit({ [G2]: 'MIA' }, 'req-2', replay)).resolves.toEqual({ success: true });
-    expect(replay.entryId).toBeUndefined();
+    expect(replay).toEqual({});
   });
 });

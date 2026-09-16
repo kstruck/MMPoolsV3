@@ -109,12 +109,26 @@ export function buildPickConfirmationEmail(input: PickConfirmationInput): { subj
 }
 
 /**
- * Reads what the email needs and queues it. Never throws.
+ * What submitNFLPicksInternal's committing transaction wrote to the entry —
+ * filled through its optional out-param, left empty on a requestId replay.
  *
- * The picks come from the SAVED entry doc, never the request: the server merges
- * a save over earlier picks (a game that locked before this save keeps its
- * stored pick) and can drop a submitted tiebreaker once its target game locks.
- * Echoing the input would confirm data that was not saved (codex r1).
+ * The email is built from this, never from the request: the server merges a
+ * save over earlier picks (a game that locked before this save keeps its stored
+ * pick) and can drop a submitted tiebreaker once its target game locks, so
+ * echoing the input could confirm data that was not saved (codex r1). And it is
+ * captured INSIDE the transaction rather than re-read after commit, because a
+ * re-read can already see a concurrent later save (codex r2).
+ */
+export interface CommittedPickSave {
+    entryId?: string;
+    entryName?: string;
+    picks?: Record<string, string>;
+    confidence?: Record<string, number> | null;
+    tiebreaker?: number | null;
+}
+
+/**
+ * Reads the pool, profile and week's games, then queues the email. Never throws.
  */
 export async function sendNFLPickConfirmation(
     db: admin.firestore.Firestore,
@@ -123,8 +137,7 @@ export async function sendNFLPickConfirmation(
         email?: string;
         poolId: string;
         week: number;
-        /** Id of the entry doc submitNFLPicksInternal wrote. */
-        entryId: string;
+        saved: CommittedPickSave;
     },
 ): Promise<void> {
     try {
@@ -137,12 +150,8 @@ export async function sendNFLPickConfirmation(
         }
         if (!email) return;
 
-        const poolRef = db.collection('pools').doc(args.poolId);
-        const pool = (await poolRef.get()).data() as Record<string, any> | undefined;
+        const pool = (await db.collection('pools').doc(args.poolId).get()).data() as Record<string, any> | undefined;
         if (!pool) return;
-        const entry = (await poolRef.collection('entries').doc(args.entryId).get()).data() as Record<string, any> | undefined;
-        if (!entry) return;
-        const tiebreaker = entry.weeklyTiebreakers?.[args.week];
 
         const profile = (await db.collection('users').doc(args.uid).get()).data();
         const gamesSnap = await db.collection('nfl_games')
@@ -158,10 +167,10 @@ export async function sendNFLPickConfirmation(
             seasonType: pool.seasonType,
             week: args.week,
             recipientName: (typeof profile?.name === 'string' && profile.name) || displayName,
-            entryName: typeof entry.entryName === 'string' && entry.entryName ? entry.entryName : undefined,
-            picks: (entry.picks ?? {}) as Record<string, string>,
-            confidence: (entry.confidence ?? null) as Record<string, number> | null,
-            tiebreakerPrediction: typeof tiebreaker === 'number' ? tiebreaker : null,
+            entryName: args.saved.entryName || undefined,
+            picks: args.saved.picks ?? {},
+            confidence: args.saved.confidence ?? null,
+            tiebreakerPrediction: typeof args.saved.tiebreaker === 'number' ? args.saved.tiebreaker : null,
             games: gamesSnap.docs.map(d => d.data() as NFLGame),
         });
 

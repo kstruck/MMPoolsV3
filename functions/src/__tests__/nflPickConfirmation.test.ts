@@ -72,19 +72,18 @@ describe('buildPickConfirmationEmail', () => {
     });
 });
 
-/** pools/{id}, pools/{id}/entries/{id}, users/{id}, and an nfl_games query. */
-function fakeDb(pool: Record<string, unknown> | undefined, entry: Record<string, unknown> | undefined, games = GAMES) {
+/** pools/{id}, users/{id}, and an nfl_games query. No entry reads exist to fake. */
+function fakeDb(pool: Record<string, unknown> | undefined, games = GAMES) {
     const snap = (data: unknown) => ({ data: () => data });
     return {
         collection: (name: string) => {
+            if (name === 'entries') throw new Error('the sender must not re-read the entry (codex r2)');
             const q: any = {
                 where: () => q,
                 get: async () => ({ docs: games.map(g => snap(g)) }),
                 doc: (id: string) => ({
                     get: async () => snap(name === 'pools' ? pool : name === 'users' ? { name: `user-${id}` } : undefined),
-                    collection: (sub: string) => ({
-                        doc: () => ({ get: async () => snap(sub === 'entries' ? entry : undefined) }),
-                    }),
+                    collection: () => { throw new Error('the sender must not re-read the entry (codex r2)'); },
                 }),
             };
             return q;
@@ -99,11 +98,9 @@ describe('sendNFLPickConfirmation', () => {
 
     const sent = () => sendEmailMock.mock.calls[0] as unknown as [unknown, string, string, string, Record<string, unknown>];
 
-    it('builds the email from the SAVED entry, not the request', async () => {
-        // The stored entry: an earlier pick (g1) the latest save did not resend,
-        // and a week-3 tiebreaker; week 2's tiebreaker must not leak in.
-        const entry = { entryName: 'Sam #2', picks: { g1: 'KC', g2: 'MIA' }, weeklyTiebreakers: { 2: 10, 3: 44 } };
-        await sendNFLPickConfirmation(fakeDb(POOL, entry), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, entryId: 'u1' });
+    it('builds the email from the committed save it is handed', async () => {
+        const saved = { entryId: 'u1', entryName: 'Sam #2', picks: { g1: 'KC', g2: 'MIA' }, tiebreaker: 44 };
+        await sendNFLPickConfirmation(fakeDb(POOL), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, saved });
         expect(sendEmailMock).toHaveBeenCalledTimes(1);
         const [, to, subject, html, ctx] = sent();
         expect(to).toBe('a@b.com');
@@ -117,15 +114,15 @@ describe('sendNFLPickConfirmation', () => {
         expect(getUserMock).not.toHaveBeenCalled();
     });
 
-    it('shows no tiebreaker when the saved entry has none for the week (server dropped it)', async () => {
-        await sendNFLPickConfirmation(fakeDb(POOL, { picks: { g1: 'KC' }, weeklyTiebreakers: {} }), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, entryId: 'u1' });
+    it('shows no tiebreaker when the save wrote none for the week (server dropped it)', async () => {
+        await sendNFLPickConfirmation(fakeDb(POOL), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, saved: { entryId: 'u1', picks: { g1: 'KC' }, tiebreaker: null } });
         expect(sent()[3]).not.toContain('Tiebreaker');
     });
 
     it('falls back to the Auth record when the token has no email', async () => {
         getUserMock.mockResolvedValue({ email: 'auth@b.com', displayName: 'Auth Name' });
-        await sendNFLPickConfirmation(fakeDb({ ...POOL, type: 'NFL_SURVIVOR' }, { picks: { '3': 'DAL' } }), {
-            uid: 'u1', poolId: 'p1', week: 3, entryId: 'u1',
+        await sendNFLPickConfirmation(fakeDb({ ...POOL, type: 'NFL_SURVIVOR' }), {
+            uid: 'u1', poolId: 'p1', week: 3, saved: { entryId: 'u1', picks: { '3': 'DAL' } },
         });
         expect(sent()[1]).toBe('auth@b.com');
         expect(sent()[3]).toContain('DAL @ NYG');
@@ -134,15 +131,14 @@ describe('sendNFLPickConfirmation', () => {
     it('never throws — a lookup failure is swallowed and nothing is sent', async () => {
         getUserMock.mockRejectedValue(new Error('auth down'));
         const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-        await expect(sendNFLPickConfirmation(fakeDb(POOL, {}), { uid: 'u1', poolId: 'p1', week: 3, entryId: 'u1' })).resolves.toBeUndefined();
+        await expect(sendNFLPickConfirmation(fakeDb(POOL), { uid: 'u1', poolId: 'p1', week: 3, saved: { entryId: 'u1' } })).resolves.toBeUndefined();
         expect(sendEmailMock).not.toHaveBeenCalled();
         expect(err).toHaveBeenCalled();
         err.mockRestore();
     });
 
-    it('sends nothing for a missing pool or a missing entry', async () => {
-        await sendNFLPickConfirmation(fakeDb(undefined, { picks: {} }), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, entryId: 'u1' });
-        await sendNFLPickConfirmation(fakeDb(POOL, undefined), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, entryId: 'u1' });
+    it('sends nothing for a missing pool', async () => {
+        await sendNFLPickConfirmation(fakeDb(undefined), { uid: 'u1', email: 'a@b.com', poolId: 'p1', week: 3, saved: { entryId: 'u1', picks: {} } });
         expect(sendEmailMock).not.toHaveBeenCalled();
     });
 });
@@ -153,7 +149,7 @@ describe('wiring in nflPools.ts', () => {
     it('the submitNFLPicks callable sends the confirmation only when an entry was committed', () => {
         const wrapper = src.slice(src.indexOf('export const submitNFLPicks = validated('), src.indexOf('export async function executeSurvivorRebuyInternal'));
         expect(wrapper).toMatch(/if \(committed\.entryId\) \{\s*await sendNFLPickConfirmation\(db,/);
-        expect(wrapper).toContain('entryId: committed.entryId');
+        expect(wrapper).toContain('saved: committed,');
     });
 
     it('the Internal (proxy picks, sim harness) never emails', () => {
