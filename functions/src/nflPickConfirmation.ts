@@ -39,8 +39,11 @@ const typeLabel = (t: string): string =>
 
 /**
  * Full team names by ESPN abbreviation. The feed's `team.name` is the nickname
- * alone ("Bills", measured on prod nfl_games 2026-09-16), and Kevin asked for
- * full names in this email. Unknown abbreviations fall back to the feed name,
+ * alone, and Kevin asked for full names in this email. Measured 2026-09-16,
+ * read-only admin SDK against prod:
+ *   db.collection('nfl_games').where('season','==','2026')
+ *     .where('seasonType','==',2).where('week','==',2).limit(2).get()
+ *   → homeTeam {"name":"Bills","abbreviation":"BUF"}, awayTeam {"name":"Lions","abbreviation":"DET"} Unknown abbreviations fall back to the feed name,
  * then the abbreviation — a new or renamed team degrades, it never breaks.
  */
 export const NFL_TEAM_NAMES: Record<string, string> = {

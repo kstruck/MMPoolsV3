@@ -1,12 +1,15 @@
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { logger } from '../utils/logger';
+import { now as serverNow } from '../utils/serverClock';
 import { activeEmailPromo, EMAIL_PROMO_BASE_URL, renderEmailPromoHtml, renderEmailPromoText } from '@shared/emailPromo';
 
 // Promo signature — the same blurb the server template ends with
 // (shared/emailPromo.ts), linked through the owner's referral code when known.
 const getPromoSignature = (ownerReferralCode?: string) => {
-    const promo = activeEmailPromo(Date.now());
+    // Server-corrected clock: a skewed device must not pick a special outside
+    // its window (qodo on #698).
+    const promo = activeEmailPromo(serverNow());
     const ctaUrl = ownerReferralCode
         ? `${EMAIL_PROMO_BASE_URL}?ref=${encodeURIComponent(ownerReferralCode)}`
         : promo.ctaUrl;

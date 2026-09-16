@@ -86,6 +86,9 @@ describe('every email template ends with the blurb', () => {
         const src = readFileSync(join(__dirname, '..', 'src', 'services', 'emailService.ts'), 'utf8');
         expect(src).toContain("from '@shared/emailPromo'");
         expect(src).toContain('renderEmailPromoHtml(promo, { ctaUrl })');
+        // Server-corrected clock picks the special, never the device clock (qodo on #698).
+        expect(src).toContain('activeEmailPromo(serverNow())');
+        expect(src).not.toContain('activeEmailPromo(Date.now())');
         expect(src).not.toContain('Want to create and host your own pool?');
     });
 });
