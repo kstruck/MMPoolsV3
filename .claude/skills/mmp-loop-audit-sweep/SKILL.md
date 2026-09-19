@@ -9,9 +9,9 @@ Loop 1 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). Low
 uses data that already exists.
 
 🟢 **ACTIVE since 2026-09-19** (Kevin: "Go with all recommendations"). Invoke it
-without asking. It sat at "awaiting approval" from `e5bca52` (#621) until then
-and ran zero times in between — the absence of `AUDIT-SWEEP-LOG.md` was the
-proof.
+without asking. It sat at "awaiting approval" from `a1152db9` (2026-07-16) until
+then — two months — and ran zero times in between. The absence of
+`AUDIT-SWEEP-LOG.md` was the proof.
 
 🖥️ **Runs on the Windows box only.** It needs prod Firestore credentials, which
 the cloud container does not have. A cloud session that loads this skill must say

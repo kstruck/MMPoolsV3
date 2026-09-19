@@ -169,7 +169,9 @@ from 2026-09-01** (dormant 2026-07-25 → 2026-07-30 and 2026-08-19 → 2026-09-
 
 ## 2c. Cross-model review is REQUIRED before opening a PR
 
-`codex` (OpenAI) is installed and on PATH — verified `codex-cli 0.144.5`.
+`codex` (OpenAI) is installed and on PATH — `codex-cli 0.155.1`, re-measured
+2026-09-19 (this line said 0.144.5 until then). **On the Windows box it works;
+in the cloud container it is unauthenticated — see the warning below.**
 **Run it on your own diff before opening any PR:**
 
 ```
@@ -343,7 +345,7 @@ absorb findings, report to Kevin, and only then start the next. Batching ~10 PRs
 in a night is what produced the defect count above; throughput was never the
 constraint, correctness is.
 
-## 2e. 🛑 THE GATE LIST IS SEVEN COMMANDS, NOT FIVE — `npx tsc -b` DOES NOT TYPECHECK `functions/`
+## 2e. 🛑 THE GATE LIST IS EIGHT COMMANDS, NOT FIVE — `npx tsc -b` DOES NOT TYPECHECK `functions/`
 
 Run ALL of these before opening a PR. Report the real numbers.
 

@@ -17,8 +17,10 @@
 >    subagent and cloud session.
 > 3. **No loop had ever run.** `AUDIT-SWEEP-LOG.md`, `E2E-SWEEP-LOG.md` and
 >    `PRUNE-LOG.md` are each promised by a skill; none of the three existed.
-> 4. **`gh` does not exist in the cloud container**, and four of the five loops
->    were written against it. Scheduling was never the blocker — portability was.
+> 4. **`gh` does not exist in the cloud container**, and the two loops that
+>    touch GitHub were written against it. The other three need a host the
+>    container also lacks (prod credentials, a JDK). Scheduling was never the
+>    blocker — portability was.
 > 5. **qodo skips draft PRs**, and cloud sessions are instructed to open drafts.
 >    Those two rules cancel: §2b's "qodo is clean" was unsatisfiable for any
 >    cloud-opened PR.
@@ -32,9 +34,23 @@
 > somewhere honest to land. `npm run lint:ratchet` pins `--max-warnings 1855`
 > and CI's required `lint` job runs it. CI gained the functions deploy build.
 > `.claude/agents/verifier.md` is a checker with no write tools at all.
-> `tests/loop-engineering-invariants.test.ts` (29 assertions) holds all of it
-> together — each one was verified to FAIL when its invariant is broken, not
-> just to pass now.
+> `tests/loop-engineering-invariants.test.ts` (**35 test cases**) holds all of
+> it together.
+>
+> **Every invariant was mutation-tested** — broken on purpose, confirmed to
+> fail, restored. That pass found three guards that did NOT bite: the lint-job
+> check accepted `npm run lint:ratchet || true`; the activation check never
+> compared a skill against the charter ledger; and the maker/checker check
+> passed when `tools:` was DELETED from the agent, which is the permissive case
+> (no list means it inherits Edit and Write), while catching the weaker attack
+> of adding `Edit` to the list. All three are fixed and re-tested. Two more had
+> been caught during authoring. Five holes in one file whose entire subject is
+> guards that do not guard — the rate is the point, not the fixes.
+>
+> The five skills landed in `a1152db9` on **2026-07-16** and had not run once
+> in the two months since (an earlier draft of this entry said `e5bca52`/#621,
+> read off a shallow clone's truncated log; `--diff-filter=A` on a full clone
+> is the reliable form).
 >
 > **Loop 1 (`mmp-loop-audit-sweep`) is ACTIVE**; loops 2–5 stay parked, and
 > auto-merge on loop 4 remains a separate approval. Loop 1 runs on the Windows

@@ -96,19 +96,6 @@ describe('CI wiring', () => {
     }
 
     /**
-     * The `lint` JOB NAME is the required status check in the repository
-     * ruleset, so it must keep that name — what changes is the command inside.
-     */
-    it('runs the ratchet, not bare eslint, in the required lint job', () => {
-        const lint = jobBlock('lint');
-        expect(lint).toContain('npm run lint:ratchet');
-        expect(
-            /run:\s*npm run lint\s*$/m.test(lint),
-            'the lint job must not fall back to uncapped `npm run lint`',
-        ).toBe(false);
-    });
-
-    /**
      * A step's command AND the directory it runs in, as one unit.
      *
      * ⚠️ The first version of this asserted `job.toContain('npm run build')`,
@@ -124,6 +111,31 @@ describe('CI wiring', () => {
             dir: chunk.match(/working-directory:\s*(.+)/)?.[1].trim() ?? '.',
         }));
     }
+
+    /**
+     * The `lint` JOB NAME is the required status check in the repository
+     * ruleset, so it must keep that name — what changes is the command inside.
+     *
+     * ⚠️ Exact equality, and `continue-on-error` checked explicitly. The first
+     * version used `toContain('npm run lint:ratchet')`, which
+     * `npm run lint:ratchet || true` satisfies — a required check that always
+     * passes. The functions-build assertion below had already been fixed for
+     * exactly this and the fix was not carried across; a review caught it.
+     */
+    it('runs the ratchet, not bare eslint, in the required lint job', () => {
+        const lint = jobBlock('lint');
+        const commands = steps(lint).map((s) => s.run);
+
+        expect(commands, 'the lint job must run the capped ratchet').toContain('npm run lint:ratchet');
+        expect(
+            commands,
+            'the lint job must not fall back to uncapped `npm run lint`',
+        ).not.toContain('npm run lint');
+        expect(
+            /continue-on-error:\s*true/.test(lint),
+            'continue-on-error would make the required lint check unable to fail',
+        ).toBe(false);
+    });
 
     /**
      * CLAUDE.md §2e lists seven gates. `npm --prefix functions run build` was on
@@ -167,17 +179,38 @@ describe('loop charter', () => {
     });
 
     /**
-     * Every loop must declare an activation state using one of the three tokens
-     * the charter defines. Case-sensitive and anchored to the token, because the
-     * loose version (`/ACTIVE|.../i`) also matched the word "inactive" and any
-     * prose that happened to say "active".
+     * The charter is the ledger, so the skill must AGREE WITH IT — not merely
+     * say something state-shaped.
+     *
+     * ⚠️ The first version accepted any token from a list and never looked at
+     * the charter at all: flipping audit-sweep to "Still parked" while the
+     * ledger still read ACTIVE passed. An activation ledger that no test
+     * compares against is the same unreadable-state problem this PR is fixing,
+     * one level up. Found by a review.
+     *
+     * The ledger row is the authority; a skill declaring both tokens, or the
+     * wrong one, fails.
      */
-    const STATE_TOKENS = ['**ACTIVE', '**Still parked**', 'proceed-gate'];
+    function charterState(skill: string): 'ACTIVE' | 'PARKED' {
+        const row = read(CHARTER)
+            .split('\n')
+            .find((l) => l.startsWith('|') && l.includes(skill));
+        expect(row, `${skill} must have a row in the charter ledger`).toBeDefined();
+        return /\bACTIVE\b/.test(row!) ? 'ACTIVE' : 'PARKED';
+    }
 
-    it.each(loopSkills)('%s declares one of the charter activation states', (skill) => {
+    it.each(loopSkills)('%s declares the same state the charter ledger gives it', (skill) => {
         const body = read(path.join('.claude', 'skills', skill, 'SKILL.md'));
-        const declared = STATE_TOKENS.filter((t) => body.includes(t));
-        expect(declared, `${skill} must declare one of ${STATE_TOKENS.join(' / ')}`).not.toHaveLength(0);
+        const saysActive = body.includes('**ACTIVE');
+        const saysParked = body.includes('**Still parked**');
+
+        expect(
+            saysActive !== saysParked,
+            `${skill} must declare exactly one of **ACTIVE / **Still parked** (active=${saysActive}, parked=${saysParked})`,
+        ).toBe(true);
+        expect(saysActive ? 'ACTIVE' : 'PARKED', `${skill} contradicts the charter ledger`).toBe(
+            charterState(skill),
+        );
     });
 });
 
@@ -262,11 +295,26 @@ describe('maker/checker separation', () => {
      */
     it('grants the verifier no write tools', () => {
         const frontmatter = read(AGENT).split('---')[1] ?? '';
-        const tools = (frontmatter.match(/^tools:\s*(.+)$/m)?.[1] ?? '')
-            .split(',')
-            .map((t) => t.trim());
+        const declared = frontmatter.match(/^tools:\s*(.+)$/m)?.[1] ?? '';
+        const tools = declared.split(',').map((t) => t.trim()).filter((t) => t.length > 0);
 
-        expect(tools.length, 'the verifier must declare an explicit tool list').toBeGreaterThan(0);
+        /**
+         * ⚠️ THE STRONGER ATTACK IS DELETION, NOT ADDITION. An agent with NO
+         * `tools:` line inherits the full default set — Edit and Write included
+         * — so a missing list is the permissive case, not the restrictive one.
+         * The first version split the empty string, got `['']`, and passed a
+         * length check with the line deleted: it caught `tools: ..., Edit` and
+         * missed the thing that actually hands the checker a pen. Found by a
+         * review; it is the defect class this whole file exists to stop,
+         * sitting in the assertion meant to stop it.
+         */
+        expect(
+            tools,
+            'the verifier must declare an explicit tool list — no list means it inherits Edit and Write',
+        ).not.toHaveLength(0);
+        for (const required of ['Read', 'Bash']) {
+            expect(tools, `verifier needs ${required} to review anything`).toContain(required);
+        }
         for (const forbidden of ['Edit', 'Write', 'NotebookEdit', 'MultiEdit']) {
             expect(tools, `verifier must not hold ${forbidden}`).not.toContain(forbidden);
         }

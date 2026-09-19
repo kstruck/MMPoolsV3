@@ -46,10 +46,12 @@ last and trusted least on purpose.
 
 ## Where the loops run — the question that blocked all of them
 
-Four of the five were written against the `gh` CLI. **`gh` is not installed in
-the Claude Code cloud container**; GitHub access there is through the
-`mcp__github__*` tools only. Loops 1 and 3 need prod Firestore credentials and a
-JDK respectively, which the cloud container does not have either.
+**Two** of the five — the pruner and the dependabot babysitter, the only two
+that touch GitHub at all — were written against the `gh` CLI, which **is not
+installed in the Claude Code cloud container**; GitHub access there is through
+the `mcp__github__*` tools only. Loops 1 and 3 need prod Firestore credentials
+and a JDK respectively, which the cloud container does not have either. So
+every one of the five had a host problem; only two of them had a `gh` problem.
 
 The result was a deadlock nobody wrote down: the environment that is always on
 could not run the loops as written, and the environment that could run them is a
@@ -102,8 +104,16 @@ enforces the shape.
 
 - **2026-09-19 — loop 1 ACTIVATED.** Read-only, no mutation, worst case is a
   wrong line in a log file. It had been "awaiting Kevin's approval" since the
-  skills landed in `e5bca52` (#621) with no run in between. Watch it for two
-  weeks before considering loop 2.
+  five skills landed in **`a1152db9`, 2026-07-16** — **two months and three
+  days** with no run in between. Watch it for two weeks before considering
+  loop 2.
+
+  *(This line first said `e5bca52` (#621, 2026-08-27). That commit touches no
+  file with "loop" in its path. The error came from reading `git log` on a
+  SHALLOW clone, where the oldest visible commit is the truncation point and
+  not the commit that added the file — `--diff-filter=A` on a full clone gives
+  `a1152db9`. Recorded rather than quietly corrected, because the charter's job
+  is to be the reliable copy.)*
 - **2026-09-19 — loops 2–5 stay parked**, and the parked state is now recorded
   here rather than only in each skill's prose.
 - **Auto-merge on loop 4 is OFF** and is a separate approval from loop 4's own

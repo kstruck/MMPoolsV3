@@ -41,6 +41,7 @@ invent new machinery. Session-invoked, not scheduled.
 - This loop touches real code — same worktree-isolation discipline as any other change
   in this repo applies (see mmp-change-control). It is not exempt just because it's
   "just formalizing an existing pattern."
-- No activation concern here in the scheduling sense (it's not cron'd), but the
-  proceed-gate IS the approval mechanism — never treat "loop completed a phase" as
-  license to keep going without Kevin's sign-off.
+- **Still parked** in the charter's sense: it is session-invoked and never
+  cron'd, so there is no scheduling approval to give. The **proceed-gate IS the
+  approval mechanism** — never treat "loop completed a phase" as license to keep
+  going without Kevin's sign-off.
