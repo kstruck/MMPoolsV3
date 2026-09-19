@@ -5,7 +5,7 @@ description: Run the create-pool Playwright e2e suite and report pass rate vs th
 
 # Nightly E2E Sweep
 
-Loop 3 of 5 (build order per PLAN-LOOPS.md). Read-only reporting, no mutation beyond
+Loop 3 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). Read-only reporting, no mutation beyond
 the test run itself. **Not yet activated** — manual invoke only until Kevin approves
 scheduling.
 
@@ -30,8 +30,13 @@ historical context — do not act on it).
 4. **Verify (real gate):** pass rate ≥ 95%, the team's existing target — not "the run
    completed."
 5. On any failure, capture the specific failing test + error, not just a red/green count.
-6. Append results to `E2E-SWEEP-LOG.md` at repo root. Only ping Kevin on a run below
-   target — stay silent on green runs.
+6. Append one row to `LOOP-LOG.tsv` at the repo root — one tab-separated row per run
+   (`date loop commit verdict metric idea lesson`, spec in
+   `docs/plans/PLAN-LOOPS.md`). Append only; never rewrite an earlier row.
+   **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never
+   `CLEAN`**, and `metric` carries the number the verifier produced.
+   `metric` is the pass rate (`7/7`, `94%`). Only ping Kevin on a run below
+   target — stay silent on green runs, but still write the row.
 
 ## Rules
 
@@ -44,6 +49,8 @@ historical context — do not act on it).
   keeps the channel open, so it never resolves.
 - Cheap-model pass for running + summarizing. Escalate to a heavier pass only if a
   failure needs real diagnosis (not just "which test failed").
-- **Do not wire this to `CronCreate` yet.** Manual invoke only, and only after the
-  blocking dependency above is resolved, until Kevin explicitly approves scheduled
-  activation.
+- **Still parked** — manual invoke only until Kevin approves scheduled activation.
+- 🖥️ **Windows box only.** Playwright here drives real Firebase emulators, which
+  need a JDK; the cloud container has neither the JDK nor the worktree this skill
+  assumes. This loop cannot move to the cloud without rebuilding what it runs
+  against, so it stays where it works.
