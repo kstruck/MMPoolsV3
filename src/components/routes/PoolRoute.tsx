@@ -31,6 +31,7 @@ import { Button, Badge } from '../ui';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStatus } from '../../types';
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
+import { resolveLogoUrl } from '../../utils/logoUrl';
 
 interface PoolRouteProps {
     user: User | null;
@@ -514,7 +515,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 <div className="text-center md:text-left">
                     <div className="flex items-center gap-3 mb-1">
                         {squaresPool.branding?.logoUrl && (
-                            <img src={squaresPool.branding.logoUrl} className="h-16 w-auto object-contain drop-shadow-lg" alt="Pool Logo" />
+                            <img src={resolveLogoUrl(squaresPool.branding.logoUrl)} className="h-16 w-auto object-contain drop-shadow-lg" alt="Pool Logo" />
                         )}
                         <h1 className="text-3xl font-display font-extrabold uppercase tracking-[0.02em] text-[color:var(--text)]">{squaresPool.name}</h1>
                         <button onClick={() => setShowAudit(true)} className="bg-gold-500/10 hover:bg-gold-500/20 text-gold-600 border border-gold-500/30 text-[10px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors duration-150">
