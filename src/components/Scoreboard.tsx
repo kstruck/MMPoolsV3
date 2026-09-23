@@ -5,6 +5,7 @@ import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import type { User } from '../types';
 import { HelpRoutePublisher } from '../help/publish';
+import { fetchScoreboardWindow } from '../services/espnScoreboardWindow';
 
 interface Game {
     id: string;
@@ -78,24 +79,32 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             const future = new Date(today);
             future.setDate(today.getDate() + 7);
 
-            const formatDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
-            const dateStr = `${formatDate(past)}-${formatDate(future)}`;
+            let fetchedGames: Game[] = [];
 
-            let url = '';
             if (activeTab === 'basketball') {
-                // College Basketball (Mens) - NCAA Tournament (groups=100)
-                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`;
+                // College Basketball (Mens) - NCAA Tournament (groups=100).
+                // No `dates=`, so the range outage below does not reach it.
+                const response = await fetch(
+                    `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`,
+                );
+                if (!response.ok) throw new Error('Failed to fetch scores');
+                const data: { events: Game[] } = await response.json();
+                fetchedGames = data.events || [];
             } else {
-                // Football
+                // ⚠️ NOT `dates=<start>-<end>`. ESPN began answering every date
+                // RANGE with HTTP 400 on 2026-09-15, which is what made this page
+                // show "Failed to fetch scores" on every refresh. The window is
+                // now assembled from the month(s) it spans — one or two requests
+                // — and filtered locally. See src/services/espnScoreboardWindow.ts for
+                // the measurements, including why `limit` must stay at or below
+                // 500.
                 const leaguePath = activeTab === 'college' ? 'college-football' : 'nfl';
-                url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?dates=${dateStr}&limit=200`;
+                const { events, monthsFailed } = await fetchScoreboardWindow<Game>(leaguePath, past, future);
+                fetchedGames = events;
+                // Partial failure is stated rather than silently shown as a short
+                // list — the games we did get are still worth rendering.
+                if (monthsFailed > 0) setError('Some scores could not be loaded. Showing what we have.');
             }
-
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Failed to fetch scores');
-
-            const data: { events: Game[] } = await response.json();
-            let fetchedGames = data.events || [];
 
             // For basketball, always include LIVE games + any game featuring an AP Top 25 team
             if (activeTab === 'basketball') {
