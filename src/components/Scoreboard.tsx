@@ -5,7 +5,8 @@ import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import type { User } from '../types';
 import { HelpRoutePublisher } from '../help/publish';
-import { fetchScoreboardWindow } from '../services/espnScoreboardWindow';
+import { fetchScoreboardWindow, windowAround } from '../services/espnScoreboardWindow';
+import { now as serverNow } from '../utils/serverClock';
 
 interface Game {
     id: string;
@@ -72,12 +73,12 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             setLoading(true);
             setError(null);
 
-            // Calculate date range: Past 7 days to Next 7 days
-            const today = new Date();
-            const past = new Date(today);
-            past.setDate(today.getDate() - 7);
-            const future = new Date(today);
-            future.setDate(today.getDate() + 7);
+            // Date range: past 7 days to next 7 days, off the SERVER-corrected
+            // clock. `new Date()` here meant a viewer whose device clock is wrong
+            // by a day fetched — and was shown — a window centred on the wrong
+            // date, with nothing on screen admitting it. Every lock and countdown
+            // in this app already reads `now()`; this page was the exception.
+            const { start: past, end: future } = windowAround(serverNow());
 
             let fetchedGames: Game[] = [];
 

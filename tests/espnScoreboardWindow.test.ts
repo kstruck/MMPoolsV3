@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
-  monthKeysForWindow, scoreboardMonthUrls, fetchScoreboardWindow,
+  monthKeysForWindow, scoreboardMonthUrls, fetchScoreboardWindow, windowAround,
 } from '../src/services/espnScoreboardWindow';
 
 /**
@@ -17,6 +19,57 @@ const ok = (events: unknown[]) => ({ ok: true, status: 200, json: async () => ({
 const fail = (status: number) => ({ ok: false, status, json: async () => ({}) });
 
 const ev = (id: string, date: string) => ({ id, date });
+
+describe('windowAround — the window is a function of the clock it is GIVEN', () => {
+  it('spans ±7 days by default', () => {
+    const { start, end } = windowAround(Date.parse('2026-09-23T12:00:00Z'));
+    // Compared as a span rather than as fixed strings: the day arithmetic is
+    // local, so pinning ISO text would make this test pass or fail by timezone.
+    expect(Math.round((end.getTime() - start.getTime()) / 86_400_000)).toBe(14);
+    expect(start.getTime()).toBeLessThan(Date.parse('2026-09-23T12:00:00Z'));
+    expect(end.getTime()).toBeGreaterThan(Date.parse('2026-09-23T12:00:00Z'));
+  });
+
+  it('READS NO CLOCK OF ITS OWN — a wrong device clock cannot move it', () => {
+    // The defect this closes: the page centred its window on `new Date()`, so a
+    // device a day out fetched the wrong week and presented it as current.
+    const fixed = Date.parse('2026-09-23T12:00:00Z');
+    const a = windowAround(fixed);
+    const realNow = Date.now;
+    try {
+      Date.now = () => Date.parse('2027-01-01T00:00:00Z');
+      const b = windowAround(fixed);
+      expect(b.start.getTime()).toBe(a.start.getTime());
+      expect(b.end.getTime()).toBe(a.end.getTime());
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('honours a custom span', () => {
+    const { start, end } = windowAround(Date.parse('2026-09-23T12:00:00Z'), 1);
+    expect(Math.round((end.getTime() - start.getTime()) / 86_400_000)).toBe(2);
+  });
+});
+
+describe('the Scoreboard page takes its window from the server clock', () => {
+  // A source guard, not a render test: mounting this page pulls in Header,
+  // Footer and src/firebase.ts, and the thing worth pinning is one import plus
+  // one call site. Same shape as the other source-walking guards in tests/.
+  const src = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/Scoreboard.tsx'), 'utf8');
+
+  it('imports now() from utils/serverClock', () => {
+    expect(src).toMatch(/import\s*\{\s*now as serverNow\s*\}\s*from\s*'\.\.\/utils\/serverClock'/);
+  });
+
+  it('builds the fetch window from serverNow(), never from a bare new Date()', () => {
+    expect(src).toMatch(/windowAround\(\s*serverNow\(\)\s*\)/);
+    // `new Date(game.date)` and `new Date(nowMs)` are fine and still present;
+    // what must not come back is the no-argument form seeding the window.
+    expect(src).not.toMatch(/const\s+today\s*=\s*new Date\(\)/);
+  });
+});
 
 describe('monthKeysForWindow', () => {
   it('returns one key when the window sits inside a month', () => {
