@@ -86,14 +86,21 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
      */
     const requestIdRef = useRef(0);
     /**
-     * The clock-sync budget is paid ONCE per mount, not per refresh.
+     * The ONE bounded clock wait for this mount. Every football fetch awaits
+     * this same promise.
      *
-     * `syncServerClock()` hands back the same session promise every time, so if
-     * the callable outlives the budget then every 30-second refresh would race
-     * that same pending promise against a fresh two-second timer — paying the
-     * delay again and again while already falling back to device time. (qodo #3.)
+     * A boolean "already paid" flag is the obvious version and it is wrong two
+     * ways. Set AFTER the await, every concurrent fetch queues its own timer and
+     * the budget is paid per refresh forever while the callable hangs (qodo #3).
+     * Set BEFORE it, a replacement fetch — a tab switch during the initial sync —
+     * skips the wait entirely, uses device time, and supersedes the one request
+     * that would have used the corrected clock, which defeats the whole point of
+     * this PR for exactly the viewer it is for (codex r4).
+     *
+     * Sharing the promise is both at once: one timer, and every fetch waits on
+     * the same deadline. Once it settles, awaiting it again costs a microtask.
      */
-    const clockWaitPaidRef = useRef(false);
+    const clockWaitRef = useRef<Promise<void> | null>(null);
 
     const fetchScores = useCallback(async () => {
         const requestId = ++requestIdRef.current;
@@ -138,16 +145,12 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 // a worse outcome than a window built on a clock that is usually
                 // right. Past the budget we proceed with the best time we have and
                 // any later refresh picks up the corrected offset.
-                // ONCE per mount — see `clockWaitPaidRef`. Marked paid before the
-                // await as well as after, so two fetches starting together (a tab
-                // switch during the initial load) cannot both queue the budget.
-                if (!clockWaitPaidRef.current) {
-                    clockWaitPaidRef.current = true;
-                    await Promise.race([
-                        syncServerClock(),
-                        new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
-                    ]);
-                }
+                // ONE shared bounded wait per mount — see `clockWaitRef`.
+                clockWaitRef.current ??= Promise.race([
+                    syncServerClock(),
+                    new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
+                ]);
+                await clockWaitRef.current;
                 const { start: past, end: future } = windowAround(serverNow());
 
                 // ⚠️ NOT `dates=<start>-<end>`. ESPN began answering every date

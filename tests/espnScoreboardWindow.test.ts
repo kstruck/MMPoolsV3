@@ -75,7 +75,7 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     // The hole codex found: `now()` starts the sync and returns immediately, so
     // the first fetch (the only one, when auto-refresh is off) would still be
     // built on the uncorrected clock.
-    const awaitIdx = src.indexOf('await Promise.race([');
+    const awaitIdx = src.indexOf('clockWaitRef.current ??= Promise.race([');
     const windowIdx = src.indexOf('windowAround(serverNow())');
     expect(awaitIdx).toBeGreaterThan(-1);
     expect(src).toContain('syncServerClock()');
@@ -88,7 +88,7 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     // position: the wait must sit after the basketball request, i.e. inside the
     // football branch.
     const basketballIdx = src.indexOf('mens-college-basketball/scoreboard');
-    const awaitIdx = src.indexOf('await Promise.race([');
+    const awaitIdx = src.indexOf('clockWaitRef.current ??= Promise.race([');
     expect(basketballIdx).toBeGreaterThan(-1);
     expect(awaitIdx).toBeGreaterThan(basketballIdx);
   });
@@ -105,11 +105,17 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     expect(src).toMatch(/monthsFailed > 0 && isCurrent\(\)/);
   });
 
-  it('pays the clock budget ONCE per mount, not on every refresh', () => {
-    // qodo #3 on #702: `syncServerClock()` returns the same pending promise, so
-    // racing it against a fresh timer each refresh re-paid the delay forever
-    // while already using the device-time fallback.
-    expect(src).toMatch(/if \(!clockWaitPaidRef\.current\) \{\s*\n\s*clockWaitPaidRef\.current = true;/);
+  it('SHARES one bounded clock wait — not a boolean flag', () => {
+    // Two findings meet here. qodo #3 on #702: racing the same pending promise
+    // against a fresh timer each refresh re-paid the delay forever while already
+    // using the device-time fallback. codex r4: a boolean set BEFORE the await
+    // lets a replacement fetch (a tab switch during the initial sync) skip the
+    // wait, use device time, and supersede the only request that would have used
+    // the corrected clock. Sharing the promise satisfies both.
+    expect(src).toMatch(/clockWaitRef\.current \?\?= Promise\.race\(\[/);
+    expect(src).toMatch(/await clockWaitRef\.current;/);
+    // The flag shape either finding would reintroduce.
+    expect(src).not.toMatch(/clockWaitPaidRef/);
   });
 
   it('BOUNDS that wait, so scores never hang on the callable', () => {
