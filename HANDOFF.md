@@ -1,6 +1,23 @@
 # HANDOFF — Session entry point
 
-> ## 🟡 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY WILL PROMPT TO DELETE `createParticipantProfile`.**
+> ## 🟢 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR [#691](https://github.com/kstruck/MMPoolsV3/pull/691) MERGED (`93ceeb5f`) AND DEPLOYED 2026-09-11; `createParticipantProfile` DELETED FROM PROD.**
+>
+> **Deploy evidence (Kevin, 2026-09-11).** First deploy attempt ran from the
+> main checkout at `e91e72c9` BEFORE the merge — `Deploy complete!`, and
+> `functions:list` still showed `createParticipantProfile` (the §3 stale-checkout
+> failure, caught by the verify-by-name step). After `gh pr merge 691 --admin`,
+> `pull --ff-only` (`e91e72c9..93ceeb5f`), `npm --prefix functions ci`, and
+> `npx firebase deploy --only functions,firestore:indexes` with `y` at the
+> deletion prompt: `functions:list | Select-String "createParticipantProfile"`
+> prints nothing; `Select-String "onUserCreated"` prints the one v1 trigger.
+> The `propCards.userId` collection-group index shipped in the same command;
+> the trigger retries until it is built.
+>
+> Still true after deploy: names fixed BEFORE it do not back-fill into playoff
+> maps / prop cards — edit the name away and back. Follow-up still owed (own
+> PR, scoring gate): `checkPlayoffScores` writes rescored entries back whole,
+> which can revert a name or a `paid` toggle landing inside its read→commit
+> window.
 >
 > Branch `claude/name-sync-followup-690`. #690 merged 2026-09-11 with three
 > findings accepted and deferred; this is them.
