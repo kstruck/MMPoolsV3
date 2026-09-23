@@ -71,24 +71,31 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     expect(src).not.toMatch(/const\s+today\s*=\s*new Date\(\)/);
   });
 
+  // ⚠️ ANCHORED ON THE `await`, NOT ON THE ASSIGNMENT. These two guards used to
+  // record the position of `clockWaitRef.current ??= Promise.race([`, which is
+  // where the promise is CREATED — so moving the actual `await` below
+  // `windowAround(serverNow())`, or out of the football branch, reintroduced the
+  // wrong-clock and delayed-basketball bugs with both tests still green. A guard
+  // that pins the wrong statement is not a guard. (qodo #2 on #702, round 2.)
+  const awaitIdx = src.indexOf('await clockWaitRef.current;');
+  const windowIdx = src.indexOf('windowAround(serverNow())');
+  const basketballIdx = src.indexOf('mens-college-basketball/scoreboard');
+
   it('AWAITS the sync before reading the clock — now() alone returns device time', () => {
     // The hole codex found: `now()` starts the sync and returns immediately, so
     // the first fetch (the only one, when auto-refresh is off) would still be
     // built on the uncorrected clock.
-    const awaitIdx = src.indexOf('clockWaitRef.current ??= Promise.race([');
-    const windowIdx = src.indexOf('windowAround(serverNow())');
     expect(awaitIdx).toBeGreaterThan(-1);
+    expect(windowIdx).toBeGreaterThan(-1);
     expect(src).toContain('syncServerClock()');
     expect(awaitIdx).toBeLessThan(windowIdx);
   });
 
   it('does NOT make the basketball tab wait on the clock', () => {
     // That feed sends no `dates=` and uses no window, so waiting on the sync
-    // would delay live basketball scores for nothing. (codex r2.) Pinned by
-    // position: the wait must sit after the basketball request, i.e. inside the
-    // football branch.
-    const basketballIdx = src.indexOf('mens-college-basketball/scoreboard');
-    const awaitIdx = src.indexOf('clockWaitRef.current ??= Promise.race([');
+    // would delay live basketball scores for nothing. (codex r2.) The AWAIT —
+    // the thing that actually costs time — must sit after the basketball
+    // request, i.e. inside the football branch.
     expect(basketballIdx).toBeGreaterThan(-1);
     expect(awaitIdx).toBeGreaterThan(basketballIdx);
   });
@@ -103,6 +110,11 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     expect(src).toMatch(/if \(!isCurrent\(\)\) return;\s*\n\s*setGames\(fetchedGames\);/);
     expect(src).toMatch(/if \(isCurrent\(\)\) setLoading\(false\);/);
     expect(src).toMatch(/monthsFailed > 0 && isCurrent\(\)/);
+    // ⚠️ THE CATCH BLOCK TOO. It was missing here, so deleting the guard in the
+    // error path left this test green while a stale rejection could still
+    // overwrite the current tab's error — and an error banner is the one piece of
+    // state a viewer is guaranteed to read. (qodo #3 on #702, round 2.)
+    expect(src).toMatch(/catch \(err: unknown\) \{\s*\n\s*if \(!isCurrent\(\)\) return;\s*\n\s*setError\(/);
   });
 
   it('SHARES one bounded clock wait — not a boolean flag', () => {
