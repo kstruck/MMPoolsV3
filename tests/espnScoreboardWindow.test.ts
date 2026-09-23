@@ -82,6 +82,17 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     expect(awaitIdx).toBeLessThan(windowIdx);
   });
 
+  it('does NOT make the basketball tab wait on the clock', () => {
+    // That feed sends no `dates=` and uses no window, so waiting on the sync
+    // would delay live basketball scores for nothing. (codex r2.) Pinned by
+    // position: the wait must sit after the basketball request, i.e. inside the
+    // football branch.
+    const basketballIdx = src.indexOf('mens-college-basketball/scoreboard');
+    const awaitIdx = src.indexOf('await Promise.race([');
+    expect(basketballIdx).toBeGreaterThan(-1);
+    expect(awaitIdx).toBeGreaterThan(basketballIdx);
+  });
+
   it('BOUNDS that wait, so scores never hang on the callable', () => {
     // The callable carries Firebase's ~70s default timeout; a public scoreboard
     // must not sit behind it.

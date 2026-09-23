@@ -80,36 +80,14 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             setLoading(true);
             setError(null);
 
-            // Date range: past 7 days to next 7 days, off the SERVER-corrected
-            // clock. `new Date()` here meant a viewer whose device clock is wrong
-            // by a day fetched — and was shown — a window centred on the wrong
-            // date, with nothing on screen admitting it. Every lock and countdown
-            // in this app already reads `now()`; this page was the exception.
-            //
-            // ⚠️ AWAITED, because `now()` alone does NOT fix this on first paint.
-            // It KICKS OFF the sync and returns device time immediately, so the
-            // first fetch — the only one that happens at all when auto-refresh is
-            // off — would still be built on the wrong clock. (codex on this
-            // change.) `syncServerClock` is idempotent and swallows its own
-            // failure, so this is one round trip per session at most.
-            //
-            // BOUNDED, because scores must not wait on it. The callable carries
-            // the Firebase default timeout of about seventy seconds, and blocking
-            // a public scoreboard that long on a flaky network is a worse outcome
-            // than a window built on a clock that is usually right. Past the
-            // budget we proceed with the best time we have and any later refresh
-            // picks up the corrected offset.
-            await Promise.race([
-                syncServerClock(),
-                new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
-            ]);
-            const { start: past, end: future } = windowAround(serverNow());
-
             let fetchedGames: Game[] = [];
 
             if (activeTab === 'basketball') {
                 // College Basketball (Mens) - NCAA Tournament (groups=100).
-                // No `dates=`, so the range outage below does not reach it.
+                // No `dates=`, so the range outage below does not reach it — and
+                // no date window, so it deliberately does NOT wait on the server
+                // clock below. Making it wait would delay live basketball scores
+                // by up to the sync budget for no benefit. (codex r2.)
                 const response = await fetch(
                     `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`,
                 );
@@ -117,6 +95,32 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 const data: { events: Game[] } = await response.json();
                 fetchedGames = data.events || [];
             } else {
+                // Date range: past 7 days to next 7 days, off the SERVER-corrected
+                // clock. `new Date()` here meant a viewer whose device clock is
+                // wrong by a day fetched — and was shown — a window centred on the
+                // wrong date, with nothing on screen admitting it. Every lock and
+                // countdown in this app already reads `now()`; this page was the
+                // exception.
+                //
+                // ⚠️ AWAITED, because `now()` alone does NOT fix this on first
+                // paint. It KICKS OFF the sync and returns device time
+                // immediately, so the first fetch — the only one that happens at
+                // all when auto-refresh is off — would still be built on the wrong
+                // clock. (codex r1.) `syncServerClock` is idempotent and swallows
+                // its own failure, so this is one round trip per session at most.
+                //
+                // BOUNDED, because scores must not wait on it. The callable
+                // carries the Firebase default timeout of about seventy seconds,
+                // and blocking a public scoreboard that long on a flaky network is
+                // a worse outcome than a window built on a clock that is usually
+                // right. Past the budget we proceed with the best time we have and
+                // any later refresh picks up the corrected offset.
+                await Promise.race([
+                    syncServerClock(),
+                    new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
+                ]);
+                const { start: past, end: future } = windowAround(serverNow());
+
                 // ⚠️ NOT `dates=<start>-<end>`. ESPN began answering every date
                 // RANGE with HTTP 400 on 2026-09-15, which is what made this page
                 // show "Failed to fetch scores" on every refresh. The window is
