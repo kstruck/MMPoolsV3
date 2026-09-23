@@ -6,7 +6,14 @@ import { getTeamLogo } from '../constants';
 import type { User } from '../types';
 import { HelpRoutePublisher } from '../help/publish';
 import { fetchScoreboardWindow, windowAround } from '../services/espnScoreboardWindow';
-import { now as serverNow } from '../utils/serverClock';
+import { now as serverNow, syncServerClock } from '../utils/serverClock';
+
+/**
+ * How long the first scoreboard fetch will wait for the server clock before
+ * giving up and using the best time it has. See the call site for why it is
+ * bounded at all.
+ */
+const SERVER_CLOCK_SYNC_BUDGET_MS = 2000;
 
 interface Game {
     id: string;
@@ -78,6 +85,24 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             // by a day fetched — and was shown — a window centred on the wrong
             // date, with nothing on screen admitting it. Every lock and countdown
             // in this app already reads `now()`; this page was the exception.
+            //
+            // ⚠️ AWAITED, because `now()` alone does NOT fix this on first paint.
+            // It KICKS OFF the sync and returns device time immediately, so the
+            // first fetch — the only one that happens at all when auto-refresh is
+            // off — would still be built on the wrong clock. (codex on this
+            // change.) `syncServerClock` is idempotent and swallows its own
+            // failure, so this is one round trip per session at most.
+            //
+            // BOUNDED, because scores must not wait on it. The callable carries
+            // the Firebase default timeout of about seventy seconds, and blocking
+            // a public scoreboard that long on a flaky network is a worse outcome
+            // than a window built on a clock that is usually right. Past the
+            // budget we proceed with the best time we have and any later refresh
+            // picks up the corrected offset.
+            await Promise.race([
+                syncServerClock(),
+                new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
+            ]);
             const { start: past, end: future } = windowAround(serverNow());
 
             let fetchedGames: Game[] = [];

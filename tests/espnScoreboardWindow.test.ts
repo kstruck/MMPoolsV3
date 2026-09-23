@@ -59,8 +59,9 @@ describe('the Scoreboard page takes its window from the server clock', () => {
   const src = fs.readFileSync(
     path.join(process.cwd(), 'src/components/Scoreboard.tsx'), 'utf8');
 
-  it('imports now() from utils/serverClock', () => {
-    expect(src).toMatch(/import\s*\{\s*now as serverNow\s*\}\s*from\s*'\.\.\/utils\/serverClock'/);
+  it('imports now() and the sync from utils/serverClock', () => {
+    expect(src).toMatch(/import\s*\{[^}]*\bnow as serverNow\b[^}]*\}\s*from\s*'\.\.\/utils\/serverClock'/);
+    expect(src).toMatch(/import\s*\{[^}]*\bsyncServerClock\b[^}]*\}\s*from\s*'\.\.\/utils\/serverClock'/);
   });
 
   it('builds the fetch window from serverNow(), never from a bare new Date()', () => {
@@ -68,6 +69,27 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     // `new Date(game.date)` and `new Date(nowMs)` are fine and still present;
     // what must not come back is the no-argument form seeding the window.
     expect(src).not.toMatch(/const\s+today\s*=\s*new Date\(\)/);
+  });
+
+  it('AWAITS the sync before reading the clock — now() alone returns device time', () => {
+    // The hole codex found: `now()` starts the sync and returns immediately, so
+    // the first fetch (the only one, when auto-refresh is off) would still be
+    // built on the uncorrected clock.
+    const awaitIdx = src.indexOf('await Promise.race([');
+    const windowIdx = src.indexOf('windowAround(serverNow())');
+    expect(awaitIdx).toBeGreaterThan(-1);
+    expect(src).toContain('syncServerClock()');
+    expect(awaitIdx).toBeLessThan(windowIdx);
+  });
+
+  it('BOUNDS that wait, so scores never hang on the callable', () => {
+    // The callable carries Firebase's ~70s default timeout; a public scoreboard
+    // must not sit behind it.
+    expect(src).toMatch(/const SERVER_CLOCK_SYNC_BUDGET_MS = \d+;/);
+    const budget = Number(/const SERVER_CLOCK_SYNC_BUDGET_MS = (\d+);/.exec(src)?.[1]);
+    expect(budget).toBeGreaterThan(0);
+    expect(budget).toBeLessThanOrEqual(5000);
+    expect(src).toMatch(/setTimeout\(resolve, SERVER_CLOCK_SYNC_BUDGET_MS\)/);
   });
 });
 
