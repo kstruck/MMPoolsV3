@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Trophy, PlayCircle, Calendar, Radio, Clock, Shield, GraduationCap, Volleyball } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -75,7 +75,30 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [autoRefresh, setAutoRefresh] = useState(true);
 
+    /**
+     * Which fetch owns the view. Every state write below is gated on it.
+     *
+     * Without this, a tab switch starts a second fetch while the first is still
+     * in flight, and BOTH write `games` on completion — so a slow football
+     * response lands after the basketball one and paints football games under
+     * the basketball tab. The football branch's clock wait widened that window,
+     * which is how it was found. (qodo #1 on PR #702.)
+     */
+    const requestIdRef = useRef(0);
+    /**
+     * The clock-sync budget is paid ONCE per mount, not per refresh.
+     *
+     * `syncServerClock()` hands back the same session promise every time, so if
+     * the callable outlives the budget then every 30-second refresh would race
+     * that same pending promise against a fresh two-second timer — paying the
+     * delay again and again while already falling back to device time. (qodo #3.)
+     */
+    const clockWaitPaidRef = useRef(false);
+
     const fetchScores = useCallback(async () => {
+        const requestId = ++requestIdRef.current;
+        /** True while this fetch is still the newest one. */
+        const isCurrent = () => requestIdRef.current === requestId;
         try {
             setLoading(true);
             setError(null);
@@ -115,10 +138,16 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 // a worse outcome than a window built on a clock that is usually
                 // right. Past the budget we proceed with the best time we have and
                 // any later refresh picks up the corrected offset.
-                await Promise.race([
-                    syncServerClock(),
-                    new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
-                ]);
+                // ONCE per mount — see `clockWaitPaidRef`. Marked paid before the
+                // await as well as after, so two fetches starting together (a tab
+                // switch during the initial load) cannot both queue the budget.
+                if (!clockWaitPaidRef.current) {
+                    clockWaitPaidRef.current = true;
+                    await Promise.race([
+                        syncServerClock(),
+                        new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
+                    ]);
+                }
                 const { start: past, end: future } = windowAround(serverNow());
 
                 // ⚠️ NOT `dates=<start>-<end>`. ESPN began answering every date
@@ -133,7 +162,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 fetchedGames = events;
                 // Partial failure is stated rather than silently shown as a short
                 // list — the games we did get are still worth rendering.
-                if (monthsFailed > 0) setError('Some scores could not be loaded. Showing what we have.');
+                if (monthsFailed > 0 && isCurrent()) setError('Some scores could not be loaded. Showing what we have.');
             }
 
             // For basketball, always include LIVE games + any game featuring an AP Top 25 team
@@ -149,12 +178,18 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 });
             }
 
+            // A superseded fetch writes NOTHING — not games, not the timestamp,
+            // not the error, not `loading`. Painting football results under the
+            // basketball tab is the failure; a stale "Updated:" stamp or a
+            // spinner cleared by the wrong request are the same class.
+            if (!isCurrent()) return;
             setGames(fetchedGames);
             setLastUpdated(new Date());
         } catch (err: unknown) {
+            if (!isCurrent()) return;
             setError(err instanceof Error ? err.message : 'Failed to load scores');
         } finally {
-            setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, [activeTab]);
 

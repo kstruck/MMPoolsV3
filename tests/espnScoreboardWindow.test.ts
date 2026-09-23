@@ -93,6 +93,25 @@ describe('the Scoreboard page takes its window from the server clock', () => {
     expect(awaitIdx).toBeGreaterThan(basketballIdx);
   });
 
+  it('gates every state write on the request still being current', () => {
+    // qodo #1 on #702: two fetches can be in flight across a tab switch, and
+    // both used to write `games` — so a slow football response painted football
+    // games under the basketball tab.
+    expect(src).toMatch(/const requestId = \+\+requestIdRef\.current;/);
+    expect(src).toMatch(/const isCurrent = \(\) => requestIdRef\.current === requestId;/);
+    // The writes that would otherwise land from a superseded fetch.
+    expect(src).toMatch(/if \(!isCurrent\(\)\) return;\s*\n\s*setGames\(fetchedGames\);/);
+    expect(src).toMatch(/if \(isCurrent\(\)\) setLoading\(false\);/);
+    expect(src).toMatch(/monthsFailed > 0 && isCurrent\(\)/);
+  });
+
+  it('pays the clock budget ONCE per mount, not on every refresh', () => {
+    // qodo #3 on #702: `syncServerClock()` returns the same pending promise, so
+    // racing it against a fresh timer each refresh re-paid the delay forever
+    // while already using the device-time fallback.
+    expect(src).toMatch(/if \(!clockWaitPaidRef\.current\) \{\s*\n\s*clockWaitPaidRef\.current = true;/);
+  });
+
   it('BOUNDS that wait, so scores never hang on the callable', () => {
     // The callable carries Firebase's ~70s default timeout; a public scoreboard
     // must not sit behind it.
