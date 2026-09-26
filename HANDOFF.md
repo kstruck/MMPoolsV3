@@ -1,5 +1,65 @@
 # HANDOFF — Session entry point
 
+> ## 🟢 2026-09-19 — **LOOP ENGINEERING: CHARTER TRACKED, LINT RATCHET MACHINE-ENFORCED, LOOP 1 ACTIVATED, VERIFIER AGENT ADDED. PR OPEN, NOT MERGED. NO DEPLOY — nothing here ships to Firebase.**
+>
+> Branch `claude/loop-engineering-review-78dz0d`. From a review of the five
+> `mmp-loop-*` skills against a loop-engineering writeup Kevin brought in.
+> Kevin: "Go with all recommendations."
+>
+> **The measured findings, since several contradict what was written down.**
+> 1. **The lint baseline in CLAUDE.md §2e was wrong.** It said 1881 warnings;
+>    `npm run lint` on `37ac1aa` reports **1855, 0 errors**. §2e's remedy was a
+>    manual procedure (detach to `origin/main`, re-run, compare) that nobody ran,
+>    which is why it drifted 26 unobserved.
+> 2. **`PLAN-LOOPS.md` was never in git.** All five loop skills cite it for build
+>    order and activation state; `git log --all` had never seen it. Five loops'
+>    approval state lived on one Windows checkout, unreadable to every worktree,
+>    subagent and cloud session.
+> 3. **No loop had ever run.** `AUDIT-SWEEP-LOG.md`, `E2E-SWEEP-LOG.md` and
+>    `PRUNE-LOG.md` are each promised by a skill; none of the three existed.
+> 4. **`gh` does not exist in the cloud container**, and the two loops that
+>    touch GitHub were written against it. The other three need a host the
+>    container also lacks (prod credentials, a JDK). Scheduling was never the
+>    blocker — portability was.
+> 5. **qodo skips draft PRs**, and cloud sessions are instructed to open drafts.
+>    Those two rules cancel: §2b's "qodo is clean" was unsatisfiable for any
+>    cloud-opened PR.
+> 6. **CI never ran `npm --prefix functions run build`** although §2e lists it,
+>    so the emit `firebase deploy` performs was gated by nothing but a deploy.
+>
+> **What changed.** `docs/plans/PLAN-LOOPS.md` is the tracked charter (ledger of
+> all five loops: verifier, runtime host, activation state). `LOOP-LOG.tsv`
+> replaces the three never-created logs with one append-only TSV whose verdict
+> vocabulary includes `INCONCLUSIVE`, so a loop that could not check has
+> somewhere honest to land. `npm run lint:ratchet` pins `--max-warnings 1855`
+> and CI's required `lint` job runs it. CI gained the functions deploy build.
+> `.claude/agents/verifier.md` is a checker with no write tools at all.
+> `tests/loop-engineering-invariants.test.ts` (**35 test cases**) holds all of
+> it together.
+>
+> **Every invariant was mutation-tested** — broken on purpose, confirmed to
+> fail, restored. That pass found three guards that did NOT bite: the lint-job
+> check accepted `npm run lint:ratchet || true`; the activation check never
+> compared a skill against the charter ledger; and the maker/checker check
+> passed when `tools:` was DELETED from the agent, which is the permissive case
+> (no list means it inherits Edit and Write), while catching the weaker attack
+> of adding `Edit` to the list. All three are fixed and re-tested. Two more had
+> been caught during authoring. Five holes in one file whose entire subject is
+> guards that do not guard — the rate is the point, not the fixes.
+>
+> The five skills landed in `a1152db9` on **2026-07-16** and had not run once
+> in the two months since (an earlier draft of this entry said `e5bca52`/#621,
+> read off a shallow clone's truncated log; `--diff-filter=A` on a full clone
+> is the reliable form).
+>
+> **Loop 1 (`mmp-loop-audit-sweep`) is ACTIVE**; loops 2–5 stay parked, and
+> auto-merge on loop 4 remains a separate approval. Loop 1 runs on the Windows
+> box only — it needs prod Firestore credentials. Watch it two weeks before
+> considering loop 2.
+>
+> **Nothing in this PR touches money, authorization, production data or scoring**
+> (`mmp-change-control` §1 → no plan gate), and nothing here is deployable code.
+
 > ## 🟡 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY WILL PROMPT TO DELETE `createParticipantProfile`.**
 >
 > Branch `claude/name-sync-followup-690`. #690 merged 2026-09-11 with three
@@ -685,7 +745,7 @@ date there, not by reading 3,900 lines.
 - Deploy: `npm --prefix functions ci` first (NOT `install` — it rewrites the lockfile and dirties the tree the deploy packages), then `npx firebase deploy --only functions:… --project gridiron-gamble-uzuqo`. Functions before rules. Frontend = Coolify — **manual trigger only**, pushing to `main` does NOT auto-deploy it (corrects a stale claim that lived here; matches CLAUDE.md + the mmp-deploy-and-operate skill).
 - Emulator tests need Java on PATH: `JAVA_HOME=/c/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot`; run `npm --prefix functions run test:emulator`. Unit: `npm --prefix functions test` (410 tests; emulator suite 39).
 - **PR review = TWO reviewers.** `codex exec review --base origin/main` before opening the PR, judgement up to 10 rounds, past 10 ask Kevin with a reason (CLAUDE.md §2c — it was 5, raised 2026-07-27). **AND qodo on the PR itself — Kevin, 2026-07-31: *"Qodo is now active and must be used."*** (§2b; it was off from 2026-07-25 only while the trial had lapsed, and an overnight prompt on 2026-07-30 repeated that stale line). Stop when both are clean and your own read of the diff agrees. qodo costs nothing per run and codex is billed per call, so the round budget is spent on codex. Validate every finding before fixing; a rejection needs written reasoning **on the PR**.
-- Untracked strays at root: `PLAN-LOOPS.md`, `PLAN-SECURITY-OBSERVABILITY*.md` (copies of branch-committed files). Harmless; don't commit blindly.
+- Untracked strays at root: `PLAN-SECURITY-OBSERVABILITY*.md` (copies of branch-committed files). Harmless; don't commit blindly. **`PLAN-LOOPS.md` is no longer on this list** — it is tracked at `docs/plans/PLAN-LOOPS.md` as of 2026-09-19. If a copy still sits at the root of `D:\march-melee-pools`, diff it against the tracked one and DELETE it: two copies of a loop activation ledger is the bug that file was written to fix.
 
 ## Do NOT re-do
 

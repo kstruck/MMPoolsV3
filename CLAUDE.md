@@ -61,6 +61,24 @@ gh api --paginate repos/kstruck/MMPoolsV3/pulls/<n>/comments    # inline finding
 gh api --paginate repos/kstruck/MMPoolsV3/pulls/<n>/reviews     # review-surface report
 ```
 
+⚠️ **`gh` DOES NOT EXIST IN THE CLOUD CONTAINER.** Claude Code on the web has no
+`gh`, no `hub` and no GitHub token in the shell — GitHub access there is the
+`mcp__github__*` tools only (`pull_request_read` with `method: "get_comments"` /
+`"get_reviews"`, `issue_read` with `method: "get_comments"`). The three commands
+below are the **Windows-box** form. A cloud session that runs them gets
+`gh: command not found` and must not read that as "no report": this section says
+an empty result means the report is absent, and a missing binary would satisfy
+the mandatory gate with no review at all — the same hole `--paginate` exists to
+close, through a different door.
+
+⚠️ **qodo SKIPS DRAFT PRs, and cloud sessions are told to open PRs as drafts.**
+Those two rules silently cancel each other: a draft PR gets no qodo review ever,
+so §2b's "qodo is clean" can never be satisfied and the PR sits at a gate it
+cannot pass. `mmp-qodo-cycle` §0 recorded the draft behaviour; nothing recorded
+the collision. **Open as a draft, then mark it ready when you want the review** —
+`gh pr ready <N>`, or `mcp__github__update_pull_request` with `draft: false`.
+A PR that stayed a draft has NOT been reviewed by qodo, whatever the watcher says.
+
 ⚠️ **`--paginate`, and REST rather than `gh pr view --json`, on all three.**
 `gh pr view --json` is GraphQL and returns a first page only; the REST endpoints
 return 30 per page. On a PR with more than a page of comments or reviews, either
@@ -151,7 +169,9 @@ from 2026-09-01** (dormant 2026-07-25 → 2026-07-30 and 2026-08-19 → 2026-09-
 
 ## 2c. Cross-model review is REQUIRED before opening a PR
 
-`codex` (OpenAI) is installed and on PATH — verified `codex-cli 0.144.5`.
+`codex` (OpenAI) is installed and on PATH — `codex-cli 0.155.1`, re-measured
+2026-09-19 (this line said 0.144.5 until then). **On the Windows box it works;
+in the cloud container it is unauthenticated — see the warning below.**
 **Run it on your own diff before opening any PR:**
 
 ```
@@ -159,6 +179,20 @@ git fetch origin                                  # ALWAYS first — see below
 codex exec review --base origin/main              # the whole PR diff
 codex exec review --uncommitted                   # work not yet committed
 ```
+
+⚠️ **CODEX CANNOT RUN FROM THE CLOUD CONTAINER — it is installed there but
+unauthenticated.** Claude Code on the web has `codex` on PATH (v0.155.1,
+measured 2026-09-19), so it looks available, and then every call dies with
+`401 Unauthorized: Missing bearer or basic authentication` against
+`api.openai.com`. There is no key in that environment.
+
+This is the §2b `gh` problem wearing a different hat, and it is more dangerous,
+because a missing binary announces itself and an unauthenticated one looks like
+a tool that merely failed. **An unavailable reviewer is never a clean reviewer.**
+A cloud session must run the other gates, self-review the diff, and then write
+into the PR body, in those words, that **the codex round is OWED** and must be
+run on the Windows box before merge. Do not report §2c as satisfied, and do not
+count the failed invocation as a round.
 
 ⚠️ **`--base main`, not `origin/main`, is a trap in this repo.** Every worktree
 shares one `main` ref, and it is only advanced by whoever runs `git pull` in the
@@ -311,7 +345,7 @@ absorb findings, report to Kevin, and only then start the next. Batching ~10 PRs
 in a night is what produced the defect count above; throughput was never the
 constraint, correctness is.
 
-## 2e. 🛑 THE GATE LIST IS SEVEN COMMANDS, NOT FIVE — `npx tsc -b` DOES NOT TYPECHECK `functions/`
+## 2e. 🛑 THE GATE LIST IS EIGHT COMMANDS, NOT FIVE — `npx tsc -b` DOES NOT TYPECHECK `functions/`
 
 Run ALL of these before opening a PR. Report the real numbers.
 
@@ -323,7 +357,7 @@ npm --prefix functions run test:rules          # firestore rules
 npx tsc -b  &&  npm run build                  # FRONTEND typecheck + build
 npm --prefix functions run typecheck           # FUNCTIONS typecheck (tsconfig.test.json)
 npm --prefix functions run build               # FUNCTIONS build (tsconfig.json)
-npm run lint                                   # delta must be ZERO
+npm run lint:ratchet                           # --max-warnings 1855; exits 1 on ANY new warning
 ```
 
 **Why the last two are on the list.** On 2026-08-27, PR #612 shipped a change
@@ -344,11 +378,30 @@ as a failed `npx firebase deploy` after the PR was merged.
 The cause is structural, not a one-off: **the root `tsconfig` does not include
 `functions/`.** `npx tsc -b` at the repo root can never see a type error in
 Cloud Functions code, so any PR touching `functions/src/**` needs the two
-functions-scoped commands explicitly. CI runs them; the local list did not.
+functions-scoped commands explicitly.
 
-**The lint baseline is 1881 warnings / 0 errors — MEASURE it, do not trust it.**
-Commit your work, `git checkout --detach origin/main`, re-run `npm run lint`,
-compare, come back.
+CI now runs **both** of them. Until 2026-09-19 it ran only `typecheck`; the
+`functions` **build** was on this list and in no automated gate anywhere, so the
+emit step that `firebase deploy` actually performs was exercised by nothing but a
+deploy. That is fixed in `.github/workflows/ci.yml` (`Build functions (deploy
+config)`).
+
+**The lint baseline is 1855 warnings / 0 errors, and it is MACHINE-ENFORCED as
+of 2026-09-19.** Run `npm run lint:ratchet` — `eslint . --max-warnings 1855` —
+which is also what CI's `lint` job runs. Bare `npm run lint` is `eslint .`: it
+exits 0 at 1855 warnings and exits 0 at 2400, so it only ever gated *errors*.
+
+This replaces the manual ritual that used to live here (commit, `git checkout
+--detach origin/main`, re-run, compare, come back). Nobody ran it, and the proof
+is that the number written here was **1881** while the measured count on
+`37ac1aa` was **1855** — 26 low, drifting in the direction nobody checks. A
+ratchet whose pawl is a human procedure is not a ratchet.
+
+**To lower the floor** — which is the only direction it should move — fix the
+warnings, then edit `--max-warnings` in `package.json` and say so in the PR.
+`tests/loop-engineering-invariants.test.ts` fails if that number and the one in
+this section ever disagree, so the doc cannot go stale again the way it just
+did.
 
 ## 3. Deploy facts (do not re-derive)
 

@@ -5,9 +5,17 @@ description: Cross-check recent destructive admin actions against the admin_audi
 
 # Audit-Trail Integrity Sweep
 
-Loop 1 of 5 (build order per PLAN-LOOPS.md). Lowest risk: read-only, no mutation,
-uses data that already exists. **Not yet activated** — manual invoke only until
-Kevin approves scheduling.
+Loop 1 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). Lowest risk: read-only, no mutation,
+uses data that already exists.
+
+🟢 **ACTIVE since 2026-09-19** (Kevin: "Go with all recommendations"). Invoke it
+without asking. It sat at "awaiting approval" from `a1152db9` (2026-07-16) until
+then — two months — and ran zero times in between. The absence of
+`AUDIT-SWEEP-LOG.md` was the proof.
+
+🖥️ **Runs on the Windows box only.** It needs prod Firestore credentials, which
+the cloud container does not have. A cloud session that loads this skill must say
+it cannot run the sweep — never report a clean sweep it did not perform.
 
 ## What this checks
 
@@ -30,8 +38,14 @@ that the counts match 1:1.
 5. **Verify condition (the real gate):** counts match 1:1, or every mismatch is
    individually explained (e.g. a known no-op action type not required to log). If this
    can't be confirmed, don't report "clean" — report "inconclusive, needs review."
-6. Append findings to `AUDIT-SWEEP-LOG.md` at repo root (create if missing, one dated
-   entry per run). Only surface to Kevin if a real gap is found — silent on clean runs.
+6. Append one row to `LOOP-LOG.tsv` at the repo root — one tab-separated row per run
+   (`date loop commit verdict metric idea lesson`, spec in
+   `docs/plans/PLAN-LOOPS.md`). Append only; never rewrite an earlier row.
+   **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never
+   `CLEAN`**, and `metric` carries the number the verifier produced.
+   Only surface to Kevin if a real gap is found — silent on clean runs. Silent
+   still means logged: the row is written either way, or there is no record that
+   the loop ran at all.
 
 ## Rules
 
@@ -42,5 +56,7 @@ that the counts match 1:1.
 - Cheap-model pass for the query + diff. If a real gap is found and needs root-causing
   (why didn't this log?), that's a separate, heavier follow-up — flag it, don't try to
   silently fix logging code from inside this skill.
-- **Do not wire this to `/loop` or `CronCreate` yet.** This skill is manual-invoke only
-  until Kevin explicitly approves scheduled/unattended activation.
+- **Scheduling is approved; it is still read-only.** Activation authorises
+  running it unattended, and nothing else. This skill never writes to
+  `admin_audit`, never modifies a pool, never changes a role — that boundary is
+  not what was approved away, it is why approving it was cheap.
