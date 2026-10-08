@@ -31,6 +31,7 @@ import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shar
 import { extensionRefusal } from "./lib/publishedWeeks";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { nflLockMode } from "./shared/nflLockMode";
+import { assertPoolAcceptsPlay } from "./lib/settlement";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -83,7 +84,7 @@ const loadWeekGames = async (
 };
 
 /** Resolve unique member emails: entries ownerUid -> users/{uid}.email (same as manualReminders.ts). */
-const resolveMemberEmails = async (
+export const resolveMemberEmails = async (
     db: admin.firestore.Firestore,
     poolRef: admin.firestore.DocumentReference
 ): Promise<string[]> => {
@@ -310,6 +311,9 @@ export const proxyPick = validated(
         await assertNoScoringInProgress(transaction, poolRef, now);
         const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
         if (!poolInTx) throw new HttpsError("not-found", "Pool not found.");
+        // PLAN-SPLIT-POT-SETTLEMENT §2.3 (review r2 #1): proxyPick has its OWN
+        // transaction, so the submit core's guard does not cover it.
+        assertPoolAcceptsPlay(poolInTx);
         // Entry n of the target (lib/multiEntry.ts): same resolution, same cap
         // as the member's own submit — a commissioner cannot proxy a fourth
         // entry into a three-entry pool.

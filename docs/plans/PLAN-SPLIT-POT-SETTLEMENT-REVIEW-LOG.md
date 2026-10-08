@@ -38,4 +38,24 @@ Codex confirmed the rebuy-disclosure response as "coherent if the product
 accepts that the recorded prize excludes those dues", and `force` as
 source-compatible (`nflFinalize.ts:329-333`), bypassing only completeness.
 
-## Round 3 — (below)
+## Round 3 — plan @ `f8430158` + work in progress — design APPROVED; code not yet written
+
+Two earlier round-3 attempts did not run (the default sandbox refused every
+process: `CreateProcessAsUserW failed: 5`) and are not counted. This run used
+`-s danger-full-access` with a read-only instruction; `git status` before and
+after showed no file changed by the reviewer (it left one stray `$null` error
+file from a PowerShell-style redirect, deleted).
+
+Codex reviewed the plan AND the half-built working tree, so its three findings
+are "not implemented yet" (rules predicate absent, four fields not yet
+server-owned, callable absent) — true at the time, and exactly the plan's own
+to-do list, not design defects. On the design questions it was asked:
+
+* phase precedence in `lib/settlement.ts:33-46` — **correct**;
+* `proxyPick` guard at `poolExceptions.ts:301-316` — **correct**;
+* `nflLifecycleWriteBlocked()` — "I found no existing NFL manager client path
+  that writes these fields, so this will not break a current NFL UI flow."
+
+**Plan review closed.** Every finding across three rounds is accepted (some with
+a different fix, reasoning above) or rejected with evidence; none open. Code
+review continues on the PR diff (`codex exec review --base origin/main`).
