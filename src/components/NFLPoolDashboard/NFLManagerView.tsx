@@ -30,6 +30,8 @@ import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 import { ConfirmActionModal } from '../admin/ConfirmActionModal';
+import { SettlePoolPanel } from './SettlePoolPanel';
+import { poolIsOver } from '../../utils/poolIsOver';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
 import { NFL_KICKOFF_MS } from '../../config/season';
@@ -2188,6 +2190,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 </>
               )}
             </div>
+
+            {/* ── End the pool, split the pot ── PLAN-SPLIT-POT-SETTLEMENT §2.4.
+                Survivor only, and owner-only for the same reason as Cancel below:
+                `settlePool` refuses a co-commissioner server-side (D2). Hidden once
+                the pool is over by any route — the callable would refuse anyway. */}
+            {viewerIsOwner && type === 'NFL_SURVIVOR' && !poolIsOver(castPool) && (
+              <SettlePoolPanel pool={pool} entries={entries} />
+            )}
 
             {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):
                 `cancelPool` refuses a co-commissioner server-side, so do not walk them

@@ -25,6 +25,7 @@ import {
   effectiveTieCountsAs,
   UNLIMITED_TEAM_USES,
 } from '@shared/survivorReuse';
+import { poolIsOver } from '../../utils/poolIsOver';
 
 interface SurvivorPickEntryProps {
   pool: Pool;
@@ -191,8 +192,13 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     return false;
   }, [activePickGame, isWeekLocked]);
 
+  // PLAN-SPLIT-POT-SETTLEMENT §2.4: a settled, cancelled or finalized pool
+  // offers no pick and no rebuy (the server refuses both with POOL_OVER).
+  const over = poolIsOver(pool as any);
+
   // Check if eligible for rebuy
   const canRebuy = useMemo(() => {
+    if (over) return false;
     if (!entry) return false;
     if (entry.status !== 'ELIMINATED') return false;
     // The SERVER's comparison, not a client default: `?? 4` here hid the
@@ -200,10 +206,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     // accepted all season (codex r2 on this PR).
     if (rebuyDeadlinePassed(week, { rebuyDeadlineWeek })) return false;
     return (entry.rebuysUsed ?? 0) < maxRebuys;
-  }, [entry, week, rebuyDeadlineWeek, maxRebuys]);
+  }, [over, entry, week, rebuyDeadlineWeek, maxRebuys]);
 
   const handleTeamSelect = (teamAbbreviation: string, game: NFLGame) => {
-    if (isGameLocked(game) || (entry && entry.status === 'ELIMINATED')) return;
+    if (over || isGameLocked(game) || (entry && entry.status === 'ELIMINATED')) return;
     if (blockedTeams.has(teamAbbreviation)) return;
 
     setSelectedTeam(teamAbbreviation);
@@ -528,7 +534,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
           saveLabel={savedPick ? 'Change Pick' : 'Lock In Pick'}
           savedLabel={savedPick ? `Pick saved: ${savedPick}` : 'No pick yet'}
           blockedReason={
-            entry?.status === 'ELIMINATED' ? 'Eliminated — picks are closed'
+            over ? 'This pool is over — picks are closed'
+              : entry?.status === 'ELIMINATED' ? 'Eliminated — picks are closed'
               : isSelectionLocked ? 'Picks are locked for this week'
                 : !selectedTeam ? 'Tap a team to pick'
                   : null

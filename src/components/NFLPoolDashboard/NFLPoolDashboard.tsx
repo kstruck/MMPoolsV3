@@ -23,6 +23,7 @@ import { NFLStandingsTab } from './NFLStandingsTab';
 import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
+import { SettledBanner } from './SettledBanner';
 import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
@@ -1117,6 +1118,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             </div>
           ) : (
             <>
+              {/* PLAN-SPLIT-POT-SETTLEMENT: above every tab, for every viewer. */}
+              <SettledBanner settlement={(pool as any).settlement} />
+
               {/* TAB 0: BENTO DASHBOARD OVERVIEW */}
               {activeTab === 'dashboard' && (
                 <>

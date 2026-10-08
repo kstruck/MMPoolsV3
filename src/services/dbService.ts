@@ -62,6 +62,7 @@ import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropC
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
 import type { PublicProfile } from "@shared/profile";
+import type { PoolSettlement } from "@shared/settlement";
 
 /**
  * A `publicProfiles/{uid}` document as READ (not as written). Every field of the
@@ -1987,6 +1988,15 @@ export const dbService = {
             });
             throw error;
         }
+    },
+
+    // PLAN-SPLIT-POT-SETTLEMENT: end a Survivor pool because the remaining
+    // players agreed to split the pot. Owner/manager only, enforced server-side;
+    // `entryIds` must be exactly the ALIVE entries the panel showed.
+    settlePool: async (input: { poolId: string; entryIds: string[]; note?: string; notifyMembers: boolean }): Promise<{ settlement: PoolSettlement; emailed: number }> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; settlement: PoolSettlement; emailed: number }>(functions, 'settlePool');
+        const res = await fn(withCorrelationId({ ...input, outcome: 'SPLIT' }));
+        return { settlement: res.data.settlement, emailed: res.data.emailed };
     },
 
     /** Commissioner nudge: email specific members (or all entries when targetUids is omitted) a picks/payment reminder. */
