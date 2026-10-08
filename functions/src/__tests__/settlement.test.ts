@@ -8,7 +8,9 @@ import {
   settlementMoney,
   rebuyDuesOf,
 } from '../lib/settlement';
-import { joinNames } from '../shared/settlement';
+import { joinNames, type PoolSettlement } from '../shared/settlement';
+import { settlePoolSchema } from '../schemas/poolSettlement';
+import { settlementEmail } from '../lib/settlementEmail';
 
 // PLAN-SPLIT-POT-SETTLEMENT §2.2 phase table and §2.3 terminal-pool guard.
 
@@ -124,5 +126,44 @@ describe('rebuyDuesOf / joinNames', () => {
     expect(joinNames(['A'])).toBe('A');
     expect(joinNames(['A', 'B'])).toBe('A and B');
     expect(joinNames(['A', 'B', 'C'])).toBe('A, B and C');
+  });
+});
+
+
+describe('settlePoolSchema', () => {
+  const ok = (d: unknown) => settlePoolSchema.safeParse(d).success;
+  const req = { poolId: 'p1', outcome: 'SPLIT', entryIds: ['a', 'b'] };
+  it('accepts the client payload and defaults notifyMembers to true', () => {
+    expect(ok(req)).toBe(true);
+    expect(settlePoolSchema.parse(req).notifyMembers).toBe(true);
+    expect(ok({ ...req, note: 'Split 50/50', notifyMembers: false })).toBe(true);
+  });
+  it('rejects another outcome, empty winners, a long note and unknown fields', () => {
+    expect(ok({ ...req, outcome: 'WINNER' })).toBe(false);
+    expect(ok({ ...req, entryIds: [] })).toBe(false);
+    expect(ok({ ...req, note: 'x'.repeat(501) })).toBe(false);
+    expect(ok({ ...req, force: true })).toBe(false);
+  });
+});
+
+describe('settlementEmail — says only what the record knows', () => {
+  const base: PoolSettlement = {
+    kind: 'SPLIT', entryIds: ['a', 'b'], winnerNames: ['Ann', 'Bo <b>'], settledAt: 1, settledBy: 'h',
+    note: null, throughWeek: 4, notifyMembers: true, prizePerEntry: 50, pot: 100, rebuyDuesExcluded: 0,
+  };
+  it('names the winners (escaped), the week and the per-winner prize', () => {
+    const { subject, html } = settlementEmail('My Pool', base);
+    expect(subject).toBe('My Pool is over — the pot was split');
+    expect(html).toContain('after week 4');
+    expect(html).toContain('Ann and Bo &lt;b&gt;');
+    expect(html).toContain('$50 each');
+    expect(html).not.toContain('rebuy');
+  });
+  it('omits the amount when unpriced, and states excluded rebuy dues and the note', () => {
+    const { html } = settlementEmail('P', { ...base, prizePerEntry: null, throughWeek: null, rebuyDuesExcluded: 25, note: 'Paid via Venmo' });
+    expect(html).not.toContain('each.</p>');
+    expect(html).not.toContain('after week');
+    expect(html).toContain('$25 of rebuy dues are not included');
+    expect(html).toContain('Paid via Venmo');
   });
 });

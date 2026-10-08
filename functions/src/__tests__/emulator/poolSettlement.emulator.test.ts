@@ -1,0 +1,227 @@
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import * as admin from 'firebase-admin';
+import ftest from 'firebase-functions-test';
+import { settlePool } from '../../poolSettlement';
+import { executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal } from '../../nflPools';
+import { proxyPick } from '../../poolExceptions';
+
+/**
+ * PLAN-SPLIT-POT-SETTLEMENT §2.6 — the whole settlement against the emulator.
+ *
+ * A 4-entry Survivor pool, two ALIVE (alice, bob) and two ELIMINATED, $25 a head,
+ * 100 % to 1st. Settling it must: rank both survivors 1st and split the $100 pot
+ * ($50 each), write season history and Season Places through the unchanged
+ * finalizer, flip the pool to COMPLETED/SETTLED WITHOUT the three legacy fields
+ * whose triggers would fire, write exactly one pool audit row, email every
+ * member once, and refuse every play path afterwards.
+ */
+
+const test = ftest();
+const db = admin.firestore();
+const wSettle = test.wrap(settlePool);
+const wProxy = test.wrap(proxyPick);
+
+const HOST = 'st-host';
+const ALICE = 'st-alice';
+const BOB = 'st-bob';
+const CAROL = 'st-carol';
+const DAN = 'st-dan';
+const NEWBIE = 'st-newbie';
+const CO = 'st-co';
+const SEASON = 'st-2099';
+const GAME = 'st-g5';
+const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
+const auth = (uid: string) => ({ uid, token: { email: `${uid}@example.com` } }) as any;
+
+let n = 0;
+let POOL = '';
+const created: string[] = [];
+const poolRef = () => db.collection('pools').doc(POOL);
+const poolDoc = async () => (await poolRef().get()).data()!;
+
+async function seed(extra: Record<string, unknown> = {}) {
+  n += 1;
+  POOL = `st-pool-${Date.now()}-${n}`;
+  created.push(POOL);
+  await poolRef().set({
+    type: 'NFL_SURVIVOR', league: 'NFL', name: 'Split Test', status: 'OPEN', isLocked: false,
+    ownerId: HOST, managerUid: HOST, coManagers: [CO],
+    participantIds: [HOST, ALICE, BOB, CAROL, DAN],
+    season: SEASON, seasonType: 2, entryCount: 4,
+    scoredWeeks: { 1: true, 2: true, 3: true, 4: true },
+    settings: {
+      entryFee: 25, maxStrikes: 0, payouts: { places: [{ rank: 1, percentage: 100 }], bonuses: [] },
+      rebuyCost: 25, rebuyDeadlineWeek: 9, maxRebuys: 1,
+    },
+    ...extra,
+  });
+  const e = (uid: string, over: Record<string, unknown>) => poolRef().collection('entries').doc(uid).set({
+    id: uid, poolId: POOL, ownerUid: uid, userName: uid, strikesUsed: 0, rebuysUsed: 0,
+    usedTeams: [], picks: {}, exemptWeeks: [], submittedAt: 1, paidStatus: 'PAID', ...over,
+  });
+  await e(ALICE, { status: 'ALIVE' });
+  await e(BOB, { status: 'ALIVE' });
+  await e(CAROL, { status: 'ELIMINATED', eliminatedWeek: 3, strikesUsed: 1 });
+  await e(DAN, { status: 'ELIMINATED', eliminatedWeek: 1, strikesUsed: 1 });
+  for (const uid of [ALICE, BOB, CAROL, DAN]) {
+    await poolRef().collection('members').doc(uid).set({ uid, poolId: POOL, role: 'PARTICIPANT', paidStatus: 'PAID' });
+  }
+}
+
+const settle = (uid = HOST, data: Record<string, unknown> = {}) =>
+  wSettle({ data: { poolId: POOL, outcome: 'SPLIT', entryIds: [BOB, ALICE], ...data }, auth: auth(uid) } as never) as Promise<any>;
+
+beforeEach(async () => {
+  for (const uid of [HOST, ALICE, BOB, CAROL, DAN, NEWBIE, CO]) {
+    await db.collection('users').doc(uid).set({ name: uid, email: `${uid}@example.com` });
+  }
+  await db.collection('nfl_games').doc(GAME).set({
+    id: GAME, espnGameId: GAME, season: SEASON, seasonType: 2, week: 5,
+    startTime: Date.now() + 48 * 3600 * 1000, status: 'SCHEDULED', isMonday: false,
+    homeTeam: T('KC'), awayTeam: T('BUF'),
+  });
+});
+
+afterAll(async () => {
+  try {
+    for (const id of created) await db.recursiveDelete(db.collection('pools').doc(id));
+    await db.collection('nfl_games').doc(GAME).delete();
+    for (const uid of [HOST, ALICE, BOB, CAROL, DAN, NEWBIE, CO]) await db.recursiveDelete(db.collection('users').doc(uid));
+  } catch (e) {
+    console.warn('[poolSettlement.emulator] teardown incomplete:', e);
+  }
+  test.cleanup();
+});
+
+describe('settlePool — a full settlement', () => {
+  it('finalizes now, splits 1st place, flips to COMPLETED/SETTLED without the legacy trio, audits once, emails every member', async () => {
+    await seed();
+    const res = await settle();
+    expect(res.success).toBe(true);
+
+    const p = await poolDoc();
+    expect(p.status).toBe('COMPLETED');
+    expect(p.closedVia).toBe('SETTLED');
+    expect(typeof p.closedAt).toBe('number');
+    // Sweep S1: these three would fire onPoolLocked stats and a SQUARES email.
+    expect(p.isLocked).toBe(false);
+    expect(p.isFinal).toBeUndefined();
+    expect(p.scores).toBeUndefined();
+    expect(p.finalizedAt).toBeTruthy();
+    expect(p.settlementStartedAt).toBeTruthy();
+
+    expect(p.settlement).toMatchObject({
+      kind: 'SPLIT', entryIds: [ALICE, BOB].sort(), winnerNames: [ALICE, BOB].sort(),
+      settledBy: HOST, note: null, throughWeek: 4, notifyMembers: true,
+      prizePerEntry: 50, pot: 100, rebuyDuesExcluded: 0,
+    });
+    expect(p.settlement.adminAuditedAt).toBeTruthy();
+    expect(p.settlement.emailedAt).toBeTruthy();
+
+    // The unchanged finalizer: both survivors rank 1 and share the pot.
+    const byEntry = Object.fromEntries((p.seasonPlaces as any[]).map(r => [r.entryId, r]));
+    expect(byEntry[ALICE]).toMatchObject({ rank: 1, prize: 50 });
+    expect(byEntry[BOB]).toMatchObject({ rank: 1, prize: 50 });
+    expect(byEntry[CAROL].rank).toBe(3);
+    expect(byEntry[CAROL].prize).toBeUndefined();
+    const hist = (await db.collection('users').doc(ALICE).collection('seasonHistory').get()).docs.map(d => d.data());
+    expect(hist.find(h => h.poolId === POOL)).toMatchObject({ finalRank: 1, isChampion: true });
+
+    const audit = (await poolRef().collection('audit').where('type', '==', 'POOL_SETTLED').get()).docs;
+    expect(audit).toHaveLength(1);
+
+    // resolveMemberEmails = entry owners: four members, one email each.
+    expect(res.emailed).toBe(4);
+  });
+
+  it('a second call is ALREADY_SETTLED and changes nothing', async () => {
+    await seed();
+    await settle();
+    const before = (await poolDoc()).settlement.settledAt;
+    await expect(settle()).rejects.toThrow(/ALREADY_SETTLED/);
+    expect((await poolDoc()).settlement.settledAt).toBe(before);
+  });
+
+  it('records the rebuy dues the pot does not include', async () => {
+    await seed();
+    await poolRef().collection('members').doc(CAROL).set({ rebuyOwed: 25 }, { merge: true });
+    await settle(HOST, { notifyMembers: false });
+    const p = await poolDoc();
+    expect(p.settlement.rebuyDuesExcluded).toBe(25);
+    expect(p.settlement.emailedAt).toBeUndefined();
+  });
+});
+
+describe('settlePool — refusals', () => {
+  it('refuses a co-commissioner (D2)', async () => {
+    await seed();
+    await expect(settle(CO)).rejects.toThrow();
+    expect((await poolDoc()).status).toBe('OPEN');
+  });
+
+  it('refuses anything but the exact ALIVE set (D3), leaving the pool OPEN and unfinalized', async () => {
+    await seed();
+    await expect(settle(HOST, { entryIds: [ALICE] })).rejects.toThrow(/WINNERS_MUST_BE_ALIVE_SET/);
+    await expect(settle(HOST, { entryIds: [ALICE, BOB, CAROL] })).rejects.toThrow(/WINNERS_MUST_BE_ALIVE_SET/);
+    const p = await poolDoc();
+    expect(p.status).toBe('OPEN');
+    expect(p.finalizedAt).toBeUndefined();
+    expect((await poolRef().collection('audit').where('type', '==', 'POOL_SETTLED').get()).size).toBe(0);
+  });
+
+  it('refuses a non-Survivor pool, a cancelled pool, and a naturally finalized one', async () => {
+    await seed({ type: 'NFL_PICKEM' });
+    await expect(settle()).rejects.toThrow(/NOT_SURVIVOR/);
+    await seed({ status: 'CANCELED' });
+    await expect(settle()).rejects.toThrow(/ALREADY_CLOSED/);
+    await seed({ finalizedAt: admin.firestore.Timestamp.now() });
+    await expect(settle()).rejects.toThrow(/ALREADY_FINALIZED/);
+  });
+});
+
+describe('settlePool — crash recovery', () => {
+  it('a crashed attempt (marker + finalizedAt, still OPEN) completes on retry', async () => {
+    await seed({ settlementStartedAt: 1, finalizedAt: admin.firestore.Timestamp.now() });
+    await settle(HOST, { notifyMembers: false });
+    const p = await poolDoc();
+    expect(p.closedVia).toBe('SETTLED');
+    expect(p.settlementStartedAt).toBe(1);
+  });
+
+  it('FOLLOW_UP sends only the owed emails and re-runs nothing else', async () => {
+    await seed({
+      status: 'COMPLETED', closedVia: 'SETTLED',
+      settlement: {
+        kind: 'SPLIT', entryIds: [ALICE, BOB], winnerNames: [ALICE, BOB], settledAt: 7, settledBy: HOST,
+        note: null, throughWeek: 4, notifyMembers: true, prizePerEntry: 50, pot: 100,
+        rebuyDuesExcluded: 0, adminAuditedAt: 8,
+      },
+    });
+    const res = await settle();
+    expect(res.emailed).toBe(4);
+    const p = await poolDoc();
+    expect(p.settlement.settledAt).toBe(7);
+    expect(p.settlement.adminAuditedAt).toBe(8);
+    expect(p.settlement.emailedAt).toBeTruthy();
+    expect(p.finalizedAt).toBeUndefined();           // the finalizer did NOT run again
+    await expect(settle()).rejects.toThrow(/ALREADY_SETTLED/);
+  });
+});
+
+describe('a settled pool takes no more play (POOL_OVER)', () => {
+  it('refuses a pick, a proxy pick, a rebuy and a new member', async () => {
+    await seed();
+    await settle(HOST, { notifyMembers: false });
+
+    await expect(submitNFLPicksInternal(db, { actorUid: ALICE, subjectUid: ALICE, subjectName: ALICE },
+      { poolId: POOL, week: 5, picks: { 5: 'KC' } } as never)).rejects.toThrow(/POOL_OVER/);
+    await expect(wProxy({
+      data: { poolId: POOL, week: 5, targetUid: ALICE, picks: { 5: 'KC' }, reason: 'test' },
+      auth: auth(HOST),
+    } as never)).rejects.toThrow(/POOL_OVER/);
+    await expect(executeSurvivorRebuyInternal(db, { actorUid: CAROL, subjectUid: CAROL }, { poolId: POOL, week: 5 }))
+      .rejects.toThrow(/POOL_OVER/);
+    await expect(joinNFLPoolInternal(db, { subjectUid: NEWBIE, subjectName: NEWBIE }, POOL))
+      .rejects.toThrow(/POOL_OVER/);
+  });
+});
