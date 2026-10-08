@@ -130,13 +130,14 @@ settlePoolSchema = z.strictObject({
 
 **Phase decision** (`settlementPhase(pool)`, pure), from the pool as read:
 
-| Pool state | Phase | What runs |
+| Pool state (as read) | Phase | What runs |
 |---|---|---|
-| voided by `CANCELED` / `ARCHIVED`, or `closedVia` other than `SETTLED`, or a sim pool | refuse `ALREADY_CLOSED` / `SIM_POOL` | nothing |
-| `closedVia: 'SETTLED'`, `settlement.notifyMembers` and no `settlement.emailedAt` | `EMAIL_ONLY` | step 8 only (crash recovery, review r1 #4) |
-| `closedVia: 'SETTLED'` otherwise | refuse `ALREADY_SETTLED` | nothing |
+| sim pool | refuse `SIM_POOL` | nothing |
+| `closedVia: 'SETTLED'` and follow-up owed (no `settlement.adminAuditedAt`, or `notifyMembers` and no `settlement.emailedAt`) | `FOLLOW_UP` | the post-flip steps still owed: Super-Admin audit, member emails — nothing else |
+| `closedVia: 'SETTLED'`, nothing owed | refuse `ALREADY_SETTLED` | nothing |
+| `isVoidedPool(pool)` (CANCELED / COMPLETED / ARCHIVED, any case) or any other `closedVia` | refuse `ALREADY_CLOSED` | nothing |
 | `finalizedAt` set and no `settlementStartedAt` | refuse `ALREADY_FINALIZED` (the season ended on its own) | nothing |
-| otherwise (incl. `settlementStartedAt` from a crashed attempt) | `FULL` | steps 1–8 |
+| otherwise (incl. `settlementStartedAt` left by a crashed attempt) | `FULL` | marker → re-check → finalize → flip (+ pool audit in the same transaction) → Super-Admin audit → emails |
 
 **Guards** (FULL phase, each a `failed-precondition` with the code as message prefix):
 
@@ -149,9 +150,8 @@ settlePoolSchema = z.strictObject({
 
 5. Fenced write `settlementStartedAt: now` if absent — the crash-recovery marker.
 6. **Re-check guard 4 against a fresh entry read** taken after the lease was acquired (picks are lease-checked, so the ALIVE set cannot change while it is held).
-7. `maybeFinalizeNFLPool(db, poolId, { fence, force: 'SETTLED' })`. The new option ONLY skips `isSeasonComplete`. Everything else — voided/sim refusal, `computeFinalRanks` (ALIVE entries all rank 1), season history, profiles, `seasonPlaces`, frozen `seasonPrize`, `finalizedAt` — is the unchanged season-end code.
-8. Audit, BEFORE the flip (review r1 #4): pool audit event `POOL_SETTLED` (new `AuditEventType`) and `writeAdminAudit('POOL_SETTLED')`.
-9. Fenced flip: `status: 'COMPLETED'`, `closedVia: 'SETTLED'`, `closedAt`, and
+7. `maybeFinalizeNFLPool(db, poolId, { fence, force: 'SETTLED' })`; anything but `outcome.finalized === true` throws `FINALIZE_DECLINED: <reason>` and nothing further runs (review r2 #5). The new option ONLY skips `isSeasonComplete`. Everything else — voided/sim refusal, `computeFinalRanks` (ALIVE entries all rank 1), season history, profiles, `seasonPlaces`, frozen `seasonPrize`, `finalizedAt` — is the unchanged season-end code.
+8. Fenced flip: `status: 'COMPLETED'`, `closedVia: 'SETTLED'`, `closedAt`, and
    ```ts
    settlement: {           // type PoolSettlement in shared/settlement.ts
      kind: 'SPLIT', entryIds, winnerNames, settledAt, settledBy: uid, note: string | null,
@@ -160,10 +160,15 @@ settlePoolSchema = z.strictObject({
      prizePerEntry: number | null,     // copied from the seasonPlaces step 7 just published — never computed twice
      pot: number | null,               // seasonPrize snapshot's pot; null when unpriced / seasonPlacesError
      rebuyDuesExcluded: number,        // Σ members/*.rebuyOwed — NOT in the pot (review r1 #1)
+     adminAuditedAt?: number, emailedAt?: number,   // follow-up completion stamps
    }
    ```
+   **The pool audit event `POOL_SETTLED` is written in this same transaction** (`tx.set` inside `fencedWrite`'s `apply`), so it exists if and only if the flip committed — a `cancelPool` that wins the gap leaves no false audit (review r2 #3).
    🛑 **NOT `isLocked` / `isFinal` / `scores.gameStatus`** (sweep S1): `onPoolLocked` (`statsTrigger.ts:186`) fires on `isLocked` false→true and adds a pot to `stats/global`; `onGameComplete` (`postGameEmail.ts:37`) fires on `scores.gameStatus`→`post` and sends a **Squares** email built from `squares[]`. Both skip only `closedVia === 'ADMIN_CLOSE'`. NFL season pools never set those fields, and every NFL reader decides terminal-ness from `status` / `finalizedAt` / `closedVia`.
-10. If `notifyMembers`: one email per member (`resolveMemberEmails` + `sendEmail`, reason `pool_settled`) — winners by name, `prizePerEntry` only when known, the rebuy line when `rebuyDuesExcluded > 0`, the note — then stamp `settlement.emailedAt`. At-least-once: a crash between the last send and the stamp re-sends on retry.
+9. `writeAdminAudit('POOL_SETTLED')`, then stamp `settlement.adminAuditedAt`.
+10. If `notifyMembers`: one email per member (`resolveMemberEmails` + `sendEmail`, reason `pool_settled`) — winners by name, `prizePerEntry` only when known, the rebuy line when `rebuyDuesExcluded > 0`, the note — then stamp `settlement.emailedAt`. Steps 9–10 are the `FOLLOW_UP` phase on a retry. At-least-once: a crash between the last send and the stamp re-sends.
+
+**Entry visibility after the flip.** `firestore.rules:730-735` opens an NFL pool's entries to its participants once `status` is `COMPLETED`, so a settled pool's picks — including any already saved for the unplayed week — become readable. Intended: the pool is over, exactly as at a natural season end.
 
 **Rebuy money (review r1 #1).** The finalizer's pot is `entryFee × entryCount`; rebuys never touch `entryCount`. That is today's season-end behaviour too, so the settlement is no worse than a natural finish — but it states it: `rebuyDuesExcluded`, a panel warning, and an email line ("$X of rebuy dues are not included in the recorded prize"). Pricing rebuys into the pot is §7 out of scope.
 
@@ -173,11 +178,12 @@ One helper `assertPoolAcceptsPlay(pool)` → `if (isVoidedPool(pool) || pool.clo
 
 | Core | Callers it covers | Also gains |
 |---|---|---|
-| `submitNFLPicksInternal` (`nflPools.ts:492`) | `submitNFLPicks`, `proxyPick` (`poolExceptions.ts:230`), the sim harness | — (already lease-checked at `:644`) |
+| `submitNFLPicksInternal` (`nflPools.ts:492`) | `submitNFLPicks`, the sim harness | — (already lease-checked at `:644`) |
 | `executeSurvivorRebuyInternal` (`nflPools.ts:1381`) | `executeSurvivorRebuy` | — (already lease-checked at `:1421`) |
 | `joinNFLPoolInternal` (`nflPools.ts:355`) | `joinNFLPool`, admin add-member scripts | `assertNoScoringInProgress` + `retryWhileScoring`, like its siblings (review r1 #2) |
+| `proxyPick` (`poolExceptions.ts:300-310`) — its OWN transaction, not the submit core (review r2 #1) | `proxyPick` | — (already lease-checked at `:309`) |
 
-Today none of the three reads `status` — a COMPLETED or CANCELED pool with an open week accepts a pick, a rebuy and a new member. Sim pools are unaffected unless voided.
+Today none of the four reads `status` — a COMPLETED or CANCELED pool with an open week accepts a pick, a proxy pick, a rebuy and a new member. After finalization (natural, settled, or `simFinalizePool` on a sim pool) every play path is refused — intended terminal behaviour (review r2 #6). A `FINAL`-but-not-finalized pool is not voided and still plays.
 
 ### 2.4 Client
 
@@ -191,7 +197,10 @@ Today none of the three reads `status` — a COMPLETED or CANCELED pool with an 
 
 ### 2.4b Rules
 
-Server-owned (beside `seasonPlaces`, `firestore.rules:218`): `settlement`, `settlementStartedAt`, `finalizedAt`, `firstFinalizedAt` (sweep S3 + review r1 #3; no client writer of any of them). The member-facing claim is rendered ONLY from `settlement`. `status` / `closedVia` stay client-writable — bracket and Super-Admin write `status` today (review r1 #3, rejected part). Deploy order: functions, then rules (CLAUDE.md §3).
+1. **Server-owned** (beside `seasonPlaces`, `firestore.rules:218`): `settlement`, `settlementStartedAt`, `finalizedAt`, `firstFinalizedAt` (sweep S3 + review r1 #3). No client writer of any of them. The member-facing claim is rendered ONLY from `settlement`.
+2. 🛑 **AUTHORIZATION FIX, PRE-EXISTING HOLE (review r2 #4).** New `nflLifecycleWriteBlocked()` in the manager branch of `allow update`, same shape as `nflSettingsWriteBlocked()` (`:269`): on an NFL season pool a manager may not change `status`, `closedVia`, `closedAt` or `isFinal` from the client. Today one client write can move a manager's own pool `OPEN`→`FINAL`, and the entry read rule (`:730-735`) then opens every member's un-revealed picks to every participant — commissioner-blind picks bypassed. No NFL client path writes these fields (sweep S3); the super-admin branch is unchanged; bracket pools are unaffected.
+
+Rules tests: each new server-owned field denied to a manager; each lifecycle field denied on an NFL pool; a bracket manager can still lock their bracket. Deploy order: functions, then rules (CLAUDE.md §3).
 
 ### 2.5 Docs
 
@@ -204,8 +213,8 @@ CONTEXT.md §Lifecycle: `SETTLED` as a `closedVia` value and a "Settlement" entr
 | `functions/src/__tests__/settlement.test.ts` (pure) | phase table every row; ALIVE-set equality (order, duplicates, extra, missing, zero alive); `assertPoolAcceptsPlay` matrix; settlement record built from a seasonPlaces fixture incl. `seasonPlacesError` → nulls |
 | `functions/src/__tests__/poolSettlementSchema.test.ts` | strict schema; outcome literal; bounds |
 | `nflFinalize.test.ts` (extend) | `force: 'SETTLED'` skips completeness only; still refuses voided / sim; two ALIVE + one place at 100 % → each gets half |
-| emulator `poolSettlement.emulator.test.ts` | seeded 4-entry Survivor pool: seasonHistory rows, `seasonPlaces`, flip fields present and `isLocked`/`scores` ABSENT, audit rows, a scorer pass after is a no-op, a re-call is `ALREADY_SETTLED`, a crashed attempt (`settlementStartedAt` + `finalizedAt`, still OPEN) completes, `EMAIL_ONLY` recovery, co-commissioner refused, pick / rebuy / join on the settled pool refused `POOL_OVER` |
-| rules test | manager client write of each of the four new server-owned fields denied |
+| emulator `poolSettlement.emulator.test.ts` | seeded 4-entry Survivor pool: seasonHistory rows, `seasonPlaces`, flip fields present and `isLocked`/`scores` ABSENT, audit rows, a scorer pass after is a no-op, a re-call is `ALREADY_SETTLED`, a crashed attempt (`settlementStartedAt` + `finalizedAt`, still OPEN) completes, `EMAIL_ONLY` recovery, co-commissioner refused, `FINALIZE_DECLINED` leaves the pool OPEN with no audit row, `FOLLOW_UP` recovery runs only audit + email, pick / proxy pick / rebuy / join on the settled pool refused `POOL_OVER` |
+| rules test | manager client write of each of the four new server-owned fields denied; NFL `status`/`closedVia`/`closedAt`/`isFinal` denied to a manager; bracket manager lock still allowed |
 | `src/__tests__/settledBanner.test.tsx` | 1, 2, 3 winners; note; prize shown only when known; absent with no settlement |
 
 ### 2.7 Deploy / rollout

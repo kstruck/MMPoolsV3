@@ -23,4 +23,19 @@ Codex also confirmed the `settlementStartedAt` recovery predicate as coherent:
 "`finalizedAt` absent **or** this callable's durable `settlementStartedAt`
 exists", with recovery passing `force: 'SETTLED'`.
 
-## Round 2 — (below)
+## Round 2 — plan @ `602c4086` — CHANGES NEEDED (6 findings)
+
+| # | Sev | Finding (codex) | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P1 | `proxyPick` is NOT covered by a guard in `submitNFLPicksInternal`: it has its own transaction (`poolExceptions.ts:300-310`). | **Yes** — read it; own `retryWhileScoring` transaction, own `poolInTx`. Sweep S2 was wrong on this row. | **ACCEPTED** | §2.3 adds `proxyPick` as a fourth guarded site; S2 corrected; emulator test covers it. |
+| 2 | P1 | Phase table says `EMAIL_ONLY` = "step 8" and `FULL` = "steps 1–8"; email is step 10. | **Yes** — a renumbering left behind. | **ACCEPTED** | Phase table now names the steps by what they do, not by number. |
+| 3 | P1 | Audit-before-flip can record a false `POOL_SETTLED`: `cancelPool` takes no lease, so it can win the gap and `checkFence` then refuses the flip. | **Yes** — `cancelPool` (`poolExceptions.ts:560-575`) is a plain `update`; `checkFence` refuses a voided pool (`scoringLease.ts:106-118`). | **ACCEPTED, different fix** | The pool audit event is written **inside the flip transaction** (`fencedWrite`'s `apply(tx)` — `scoringLease.ts:194-205` reads the pool first, then runs `apply`, then writes), so it exists if and only if the flip committed. `writeAdminAudit` (the Super-Admin log) and emails follow the flip and are recovered by the follow-up phase. |
+| 4 | P1 | Leaving NFL `status` client-writable is NOT harmless: the manager update rule only checks the CURRENT status (`poolIsEditable`, `firestore.rules:480`), so one write moves `OPEN`→`FINAL`/`COMPLETED`, and the entry read rule (`firestore.rules:730-735`) then opens every member's entry — un-revealed picks included — to every participant. | **Yes**, and it is **pre-existing**: a commissioner can do this today on any NFL pool, independent of this plan. No NFL client path writes `status`/`closedVia`/`closedAt`/`isFinal` (grep in sweep S3: only bracket, Super-Admin-on-bracket and the sim callable). | **ACCEPTED** (round-1 rejection withdrawn) | §2.4b: new `nflLifecycleWriteBlocked()` in the manager branch, same shape as `nflSettingsWriteBlocked()` — an NFL pool's `status`, `closedVia`, `closedAt`, `isFinal` are callable-only for managers. The super-admin branch is unchanged. Rules tests for each field, and one proving a bracket manager can still lock their bracket. Flagged to Kevin as an authorization fix riding this PR. |
+| 5 | P1 | Phase table refuses only `CANCELED`/`ARCHIVED`, but `isVoidedPool` also covers `COMPLETED`; and the finalizer returns `{finalized:false}` for a voided pool rather than throwing. | **Yes** — `autoScoreDecisions.ts:75`, `nflFinalize.ts:347-353`. | **ACCEPTED** | Refusal row is `isVoidedPool(pool)` (minus the SETTLED follow-up rows); the callable requires `outcome.finalized === true` before the flip and otherwise throws `FINALIZE_DECLINED: <reason>`. |
+| 6 | P2 | "Sim pools unaffected" is too broad: the harness drives the same cores and `simFinalizePool` stamps `finalizedAt` (`simHarness.ts:782-795`), after which the guard blocks play. | **Yes.** The one scenario runner that finalizes (`nflSeasonSimulator.ts:211-213`) only `recordPayouts` after it, which is not a play path. | **ACCEPTED** | Claim corrected: after finalization, sim or not, play is refused — intended terminal behaviour. Gates will show whether any scenario plays after `finalize`. |
+
+Codex confirmed the rebuy-disclosure response as "coherent if the product
+accepts that the recorded prize excludes those dues", and `force` as
+source-compatible (`nflFinalize.ts:329-333`), bypassing only completeness.
+
+## Round 3 — (below)
