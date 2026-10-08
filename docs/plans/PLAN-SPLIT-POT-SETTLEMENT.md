@@ -1,6 +1,6 @@
 # PLAN — Survivor split-pot settlement, Current Picks "W-L / Max" columns, Pick Distribution visibility setting
 
-> **STATUS: PLAN ONLY, AWAITING KEVIN'S SIGN-OFF ON §6. No code written.**
+> **STATUS: §6 APPROVED AS RECOMMENDED (Kevin, 2026-10-08: "approve as recommended, start PR-A"). Plan review log + sweeps in progress before PR-A code.**
 >
 > Three asks from Kevin on 2026-10-08, one plan so he can approve them together.
 > They ship as THREE separate PRs (CLAUDE.md §2d: one PR at a time).
@@ -130,13 +130,15 @@ settlePoolSchema = z.strictObject({
 
 1. Principal: `loadPoolAndAssertManager(..., assertPoolOwnerOrManagerNoCo)` — owner or `managerUid`, SUPER_ADMIN, **never a co-commissioner** (same rule as cancel/close: it moves money).
 2. `pool.type === 'NFL_SURVIVOR'` else `NOT_SURVIVOR` (D5).
-3. Not voided, not already finalized (`finalizedAt` null), not a sim pool else `ALREADY_SETTLED` / `SIM_POOL`.
+3. Not voided (`isVoidedPool`), no `closedVia` of any kind, not a sim pool, else `ALREADY_SETTLED` / `SIM_POOL`. `finalizedAt` already set is refused (`ALREADY_FINALIZED` — the season ended on its own) **unless** `pool.settlementStartedAt` is present, which marks a settlement this callable began and did not finish (crash recovery, see Idempotence).
 4. `entryIds` **equals the set of `ALIVE` entry ids** (order-free), else `WINNERS_MUST_BE_ALIVE_SET` (D3). Zero alive entries → `NO_SURVIVORS` (a pool where everyone is out finalizes on its own at season end; nothing to split).
 
 **Writes**, all under the scoring lease (`withScoringLease`) so a 5-minute scorer pass can never interleave:
 
+4b. Fenced write `settlementStartedAt: now` (only if absent). This is the crash-recovery marker for guard 3.
+
 5. `maybeFinalizeNFLPool(db, poolId, { fence, force: 'SETTLED' })`. New option; the ONLY things it changes are (a) `isSeasonComplete` is skipped and (b) the audit reason. `computeFinalRanks` already ranks the ALIVE entries 1 and `priceSeasonPlaces` already splits place 1's money across them. Season history, profiles, `seasonPlaces`, `seasonPrize`, `finalizedAt` all land exactly as at a natural end.
-6. Pool patch in the same fenced write: `status: 'COMPLETED'`, `isLocked: true`, `isFinal: true`, `scores.gameStatus: 'post'`, `closedVia: 'SETTLED'`, `closedAt`, and
+6. Pool patch, a second fenced write after the finalizer: `status: 'COMPLETED'`, `closedVia: 'SETTLED'`, `closedAt`, and
    ```ts
    settlement: {
      kind: 'SPLIT', entryIds, settledAt, settledBy: uid, note,
@@ -146,15 +148,25 @@ settlePoolSchema = z.strictObject({
      perEntryPrize: number | null, pot: number | null,
    }
    ```
-   `closedVia: 'SETTLED'`, not `ADMIN_CLOSE`: the client already maps any non-admin `closedVia` to the `final` label (`poolSport.ts:358`), the stats trigger only skips `ADMIN_CLOSE`, and `isVoidedPool` retires it from the scorer by status.
+   `closedVia: 'SETTLED'`, not `ADMIN_CLOSE`: the client already maps any non-admin `closedVia` to the `final` label (`poolSport.ts:313,358`), and `isVoidedPool` retires it from the scorer by status.
+
+   🛑 **NOT `isLocked` / `isFinal` / `scores.gameStatus`** — the three legacy fields `adminCloseUpdate` dual-writes. Sweep finding S1: `onPoolLocked` (`statsTrigger.ts:186`) fires on `isLocked` false→true and adds the pool's pot to `stats/global`, and `onGameComplete` (`postGameEmail.ts:37`) fires on `scores.gameStatus`→`post` and sends a **Squares** post-game email built from `squares[]`. Both skip only `isAdminCloseTransition` (`closedVia === 'ADMIN_CLOSE'`). NFL season pools never set those fields (§1.0: `isLocked: false` in week 5), and every NFL reader decides terminal-ness from `status` / `finalizedAt` / `closedVia` (`hasTerminalMarker`, `isRetiredPool`, `isVoidedPool`), so leaving them alone loses nothing and fires nothing.
 7. Pool audit event `POOL_SETTLED` (new `AuditEventType`, `functions/src/types.ts:283` neighbourhood) + `writeAdminAudit('POOL_SETTLED')`.
 8. If `notifyMembers`: one email per member via the same `resolveMemberEmails` + `sendEmail` path `cancelPool` uses, reason `pool_settled`: subject "<pool> is over — the pot was split", body naming the winners by display name, the per-winner amount **only when known**, the note, and the existing "run your own pool" footer.
 
-**Idempotence:** a second call hits guard 3. A crash between 5 and 6 leaves a finalized-but-OPEN pool; `finalizedAt` already retires it from the scorer (`isTerminalPool`), and re-running the callable completes the flip because guard 3 checks `closedVia`, not `finalizedAt` — written into the test.
+**Idempotence:** a completed settlement has `closedVia` and COMPLETED, so a second call hits guard 3. A crash between 5 and 6 leaves a pool with `settlementStartedAt` and `finalizedAt` but status still OPEN; `finalizedAt` already retires it from the scorer (`isTerminalPool`), and re-running the callable is admitted by guard 3's `settlementStartedAt` exception, re-runs the finalizer (a documented re-runnable overwrite, `nflFinalize.ts:28`) and completes the flip. Both paths are tests.
 
 ### 2.3 Server — close the pick-submit hole (§1.1 last row)
 
-`submitNFLPicks` and `executeSurvivorRebuy` gain, after the pool read, `if (isVoidedPool(pool) || pool.finalizedAt) throw failed-precondition 'POOL_OVER'`. Today a COMPLETED pool with an open week still accepts a pick. This is a one-line guard with a unit test each; it ships in PR-A because the settlement is what makes the hole reachable for a pool people are still looking at.
+One helper `assertPoolAcceptsPlay(pool)` → `if (isVoidedPool(pool) || pool.closedVia || pool.finalizedAt) throw failed-precondition 'POOL_OVER'`, called in the three shared cores (sweep S2), not the thin callables:
+
+| Core | Callers it covers |
+|---|---|
+| `submitNFLPicksInternal` (`nflPools.ts:492`) | `submitNFLPicks`, `proxyPick` (`poolExceptions.ts:230`), the sim harness |
+| `executeSurvivorRebuyInternal` (`nflPools.ts:1381`) | `executeSurvivorRebuy` |
+| `joinNFLPoolInternal` (`nflPools.ts:355`) | `joinNFLPool`, admin add-member scripts |
+
+Today none of the three reads `status` at all — a COMPLETED or CANCELED pool with an open week accepts a pick, a rebuy and a new member. It ships in PR-A because the settlement is what makes the hole reachable on a pool people are still looking at. Sim pools are unaffected unless voided (the sim harness never closes a pool mid-run).
 
 ### 2.4 Client
 
@@ -164,6 +176,10 @@ settlePoolSchema = z.strictObject({
 * **Standings**: the ALIVE rows read "Co-champion" instead of "Alive" when `pool.settlement` exists (one ternary at `NFLStandings.tsx:323`).
 * My Prizes and the payout ledger need **no change** — they read `seasonPlaces`.
 * `dbService.settlePool(poolId, input)`.
+
+### 2.4b Rules
+
+`settlement` and `settlementStartedAt` join the server-owned pool-field list in `firestore.rules` (beside `seasonPlaces`, `:218`). Sweep S3: without it a commissioner could write a fake `settlement` from the browser and the banner would announce a split nobody agreed to. Members already read the pool doc, so no read rule changes. Rules test in `test:rules`. Deploy order: functions, then rules (CLAUDE.md §3).
 
 ### 2.5 Docs
 
@@ -177,6 +193,8 @@ CONTEXT.md §Lifecycle: add `SETTLED` as a `closedVia` value and define "Settlem
 | `functions/src/__tests__/poolSettlement.test.ts` (unit, mocked db like `poolExceptions` tests) | guards 1–4 each; the exact pool patch; `settlement.perEntryPrize` null on `seasonPlacesError`; re-run after a crash between steps 5 and 6 |
 | extend `nflFinalize.test.ts` | `force: 'SETTLED'` skips completeness, still refuses voided/sim, Survivor alive-set ranks 1 and prize splits evenly |
 | `nflPools` submit test | `POOL_OVER` refusal on COMPLETED and on `finalizedAt` set |
+| rules test (`test:rules`) | manager client write of `settlement` / `settlementStartedAt` denied |
+| `nflPools` join + rebuy tests | `POOL_OVER` on COMPLETED / CANCELED / `finalizedAt` |
 | `src/__tests__/settledBanner.test.tsx` | banner text with 1, 2, 3 winners; note shown; absent when no settlement |
 | emulator: `poolSettlement.emulator.test.ts` | end-to-end on a seeded 3-entry survivor pool: seasonHistory docs, seasonPlaces, status flip, audit rows, scorer pass afterwards is a no-op |
 
