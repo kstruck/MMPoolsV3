@@ -216,6 +216,13 @@ service cloud.firestore {
           // PLACE awards to this list, so a manager who could rewrite it could
           // bind an award to a figure the ranking never produced.
           'seasonPlaces', 'seasonPrize', 'seasonPlacesError',
+          // Finalization stamps (written only by maybeFinalizeNFLPool) and the
+          // split-pot SETTLEMENT record (PLAN-SPLIT-POT-SETTLEMENT §2.4b). The
+          // member-facing "the pot was split between A and B" banner is rendered
+          // from `settlement` alone, so a manager who could write it could
+          // announce a split nobody agreed to; `finalizedAt` ends play on every
+          // NFL path (lib/settlement.ts assertPoolAcceptsPlay).
+          'finalizedAt', 'firstFinalizedAt', 'finalizedVia', 'settlement',
           // Scorer-owned state (PLAN-REALTIME-SCORING §3a, PR-B′). Every one of
           // these is a field a manager could otherwise use to undo the reveal
           // guarantee or the scoring mutex:
@@ -272,6 +279,25 @@ service cloud.firestore {
         let isNfl = resource.data.get('type', '') in nflTypes
                     || request.resource.data.get('type', '') in nflTypes;
         return !isNfl || !changed.hasAny(['settings']);
+      }
+
+      // 🛑 AN NFL POOL'S LIFECYCLE IS CALLABLE-ONLY FOR MANAGERS
+      // (PLAN-SPLIT-POT-SETTLEMENT §2.4b, codex plan-review r2 #4).
+      //
+      // `poolIsEditable()` checks only the CURRENT status, so before this one
+      // client write could move a manager's own NFL pool OPEN → FINAL or
+      // COMPLETED — and the entries read rule below opens every member's entry
+      // to every participant at either status. Un-revealed picks, commissioner-
+      // blind picks bypassed, by one `updateDoc`. Every legitimate NFL lifecycle
+      // change goes through a callable (cancelPool, closePool, settlePool, the
+      // finalizer); no NFL client path writes these fields. Bracket and other
+      // types are untouched, and the super-admin branch does not call this.
+      function nflLifecycleWriteBlocked() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let nflTypes = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+        let isNfl = resource.data.get('type', '') in nflTypes
+                    || request.resource.data.get('type', '') in nflTypes;
+        return !isNfl || !changed.hasAny(['status', 'closedVia', 'closedAt', 'isFinal']);
       }
 
       // `seasonType` is arm 2 of the stats test-pool discriminator
@@ -501,7 +527,7 @@ service cloud.firestore {
       // settings protection — `nflSettingsWriteBlocked()` included — is inside
       // the manager branch and is short-circuited by `isSuperAdmin()`.
       allow update: if request.auth != null && callableOnlySettingsUnchanged() && poolPasswordNotWritten() && (
-        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
+        (isPoolManager() && protectedFieldsUnchanged() && nflSettingsWriteBlocked() && nflLifecycleWriteBlocked() && nflSeasonTypeWriteBlocked() && seasonNotForgedSim() && poolIsEditable())
         || isSuperAdmin()
       );
                     

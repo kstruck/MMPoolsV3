@@ -18,6 +18,7 @@ import { helpRegistry } from '../../help/registry';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
+import { effectivePickDistribution, type PickDistributionVisibility } from '@shared/pickDistribution';
 import { buildProxyTeamGameIndex, proxyPickPayload, proxyTeamOptions } from '../../utils/proxyPickPayload';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
@@ -30,6 +31,8 @@ import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 import { ConfirmActionModal } from '../admin/ConfirmActionModal';
+import { SettlePoolPanel } from './SettlePoolPanel';
+import { poolIsOver, settlementFollowUpOwed, settlementResumable } from '../../utils/poolIsOver';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
 import { NFL_KICKOFF_MS } from '../../config/season';
@@ -365,6 +368,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // toggle claim OFF on such a pool, and the save below would then have
   // de-listed it without anybody asking.
   const [isListedPublic, setIsListedPublic] = useState<boolean>(publicListingToggleValue(castPool));
+  // PLAN-SPLIT-POT-SETTLEMENT Part C: Pick Distribution card visibility.
+  const [pickDistribution, setPickDistribution] = useState<PickDistributionVisibility>(effectivePickDistribution(castPool.settings));
+  // Sent only when changed HERE (codex r2 on PR-C): an unrelated save must not
+  // overwrite a value another commissioner set while this view was open.
+  const [pickDistributionTouched, setPickDistributionTouched] = useState(false);
+  // Until edited, the control shows the LIVE pool value, not the mount-time one.
+  const shownPickDistribution = pickDistributionTouched ? pickDistribution : effectivePickDistribution(castPool.settings);
 
   const [editManagerName, setEditManagerName] = useState(pool.managerName || '');
   const [editContactEmail, setEditContactEmail] = useState(pool.contactEmail || '');
@@ -873,6 +883,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         entryFee,
         paymentInstructions,
         ...listing.settings,
+        // Validated server-side (functions/src/lib/poolUpdate.ts). Only when the
+        // control was changed in this view — see `pickDistributionTouched`.
+        ...(pickDistributionTouched ? { pickDistribution } : {}),
         // Sent on every save; the server strips a value equal to the pool's
         // effective max (absent ⇒ 1) as a no-op, so this costs nothing until
         // it is actually raised (PLAN-MULTI-ENTRY D8).
@@ -971,6 +984,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       // another session between the two saves. What was just written is now the
       // stored truth, so the next save has nothing of its own to say.
       setWeeklyPlacesTouched(false);
+      setPickDistributionTouched(false);
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —
@@ -1373,6 +1387,27 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 onChange={e => setIsListedPublic(e.target.checked)}
                 className="w-5 h-5 rounded border-line text-navy-700 focus:ring-navy-600 dark:focus:ring-gold-500 cursor-pointer"
               />
+            </div>
+
+            {/* PLAN-SPLIT-POT-SETTLEMENT Part C (Kevin, 2026-10-08). */}
+            <div>
+              <FieldLabel tone="muted" htmlFor="pick-distribution-visibility" helpId="settings.pickDistribution">Pick Distribution</FieldLabel>
+              <select
+                id="pick-distribution-visibility"
+                value={shownPickDistribution}
+                // Locked while a save is in flight (qodo #1 on #716): a change made
+                // then would be marked clean by that save and never sent.
+                disabled={isSavingSettings}
+                onChange={e => { setPickDistribution(e.target.value as PickDistributionVisibility); setPickDistributionTouched(true); }}
+                className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
+              >
+                <option value="ALWAYS">Always show</option>
+                <option value="AFTER_LOCK">Show each game once its picks lock</option>
+                <option value="OFF">Hide</option>
+              </select>
+              <p className="font-body text-[10px] text-faint mt-1">
+                The card on the pool home showing how the pool picked each game. Also applies to the Majority row on Current Picks.
+              </p>
             </div>
 
             {/* Host Profile & Contact Links */}
@@ -2189,10 +2224,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               )}
             </div>
 
+            {/* ── End the pool, split the pot ── PLAN-SPLIT-POT-SETTLEMENT §2.4.
+                Survivor only, and owner-only for the same reason as Cancel below:
+                `settlePool` refuses a co-commissioner server-side (D2). Hidden once
+                the pool is over by any route — the callable would refuse anyway —
+                EXCEPT a settled pool that still owes its follow-up (a failed
+                email or audit): the panel then offers the retry (codex r3) — and a
+                settlement interrupted between finalize and flip, which the server
+                resumes as a full settlement (codex r7). */}
+            {viewerIsOwner && type === 'NFL_SURVIVOR' && (!poolIsOver(castPool) || settlementResumable(castPool) || settlementFollowUpOwed(castPool.settlement)) && (
+              <SettlePoolPanel pool={pool} />
+            )}
+
             {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):
                 `cancelPool` refuses a co-commissioner server-side, so do not walk them
                 through two destructive confirmations into a permission error. */}
-            {viewerIsOwner && (
+            {viewerIsOwner && !poolIsOver(castPool) && (
             <div className="bg-brandred-600/5 border border-brandred-600/25 rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Ban size={14} className="text-brandred-600" />

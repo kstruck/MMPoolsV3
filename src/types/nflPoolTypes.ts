@@ -2,6 +2,8 @@ import type { PayoutSettings } from './index';
 import type { WeeklyPlace, WeeklyPrizeSnapshot } from '@shared/weeklyPrizes';
 import type { SeasonPlace, SeasonPrizeSnapshot } from '@shared/seasonPrizes';
 import type { WeeklyTiebreaker } from '@shared/nflTiebreaker';
+import type { PoolSettlement } from '@shared/settlement';
+import type { PickDistributionVisibility } from '@shared/pickDistribution';
 
 export interface NFLGame {
   id: string; // e.g. "espn_401671234"
@@ -91,6 +93,18 @@ export interface NFLPickemPool {
   seasonPlaces?: SeasonPlace[];
   seasonPrize?: SeasonPrizeSnapshot | null;
   seasonPlacesError?: string;
+  /**
+   * PLAN-SPLIT-POT-SETTLEMENT. All SERVER-OWNED (firestore.rules). `closedVia:
+   * 'SETTLED'` + `settlement` = the remaining players agreed to split the pot
+   * and `settlePool` ended the pool (Survivor only). The member-facing banner
+   * reads `settlement` only, never `closedVia`. `finalizedAt` is a Timestamp.
+   */
+  closedVia?: string;
+  closedAt?: number;
+  finalizedAt?: unknown;
+  /** `'SETTLED'` when `settlePool` ran the finalizer (server-owned). */
+  finalizedVia?: string;
+  settlement?: PoolSettlement;
 
   settings: {
     /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
@@ -99,6 +113,8 @@ export interface NFLPickemPool {
     paymentInstructions: string;
     isListedPublic: boolean;
     payouts: PayoutSettings;
+    /** Pick Distribution card visibility (`@shared/pickDistribution`). Absent = ALWAYS. */
+    pickDistribution?: PickDistributionVisibility;
     confidenceMode: boolean;
     lockMode: 'PER_GAME' | 'WEEKLY'; // honoured for confidence pools too once stamped (lockRuleVersion 2)
     /** Server-written stamp (PLAN-CONFIDENCE-PER-GAME-LOCK); absent = legacy rule. */
@@ -191,6 +207,18 @@ export interface NFLSurvivorPool {
   seasonPlaces?: SeasonPlace[];
   seasonPrize?: SeasonPrizeSnapshot | null;
   seasonPlacesError?: string;
+  /**
+   * PLAN-SPLIT-POT-SETTLEMENT. All SERVER-OWNED (firestore.rules). `closedVia:
+   * 'SETTLED'` + `settlement` = the remaining players agreed to split the pot
+   * and `settlePool` ended the pool (Survivor only). The member-facing banner
+   * reads `settlement` only, never `closedVia`. `finalizedAt` is a Timestamp.
+   */
+  closedVia?: string;
+  closedAt?: number;
+  finalizedAt?: unknown;
+  /** `'SETTLED'` when `settlePool` ran the finalizer (server-owned). */
+  finalizedVia?: string;
+  settlement?: PoolSettlement;
 
   settings: {
     /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
@@ -199,6 +227,8 @@ export interface NFLSurvivorPool {
     paymentInstructions: string;
     isListedPublic: boolean;
     payouts: PayoutSettings;
+    /** Pick Distribution card visibility (`@shared/pickDistribution`). Absent = ALWAYS. */
+    pickDistribution?: PickDistributionVisibility;
     maxStrikes: number; // 0 = sudden death (first loss/tie = eliminated), 1+ = mulligans
     maxRebuys: number; // Default 0
     rebuyDeadlineWeek: number; // e.g. Week 4
@@ -264,6 +294,18 @@ export interface NFLMarginPool {
   seasonPlaces?: SeasonPlace[];
   seasonPrize?: SeasonPrizeSnapshot | null;
   seasonPlacesError?: string;
+  /**
+   * PLAN-SPLIT-POT-SETTLEMENT. All SERVER-OWNED (firestore.rules). `closedVia:
+   * 'SETTLED'` + `settlement` = the remaining players agreed to split the pot
+   * and `settlePool` ended the pool (Survivor only). The member-facing banner
+   * reads `settlement` only, never `closedVia`. `finalizedAt` is a Timestamp.
+   */
+  closedVia?: string;
+  closedAt?: number;
+  finalizedAt?: unknown;
+  /** `'SETTLED'` when `settlePool` ran the finalizer (server-owned). */
+  finalizedVia?: string;
+  settlement?: PoolSettlement;
 
   settings: {
     /** PLAN-MULTI-ENTRY D8: entries one player may hold. Absent on every pool created before the setting ⇒ 1; read via `effectiveMaxEntriesPerUser` (`@shared/multiEntry`), never raw. Raise-only after create. */
@@ -272,6 +314,8 @@ export interface NFLMarginPool {
     paymentInstructions: string;
     isListedPublic: boolean;
     payouts: PayoutSettings;
+    /** Pick Distribution card visibility (`@shared/pickDistribution`). Absent = ALWAYS. */
+    pickDistribution?: PickDistributionVisibility;
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
   };
 

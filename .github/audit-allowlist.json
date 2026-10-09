@@ -1,0 +1,17 @@
+{
+  "_comment": "Dated exceptions for scripts/auditGate.mjs. Add an entry ONLY when no patched release exists, and give it an expires date no more than 45 days away (the gate rejects later dates). An expired entry fails the gate again.",
+  "entries": [
+    {
+      "ghsa": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "reason": "braces <=3.0.3 stack-exhaustion DoS. 3.0.3 is the latest release (checked 2026-10-09), so there is nothing to upgrade to. Reaches us through tailwindcss and firebase-tools (build/dev tooling, not the deployed functions).",
+      "expires": "2026-11-09"
+    },
+    {
+      "ghsa": "GHSA-86w9-cpqp-85rv",
+      "package": "node-forge",
+      "reason": "node-forge <=1.4.0. 1.4.0 is the latest release (checked 2026-10-09), so there is nothing to upgrade to. Reaches functions/ through firebase-admin; npm's only 'fix' is firebase-admin 14, a major upgrade.",
+      "expires": "2026-11-09"
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import {
 import { nflReminderTier, nflNonPickerUids } from "./lib/nflNonPickers";
 import { usesWeeklyLock, gameHasStarted } from "./shared/nflLockMode";
 import type { MemberRecord } from "./shared/memberRecord";
+import { poolIsOver, type SettleablePool } from "./lib/settlement";
 
 
 
@@ -77,15 +78,36 @@ export async function sendEmail(
         }
         const finalHtml = unsubUrl ? html.replace(/\{\{UNSUB_URL\}\}/g, unsubUrl) : html;
 
-        await db.collection("mail").add({
+        // `idempotencyKey` (optional) makes the enqueue once-only: the mail doc is
+        // CREATED under that id, so a retry after a crash between the enqueue and
+        // the caller's own progress stamp finds it and sends nothing (qodo #4 on
+        // #715, "settled members can receive repeat emails"). It is not stored.
+        const { idempotencyKey, ...mailContext } = context ?? {};
+        const mailDoc = {
             to,
             message: {
                 subject,
                 html: finalHtml,
             },
-            ...context, // e.g. poolId, reason
+            ...mailContext, // e.g. poolId, reason
             createdAt: FieldValue.serverTimestamp(),
-        });
+        };
+        if (typeof idempotencyKey === 'string' && idempotencyKey) {
+            try {
+                await db.collection("mail").doc(idempotencyKey.replace(/\//g, '_')).create(mailDoc);
+            } catch (createError) {
+                const code = (createError as { code?: unknown }).code;
+                if (code === 6 || code === 'already-exists') {
+                    // Queued by an earlier attempt: delivered, and a retry cannot improve
+                    // on that — so 'skipped', never a second copy.
+                    console.log(`Email to ${to} already queued (${idempotencyKey}); not re-sending`);
+                    return recordDelivery(tally, 'skipped');
+                }
+                throw createError;
+            }
+        } else {
+            await db.collection("mail").add(mailDoc);
+        }
         console.log(`Email queued for ${to}: ${subject}`);
         return recordDelivery(tally, 'queued');
     } catch (error) {
@@ -933,7 +955,10 @@ export async function checkNFLNonPickerReminders(
     tally?: DeliveryTally,
 ) {
     try {
-        if (!pool.season || pool.status === 'archived') return;
+        // PLAN-SPLIT-POT-SETTLEMENT (codex code-review r9): a pool that is over —
+        // settled, cancelled, closed or finalized — takes no picks, so it gets no
+        // "you haven't picked" email. `poolIsOver` covers lowercase `archived`.
+        if (!pool.season || poolIsOver(pool as SettleablePool)) return;
 
         // --- 1. Determine the current week ---
         // Shared across every pool in this run — see getWeekContext.
