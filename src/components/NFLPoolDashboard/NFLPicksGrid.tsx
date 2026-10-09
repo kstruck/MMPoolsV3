@@ -8,6 +8,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/picksGrid';
 import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
+import { tallyGridRow, formatWinLoss, maxUnknownTitle } from '../../utils/picksGridMax';
 import { GridSortToggle } from './GridSortToggle';
 import { rowDisplayName } from '../../utils/entrySelection';
 import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
@@ -218,6 +219,8 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                 <th className={`sticky left-0 z-10 bg-card ${TH}`}>Player</th>
                 <th className={`${TH} text-center w-20`}>Set</th>
                 <th className={`${TH} text-center w-20`} title="This week's points from the scorer — blank until the week is scored">Week Pts</th>
+                <th className={`${TH} text-center w-20`} title="Revealed picks that won and lost so far this week">W-L</th>
+                <th className={`${TH} text-center w-20`} title="The most this player can finish the week with: points already won plus every pick still in play">Max</th>
                 {weekGames.map(g => (
                   <th key={g.id} className={`${TH} text-center whitespace-nowrap`}>
                     {g.awayTeam.abbreviation}/{g.homeTeam.abbreviation}
@@ -233,6 +236,25 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                 const mine = isMe(row);
                 const isOwnRow = ownPicksKnown(row);
                 const set = countFor(row);
+                // One cell per game, built ONCE and used by both the tally and the
+                // render below, so W-L / Max can never disagree with the cells.
+                const rowCells = new Map(weekGames.map(g => [g.id, picksGridCell({
+                  game: g,
+                  entry: row,
+                  isOwnRow,
+                  revealedGameIds,
+                  pickMode: settings.pickMode,
+                  confidenceMode: !!settings.confidenceMode,
+                })] as const));
+                const tally = tallyGridRow({
+                  weekGames,
+                  cells: rowCells,
+                  setCount: set,
+                  revealMode,
+                  isOwnRow,
+                  confidenceMode: !!settings.confidenceMode,
+                });
+                const winLoss = formatWinLoss(tally);
                 return (
                   <tr
                     key={row.id}
@@ -278,15 +300,22 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                     <td className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]">
                       {gridWeekValue(row, week, false) ?? <span className="text-faint">—</span>}
                     </td>
+                    {/* W-L and Max (PLAN-SPLIT-POT-SETTLEMENT Part B). Both are
+                        counted from the cells below, which are already graded
+                        and already gated by the server's reveal — nothing here
+                        can show a pick the cells do not. `—` = nothing graded
+                        yet; `?` = Max is not knowable (see the tooltip). */}
+                    <td className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]">
+                      {winLoss ?? dash}
+                    </td>
+                    <td
+                      className="py-3 px-3 text-center text-[12px] num font-bold text-[color:var(--text)]"
+                      title={tally.max === null ? maxUnknownTitle(tally.maxUnknown) : undefined}
+                    >
+                      {tally.max === null ? '?' : tally.max}
+                    </td>
                     {weekGames.map(g => {
-                      const cell = picksGridCell({
-                        game: g,
-                        entry: row,
-                        isOwnRow,
-                        revealedGameIds,
-                        pickMode: settings.pickMode,
-                        confidenceMode: !!settings.confidenceMode,
-                      });
+                      const cell = rowCells.get(g.id)!;
                       // A PUSH or a VOID earns nothing and is nobody's mistake,
                       // so it stays neutral — colouring it red would call a
                       // refunded pick wrong (`utils/pickemResult.ts`).
@@ -332,6 +361,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                 {/* Week Pts has no majority — placeholder keeps the game cells
                     under their own headers (codex r2 on items 11/12). */}
                 <td className="py-3 px-3 text-center">{dash}</td>
+                {/* W-L and Max have no majority either. */}
+                <td className="py-3 px-3 text-center">{dash}</td>
+                <td className="py-3 px-3 text-center">{dash}</td>
                 {weekGames.map(g => {
                   if (!majorityVisible.has(g.id)) {
                     return (
@@ -363,7 +395,13 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Set</strong>{' '}
         counts the picks a player has saved out of {weekGames.length} this week — how MANY, never which,
         so it says nothing about who picked what. Your own is live the moment you save it, and everyone
-        else's is visible to the whole pool at any time.
+        else's is visible to the whole pool at any time. <strong>W-L</strong> counts the revealed picks that
+        have won and lost so far (a tie or a cancelled game counts as neither). <strong>Max</strong> is the
+        most that player can finish the week with — points already won plus every pick still in play
+        {settings.confidenceMode ? ', each at its confidence weight' : ', one point each'}. It is counted here
+        from the cells on screen, so for a few minutes after a game ends it can differ from <strong>Week
+        Pts</strong>, which waits for the scorer. A <strong>?</strong> under Max means it cannot be worked
+        out yet{settings.confidenceMode ? ' — until the deadline reveals a player’s confidence weights' : ''}.
         {majorityMode !== 'OFF' && (
           <> <strong>Majority</strong> is the share of
           this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
