@@ -38,8 +38,12 @@ export function settlementResumable(
   return !VOIDED.has(status);
 }
 
-export function poolIsOver(pool: { status?: unknown; closedVia?: unknown; finalizedAt?: unknown } | null | undefined): boolean {
-  if (!pool) return true;
+/** The lifecycle fields read here; any pool shape may be passed (Playoff pools carry none of them). */
+type Lifecycle = { status?: unknown; closedVia?: unknown; finalizedAt?: unknown };
+
+export function poolIsOver(input: object | null | undefined): boolean {
+  if (!input) return true;
+  const pool = input as Lifecycle;
   const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
   return VOIDED.has(status)
     || (pool.closedVia !== undefined && pool.closedVia !== null)

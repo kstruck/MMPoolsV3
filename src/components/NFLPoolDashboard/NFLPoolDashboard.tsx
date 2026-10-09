@@ -1119,7 +1119,7 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
           ) : (
             <>
               {/* PLAN-SPLIT-POT-SETTLEMENT: above every tab, for every viewer. */}
-              <SettledBanner settlement={(pool as any).settlement} />
+              <SettledBanner settlement={'settlement' in pool ? pool.settlement : undefined} />
 
               {/* TAB 0: BENTO DASHBOARD OVERVIEW */}
               {activeTab === 'dashboard' && (

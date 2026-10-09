@@ -13,6 +13,7 @@ import { sendEmail } from "./reminders";
 import { settlementEmail } from "./lib/settlementEmail";
 import {
     settlementPhase,
+    type SettleablePool,
     aliveSetMismatch,
     settlementMoney,
     rebuyDuesOf,
@@ -45,6 +46,11 @@ import type { AuditLogEvent, User } from "./types";
  * committed (and only then — a natural season end is refused); the FOLLOW_UP phase completes the Super-Admin audit and
  * the member emails after the flip committed (`lib/settlement.ts`).
  */
+/** A Firestore document as read: shape unknown until a field is narrowed. */
+type Doc = Record<string, unknown>;
+/** An entry document with its id; only the fields this file reads are named. */
+type EntryRow = Doc & { id: string; status?: unknown; entryName?: unknown; userName?: unknown };
+
 export const settlePool = validated(
     { schema: settlePoolSchema, label: "settlePool", appCheck: "monitor" },
     async (input, request) => {
@@ -56,7 +62,7 @@ export const settlePool = validated(
         const poolRef = db.collection("pools").doc(poolId);
         const snap = await poolRef.get();
         if (!snap.exists) throw new HttpsError("not-found", "Pool not found.");
-        const pool = { id: snap.id, ...snap.data() } as Record<string, any>;
+        const pool: Doc = { id: snap.id, ...snap.data() };
 
         // D2: owner / managerUid / SUPER_ADMIN — never a co-commissioner. Same gate
         // as cancelPool and closePool: this records who the money goes to.
@@ -186,11 +192,10 @@ async function claimFollowUp(
 async function buildPreview(
     db: admin.firestore.Firestore,
     poolRef: admin.firestore.DocumentReference,
-    pool: Record<string, any>,
+    pool: Doc,
 ): Promise<SettlementPreview> {
     const entriesSnap = await poolRef.collection("entries").get();
-    const entries: Array<Record<string, any> & { id: string }> =
-        entriesSnap.docs.map(d => ({ ...(d.data() as Record<string, any>), id: d.id }));
+    const entries: EntryRow[] = entriesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
     const alive = entries.filter(e => e.status !== "ELIMINATED").sort((a, b) => a.id.localeCompare(b.id));
     const membersSnap = await poolRef.collection("members").get();
     const ranked = computeFinalRanks("NFL_SURVIVOR", entries);
@@ -257,7 +262,7 @@ async function runFullSettlement(
     // written until the winners are validated below (codex code-review r5: a
     // refused attempt must leave no state behind).
     const underLease = (await poolRef.get()).data() ?? {};
-    const phaseNow = settlementPhase(underLease as any);
+    const phaseNow = settlementPhase(underLease as SettleablePool);
     if (phaseNow.kind !== "FULL") throw refusal(phaseNow.kind === "REFUSE" ? phaseNow.code : "ALREADY_SETTLED");
 
     // Step 6 — the ALIVE set, read AFTER the lease is held. Picks and rebuys are
@@ -265,8 +270,7 @@ async function runFullSettlement(
     // the finalizer's own definition (`status !== 'ELIMINATED'`), so the set
     // checked here is exactly the set it will rank 1st.
     const entriesSnap = await poolRef.collection("entries").get();
-    const entries: Array<Record<string, any> & { id: string }> =
-        entriesSnap.docs.map(d => ({ ...(d.data() as Record<string, any>), id: d.id }));
+    const entries: EntryRow[] = entriesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
     const alive = entries.filter(e => e.status !== "ELIMINATED");
     const mismatch = aliveSetMismatch(args.entryIds, alive.map(e => e.id));
     if (mismatch === "NO_SURVIVORS") {

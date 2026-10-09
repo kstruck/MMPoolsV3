@@ -195,8 +195,8 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
               className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 transition-ui"
             />
           </div>
-          <label className="flex items-center gap-2 font-body text-[12px] text-[color:var(--text)] cursor-pointer">
-            <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
+          <label htmlFor="settle-notify-members" className="flex items-center gap-2 font-body text-[12px] text-[color:var(--text)] cursor-pointer">
+            <input id="settle-notify-members" type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
             Email every member that the pool is over
           </label>
           <div className="flex justify-end">

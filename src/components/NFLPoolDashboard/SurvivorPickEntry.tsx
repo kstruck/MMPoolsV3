@@ -194,11 +194,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
 
   // PLAN-SPLIT-POT-SETTLEMENT §2.4: a settled, cancelled or finalized pool
   // offers no pick and no rebuy (the server refuses both with POOL_OVER).
-  const over = poolIsOver(pool as any);
+  const over = poolIsOver(pool);
 
   // Check if eligible for rebuy
-  const canRebuy = useMemo(() => {
-    if (over) return false;
+  const rebuyEligible = useMemo(() => {
     if (!entry) return false;
     if (entry.status !== 'ELIMINATED') return false;
     // The SERVER's comparison, not a client default: `?? 4` here hid the
@@ -206,7 +205,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     // accepted all season (codex r2 on this PR).
     if (rebuyDeadlinePassed(week, { rebuyDeadlineWeek })) return false;
     return (entry.rebuysUsed ?? 0) < maxRebuys;
-  }, [over, entry, week, rebuyDeadlineWeek, maxRebuys]);
+  }, [entry, week, rebuyDeadlineWeek, maxRebuys]);
+  const canRebuy = !over && rebuyEligible;
 
   const handleTeamSelect = (teamAbbreviation: string, game: NFLGame) => {
     if (over || isGameLocked(game) || (entry && entry.status === 'ELIMINATED')) return;

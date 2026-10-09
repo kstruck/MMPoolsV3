@@ -16,6 +16,14 @@ import { proxyPick, cancelPool, closePool } from '../../poolExceptions';
  * member once, and refuse every play path afterwards.
  */
 
+/** What the callable returns, as far as these tests read it. */
+interface SettleResult {
+  success: boolean;
+  emailed: number;
+  emailFailed: number;
+  preview?: unknown;
+}
+
 const test = ftest();
 const db = admin.firestore();
 const wSettle = test.wrap(settlePool);
@@ -33,7 +41,7 @@ const CO = 'st-co';
 const SEASON = 'st-2099';
 const GAME = 'st-g5';
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
-const auth = (uid: string) => ({ uid, token: { email: `${uid}@example.com` } }) as any;
+const auth = (uid: string) => ({ uid, token: { email: `${uid}@example.com` } }) as never;
 
 let n = 0;
 let POOL = '';
@@ -71,7 +79,7 @@ async function seed(extra: Record<string, unknown> = {}) {
 }
 
 const settle = (uid = HOST, data: Record<string, unknown> = {}) =>
-  wSettle({ data: { poolId: POOL, outcome: 'SPLIT', entryIds: [BOB, ALICE], ...data }, auth: auth(uid) } as never) as Promise<any>;
+  wSettle({ data: { poolId: POOL, outcome: 'SPLIT', entryIds: [BOB, ALICE], ...data }, auth: auth(uid) } as never) as Promise<SettleResult>;
 
 beforeEach(async () => {
   for (const uid of [HOST, ALICE, BOB, CAROL, DAN, NEWBIE, CO]) {
@@ -121,7 +129,7 @@ describe('settlePool — a full settlement', () => {
     expect(p.settlement.emailedAt).toBeTruthy();
 
     // The unchanged finalizer: both survivors rank 1 and share the pot.
-    const byEntry = Object.fromEntries((p.seasonPlaces as any[]).map(r => [r.entryId, r]));
+    const byEntry = Object.fromEntries((p.seasonPlaces as Array<{ entryId: string; rank: number; prize?: number }>).map(r => [r.entryId, r]));
     expect(byEntry[ALICE]).toMatchObject({ rank: 1, prize: 50 });
     expect(byEntry[BOB]).toMatchObject({ rank: 1, prize: 50 });
     expect(byEntry[CAROL].rank).toBe(3);
@@ -219,7 +227,7 @@ describe('settlePool — read-only preview (codex code-review r1 P1)', () => {
   it('returns every ALIVE entry doc — including one standings would show as unscored — with the exact money, and writes nothing', async () => {
     await seed();
     const before = JSON.stringify(await poolDoc());
-    const res = await wSettle({ data: { poolId: POOL, outcome: 'SPLIT', preview: true }, auth: auth(HOST) } as never) as any;
+    const res = await wSettle({ data: { poolId: POOL, outcome: 'SPLIT', preview: true }, auth: auth(HOST) } as never) as SettleResult;
     expect(res.preview).toEqual({
       alive: [{ id: ALICE, name: ALICE }, { id: BOB, name: BOB }],
       pot: 100, prizePerEntry: 50, entryCount: 4, rebuyDuesExcluded: 0,

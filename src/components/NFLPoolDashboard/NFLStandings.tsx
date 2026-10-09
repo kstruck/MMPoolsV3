@@ -324,7 +324,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">
                               {/* A settled pool's survivors are its co-champions
                                   (PLAN-SPLIT-POT-SETTLEMENT §2.4). */}
-                              <Heart size={8} className="fill-[#0F7B4A]/20" /> {(pool as any).settlement ? 'Co-champion' : 'Alive'}
+                              <Heart size={8} className="fill-[#0F7B4A]/20" /> {'settlement' in pool && pool.settlement ? 'Co-champion' : 'Alive'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-brandred-600/10 border border-brandred-600/30 font-display font-bold text-[10px] text-brandred-600 uppercase tracking-[0.08em]">
