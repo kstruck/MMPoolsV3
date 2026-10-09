@@ -31,6 +31,7 @@ import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shar
 import { extensionRefusal } from "./lib/publishedWeeks";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { nflLockMode } from "./shared/nflLockMode";
+import { assertPoolAcceptsPlay, poolIsOver } from "./lib/settlement";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -310,6 +311,9 @@ export const proxyPick = validated(
         await assertNoScoringInProgress(transaction, poolRef, now);
         const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
         if (!poolInTx) throw new HttpsError("not-found", "Pool not found.");
+        // PLAN-SPLIT-POT-SETTLEMENT §2.3 (review r2 #1): proxyPick has its OWN
+        // transaction, so the submit core's guard does not cover it.
+        assertPoolAcceptsPlay(poolInTx);
         // Entry n of the target (lib/multiEntry.ts): same resolution, same cap
         // as the member's own submit — a commissioner cannot proxy a fourth
         // entry into a three-entry pool.
@@ -569,13 +573,36 @@ export const cancelPool = validated(
     if (pool.status === "CANCELED") {
         throw new HttpsError("failed-precondition", "This pool has already been canceled.");
     }
+    if (poolIsOver(pool)) {
+        throw new HttpsError("failed-precondition", "POOL_OVER: This pool is already over and cannot be canceled.");
+    }
 
     const now = Date.now();
-    await poolRef.update({
-        status: "CANCELED",
-        cancelledAt: now,
-        cancelReason: reason,
-    });
+    // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
+    // SETTLEMENT, codex code-review r4). A settlement runs the season finalizer
+    // under the lease and writes champion season-history rows BEFORE it flips the
+    // pool; a plain update landing in that gap left those rows on a pool that then
+    // reads as cancelled/closed. The same gap existed against the regular scorer.
+    // Now a live lease bounces this write (retried briefly), and a lifecycle
+    // write that commits first makes the settlement's next fenced write refuse.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        await assertNoScoringInProgress(tx, poolRef, Date.now());
+        const fresh = (await tx.get(poolRef)).data();
+        if (fresh?.status === "CANCELED") {
+            throw new HttpsError("failed-precondition", "This pool has already been canceled.");
+        }
+        // qodo #1 on #715: an over pool (settled, closed, finalized) cannot be
+        // cancelled — that would overwrite a settlement and email members a
+        // cancellation for a pool that already ended.
+        if (poolIsOver(fresh)) {
+            throw new HttpsError("failed-precondition", "POOL_OVER: This pool is already over and cannot be canceled.");
+        }
+        tx.update(poolRef, {
+            status: "CANCELED",
+            cancelledAt: now,
+            cancelReason: reason,
+        });
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,
@@ -631,7 +658,27 @@ export const closePool = validated(
     }
 
     const now = Date.now();
-    await poolRef.update(adminCloseUpdate(now));
+    // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
+    // SETTLEMENT, codex code-review r4). A settlement runs the season finalizer
+    // under the lease and writes champion season-history rows BEFORE it flips the
+    // pool; a plain update landing in that gap left those rows on a pool that then
+    // reads as cancelled/closed. The same gap existed against the regular scorer.
+    // Now a live lease bounces this write (retried briefly), and a lifecycle
+    // write that commits first makes the settlement's next fenced write refuse.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        await assertNoScoringInProgress(tx, poolRef, Date.now());
+        const fresh = (await tx.get(poolRef)).data();
+        if (isTerminalStatus(fresh?.status as string | undefined)) {
+            throw new HttpsError("failed-precondition", `This pool is already ${fresh?.status} and cannot be closed.`);
+        }
+        // qodo #1 on #715: a settlement interrupted between finalize and flip is
+        // resumed by settlePool; an admin close here would strand it. A naturally
+        // finalized pool can still be closed (the Super-Admin tidy-up flow).
+        if (fresh?.finalizedVia === "SETTLED") {
+            throw new HttpsError("failed-precondition", "SETTLEMENT_IN_PROGRESS: Finish the split-pot settlement from the Manager tab instead.");
+        }
+        tx.update(poolRef, adminCloseUpdate(now));
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,

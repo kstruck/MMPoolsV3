@@ -30,6 +30,8 @@ import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 import { ConfirmActionModal } from '../admin/ConfirmActionModal';
+import { SettlePoolPanel } from './SettlePoolPanel';
+import { poolIsOver, settlementFollowUpOwed, settlementResumable } from '../../utils/poolIsOver';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
 import { NFL_KICKOFF_MS } from '../../config/season';
@@ -2189,10 +2191,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               )}
             </div>
 
+            {/* ── End the pool, split the pot ── PLAN-SPLIT-POT-SETTLEMENT §2.4.
+                Survivor only, and owner-only for the same reason as Cancel below:
+                `settlePool` refuses a co-commissioner server-side (D2). Hidden once
+                the pool is over by any route — the callable would refuse anyway —
+                EXCEPT a settled pool that still owes its follow-up (a failed
+                email or audit): the panel then offers the retry (codex r3) — and a
+                settlement interrupted between finalize and flip, which the server
+                resumes as a full settlement (codex r7). */}
+            {viewerIsOwner && type === 'NFL_SURVIVOR' && (!poolIsOver(castPool) || settlementResumable(castPool) || settlementFollowUpOwed(castPool.settlement)) && (
+              <SettlePoolPanel pool={pool} />
+            )}
+
             {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):
                 `cancelPool` refuses a co-commissioner server-side, so do not walk them
                 through two destructive confirmations into a permission error. */}
-            {viewerIsOwner && (
+            {viewerIsOwner && !poolIsOver(castPool) && (
             <div className="bg-brandred-600/5 border border-brandred-600/25 rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Ban size={14} className="text-brandred-600" />

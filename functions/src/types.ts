@@ -281,6 +281,9 @@ export type AuditEventType =
     | 'PROXY_PICK_SUBMITTED'
     | 'POOL_CANCELED'
     | 'POOL_CLOSED'
+    // PLAN-SPLIT-POT-SETTLEMENT: written in the same transaction as the flip,
+    // payload {winners, prizePerEntry, pot, rebuyDuesExcluded, throughWeek}.
+    | 'POOL_SETTLED'
     // PLAN-CO-COMMISSIONERS D2: {op, uid, before, after, revision} — the pool's own
     // audit trail, not admin_audit (that is the SUPER_ADMIN actor log).
     | 'CO_COMMISSIONER_CHANGED'

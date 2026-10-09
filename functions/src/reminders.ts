@@ -21,6 +21,7 @@ import {
 import { nflReminderTier, nflNonPickerUids } from "./lib/nflNonPickers";
 import { usesWeeklyLock, gameHasStarted } from "./shared/nflLockMode";
 import type { MemberRecord } from "./shared/memberRecord";
+import { poolIsOver, type SettleablePool } from "./lib/settlement";
 
 
 
@@ -933,7 +934,10 @@ export async function checkNFLNonPickerReminders(
     tally?: DeliveryTally,
 ) {
     try {
-        if (!pool.season || pool.status === 'archived') return;
+        // PLAN-SPLIT-POT-SETTLEMENT (codex code-review r9): a pool that is over —
+        // settled, cancelled, closed or finalized — takes no picks, so it gets no
+        // "you haven't picked" email. `poolIsOver` covers lowercase `archived`.
+        if (!pool.season || poolIsOver(pool as SettleablePool)) return;
 
         // --- 1. Determine the current week ---
         // Shared across every pool in this run — see getWeekContext.

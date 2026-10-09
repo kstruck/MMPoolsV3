@@ -227,6 +227,15 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
     related: ['pool'],
   },
   {
+    id: 'settlement',
+    term: 'Split pot',
+    short: 'A Survivor pool that ended early because the players still alive agreed to share the pot.',
+    long: 'When the last players standing agree to split the pot, the commissioner can end the pool there. Everyone still alive shares 1st place and is recorded as a co-champion, and the 1st place prize is divided evenly between them.\n\nThe pool is then over: nobody can make another pick, use a rebuy, or join. Money is still settled between the commissioner and the players.',
+    contextHeading: 'Settlement (split pot)',
+    audience: ['member', 'commissioner', 'admin'],
+    related: ['pool-lifecycle-state'],
+  },
+  {
     id: 'roster',
     term: 'Roster',
     short: 'Everyone in one pool, with what each owes and whether they have paid.',
