@@ -109,6 +109,33 @@ describe("tallyGridRow — another player's row", () => {
         expect(t).toMatchObject({ earned: 16, max: 30 });
     });
 
+    it('confidence with every saved pick already revealed is exact even though other cells are hidden (codex)', () => {
+        // Set says 2 picks and both are revealed; g3–g5 are hidden but hold no pick.
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: cells(pick('W', 16), pick('L', 15), HIDDEN, HIDDEN, HIDDEN),
+            setCount: 2, revealMode: 'WEEK', isOwnRow: false, confidenceMode: true,
+        });
+        expect(t).toMatchObject({ earned: 16, max: 16 });
+        expect(t.maxUnknown).toBeUndefined();
+    });
+
+    it('confidence, a player with no picks at all: Max is exactly 0, not "?"', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: cells(HIDDEN, HIDDEN, HIDDEN, HIDDEN, HIDDEN),
+            setCount: 0, revealMode: 'WEEK', isOwnRow: false, confidenceMode: true,
+        });
+        expect(t.max).toBe(0);
+    });
+
+    it('a hidden FINAL game stays counted: the reveal can lag the game, and that pick may already be a win', () => {
+        const slate = [game('f1', 'FINAL')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        });
+        expect(t.max).toBe(1);
+    });
+
     it('the Set count has not arrived: "?", never a guess', () => {
         const t = tallyGridRow({
             weekGames: GAMES, cells: cells(pick('W'), HIDDEN, HIDDEN, HIDDEN, HIDDEN),

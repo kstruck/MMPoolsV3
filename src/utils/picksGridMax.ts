@@ -104,14 +104,24 @@ export function tallyGridRow(args: {
         if (revealMode === undefined || setCount === undefined) {
             return { ...tally, max: null, maxUnknown: 'COUNT_UNKNOWN' };
         }
-        // Standard scoring prices every unrevealed pick at exactly 1, so the
-        // answer is exact. Confidence weights are unknowable until revealed.
-        if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN' };
-        // A stale count smaller than what is already revealed clamps to 0, and the
-        // unrevealed picks cannot outnumber the hidden games that can still pay —
-        // which keeps Max an UPPER bound even when we cannot see which hidden
-        // game a pick sits on.
-        remaining += Math.min(Math.max(0, setCount - revealedPicks), hiddenLive);
+        // How many saved picks are still unrevealed. A stale count smaller than
+        // what is already revealed clamps to 0.
+        const unrevealed = Math.max(0, setCount - revealedPicks);
+        // Confidence weights are unknowable until revealed — but only matter if
+        // there IS an unrevealed pick: when the server's count equals the revealed
+        // picks (including a player with none), nothing hidden can contribute and
+        // the answer is exact.
+        if (confidenceMode && unrevealed > 0) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN' };
+        // Standard scoring prices every unrevealed pick at exactly 1. They cannot
+        // outnumber the hidden games that can still pay, which keeps Max an UPPER
+        // bound even though we cannot see which hidden game a pick sits on.
+        //
+        // ⚠️ A hidden FINAL game stays counted ON PURPOSE (codex asked to drop
+        // it): a reveal can lag the game document, and that hidden pick may
+        // already be a win. Dropping it could put Max BELOW the player's real
+        // score; counting it can only leave Max one point high until the reveal
+        // lands, which an upper bound is allowed to be.
+        if (!confidenceMode) remaining += Math.min(unrevealed, hiddenLive);
     }
 
     return { ...tally, max: earned + remaining };
