@@ -108,3 +108,15 @@ review continues on the PR diff (`codex exec review --base origin/main`).
 | # | Sev | Finding | Verified? | Verdict | Response |
 |---|---|---|---|---|---|
 | 1 | P1 | A settlement interrupted after the finalizer and before the flip (`finalizedVia: 'SETTLED'`, no `settlement`) is resumable server-side, but `poolIsOver` hid the only panel that could resume it. | **Yes** — same family as round 3 #2, a state the server handles and the UI could not reach. | **ACCEPTED** | `settlementResumable(pool)` added to the panel's render condition; in that state the panel's preview and submit run the FULL phase as normal. Unit-tested. |
+
+## Code round 8 — HEAD `0ce86a6b` — CLEAN ("No discrete correctness issues")
+
+Then lint: +15 warnings on added lines (typed `any` casts, an unlinked checkbox
+label, a React-compiler memo warning). Fixed to a delta of zero (1855 = the
+`origin/main` baseline) in `1fd9fed7`; that new code earned another round.
+
+## Code round 9 — HEAD `1fd9fed7` — 1 finding
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P2 | The scheduled "you haven't picked" reminder (`checkNFLNonPickerReminders`) skipped only `status === 'archived'`, so members of a settled pool would still be told to pick. | **Yes** — `reminders.ts:936`; it is the only reminder path NFL pools run (`:226`). | **ACCEPTED** | Gate is `poolIsOver(pool)` (settled, cancelled, closed, finalized, any-case archived). Tests: no mail and no notification for each of the four. |
