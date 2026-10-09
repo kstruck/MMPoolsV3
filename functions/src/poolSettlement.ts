@@ -105,7 +105,10 @@ export const settlePool = validated(
         // overlapping retries cannot both run it. A lost claim is not an error:
         // another attempt is doing, or has done, that step.
         let adminAuditFailed = false;
-        if (owed.adminAudit && await claimFollowUp(db, poolRef, "adminAudit")) {
+        let auditBusy = false;
+        const auditClaimed = owed.adminAudit ? await claimFollowUp(db, poolRef, "adminAudit") : false;
+        if (owed.adminAudit && !auditClaimed) auditBusy = true;
+        if (auditClaimed) {
             // `writeAdminAudit` returns false rather than throwing when it cannot
             // persist (codex code-review r3): stamp only on success, otherwise
             // release the claim so the follow-up stays owed and retryable.
@@ -123,7 +126,9 @@ export const settlePool = validated(
                     rebuyDuesExcluded: settlement.rebuyDuesExcluded,
                 },
                 status: "success",
-            });
+            // qodo #3 on #715: ONE record per settlement. A retry after a lost
+            // `adminAuditedAt` stamp finds this id and is a no-op success.
+            }, { id: `pool-settled-${poolId}-${settlement.settledAt}` });
             adminAuditFailed = !audited;
             await poolRef.update(audited
                 ? { "settlement.adminAuditedAt": Date.now() }
@@ -140,13 +145,17 @@ export const settlePool = validated(
         // Uids, never addresses: the pool document is readable by its members.
         let emailed = 0;
         let emailFailed = 0;
-        if (owed.email && await claimFollowUp(db, poolRef, "email")) {
+        // qodo #4 on #715: say when another attempt holds a step, so the panel
+        // does not report "Done." for work this call did not do.
+        let followUpInProgress = false;
+        const emailClaimed = owed.email ? await claimFollowUp(db, poolRef, "email") : false;
+        if (auditBusy || (owed.email && !emailClaimed)) followUpInProgress = true;
+        if (emailClaimed) {
             const { subject, html } = settlementEmail(String(pool.name || "Your pool"), settlement);
             // The roster as it stands AFTER the flip (codex code-review r2 P2): a
             // member who joined between the first read and the lease is on it.
             const fresh = (await poolRef.get()).data() ?? {};
             const done = new Set<string>(Array.isArray(fresh.settlement?.notifiedUids) ? fresh.settlement.notifiedUids : []);
-            const newlyDone: string[] = [];
             for (const { uid: memberUid, email } of await settlementRecipients(db, poolRef, fresh.participantIds)) {
                 if (done.has(memberUid)) continue;
                 const outcome = email
@@ -154,17 +163,18 @@ export const settlePool = validated(
                     : "skipped";
                 if (outcome === "failed") { emailFailed++; continue; }
                 if (outcome === "queued") emailed++;
-                newlyDone.push(memberUid);
+                // Recorded per recipient, as it happens (qodo #4 on #715): a crash
+                // mid-loop re-sends at most the one email in flight, not the batch.
+                await poolRef.update({ "settlement.notifiedUids": FieldValue.arrayUnion(memberUid) });
             }
             await poolRef.update({
-                ...(newlyDone.length > 0 ? { "settlement.notifiedUids": FieldValue.arrayUnion(...newlyDone) } : {}),
                 ...(emailFailed === 0
                     ? { "settlement.emailedAt": Date.now() }
                     : { "settlement.emailClaimedAt": FieldValue.delete() }),
             });
         }
 
-        return { success: true, settlement, emailed, emailFailed, adminAuditFailed };
+        return { success: true, settlement, emailed, emailFailed, adminAuditFailed, followUpInProgress };
     },
 );
 

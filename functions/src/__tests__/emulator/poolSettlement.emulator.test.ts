@@ -324,3 +324,39 @@ describe('cancel / close respect the scoring lease (codex code-review r4)', () =
     expect((await poolDoc()).status).toBe('CANCELED');
   });
 });
+
+describe('qodo review of #715', () => {
+  it('#1 a settled pool cannot be cancelled (no overwrite, no cancellation email)', async () => {
+    await seed();
+    await settle(HOST, { notifyMembers: false });
+    await expect(wCancel({ data: { poolId: POOL, reason: 'changed my mind' }, auth: auth(HOST) } as never))
+      .rejects.toThrow(/POOL_OVER/);
+    const p = await poolDoc();
+    expect(p.status).toBe('COMPLETED');
+    expect(p.closedVia).toBe('SETTLED');
+  });
+
+  it('#1 an interrupted settlement cannot be admin-closed out from under its resume', async () => {
+    await seed({ finalizedVia: 'SETTLED', finalizedAt: admin.firestore.Timestamp.now() });
+    await expect(wClose({ data: { poolId: POOL }, auth: auth(HOST) } as never)).rejects.toThrow(/SETTLEMENT_IN_PROGRESS/);
+  });
+
+  it('#3 the Super-Admin audit row has one stable id per settlement', async () => {
+    await seed();
+    await settle(HOST, { notifyMembers: false });
+    const s = (await poolDoc()).settlement;
+    const doc = await db.collection('admin_audit').doc(`pool-settled-${POOL}-${s.settledAt}`).get();
+    expect(doc.exists).toBe(true);
+  });
+
+  it('#10 more than 50 survivors can still be settled', async () => {
+    await seed();
+    const many = Array.from({ length: 60 }, (_, i) => `st-many-${i}`);
+    for (const id of many) {
+      await poolRef().collection('entries').doc(id).set({ id, poolId: POOL, ownerUid: id, userName: id, status: 'ALIVE', strikesUsed: 0 });
+    }
+    const res = await settle(HOST, { entryIds: [ALICE, BOB, ...many], notifyMembers: false });
+    expect(res.success).toBe(true);
+    expect((await poolDoc()).settlement.entryIds).toHaveLength(62);
+  });
+});

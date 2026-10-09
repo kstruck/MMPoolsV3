@@ -27,7 +27,7 @@ export const SettledBanner: React.FC<{ settlement: PoolSettlement | undefined | 
         <p className="font-display font-bold uppercase text-[13px] tracking-[0.06em] text-[color:var(--text)]">
           Pool over — the pot was split
         </p>
-        <p className="font-body text-sm text-[color:var(--text)]">
+        <p className="font-body text-sm text-[color:var(--text)] num">
           {names} agreed to split the pot{week} and share 1st place
           {typeof settlement.prizePerEntry === 'number' ? <>, ${settlement.prizePerEntry} each</> : null}.
           No more picks can be made.

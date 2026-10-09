@@ -1993,10 +1993,10 @@ export const dbService = {
     // PLAN-SPLIT-POT-SETTLEMENT: end a Survivor pool because the remaining
     // players agreed to split the pot. Owner/manager only, enforced server-side;
     // `entryIds` must be exactly the ALIVE entries the panel showed.
-    settlePool: async (input: { poolId: string; entryIds: string[]; note?: string; notifyMembers: boolean }): Promise<{ settlement: PoolSettlement; emailed: number; emailFailed: number; adminAuditFailed: boolean }> => {
-        const fn = httpsCallable<Record<string, unknown>, { success: boolean; settlement: PoolSettlement; emailed: number; emailFailed?: number; adminAuditFailed?: boolean }>(functions, 'settlePool');
+    settlePool: async (input: { poolId: string; entryIds: string[]; note?: string; notifyMembers: boolean }): Promise<{ settlement: PoolSettlement; emailed: number; emailFailed: number; adminAuditFailed: boolean; followUpInProgress: boolean }> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; settlement: PoolSettlement; emailed: number; emailFailed?: number; adminAuditFailed?: boolean; followUpInProgress?: boolean }>(functions, 'settlePool');
         const res = await fn(withCorrelationId({ ...input, outcome: 'SPLIT' }));
-        return { settlement: res.data.settlement, emailed: res.data.emailed, emailFailed: res.data.emailFailed ?? 0, adminAuditFailed: res.data.adminAuditFailed === true };
+        return { settlement: res.data.settlement, emailed: res.data.emailed, emailFailed: res.data.emailFailed ?? 0, adminAuditFailed: res.data.adminAuditFailed === true, followUpInProgress: res.data.followUpInProgress === true };
     },
 
     // Read-only: who is still alive and what the settlement would record —

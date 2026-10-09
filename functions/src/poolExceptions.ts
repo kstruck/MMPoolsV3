@@ -31,7 +31,7 @@ import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shar
 import { extensionRefusal } from "./lib/publishedWeeks";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { nflLockMode } from "./shared/nflLockMode";
-import { assertPoolAcceptsPlay } from "./lib/settlement";
+import { assertPoolAcceptsPlay, poolIsOver } from "./lib/settlement";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -573,6 +573,9 @@ export const cancelPool = validated(
     if (pool.status === "CANCELED") {
         throw new HttpsError("failed-precondition", "This pool has already been canceled.");
     }
+    if (poolIsOver(pool)) {
+        throw new HttpsError("failed-precondition", "POOL_OVER: This pool is already over and cannot be canceled.");
+    }
 
     const now = Date.now();
     // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
@@ -587,6 +590,12 @@ export const cancelPool = validated(
         const fresh = (await tx.get(poolRef)).data();
         if (fresh?.status === "CANCELED") {
             throw new HttpsError("failed-precondition", "This pool has already been canceled.");
+        }
+        // qodo #1 on #715: an over pool (settled, closed, finalized) cannot be
+        // cancelled — that would overwrite a settlement and email members a
+        // cancellation for a pool that already ended.
+        if (poolIsOver(fresh)) {
+            throw new HttpsError("failed-precondition", "POOL_OVER: This pool is already over and cannot be canceled.");
         }
         tx.update(poolRef, {
             status: "CANCELED",
@@ -661,6 +670,12 @@ export const closePool = validated(
         const fresh = (await tx.get(poolRef)).data();
         if (isTerminalStatus(fresh?.status as string | undefined)) {
             throw new HttpsError("failed-precondition", `This pool is already ${fresh?.status} and cannot be closed.`);
+        }
+        // qodo #1 on #715: a settlement interrupted between finalize and flip is
+        // resumed by settlePool; an admin close here would strand it. A naturally
+        // finalized pool can still be closed (the Super-Admin tidy-up flow).
+        if (fresh?.finalizedVia === "SETTLED") {
+            throw new HttpsError("failed-precondition", "SETTLEMENT_IN_PROGRESS: Finish the split-pot settlement from the Manager tab instead.");
         }
         tx.update(poolRef, adminCloseUpdate(now));
     }));

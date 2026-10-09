@@ -104,7 +104,9 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
         entryIds: settled.entryIds,
         notifyMembers: settled.notifyMembers,
       });
-      if (res.emailFailed > 0 || res.adminAuditFailed) {
+      if (res.followUpInProgress) {
+        toast.error('Another attempt is already finishing this. Check back in a few minutes.');
+      } else if (res.emailFailed > 0 || res.adminAuditFailed) {
         toast.error(`Still not finished: ${res.emailFailed} email(s) failed${res.adminAuditFailed ? ' and the audit record could not be written' : ''}. Try again later.`);
       } else {
         toast.success(res.emailed > 0 ? `Done. Emailed ${res.emailed} more member(s).` : 'Done.');
@@ -166,7 +168,7 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
       ) : (
         <>
           <div className="bg-page border border-line rounded-md p-3 space-y-1">
-            <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted">
+            <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted num">
               Sharing 1st place ({preview.alive.length})
             </p>
             <p className="font-body text-sm text-[color:var(--text)]">{joinNames(names)}</p>
@@ -177,7 +179,7 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
                     {preview.prizePerEntry !== null ? <>Recorded as ${preview.prizePerEntry} each.</> : <>The per-player amount is not priced.</>}</>
                 : <>This pool has no priced pot, so no amount is recorded.</>}
             </p>
-            <p className="font-body text-[11px] text-faint">
+            <p className="font-body text-[11px] text-faint num">
               {preview.rebuyDuesExcluded > 0
                 ? <>${preview.rebuyDuesExcluded} of rebuy dues are NOT part of this pot. </>
                 : <>Rebuy dues are not part of the pot. </>}
@@ -195,7 +197,7 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
               className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 transition-ui"
             />
           </div>
-          <label htmlFor="settle-notify-members" className="flex items-center gap-2 font-body text-[12px] text-[color:var(--text)] cursor-pointer">
+          <label htmlFor="settle-notify-members" className="flex items-center gap-2 font-display font-bold uppercase text-[11px] tracking-[0.08em] text-[color:var(--text)] cursor-pointer">
             <input id="settle-notify-members" type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
             Email every member that the pool is over
           </label>

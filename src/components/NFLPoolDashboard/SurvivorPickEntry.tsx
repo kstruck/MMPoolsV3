@@ -400,7 +400,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
           Your {nflWeekLabel(poolSeasonType(pool), week)} pick is saved: {savedPick}.
-          {isSelectionLocked ? ' Picks are locked for this week.' : ' You can change it until lock.'}
+          {over ? ' This pool is over.' : isSelectionLocked ? ' Picks are locked for this week.' : ' You can change it until lock.'}
         </div>
       )}
 
@@ -471,7 +471,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     selected={selectedTeam === awayAbbrev}
                     saved={savedPick === awayAbbrev}
                     outcome={savedPick === awayAbbrev ? outcome : null}
-                    disabled={locked || blockedTeams.has(awayAbbrev) || isEliminated}
+                    disabled={over || locked || blockedTeams.has(awayAbbrev) || isEliminated}
                     badge={usedBadgeLabel(awayAbbrev)}
                     title={pickHighlightLabel(selectedTeam === awayAbbrev, savedPick === awayAbbrev) || undefined}
                     onSelect={() => handleTeamSelect(awayAbbrev, game)}
@@ -511,7 +511,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     selected={selectedTeam === homeAbbrev}
                     saved={savedPick === homeAbbrev}
                     outcome={savedPick === homeAbbrev ? outcome : null}
-                    disabled={locked || blockedTeams.has(homeAbbrev) || isEliminated}
+                    disabled={over || locked || blockedTeams.has(homeAbbrev) || isEliminated}
                     badge={usedBadgeLabel(homeAbbrev)}
                     title={pickHighlightLabel(selectedTeam === homeAbbrev, savedPick === homeAbbrev) || undefined}
                     onSelect={() => handleTeamSelect(homeAbbrev, game)}

@@ -23,7 +23,9 @@ export const settlePoolSchema = z.strictObject({
      * from a roster-only member, so the client must not derive the set).
      */
     preview: z.boolean().optional(),
-    entryIds: z.array(z.string().min(1).max(100)).min(1).max(50).optional(),
+    // Bounded generously, not at 50 (qodo #10 on #715): the server requires the
+    // WHOLE alive set, so a cap below the largest field makes big pools unsettleable.
+    entryIds: z.array(z.string().min(1).max(100)).min(1).max(2000).optional(),
     note: z.string().trim().max(500).optional(),
     notifyMembers: z.boolean().default(true),
 }).refine((d) => d.preview === true || (d.entryIds?.length ?? 0) > 0, {
