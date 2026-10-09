@@ -104,10 +104,22 @@ export async function sendEmail(
                 // BUT the mail extension stamps `delivery.state: 'ERROR'` when it
                 // gave up, and that mail never reached anyone (qodo #2 on #720):
                 // treating it as done would stamp the member notified for ever.
-                // Overwrite it, which drops `delivery` so the extension sends it anew.
+                // DELETE it and CREATE it afresh rather than overwrite: whether the
+                // extension reacts to an update is not something this code can
+                // verify (codex), but a brand-new document is a create under any
+                // trigger. Not atomic, and it need not be — a crash between the two
+                // leaves no document, and the next retry simply creates it.
                 const existing = (await mailRef.get()).data() as { delivery?: { state?: string } } | undefined;
                 if (existing?.delivery?.state === 'ERROR') {
-                    await mailRef.set(mailDoc);
+                    await mailRef.delete();
+                    try {
+                        await mailRef.create(mailDoc);
+                    } catch (recreateError) {
+                        const recreateCode = (recreateError as { code?: unknown }).code;
+                        if (recreateCode !== 6 && recreateCode !== 'already-exists') throw recreateError;
+                        // A concurrent attempt re-created it between the delete and here.
+                        return recordDelivery(tally, 'skipped');
+                    }
                     console.log(`Email to ${to} had failed delivery (${idempotencyKey}); re-queued`);
                     return recordDelivery(tally, 'queued');
                 }

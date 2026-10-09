@@ -11,10 +11,10 @@ import { settlementMailKey } from '../lib/settlement';
 function stubDb(createImpl: (data: unknown) => Promise<unknown>, existing?: Record<string, unknown>) {
     const create = vi.fn(createImpl);
     const add = vi.fn(async () => ({ id: 'auto' }));
-    const set = vi.fn<(data: unknown) => Promise<undefined>>(async () => undefined);
+    const del = vi.fn(async () => undefined);
     const get = vi.fn(async () => ({ data: () => existing }));
-    const doc = vi.fn(() => ({ create, get, set }));
-    return { db: { collection: vi.fn(() => ({ doc, add })) } as never, create, add, doc, set, get };
+    const doc = vi.fn(() => ({ create, get, delete: del }));
+    return { db: { collection: vi.fn(() => ({ doc, add })) } as never, create, add, doc, del, get };
 }
 const ALREADY_EXISTS = () => { throw Object.assign(new Error('exists'), { code: 6 }); };
 
@@ -38,20 +38,29 @@ describe('sendEmail idempotencyKey', () => {
     });
 
     it('an existing mail doc the extension marked ERROR is re-queued, not treated as delivered (qodo #2 on #720)', async () => {
-        const { db, set } = stubDb(async () => ALREADY_EXISTS(), { delivery: { state: 'ERROR' } });
+        // First create hits the existing doc; after the delete, the second succeeds.
+        let calls = 0;
+        const { db, del, create } = stubDb(async () => { if (calls++ === 0) ALREADY_EXISTS(); return undefined; }, { delivery: { state: 'ERROR' } });
         const out = await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { poolId: 'p1', idempotencyKey: 'k' });
         expect(out).toBe('queued');
-        // Overwritten with the fresh doc, which carries no `delivery` field.
-        expect(set).toHaveBeenCalledTimes(1);
-        expect(set.mock.calls[0][0]).toMatchObject({ to: 'a@b.com', poolId: 'p1' });
-        expect(set.mock.calls[0][0]).not.toHaveProperty('delivery');
+        // Deleted, then CREATED afresh (a create under any trigger), with no `delivery` field.
+        expect(del).toHaveBeenCalledTimes(1);
+        expect(create).toHaveBeenCalledTimes(2);
+        expect(create.mock.calls[1][0]).toMatchObject({ to: 'a@b.com', poolId: 'p1' });
+        expect(create.mock.calls[1][0]).not.toHaveProperty('delivery');
+    });
+
+    it('if a concurrent attempt re-creates the doc after the delete, this one stands down', async () => {
+        const { db, del } = stubDb(async () => ALREADY_EXISTS(), { delivery: { state: 'ERROR' } });
+        expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('skipped');
+        expect(del).toHaveBeenCalledTimes(1);
     });
 
     it('an existing mail doc that is pending, processing or delivered is left alone', async () => {
         for (const existing of [undefined, { delivery: { state: 'PENDING' } }, { delivery: { state: 'PROCESSING' } }, { delivery: { state: 'SUCCESS' } }]) {
-            const { db, set } = stubDb(async () => ALREADY_EXISTS(), existing);
+            const { db, del } = stubDb(async () => ALREADY_EXISTS(), existing);
             expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('skipped');
-            expect(set).not.toHaveBeenCalled();
+            expect(del).not.toHaveBeenCalled();
         }
     });
 
