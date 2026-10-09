@@ -4,9 +4,7 @@ import { dbService } from '../../services/dbService';
 import { useSiteConsensusState } from './pickSheet/useSiteConsensus';
 import { readStoredScope, writeStoredScope, type DistributionScope } from './pickSheet/distributionScope';
 import type { Pool, NFLGame } from '../../types';
-import { now as serverNow } from '../../utils/serverClock';
-import { distributionGameVisible, effectivePickDistribution } from '@shared/pickDistribution';
-import type { NFLLockPool } from '@shared/nflLockMode';
+import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
 
 interface PickDistributionProps {
   pool: Pool;
@@ -58,18 +56,8 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   // that game's pick locks. The parent does not render the card at all on OFF;
   // the check here is the second guard on the same rule. A one-minute tick lets a
   // split appear on its own when a lock passes, without a reload.
-  const visibility = effectivePickDistribution((pool as { settings?: { pickDistribution?: unknown } }).settings);
-  const [clock, setClock] = useState(() => serverNow());
-  useEffect(() => {
-    if (visibility !== 'AFTER_LOCK') return;
-    const id = setInterval(() => setClock(serverNow()), 60_000);
-    return () => clearInterval(id);
-  }, [visibility]);
-  const lockPool = pool as unknown as NFLLockPool & { settings?: { pickDistribution?: unknown } };
-  const shownGames = useMemo(
-    () => games.filter(g => distributionGameVisible(lockPool, week, g, games, clock)),
-    [games, lockPool, week, clock],
-  );
+  const { mode: visibility, visibleIds } = useDistributionVisibility(pool, week, games);
+  const shownGames = useMemo(() => games.filter(g => visibleIds.has(g.id)), [games, visibleIds]);
   const heldBack = games.length - shownGames.length;
   const selectScope = (next: DistributionScope) => {
     setScope(next);

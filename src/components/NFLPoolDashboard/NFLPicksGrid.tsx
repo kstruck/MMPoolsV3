@@ -10,9 +10,7 @@ import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/pic
 import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
 import { GridSortToggle } from './GridSortToggle';
 import { rowDisplayName } from '../../utils/entrySelection';
-import { now as serverNow } from '../../utils/serverClock';
-import { distributionGameVisible, effectivePickDistribution } from '@shared/pickDistribution';
-import type { NFLLockPool } from '@shared/nflLockMode';
+import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
 
 /**
  * CURRENT PICKS (Kevin's A2) — the page that did not exist.
@@ -97,13 +95,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // The commissioner's Pick Distribution setting governs this row too
   // (PLAN-SPLIT-POT-SETTLEMENT Part C): it is the same pool aggregate. OFF hides
   // the row; AFTER_LOCK shows each game's split once that game's pick locks.
-  const majorityMode = effectivePickDistribution((pool as { settings?: { pickDistribution?: unknown } }).settings);
-  const [clock, setClock] = useState(() => serverNow());
-  useEffect(() => {
-    if (majorityMode !== 'AFTER_LOCK') return;
-    const id = setInterval(() => setClock(serverNow()), 60_000);
-    return () => clearInterval(id);
-  }, [majorityMode]);
+  // The clock lives in the hook, not here: this file stays free of any lock
+  // comparison (tests/nfl-surface-invariants.test.ts), and the hook can only
+  // hide an aggregate, never reveal a pick.
 
   // Columns are the week's slate in kickoff order, so the grid reads left to
   // right in the order the games (and therefore the reveals) happen.
@@ -111,6 +105,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
     () => [...gamesForPoolWeek(games || [], pool as any, week)].sort((a, b) => a.startTime - b.startTime),
     [games, pool, week],
   );
+  const { mode: majorityMode, visibleIds: majorityVisible } = useDistributionVisibility(pool, week, weekGames);
 
   // Alphabetical by default — a commissioner uses this grid to find one
   // person's row, and a rank order moves that row every time a week is scored.
@@ -338,7 +333,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                     under their own headers (codex r2 on items 11/12). */}
                 <td className="py-3 px-3 text-center">{dash}</td>
                 {weekGames.map(g => {
-                  if (!distributionGameVisible(pool as unknown as NFLLockPool, week, g, weekGames, clock)) {
+                  if (!majorityVisible.has(g.id)) {
                     return (
                       <td key={g.id} className="py-3 px-3 text-center" title="Shown once this game's picks lock">{dash}</td>
                     );
