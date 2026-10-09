@@ -34,7 +34,7 @@ export const SettledBanner: React.FC<{ settlement: PoolSettlement | undefined | 
             ? <>{names} won the pool{week}{typeof settlement.prizePerEntry === 'number' ? <>, ${settlement.prizePerEntry}</> : null}.</>
             : <>{names} agreed to split the pot{week} and share 1st place
                 {typeof settlement.prizePerEntry === 'number' ? <>, ${settlement.prizePerEntry} each</> : null}.</>}
-          No more picks can be made.
+          {' '}No more picks can be made.
         </p>
         {settlement.note && (
           <p className="font-body text-[13px] text-muted">

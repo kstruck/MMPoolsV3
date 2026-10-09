@@ -9,6 +9,7 @@ import { NotificationLog, User } from "./types";
 import type { MemberRecord } from "./shared/memberRecord";
 import { resolveReminderTargets, outstandingDuesByUid, rebuyPortionByUid } from "./lib/reminderTargets";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
+import { poolIsOver } from "./lib/settlement";
 
 type ReminderKind = "PICKS" | "PAYMENT";
 
@@ -62,6 +63,18 @@ export const sendManualReminder = validated(
     const pool = { id: poolSnap.id, ...poolSnap.data() } as any;
     // Unconfirmed SUPER_ADMIN claims are stripped (Phase 3, PLAN-API-TRUST-BOUNDARY).
     assertPoolOwnerOrSuperAdmin(pool, uid, await confirmedAdminClaim(request));
+
+    // A pool that is over (settled, finalized, cancelled, closed) takes no more
+    // picks, so a "submit your picks" email would chase people for something they
+    // can no longer do. The automatic non-picker job already skips these pools
+    // (`checkNFLNonPickerReminders`); this is the same rule for the manual path.
+    // PAYMENT reminders are untouched — money can still be owed after the end.
+    if (kind === "PICKS" && poolIsOver(pool)) {
+        throw new HttpsError(
+            "failed-precondition",
+            "POOL_OVER: This pool is over and takes no more picks, so there is nothing to remind anyone to submit. Payment reminders still work.",
+        );
+    }
 
     // 4. Resolve targets from the ROSTER, not the entries collection.
     //
