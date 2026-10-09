@@ -253,6 +253,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   revealMode,
                   isOwnRow,
                   confidenceMode: !!settings.confidenceMode,
+                  pickMode: settings.pickMode,
                 });
                 const winLoss = formatWinLoss(tally);
                 return (

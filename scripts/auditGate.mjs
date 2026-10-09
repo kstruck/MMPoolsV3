@@ -28,14 +28,22 @@ function advisoryId(url) {
   return m ? m[0] : String(url ?? '');
 }
 
-/** Every distinct high/critical advisory in an `npm audit --json` report. */
+/**
+ * An exception is for ONE advisory in ONE package. The same GHSA can be reported
+ * against more than one package, and a waiver for the first must not wave the
+ * second through (qodo #2 on #717).
+ */
+const exceptionKey = (id, pkg) => `${id}|${pkg}`;
+
+/** Every distinct (advisory, package) high/critical pair in an `npm audit --json` report. */
 export function collectAdvisories(report) {
   const found = new Map();
   for (const vuln of Object.values(report?.vulnerabilities ?? {})) {
     for (const via of vuln.via ?? []) {
       if (typeof via !== 'object' || !via || !BLOCKING.has(via.severity)) continue;
       const id = advisoryId(via.url);
-      if (!found.has(id)) found.set(id, { id, name: via.name, severity: via.severity, title: via.title });
+      const key = exceptionKey(id, via.name);
+      if (!found.has(key)) found.set(key, { id, key, name: via.name, severity: via.severity, title: via.title });
     }
   }
   return [...found.values()];
@@ -47,14 +55,14 @@ export function collectAdvisories(report) {
  */
 export function evaluateAudit(report, allowlist, now = new Date()) {
   const entries = new Map();
-  for (const e of allowlist?.entries ?? []) entries.set(advisoryId(e.ghsa), e);
+  for (const e of allowlist?.entries ?? []) entries.set(exceptionKey(advisoryId(e.ghsa), e.package), e);
 
   const failures = [];
   const allowed = [];
   const seen = new Set();
   for (const adv of collectAdvisories(report)) {
-    seen.add(adv.id);
-    const entry = entries.get(adv.id);
+    seen.add(adv.key);
+    const entry = entries.get(adv.key);
     if (!entry) {
       failures.push({ ...adv, reason: 'not on the allow-list' });
       continue;
