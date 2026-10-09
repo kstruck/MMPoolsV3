@@ -31,7 +31,7 @@ import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReus
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 import { ConfirmActionModal } from '../admin/ConfirmActionModal';
 import { SettlePoolPanel } from './SettlePoolPanel';
-import { poolIsOver, settlementFollowUpOwed } from '../../utils/poolIsOver';
+import { poolIsOver, settlementFollowUpOwed, settlementResumable } from '../../utils/poolIsOver';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
 import { NFL_KICKOFF_MS } from '../../config/season';
@@ -2196,8 +2196,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 `settlePool` refuses a co-commissioner server-side (D2). Hidden once
                 the pool is over by any route — the callable would refuse anyway —
                 EXCEPT a settled pool that still owes its follow-up (a failed
-                email or audit): the panel then offers the retry (codex r3). */}
-            {viewerIsOwner && type === 'NFL_SURVIVOR' && (!poolIsOver(castPool) || settlementFollowUpOwed(castPool.settlement)) && (
+                email or audit): the panel then offers the retry (codex r3) — and a
+                settlement interrupted between finalize and flip, which the server
+                resumes as a full settlement (codex r7). */}
+            {viewerIsOwner && type === 'NFL_SURVIVOR' && (!poolIsOver(castPool) || settlementResumable(castPool) || settlementFollowUpOwed(castPool.settlement)) && (
               <SettlePoolPanel pool={pool} />
             )}
 

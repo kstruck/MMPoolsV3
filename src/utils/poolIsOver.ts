@@ -23,6 +23,21 @@ export function settlementFollowUpOwed(
   return missing(settlement.adminAuditedAt) || (settlement.notifyMembers === true && missing(settlement.emailedAt));
 }
 
+/**
+ * A settlement interrupted after the finalizer committed and before the pool
+ * was flipped: `finalizedVia: 'SETTLED'` but no `settlement` / `closedVia` yet.
+ * The server resumes this as a FULL settlement (`settlementPhase`), so the
+ * panel must stay reachable for it (codex code-review r7).
+ */
+export function settlementResumable(
+  pool: { finalizedVia?: unknown; settlement?: unknown; closedVia?: unknown; status?: unknown } | null | undefined,
+): boolean {
+  if (!pool || pool.finalizedVia !== 'SETTLED') return false;
+  if (pool.settlement || pool.closedVia) return false;
+  const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';
+  return !VOIDED.has(status);
+}
+
 export function poolIsOver(pool: { status?: unknown; closedVia?: unknown; finalizedAt?: unknown } | null | undefined): boolean {
   if (!pool) return true;
   const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';

@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SettledBanner } from '../components/NFLPoolDashboard/SettledBanner';
-import { poolIsOver, settlementFollowUpOwed } from '../utils/poolIsOver';
+import { poolIsOver, settlementFollowUpOwed, settlementResumable } from '../utils/poolIsOver';
 import type { PoolSettlement } from '@shared/settlement';
 
 const base: PoolSettlement = {
@@ -68,5 +68,14 @@ describe('settlementFollowUpOwed — keeps the retry reachable after the pool cl
   it('is true while the audit or the requested emails are outstanding', () => {
     expect(settlementFollowUpOwed({ notifyMembers: false })).toBe(true);
     expect(settlementFollowUpOwed({ notifyMembers: true, adminAuditedAt: 1 })).toBe(true);
+  });
+});
+
+describe('settlementResumable — an interrupted settlement stays reachable (codex r7)', () => {
+  it('is true only for finalizedVia SETTLED with no settlement, no closedVia, not voided', () => {
+    expect(settlementResumable({ finalizedVia: 'SETTLED', status: 'OPEN' })).toBe(true);
+    expect(settlementResumable({ status: 'OPEN' })).toBe(false);
+    expect(settlementResumable({ finalizedVia: 'SETTLED', status: 'COMPLETED', closedVia: 'SETTLED', settlement: {} })).toBe(false);
+    expect(settlementResumable({ finalizedVia: 'SETTLED', status: 'CANCELED' })).toBe(false);
   });
 });

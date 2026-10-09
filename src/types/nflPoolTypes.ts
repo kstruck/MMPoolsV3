@@ -101,6 +101,8 @@ export interface NFLPickemPool {
   closedVia?: string;
   closedAt?: number;
   finalizedAt?: unknown;
+  /** `'SETTLED'` when `settlePool` ran the finalizer (server-owned). */
+  finalizedVia?: string;
   settlement?: PoolSettlement;
 
   settings: {
@@ -211,6 +213,8 @@ export interface NFLSurvivorPool {
   closedVia?: string;
   closedAt?: number;
   finalizedAt?: unknown;
+  /** `'SETTLED'` when `settlePool` ran the finalizer (server-owned). */
+  finalizedVia?: string;
   settlement?: PoolSettlement;
 
   settings: {
@@ -294,6 +298,8 @@ export interface NFLMarginPool {
   closedVia?: string;
   closedAt?: number;
   finalizedAt?: unknown;
+  /** `'SETTLED'` when `settlePool` ran the finalizer (server-owned). */
+  finalizedVia?: string;
   settlement?: PoolSettlement;
 
   settings: {

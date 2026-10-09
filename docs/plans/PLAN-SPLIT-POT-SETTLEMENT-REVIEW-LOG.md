@@ -102,3 +102,9 @@ review continues on the PR diff (`codex exec review --base origin/main`).
 | # | Sev | Finding | Verified? | Verdict | Response |
 |---|---|---|---|---|---|
 | 1 | P2 | The join guard sat AFTER the already-a-participant branch, which can create a Member Record and move `entryCount` on a closed pool. | **Yes** — I had left that branch open on purpose, assuming it was a harmless backfill; it is not harmless (it moves `entryCount`). The only caller is the Join page (`JoinPool.tsx:79`), so refusing it costs nothing but a truthful error there. | **ACCEPTED** | Guard moved above the branch. Emulator test: an existing participant's join on a settled pool is refused and `entryCount` is unchanged. |
+
+## Code round 7 — HEAD `c495111f` — 1 finding
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P1 | A settlement interrupted after the finalizer and before the flip (`finalizedVia: 'SETTLED'`, no `settlement`) is resumable server-side, but `poolIsOver` hid the only panel that could resume it. | **Yes** — same family as round 3 #2, a state the server handles and the UI could not reach. | **ACCEPTED** | `settlementResumable(pool)` added to the panel's render condition; in that state the panel's preview and submit run the FULL phase as normal. Unit-tested. |
