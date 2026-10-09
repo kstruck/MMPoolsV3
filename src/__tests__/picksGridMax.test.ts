@@ -133,6 +133,25 @@ describe("tallyGridRow — another player's row", () => {
         expect(t.max).toBe(3);                                                // 2 earned + 1 live, + 0 unrevealed
     });
 
+    it('a hidden CANCELLED game is not priced as winnable (codex)', () => {
+        const only = [game('c1', 'CANCELLED')];
+        const t = tallyGridRow({
+            weekGames: only, cells: new Map([['c1', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        });
+        expect(t.max).toBe(0);
+    });
+
+    it('unrevealed picks cannot outnumber the hidden games that can still pay', () => {
+        // Two hidden games, one of them cancelled; Set says 2 unrevealed picks.
+        const slate = [game('h1'), game('h2', 'CANCELLED')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['h1', HIDDEN], ['h2', HIDDEN]]),
+            setCount: 2, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        });
+        expect(t.max).toBe(1);
+    });
+
     it('a fully revealed row needs no Set count', () => {
         const t = tallyGridRow({
             weekGames: GAMES, cells: cells(pick('W'), pick('L'), pick(null), NO_PICK, NO_PICK),

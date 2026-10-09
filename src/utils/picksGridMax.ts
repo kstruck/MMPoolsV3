@@ -65,12 +65,19 @@ export function tallyGridRow(args: {
     let remaining = 0;
     let revealedPicks = 0;
     let hiddenCells = 0;
+    // Hidden games that can still pay: a CANCELLED game grades VOID whenever it is
+    // revealed, so a pick on it (counted in Set, not yet visible) can never score.
+    let hiddenLive = 0;
     let weightMissing = false;
 
     for (const game of weekGames) {
         const cell = cells.get(game.id);
         if (!cell) continue;
-        if (cell.kind === 'HIDDEN') { hiddenCells++; continue; }
+        if (cell.kind === 'HIDDEN') {
+            hiddenCells++;
+            if (game.status !== 'CANCELLED') hiddenLive++;
+            continue;
+        }
         if (cell.kind !== 'PICK') continue;
         revealedPicks++;
 
@@ -100,8 +107,11 @@ export function tallyGridRow(args: {
         // Standard scoring prices every unrevealed pick at exactly 1, so the
         // answer is exact. Confidence weights are unknowable until revealed.
         if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN' };
-        // A stale count smaller than what is already revealed clamps to 0.
-        remaining += Math.max(0, setCount - revealedPicks);
+        // A stale count smaller than what is already revealed clamps to 0, and the
+        // unrevealed picks cannot outnumber the hidden games that can still pay —
+        // which keeps Max an UPPER bound even when we cannot see which hidden
+        // game a pick sits on.
+        remaining += Math.min(Math.max(0, setCount - revealedPicks), hiddenLive);
     }
 
     return { ...tally, max: earned + remaining };
