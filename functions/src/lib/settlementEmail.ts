@@ -4,11 +4,15 @@ import { joinNames, type PoolSettlement } from "../shared/settlement";
 /** The settlement email (PLAN-SPLIT-POT-SETTLEMENT §2.2 step 10). It says only what the record knows. */
 export function settlementEmail(poolName: string, s: PoolSettlement): { subject: string; html: string } {
     const names = escapeHtml(joinNames(s.winnerNames));
-    const subject = `${poolName} is over — the pot was split`;
+    const solo = s.winnerNames.length === 1;
+    const subject = solo ? `${poolName} is over — we have a winner` : `${poolName} is over — the pot was split`;
     const week = s.throughWeek !== null ? ` after week ${s.throughWeek}` : "";
     const lines = [
-        `<p><strong>${escapeHtml(poolName)}</strong> is over${week}. The remaining players agreed to split the pot: <strong>${names}</strong>.</p>`,
-        s.prizePerEntry !== null
+        // One survivor is a winner, not a split (qodo re-review of #715).
+        solo
+            ? `<p><strong>${escapeHtml(poolName)}</strong> is over${week}. <strong>${names}</strong> is the last player standing and wins 1st place${s.prizePerEntry !== null ? `, $${s.prizePerEntry}` : ""}.</p>`
+            : `<p><strong>${escapeHtml(poolName)}</strong> is over${week}. The remaining players agreed to split the pot: <strong>${names}</strong>.</p>`,
+        solo ? "" : s.prizePerEntry !== null
             ? `<p>Each of them is recorded as sharing 1st place, $${s.prizePerEntry} each.</p>`
             : `<p>Each of them is recorded as sharing 1st place.</p>`,
         s.rebuyDuesExcluded > 0

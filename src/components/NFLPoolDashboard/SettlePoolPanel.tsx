@@ -58,7 +58,9 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
     if (!preview || preview.alive.length === 0) return;
     const first = await toast.confirm({
       title: 'End this pool and split the pot?',
-      message: `This ends "${pool.name}" now. ${joinNames(names)} share 1st place${preview.prizePerEntry !== null ? ` — $${preview.prizePerEntry} each` : ''}. Picks close for everyone.`,
+      message: names.length === 1
+        ? `This ends "${pool.name}" now. ${names[0]} wins 1st place${preview.prizePerEntry !== null ? ` — $${preview.prizePerEntry}` : ''}. Picks close for everyone.`
+        : `This ends "${pool.name}" now. ${joinNames(names)} share 1st place${preview.prizePerEntry !== null ? ` — $${preview.prizePerEntry} each` : ''}. Picks close for everyone.`,
       confirmLabel: 'Continue',
       danger: true,
     });
@@ -169,7 +171,7 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
         <>
           <div className="bg-page border border-line rounded-md p-3 space-y-1">
             <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted num">
-              Sharing 1st place ({preview.alive.length})
+              {preview.alive.length === 1 ? 'Wins 1st place' : `Sharing 1st place (${preview.alive.length})`}
             </p>
             <p className="font-body text-sm text-[color:var(--text)]">{joinNames(names)}</p>
             <p className="font-body text-[12px] text-muted num">

@@ -160,6 +160,13 @@ describe('settlementEmail — says only what the record knows', () => {
     expect(html).toContain('$50 each');
     expect(html).not.toContain('rebuy');
   });
+  it('a single survivor reads as a winner, not a split', () => {
+    const { subject, html } = settlementEmail('P', { ...base, winnerNames: ['Ann'], entryIds: ['a'], prizePerEntry: 100 });
+    expect(subject).toBe('P is over — we have a winner');
+    expect(html).toContain('Ann</strong> is the last player standing and wins 1st place, $100');
+    expect(html).not.toContain('split');
+  });
+
   it('omits the amount when unpriced, and states excluded rebuy dues and the note', () => {
     const { html } = settlementEmail('P', { ...base, prizePerEntry: null, throughWeek: null, rebuyDuesExcluded: 25, note: 'Paid via Venmo' });
     expect(html).not.toContain('each.</p>');

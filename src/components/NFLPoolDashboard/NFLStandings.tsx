@@ -328,7 +328,7 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                               so an unscored row that is one of them is not a dash. */}
                           {coChampion(entry) ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">
-                              <Heart size={8} className="fill-[#0F7B4A]/20" /> Co-champion
+                              <Heart size={8} className="fill-[#0F7B4A]/20" /> {settledIds.size === 1 ? 'Champion' : 'Co-champion'}
                             </span>
                           ) : entry.unscored ? dash : entry.status === 'ALIVE' ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">

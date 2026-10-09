@@ -26,7 +26,9 @@ describe('SettledBanner', () => {
   });
 
   it('names one, two and three winners in plain English', () => {
-    expect(html({ ...base, winnerNames: ['Alex'] })).toContain('Alex agreed to split the pot');
+    // One survivor is a winner, not a split (qodo re-review of #715).
+    expect(html({ ...base, winnerNames: ['Alex'] })).toContain('Alex won the pool after week 4, $100.');
+    expect(html({ ...base, winnerNames: ['Alex'] })).not.toContain('split');
     expect(html(base)).toContain('Alex and Sam agreed to split the pot after week 4');
     expect(html({ ...base, winnerNames: ['Alex', 'Sam', 'Kim'] })).toContain('Alex, Sam and Kim agreed');
   });
