@@ -58,7 +58,12 @@ describe('sendEmail idempotencyKey', () => {
     it('settlementMailKey: distinct (pool, settlement, member) triples never collide, even with hyphens in the ids (qodo #3 on #720)', () => {
         // A plain "-" join gave the SAME id for both of these.
         expect(settlementMailKey('a-1', 2, 'b')).not.toBe(settlementMailKey('a', 1, '2-b'));
-        expect(settlementMailKey('p', 7, 'u')).toBe('pool-settled~p~7~u');
+        expect(settlementMailKey('p', 7, 'u')).toBe('pool-settled|p|7|u');
+        // The separator itself, and the characters encodeURIComponent leaves alone.
+        for (const sep of ['|', '~', '%', '-', '_', '.']) {
+            expect(settlementMailKey(`a${sep}1`, 2, 'b')).not.toBe(settlementMailKey('a', 1, `2${sep}b`));
+            expect(settlementMailKey('a', `1${sep}2`, 'b')).not.toBe(settlementMailKey('a', 1, `2${sep}b`));
+        }
         // Safe as a Firestore document id: no slash.
         expect(settlementMailKey('p/q', 7, 'u/v')).not.toContain('/');
     });

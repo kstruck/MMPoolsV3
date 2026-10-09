@@ -136,11 +136,14 @@ export function rebuyDuesOf(members: ReadonlyArray<{ rebuyOwed?: unknown }>): nu
 /**
  * The once-only mail document id for one member of one settlement.
  *
- * Each part is percent-encoded and the parts are joined with `~`, which
- * `encodeURIComponent` never emits — so two different (pool, settlement, member)
- * triples can never produce the same id the way a plain `-` join could when an id
- * itself contains hyphens (sim pools do). qodo #3 on #720.
+ * Each part is percent-encoded and the parts are joined with `|`. `encodeURIComponent`
+ * ALWAYS escapes `|` (to `%7C`), so a `|` in the output can only be a separator —
+ * two different (pool, settlement, member) triples can never produce the same id
+ * the way a plain `-` join could when an id itself contains hyphens (sim pools
+ * do). qodo #3 on #720. (`~` would NOT do: `encodeURIComponent` leaves it as is —
+ * codex caught that in the first version of this comment.) `|` is a legal
+ * Firestore document-id character; `/` cannot appear, having been escaped.
  */
 export function settlementMailKey(poolId: string, settledAt: unknown, memberUid: string): string {
-  return ['pool-settled', poolId, String(settledAt), memberUid].map(encodeURIComponent).join('~');
+  return ['pool-settled', poolId, String(settledAt), memberUid].map(encodeURIComponent).join('|');
 }
