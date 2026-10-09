@@ -43,6 +43,16 @@ describe('audit gate', () => {
     }
   });
 
+  it('rejects an expiry more than 45 days away, accepts exactly 45', () => {
+    const r = report(adv('braces', 'GHSA-aaaa-bbbb-cccc'));
+    const far = evaluateAudit(r, { entries: [entry('GHSA-aaaa-bbbb-cccc', '2099-01-01')] }, NOW);
+    expect(far.failures[0].reason).toMatch(/more than 45 days/);
+    const edge = evaluateAudit(r, { entries: [entry('GHSA-aaaa-bbbb-cccc', '2026-12-04')] }, NOW);
+    expect(edge.failures).toEqual([]);
+    const over = evaluateAudit(r, { entries: [entry('GHSA-aaaa-bbbb-cccc', '2026-12-05')] }, NOW);
+    expect(over.failures).toHaveLength(1);
+  });
+
   it('lets one allow-listed advisory through but still fails a second, unlisted one', () => {
     const r = evaluateAudit(
       report(adv('braces', 'GHSA-aaaa-bbbb-cccc'), adv('proxy-addr', 'GHSA-dddd-eeee-ffff', 'critical')),

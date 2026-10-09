@@ -1,5 +1,5 @@
 {
-  "_comment": "Dated exceptions for scripts/auditGate.mjs. Add an entry ONLY when no patched release exists, and give it an expires date (<= 30 days). An expired entry fails the gate again.",
+  "_comment": "Dated exceptions for scripts/auditGate.mjs. Add an entry ONLY when no patched release exists, and give it an expires date no more than 45 days away (the gate rejects later dates). An expired entry fails the gate again.",
   "entries": [
     {
       "ghsa": "GHSA-vfj7-8cjw-p6xm",

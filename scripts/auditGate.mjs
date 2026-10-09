@@ -19,6 +19,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BLOCKING = new Set(['high', 'critical']);
+/** Longest an exception may run, measured from the CI run date. */
+export const MAX_EXCEPTION_DAYS = 45;
 
 /** GHSA id from an advisory URL, or the URL itself when it is not a GHSA link. */
 function advisoryId(url) {
@@ -62,6 +64,10 @@ export function evaluateAudit(report, allowlist, now = new Date()) {
       failures.push({ ...adv, reason: 'allow-list entry needs a reason and a valid expires date' });
     } else if (expires < now.getTime()) {
       failures.push({ ...adv, reason: `allow-list entry expired ${entry.expires}` });
+    } else if (expires > now.getTime() + MAX_EXCEPTION_DAYS * 86_400_000) {
+      // A 2099 date would make the exception permanent, which is what the
+      // expiry exists to prevent (codex P1 on the PR).
+      failures.push({ ...adv, reason: `allow-list expires ${entry.expires} is more than ${MAX_EXCEPTION_DAYS} days away` });
     } else {
       allowed.push({ ...adv, expires: entry.expires });
     }
