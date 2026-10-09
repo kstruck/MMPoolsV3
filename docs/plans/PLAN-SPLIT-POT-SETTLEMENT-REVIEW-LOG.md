@@ -96,3 +96,9 @@ review continues on the PR diff (`codex exec review --base origin/main`).
 | # | Sev | Finding | Verified? | Verdict | Response |
 |---|---|---|---|---|---|
 | 1 | P1 | `settlementStartedAt` was written before the winner check, so a refused attempt left a marker; after a later natural finalization the marker made `settlementPhase` treat the pool as an interrupted settlement and let it be force-settled. | **Yes**. A second path reaches the same state: a settlement that crashed AFTER the marker but BEFORE the finalizer, followed by a natural season end. | **ACCEPTED, broader fix** | The marker is gone. `maybeFinalizeNFLPool` with `force: 'SETTLED'` now stamps `finalizedVia: 'SETTLED'` in the SAME fenced write as `finalizedAt`, and the phase resumes a finalized pool only when `finalizedVia === 'SETTLED'`. Nothing is written before the winners are validated. `finalizedVia` replaces the marker in the rules' server-owned list. The plan's §2.2 step 5 (`settlementStartedAt`) is superseded by this row. |
+
+## Code round 6 — HEAD after `58711e0b` — 1 finding
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P2 | The join guard sat AFTER the already-a-participant branch, which can create a Member Record and move `entryCount` on a closed pool. | **Yes** — I had left that branch open on purpose, assuming it was a harmless backfill; it is not harmless (it moves `entryCount`). The only caller is the Join page (`JoinPool.tsx:79`), so refusing it costs nothing but a truthful error there. | **ACCEPTED** | Guard moved above the branch. Emulator test: an existing participant's join on a settled pool is refused and `entryCount` is unchanged. |

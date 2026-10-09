@@ -399,6 +399,11 @@ export async function joinNFLPoolInternal(
       ? null
       : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
 
+    // Nobody joins a pool that is over — not even an existing participant
+    // re-running join: that branch can create a Member Record and move
+    // `entryCount` (codex code-review r6). The only caller is the Join page.
+    assertPoolAcceptsPlay(poolData);
+
     const participantIds = poolData.participantIds || [];
     if (participantIds.includes(uid)) {
       // Already a participant — still ensure a Member Record exists (backfill-on-touch).
@@ -413,9 +418,6 @@ export async function joinNFLPoolInternal(
       return;
     }
 
-    // A NEW member may not join a pool that is over. The already-a-participant
-    // branch above stays open: it only backfills their own Member Record.
-    assertPoolAcceptsPlay(poolData);
     assertJoinCapacity(poolData, participantIds.length);
 
     // 3 (moved up so its liability delta can ride the pool write below).

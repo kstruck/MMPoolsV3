@@ -289,6 +289,12 @@ describe('a settled pool takes no more play (POOL_OVER)', () => {
       .rejects.toThrow(/POOL_OVER/);
     await expect(joinNFLPoolInternal(db, { subjectUid: NEWBIE, subjectName: NEWBIE }, POOL))
       .rejects.toThrow(/POOL_OVER/);
+    // …and an EXISTING participant re-running join is refused too (codex r6):
+    // that branch could otherwise create a Member Record and move entryCount.
+    const countBefore = (await poolDoc()).entryCount;
+    await expect(joinNFLPoolInternal(db, { subjectUid: HOST, subjectName: HOST }, POOL))
+      .rejects.toThrow(/POOL_OVER/);
+    expect((await poolDoc()).entryCount).toBe(countBefore);
   });
 });
 
