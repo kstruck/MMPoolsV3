@@ -267,6 +267,37 @@ describe('settlePool — per-member delivery (codex code-review r2)', () => {
   });
 });
 
+describe('settlePool — an email already queued is never sent twice (qodo #4 on #715)', () => {
+  it('a crash after the enqueue but before the notifiedUids stamp: the retry sends the rest and leaves that mail doc alone', async () => {
+    const mailId = (uid: string) => `pool-settled-${POOL}-7-${uid}`;
+    await seed({
+      status: 'COMPLETED', closedVia: 'SETTLED',
+      settlement: {
+        kind: 'SPLIT', entryIds: [ALICE, BOB], winnerNames: [ALICE, BOB], settledAt: 7, settledBy: HOST,
+        note: null, throughWeek: 4, notifyMembers: true, prizePerEntry: 50, pot: 100,
+        rebuyDuesExcluded: 0, adminAuditedAt: 8,       // notifiedUids absent: the stamp was lost
+      },
+    });
+    // Carol's mail was enqueued by the crashed attempt.
+    await db.collection('mail').doc(mailId(CAROL)).set({ to: `${CAROL}@example.com`, poolId: POOL, preexisting: true });
+    try {
+      const res = await settle();
+      expect(res.emailed).toBe(4);                     // everyone except Carol
+      expect(res.emailFailed).toBe(0);
+      const carolMail = (await db.collection('mail').doc(mailId(CAROL)).get()).data();
+      expect(carolMail).toEqual({ to: `${CAROL}@example.com`, poolId: POOL, preexisting: true });   // untouched, not re-created
+      for (const uid of [HOST, ALICE, BOB, DAN]) {
+        expect((await db.collection('mail').doc(mailId(uid)).get()).exists).toBe(true);
+      }
+      const p = await poolDoc();
+      expect([...p.settlement.notifiedUids].sort()).toEqual([ALICE, BOB, CAROL, DAN, HOST].sort());   // Carol is stamped done
+      expect(p.settlement.emailedAt).toBeTruthy();
+    } finally {
+      for (const uid of [HOST, ALICE, BOB, CAROL, DAN]) await db.collection('mail').doc(mailId(uid)).delete();
+    }
+  });
+});
+
 describe('settlePool — overlapping FOLLOW_UP retries (codex code-review r1 P2)', () => {
   it('two concurrent retries send each email exactly once in total', async () => {
     await seed({

@@ -162,7 +162,12 @@ export const settlePool = validated(
             for (const { uid: memberUid, email } of await settlementRecipients(db, poolRef, fresh.participantIds)) {
                 if (done.has(memberUid)) continue;
                 const outcome = email
-                    ? await sendEmail(db, email, subject, html, { poolId, reason: "pool_settled" })
+                    // One mail doc per (settlement, member): a crash between this enqueue
+                    // and the notifiedUids stamp below cannot send a second copy.
+                    ? await sendEmail(db, email, subject, html, {
+                        poolId, reason: "pool_settled",
+                        idempotencyKey: `pool-settled-${poolId}-${settlement.settledAt}-${memberUid}`,
+                    })
                     : "skipped";
                 if (outcome === "failed") { emailFailed++; continue; }
                 if (outcome === "queued") emailed++;
