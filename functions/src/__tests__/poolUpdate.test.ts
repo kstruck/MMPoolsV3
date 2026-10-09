@@ -8,6 +8,15 @@ import {
 } from '../lib/poolUpdate';
 import { normalizePhase, isGroupEditable, classifyUpdateKey } from '../shared/editability';
 
+describe('flattenSettingsPatch — pickDistribution (PLAN-SPLIT-POT-SETTLEMENT Part C)', () => {
+  it.each(['ALWAYS', 'AFTER_LOCK', 'OFF'])('stores %s as a dotted write', (v) => {
+    expect(flattenSettingsPatch({ settings: { pickDistribution: v } }, 'NFL_PICKEM')['settings.pickDistribution']).toBe(v);
+  });
+  it.each(['OFFF', '', 'off', 1, null, true])('rejects %s rather than storing it', (v) => {
+    expect(() => flattenSettingsPatch({ settings: { pickDistribution: v } }, 'NFL_SURVIVOR')).toThrow(/pickDistribution/);
+  });
+});
+
 describe('normalizePhase', () => {
   it('locked wins over status', () => {
     expect(normalizePhase({ isLocked: true, status: 'OPEN' })).toBe('locked');

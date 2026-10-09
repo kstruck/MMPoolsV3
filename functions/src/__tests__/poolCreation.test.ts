@@ -21,6 +21,19 @@ describe('validateCreateInput (schema gate)', () => {
       }),
     ).toThrow();
   });
+  it('rejects an invalid settings.pickDistribution at creation, accepts each valid value', () => {
+    const base = { type: 'NFL_PICKEM', name: 'Weekly', season: '2026' };
+    const withValue = (pickDistribution: unknown) => ({
+      ...base,
+      settings: { entryFee: 0, payouts: { places: [], bonuses: [] }, pickDistribution },
+    });
+    for (const bad of ['OFFF', 'off', '', null, 0, true]) {
+      expect(() => validateCreateInput('NFL_PICKEM', withValue(bad))).toThrow(/pickDistribution/);
+    }
+    for (const good of ['ALWAYS', 'AFTER_LOCK', 'OFF']) {
+      expect(() => validateCreateInput('NFL_PICKEM', withValue(good))).not.toThrow();
+    }
+  });
   it('accepts a valid bracket payload', () => {
     expect(() =>
       validateCreateInput('BRACKET', { name: 'Madness', seasonYear: 2026, settings: { entryFee: 20 } }),

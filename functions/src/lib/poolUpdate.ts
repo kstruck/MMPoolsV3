@@ -13,6 +13,7 @@ import { isPinnableMessageId } from '../shared/pinnedMessage';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
 import { MAX_TEAM_USES } from '../shared/survivorReuse';
 import { MAX_ENTRIES_PER_USER_CAP } from '../shared/multiEntry';
+import { isPickDistributionVisibility, PICK_DISTRIBUTION_VALUES } from '../shared/pickDistribution';
 
 export interface PoolSettingsUpdatePlan {
   // Fields to set on the pool doc.
@@ -203,6 +204,18 @@ export function flattenSettingsPatch(
         continue;
       }
       out['settings.lockBufferMinutes'] = n;
+      continue;
+    }
+    // Pick Distribution visibility (PLAN-SPLIT-POT-SETTLEMENT Part C). Rejected
+    // rather than coerced: a typo would otherwise be stored and silently read as
+    // ALWAYS by `effectivePickDistribution`, showing a card the commissioner
+    // believed they had hidden.
+    if (key === 'pickDistribution') {
+      if (!isPickDistributionVisibility(value)) {
+        rejected.push(`settings.pickDistribution (must be ${PICK_DISTRIBUTION_VALUES.join(', ')})`);
+        continue;
+      }
+      out['settings.pickDistribution'] = value;
       continue;
     }
     // Survivor parity settings. `updatePoolSettingsSchema.updates` is
