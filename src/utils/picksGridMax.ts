@@ -1,5 +1,6 @@
 import type { NFLGame } from '../types';
 import type { PicksGridCell } from './picksGrid';
+import { gradePick, hasReportedScores } from './pickemResult';
 
 /**
  * W-L and Max for one row of the Current Picks grid (PLAN-SPLIT-POT-SETTLEMENT
@@ -27,9 +28,10 @@ import type { PicksGridCell } from './picksGrid';
  *   - a confidence pick with no stored weight (`WEIGHT_MISSING`).
  *
  * PUSH and VOID earn nothing and are nobody's mistake: excluded from W-L and
- * from Max. A FINAL the feed reported no scores for stays ungraded (`null`) and
- * is excluded from Max too — the scorer is still refusing to grade it, so it is
- * neither earned nor winnable.
+ * from Max. A FINAL the feed reported no scores for stays ungraded (`null`), is
+ * left out of W-L, and STAYS in Max: the scorer will grade it when scores arrive,
+ * so it is still winnable, and Max is an upper bound that must not dip below what
+ * that grade could give.
  *
  * Pure and clock-free: no `now`, no lock arithmetic. Whether a game is over is
  * the game's own `status`, the same field `gradePick` reads.
@@ -46,6 +48,31 @@ export interface GridRowTally {
     maxUnknown?: MaxUnknownReason;
 }
 
+/**
+ * Could a pick on this game that we cannot see still earn a point?
+ *
+ *   CANCELLED                  never — grades VOID.
+ *   FINAL, a tie / exact cover never — grades PUSH. A PUSH does not depend on
+ *                              which side was picked, so any pick answers it.
+ *   FINAL, no reported scores  YES — it is not settled: the scorer grades it
+ *                              once scores arrive, and showing Max below what
+ *                              that grade could give would break the upper
+ *                              bound (qodo #2 on #722 asked for a number that
+ *                              is not 0; the honest one is the upper bound).
+ *   FINAL, otherwise           yes — the hidden pick may already be a win, and
+ *                              dropping it could put Max BELOW the real score
+ *                              (the reveal can lag the game document).
+ *   not over yet               yes.
+ */
+function hiddenGameCanPay(game: NFLGame, pickMode: string | undefined): boolean {
+    if (game.status === 'CANCELLED') return false;
+    if (game.status !== 'FINAL') return true;
+    if (!hasReportedScores(game)) return true;
+    // PUSH is independent of the side picked, so either team answers it; a real
+    // team is needed because `gradePick` returns null for an empty pick.
+    return gradePick(game, game.homeTeam.abbreviation, pickMode) !== 'PUSH';
+}
+
 export function tallyGridRow(args: {
     weekGames: readonly NFLGame[];
     /** What the grid already computed for this row, keyed by game id. */
@@ -56,8 +83,10 @@ export function tallyGridRow(args: {
     revealMode: 'WEEK' | 'PER_GAME' | undefined;
     isOwnRow: boolean;
     confidenceMode: boolean;
+    /** `settings.pickMode` — the same value `picksGridCell` grades with. */
+    pickMode?: string;
 }): GridRowTally {
-    const { weekGames, cells, setCount, revealMode, isOwnRow, confidenceMode } = args;
+    const { weekGames, cells, setCount, revealMode, isOwnRow, confidenceMode, pickMode } = args;
 
     let wins = 0;
     let losses = 0;
@@ -65,8 +94,8 @@ export function tallyGridRow(args: {
     let remaining = 0;
     let revealedPicks = 0;
     let hiddenCells = 0;
-    // Hidden games that can still pay: a CANCELLED game grades VOID whenever it is
-    // revealed, so a pick on it (counted in Set, not yet visible) can never score.
+    // Hidden games that can still pay (`hiddenGameCanPay`): a pick on one that
+    // can never score is counted in Set but must not be priced in Max.
     let hiddenLive = 0;
     let weightMissing = false;
 
@@ -75,7 +104,7 @@ export function tallyGridRow(args: {
         if (!cell) continue;
         if (cell.kind === 'HIDDEN') {
             hiddenCells++;
-            if (game.status !== 'CANCELLED') hiddenLive++;
+            if (hiddenGameCanPay(game, pickMode)) hiddenLive++;
             continue;
         }
         if (cell.kind !== 'PICK') continue;
@@ -87,10 +116,13 @@ export function tallyGridRow(args: {
             if (typeof weight === 'number') earned += weight; else weightMissing = true;
         } else if (cell.result === 'L') {
             losses++;
-        } else if (cell.result === null && game.status !== 'FINAL' && game.status !== 'CANCELLED') {
+        } else if (cell.result === null && game.status !== 'CANCELLED' && (game.status !== 'FINAL' || !hasReportedScores(game))) {
+            // Ungraded: not over yet, OR a FINAL the feed reported no scores for —
+            // the scorer will grade that one when scores arrive, so it is still
+            // winnable and must stay in Max (an upper bound).
             if (typeof weight === 'number') remaining += weight; else weightMissing = true;
         }
-        // PUSH, VOID, and a scoreless FINAL: neither earned nor winnable.
+        // PUSH and VOID: neither earned nor winnable.
     }
 
     const tally = { wins, losses, earned };
@@ -111,7 +143,11 @@ export function tallyGridRow(args: {
         // there IS an unrevealed pick: when the server's count equals the revealed
         // picks (including a player with none), nothing hidden can contribute and
         // the answer is exact.
-        if (confidenceMode && unrevealed > 0) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN' };
+        //
+        // Only a pick on a hidden game that CAN still pay has a weight that
+        // matters. A pick on a cancelled game grades VOID whatever its weight, so
+        // when no hidden game can pay the answer is exact (qodo #2 on #721).
+        if (confidenceMode && Math.min(unrevealed, hiddenLive) > 0) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN' };
         // Standard scoring prices every unrevealed pick at exactly 1. They cannot
         // outnumber the hidden games that can still pay, which keeps Max an UPPER
         // bound even though we cannot see which hidden game a pick sits on.

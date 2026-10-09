@@ -93,17 +93,38 @@ export async function sendEmail(
             createdAt: FieldValue.serverTimestamp(),
         };
         if (typeof idempotencyKey === 'string' && idempotencyKey) {
+            const mailRef = db.collection("mail").doc(idempotencyKey.replace(/\//g, '_'));
             try {
-                await db.collection("mail").doc(idempotencyKey.replace(/\//g, '_')).create(mailDoc);
+                await mailRef.create(mailDoc);
             } catch (createError) {
                 const code = (createError as { code?: unknown }).code;
-                if (code === 6 || code === 'already-exists') {
-                    // Queued by an earlier attempt: delivered, and a retry cannot improve
-                    // on that — so 'skipped', never a second copy.
-                    console.log(`Email to ${to} already queued (${idempotencyKey}); not re-sending`);
-                    return recordDelivery(tally, 'skipped');
+                if (code !== 6 && code !== 'already-exists') throw createError;
+                // Queued by an earlier attempt. Normally that means delivered, or on
+                // its way, and a retry must not send a second copy — 'skipped'.
+                // BUT the mail extension stamps `delivery.state: 'ERROR'` when it
+                // gave up, and that mail never reached anyone (qodo #2 on #720):
+                // treating it as done would stamp the member notified for ever.
+                // DELETE it and CREATE it afresh rather than overwrite: whether the
+                // extension reacts to an update is not something this code can
+                // verify (codex), but a brand-new document is a create under any
+                // trigger. Not atomic, and it need not be — a crash between the two
+                // leaves no document, and the next retry simply creates it.
+                const existing = (await mailRef.get()).data() as { delivery?: { state?: string } } | undefined;
+                if (existing?.delivery?.state === 'ERROR') {
+                    await mailRef.delete();
+                    try {
+                        await mailRef.create(mailDoc);
+                    } catch (recreateError) {
+                        const recreateCode = (recreateError as { code?: unknown }).code;
+                        if (recreateCode !== 6 && recreateCode !== 'already-exists') throw recreateError;
+                        // A concurrent attempt re-created it between the delete and here.
+                        return recordDelivery(tally, 'skipped');
+                    }
+                    console.log(`Email to ${to} had failed delivery (${idempotencyKey}); re-queued`);
+                    return recordDelivery(tally, 'queued');
                 }
-                throw createError;
+                console.log(`Email to ${to} already queued (${idempotencyKey}); not re-sending`);
+                return recordDelivery(tally, 'skipped');
             }
         } else {
             await db.collection("mail").add(mailDoc);
