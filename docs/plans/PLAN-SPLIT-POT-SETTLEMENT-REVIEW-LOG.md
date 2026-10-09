@@ -131,3 +131,14 @@ by §2b (code written to close qodo's findings had never been seen by codex).
 | # | Sev | Finding | Verified? | Verdict | Response |
 |---|---|---|---|---|---|
 | 1 | P1 | The owner confirms the pot from the preview, but a join between preview and click raises `entryCount` without changing the ALIVE set, so the server records a larger pot than was confirmed. | **Yes**. | **ACCEPTED** | The client sends `expectedPot` / `expectedPrizePerEntry` (required by the schema on a real call; `null` = unpriced). The server recomputes with the SAME `quoteFor` the preview uses, on the pool as read under the lease, and refuses with `QUOTE_CHANGED` before anything is written. Joins are lease-checked since round 1, so the figure cannot move between the check and the finalizer. Emulator test. |
+
+## Code round 12 — HEAD after the QUOTE_CHANGED fix — CLEAN
+
+"No discrete, actionable correctness issues were identified in the diff."
+
+**Gate closed (CLAUDE.md §2b/§2c, three conditions):** qodo reported, all 11 of
+its findings fixed or rejected with reasons on PR #715; codex round 12 on the
+final diff is clean; own read agrees. Codex rounds on this artifact: 12
+(10 completed + 1 interrupted by the usage limit within the cap, then 11–12
+over the cap under the §2b exception: both forced by code written to close
+qodo findings).
