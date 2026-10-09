@@ -76,6 +76,9 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
         notifyMembers: notify,
       });
       toast.success(notify ? `Pool settled. Emailed ${res.emailed} member(s).` : 'Pool settled.');
+      // A failed send is not a failed settlement — the pool IS over. Say so, and
+      // say how many were missed, rather than claim everyone was told.
+      if (res.emailFailed > 0) toast.error(`${res.emailFailed} email(s) could not be sent. The pool is still settled.`);
     } catch (err) {
       logger.error('Failed to settle pool:', err);
       toast.error(getUserMessage(err));

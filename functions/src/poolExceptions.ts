@@ -84,7 +84,7 @@ const loadWeekGames = async (
 };
 
 /** Resolve unique member emails: entries ownerUid -> users/{uid}.email (same as manualReminders.ts). */
-export const resolveMemberEmails = async (
+const resolveMemberEmails = async (
     db: admin.firestore.Firestore,
     poolRef: admin.firestore.DocumentReference
 ): Promise<string[]> => {

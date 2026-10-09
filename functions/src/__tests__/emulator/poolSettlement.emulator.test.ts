@@ -230,6 +230,28 @@ describe('settlePool — read-only preview (codex code-review r1 P1)', () => {
   });
 });
 
+describe('settlePool — per-member delivery (codex code-review r2)', () => {
+  it('a retry reaches only members not yet notified, and reads the roster as it is NOW', async () => {
+    await seed({
+      status: 'COMPLETED', closedVia: 'SETTLED',
+      participantIds: [HOST, ALICE, BOB, CAROL, DAN, NEWBIE],   // NEWBIE joined after the first read
+      settlement: {
+        kind: 'SPLIT', entryIds: [ALICE, BOB], winnerNames: [ALICE, BOB], settledAt: 7, settledBy: HOST,
+        note: null, throughWeek: 4, notifyMembers: true, prizePerEntry: 50, pot: 100,
+        rebuyDuesExcluded: 0, adminAuditedAt: 8, notifiedUids: [ALICE, BOB],
+      },
+    });
+    const res = await settle();
+    expect(res.emailed).toBe(4);                      // host, carol, dan, newbie
+    expect(res.emailFailed).toBe(0);
+    const p = await poolDoc();
+    expect([...p.settlement.notifiedUids].sort()).toEqual([ALICE, BOB, CAROL, DAN, HOST, NEWBIE].sort());
+    expect(p.settlement.emailedAt).toBeTruthy();
+    // No address ever lands on the member-readable pool document.
+    expect(JSON.stringify(p.settlement)).not.toContain('@');
+  });
+});
+
 describe('settlePool — overlapping FOLLOW_UP retries (codex code-review r1 P2)', () => {
   it('two concurrent retries send each email exactly once in total', async () => {
     await seed({

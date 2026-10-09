@@ -42,6 +42,12 @@ export interface PoolSettlement {
    */
   adminAuditClaimedAt?: number;
   emailClaimedAt?: number;
+  /**
+   * Members (by uid, never address) the settlement email is DONE for — sent,
+   * or skipped for a reason a retry cannot fix. A retry after a failed send
+   * reaches only the rest (codex code-review r2 P1).
+   */
+  notifiedUids?: string[];
 }
 
 /** How long a follow-up claim blocks a retry before it counts as abandoned. */

@@ -1,6 +1,6 @@
 import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { validated } from "./lib/validated";
 import { settlePoolSchema } from "./schemas/poolSettlement";
 import { assertPoolOwnerOrManagerNoCo } from "./poolOps";
@@ -11,7 +11,6 @@ import { maybeFinalizeNFLPool, computeFinalRanks, seasonPlacesPublication } from
 import { writeAdminAudit } from "./lib/adminAudit";
 import { sendEmail } from "./reminders";
 import { settlementEmail } from "./lib/settlementEmail";
-import { resolveMemberEmails } from "./poolExceptions";
 import {
     settlementPhase,
     aliveSetMismatch,
@@ -117,17 +116,41 @@ export const settlePool = validated(
             await poolRef.update({ "settlement.adminAuditedAt": Date.now() });
         }
 
+        // 🛑 Delivery is tracked PER MEMBER, by uid (codex code-review r2 P1).
+        // `sendEmail` does not throw on a failed enqueue — it returns 'failed' —
+        // so stamping `emailedAt` unconditionally would mark a transient failure
+        // as delivered for ever. `notifiedUids` records who is done (queued, or
+        // skipped for a reason a retry cannot fix: no address, opted out);
+        // `emailedAt` is stamped only when nobody failed. On a failure the claim
+        // is released so a retry reaches ONLY the members who were missed.
+        // Uids, never addresses: the pool document is readable by its members.
         let emailed = 0;
+        let emailFailed = 0;
         if (owed.email && await claimFollowUp(db, poolRef, "email")) {
             const { subject, html } = settlementEmail(String(pool.name || "Your pool"), settlement);
-            for (const email of await settlementRecipients(db, poolRef, pool.participantIds)) {
-                await sendEmail(db, email, subject, html, { poolId, reason: "pool_settled" });
-                emailed++;
+            // The roster as it stands AFTER the flip (codex code-review r2 P2): a
+            // member who joined between the first read and the lease is on it.
+            const fresh = (await poolRef.get()).data() ?? {};
+            const done = new Set<string>(Array.isArray(fresh.settlement?.notifiedUids) ? fresh.settlement.notifiedUids : []);
+            const newlyDone: string[] = [];
+            for (const { uid: memberUid, email } of await settlementRecipients(db, poolRef, fresh.participantIds)) {
+                if (done.has(memberUid)) continue;
+                const outcome = email
+                    ? await sendEmail(db, email, subject, html, { poolId, reason: "pool_settled" })
+                    : "skipped";
+                if (outcome === "failed") { emailFailed++; continue; }
+                if (outcome === "queued") emailed++;
+                newlyDone.push(memberUid);
             }
-            await poolRef.update({ "settlement.emailedAt": Date.now() });
+            await poolRef.update({
+                ...(newlyDone.length > 0 ? { "settlement.notifiedUids": FieldValue.arrayUnion(...newlyDone) } : {}),
+                ...(emailFailed === 0
+                    ? { "settlement.emailedAt": Date.now() }
+                    : { "settlement.emailClaimedAt": FieldValue.delete() }),
+            });
         }
 
-        return { success: true, settlement, emailed };
+        return { success: true, settlement, emailed, emailFailed };
     },
 );
 
@@ -175,26 +198,33 @@ async function buildPreview(
 }
 
 /**
- * Everyone on the roster, not only entry owners. `resolveMemberEmails` (shared
- * with cancelPool) reads entry owners alone, which misses roster members who
- * never made a pick — and the help text promises EVERY member hears the pool is
- * over. Union of `participantIds` and the entry owners, deduplicated by uid
- * then by address.
+ * Everyone on the roster, not only entry owners (`resolveMemberEmails`, shared
+ * with cancelPool, reads entry owners alone and misses roster members who never
+ * made a pick — the help text promises EVERY member hears the pool is over).
+ * Union of `participantIds` and the entry owners, one row per uid, and one row
+ * per address: a second uid sharing an address is marked done without a send.
  */
 async function settlementRecipients(
     db: admin.firestore.Firestore,
     poolRef: admin.firestore.DocumentReference,
     participantIds: unknown,
-): Promise<string[]> {
-    const fromEntries = await resolveMemberEmails(db, poolRef);
-    const uids = Array.isArray(participantIds) ? [...new Set(participantIds.filter((u): u is string => typeof u === "string" && u.length > 0))] : [];
-    const emails = new Set(fromEntries);
+): Promise<Array<{ uid: string; email: string | null }>> {
+    const uids = new Set<string>(
+        Array.isArray(participantIds) ? participantIds.filter((u): u is string => typeof u === "string" && u.length > 0) : [],
+    );
+    for (const d of (await poolRef.collection("entries").get()).docs) {
+        const owner = (d.data().ownerUid as string | undefined) || d.id;
+        if (owner) uids.add(owner);
+    }
+    const seen = new Set<string>();
+    const out: Array<{ uid: string; email: string | null }> = [];
     for (const uid of uids) {
         const snap = await db.collection("users").doc(uid).get();
-        const email = snap.exists ? (snap.data() as User).email : undefined;
-        if (email) emails.add(email);
+        const email = snap.exists ? ((snap.data() as User).email || null) : null;
+        out.push({ uid, email: email && !seen.has(email) ? email : null });
+        if (email) seen.add(email);
     }
-    return [...emails];
+    return out;
 }
 
 function refusal(code: "ALREADY_SETTLED" | "ALREADY_CLOSED" | "ALREADY_FINALIZED"): HttpsError {
