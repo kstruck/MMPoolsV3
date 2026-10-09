@@ -241,8 +241,10 @@ export function tallyGridRow(args: {
 
 * `wins` / `losses`: count of `PICK` cells with `result === 'W'` / `'L'`. PUSH, VOID, null (undecided) do not count.
 * `earned`: standard → `wins`; confidence → Σ weight over `W` cells.
-* `remaining`: Σ over `PICK` cells with `result === null` and the game not final/cancelled (weight or 1), **plus** for a non-own row the unrevealed picks: `max(0, setCount − revealedPickCount)` × 1 in standard mode. In confidence mode an unrevealed pick's weight is unknowable → `max = null`. `setCount === undefined` (reveal not arrived) → `max = null`.
-* `max = earned + remaining`.
+* `remaining`: Σ over `PICK` cells with `result === null` on a game that can still pay (weight or 1), **plus** for a non-own row the unrevealed picks: `max(0, setCount − revealedPickCount)` × 1 in standard mode, **capped at the number of hidden games that can still pay**. `setCount === undefined` (reveal not arrived) → `max = null`.
+* A game **can still pay** unless it is CANCELLED (VOID), or FINAL and graded PUSH (a tie or an exact ATS cover — independent of the side picked). A FINAL the feed reported **no scores** for is *not* settled — the scorer will grade it when scores arrive — so it still counts. A hidden FINAL that is a decided win or loss also still counts: the reveal can lag the game, that pick may already be a win, and dropping it could put Max below the real score.
+* **Confidence:** an unrevealed pick's weight is unknowable, so `max = null` — but only if some hidden game that can still pay holds an unrevealed pick. When no hidden pick can matter (the saved-pick count equals the revealed picks, or every hidden game is cancelled or a PUSH) the answer is exact.
+* `max = earned + remaining`. **Max is an upper bound, never below the player's real score.** (Revised after review: PR #721 and its qodo/codex findings.)
 
 Rendered as **W-L** (`3-1`, `—` when nothing graded yet) and **Max** (`12`, `?` when null, with a title explaining why). Both after Week Pts. The Majority row shows `—` in both.
 

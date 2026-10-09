@@ -46,12 +46,14 @@ describe('tallyGridRow — own row, standard scoring', () => {
         expect(t).toMatchObject({ wins: 1, losses: 0, earned: 1, max: 3 });
     });
 
-    it('a FINAL game the feed reported no scores for stays ungraded and is not winnable', () => {
+    it('a FINAL the feed reported no scores for is ungraded: not in W-L, but still winnable, so Max keeps it (qodo #2 on #722)', () => {
+        const slate = [game('s1', 'FINAL', { scores: undefined })];
         const t = tallyGridRow({
-            weekGames: GAMES, cells: cells(pick(null), NO_PICK, NO_PICK, NO_PICK, NO_PICK),
+            weekGames: slate, cells: new Map([['s1', pick(null)]]),
             setCount: 1, revealMode: 'PER_GAME', isOwnRow: true, confidenceMode: false,
         });
-        expect(t).toMatchObject({ wins: 0, losses: 0, max: 0 });
+        expect(t).toMatchObject({ wins: 0, losses: 0, earned: 0, max: 1 });
+        expect(formatWinLoss(t)).toBeNull();
     });
 
     it('an own row that picked nothing is 0-0 with Max 0, not unknown', () => {
@@ -153,12 +155,12 @@ describe("tallyGridRow — another player's row", () => {
         }).max).toBe(1);
     });
 
-    it('a hidden FINAL the feed reported no scores for is not winnable either', () => {
+    it('a hidden FINAL the feed reported no scores for is still winnable, so it stays in Max (qodo #2 on #722)', () => {
         const scoreless = [game('s1', 'FINAL', { scores: undefined })];
         expect(tallyGridRow({
             weekGames: scoreless, cells: new Map([['s1', HIDDEN]]),
             setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
-        }).max).toBe(0);
+        }).max).toBe(1);
     });
 
     it('confidence: when every hidden game is cancelled the weights cannot matter, so Max is exact (qodo #2 on #721)', () => {

@@ -28,9 +28,10 @@ import { gradePick, hasReportedScores } from './pickemResult';
  *   - a confidence pick with no stored weight (`WEIGHT_MISSING`).
  *
  * PUSH and VOID earn nothing and are nobody's mistake: excluded from W-L and
- * from Max. A FINAL the feed reported no scores for stays ungraded (`null`) and
- * is excluded from Max too — the scorer is still refusing to grade it, so it is
- * neither earned nor winnable.
+ * from Max. A FINAL the feed reported no scores for stays ungraded (`null`), is
+ * left out of W-L, and STAYS in Max: the scorer will grade it when scores arrive,
+ * so it is still winnable, and Max is an upper bound that must not dip below what
+ * that grade could give.
  *
  * Pure and clock-free: no `now`, no lock arithmetic. Whether a game is over is
  * the game's own `status`, the same field `gradePick` reads.
@@ -51,9 +52,13 @@ export interface GridRowTally {
  * Could a pick on this game that we cannot see still earn a point?
  *
  *   CANCELLED                  never — grades VOID.
- *   FINAL, no reported scores  never — the scorer refuses to grade it.
  *   FINAL, a tie / exact cover never — grades PUSH. A PUSH does not depend on
  *                              which side was picked, so any pick answers it.
+ *   FINAL, no reported scores  YES — it is not settled: the scorer grades it
+ *                              once scores arrive, and showing Max below what
+ *                              that grade could give would break the upper
+ *                              bound (qodo #2 on #722 asked for a number that
+ *                              is not 0; the honest one is the upper bound).
  *   FINAL, otherwise           yes — the hidden pick may already be a win, and
  *                              dropping it could put Max BELOW the real score
  *                              (the reveal can lag the game document).
@@ -62,7 +67,7 @@ export interface GridRowTally {
 function hiddenGameCanPay(game: NFLGame, pickMode: string | undefined): boolean {
     if (game.status === 'CANCELLED') return false;
     if (game.status !== 'FINAL') return true;
-    if (!hasReportedScores(game)) return false;
+    if (!hasReportedScores(game)) return true;
     // PUSH is independent of the side picked, so either team answers it; a real
     // team is needed because `gradePick` returns null for an empty pick.
     return gradePick(game, game.homeTeam.abbreviation, pickMode) !== 'PUSH';
@@ -111,10 +116,13 @@ export function tallyGridRow(args: {
             if (typeof weight === 'number') earned += weight; else weightMissing = true;
         } else if (cell.result === 'L') {
             losses++;
-        } else if (cell.result === null && game.status !== 'FINAL' && game.status !== 'CANCELLED') {
+        } else if (cell.result === null && game.status !== 'CANCELLED' && (game.status !== 'FINAL' || !hasReportedScores(game))) {
+            // Ungraded: not over yet, OR a FINAL the feed reported no scores for —
+            // the scorer will grade that one when scores arrive, so it is still
+            // winnable and must stay in Max (an upper bound).
             if (typeof weight === 'number') remaining += weight; else weightMissing = true;
         }
-        // PUSH, VOID, and a scoreless FINAL: neither earned nor winnable.
+        // PUSH and VOID: neither earned nor winnable.
     }
 
     const tally = { wins, losses, earned };
