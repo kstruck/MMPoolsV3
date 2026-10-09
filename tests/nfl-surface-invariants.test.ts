@@ -975,7 +975,7 @@ describe('the tiebreaker explanation has ONE source, and both surfaces read it',
  * on the Majority row before ITS game map.
  */
 describe('current picks grid — the Majority row has a cell for every fixed column', () => {
-  it('Player, Set, Week Pts headers ↔ label, dash, dash before weekGames.map', () => {
+  it('Player, Set, Week Pts, W-L, Max headers ↔ label + four dashes before weekGames.map', () => {
     const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'), 'utf8');
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     // Every marker is asserted present before it is used to slice, so a
@@ -996,7 +996,7 @@ describe('current picks grid — the Majority row has a cell for every fixed col
     const majorityBlock = code.slice(majorityStart, majorityGamesMap);
     // label cell is the <td> that wraps "Majority" itself, opened before the marker
     const fixedMajorityCells = 1 + (majorityBlock.match(/<td\b/g) ?? []).length;
-    expect(fixedHeaders).toBe(3);
+    expect(fixedHeaders).toBe(5);
     expect(fixedMajorityCells).toBe(fixedHeaders);
   });
 });
