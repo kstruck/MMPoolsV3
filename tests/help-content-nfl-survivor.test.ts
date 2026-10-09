@@ -147,8 +147,21 @@ describe('T10 — the eight survivor settings are explained', () => {
     expect(helpRegistry.resolveTopic(HOST, path)?.id).toBe(path);
   });
 
-  it('authors exactly those eight and nothing else', () => {
-    expect(NFL_SURVIVOR_TOPICS.map((t) => t.id).sort()).toEqual([...T10_PATHS].sort());
+  it('authors exactly those eight settings and nothing else', () => {
+    // Settings topics only. The file also carries ONE Survivor-only commissioner
+    // ACTION, the split-pot settlement (PLAN-SPLIT-POT-SETTLEMENT §2.4) — it is
+    // not a setting and is pinned by the next case, so a stray settings topic
+    // still fails here.
+    expect(NFL_SURVIVOR_TOPICS.map((t) => t.id).filter((id) => id.startsWith('settings.')).sort())
+      .toEqual([...T10_PATHS].sort());
+    expect(NFL_SURVIVOR_TOPICS.map((t) => t.id).filter((id) => !id.startsWith('settings.')))
+      .toEqual(['nfl.manager.settlePool']);
+  });
+
+  it('the settlement topic is commissioner-only and resolves only on a Survivor pool', () => {
+    expect(helpRegistry.resolveTopic(HOST, 'nfl.manager.settlePool')?.id).toBe('nfl.manager.settlePool');
+    expect(helpRegistry.resolveTopic(MEMBER, 'nfl.manager.settlePool')).toBeFalsy();
+    expect(helpRegistry.resolveTopic({ poolType: 'NFL_PICKEM', audience: 'commissioner' } as const, 'nfl.manager.settlePool')).toBeFalsy();
   });
 
   it('every one of them is scoped to NFL_SURVIVOR alone', () => {

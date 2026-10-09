@@ -130,8 +130,9 @@ describe('settlePool — a full settlement', () => {
     const audit = (await poolRef().collection('audit').where('type', '==', 'POOL_SETTLED').get()).docs;
     expect(audit).toHaveLength(1);
 
-    // resolveMemberEmails = entry owners: four members, one email each.
-    expect(res.emailed).toBe(4);
+    // Every roster member (participantIds ∪ entry owners), once each: the host
+    // and four players — the host has no entry and must still be told.
+    expect(res.emailed).toBe(5);
   });
 
   it('a second call is ALREADY_SETTLED and changes nothing', async () => {
@@ -198,7 +199,7 @@ describe('settlePool — crash recovery', () => {
       },
     });
     const res = await settle();
-    expect(res.emailed).toBe(4);
+    expect(res.emailed).toBe(5);
     const p = await poolDoc();
     expect(p.settlement.settledAt).toBe(7);
     expect(p.settlement.adminAuditedAt).toBe(8);

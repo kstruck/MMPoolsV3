@@ -20,7 +20,7 @@ import {
     throughWeekOf,
 } from "./lib/settlement";
 import { SETTLED, joinNames, type PoolSettlement } from "./shared/settlement";
-import type { AuditLogEvent } from "./types";
+import type { AuditLogEvent, User } from "./types";
 
 /**
  * settlePool — end a Survivor pool early because its remaining players agreed to
@@ -109,7 +109,7 @@ export const settlePool = validated(
         let emailed = 0;
         if (owed.email) {
             const { subject, html } = settlementEmail(String(pool.name || "Your pool"), settlement);
-            for (const email of await resolveMemberEmails(db, poolRef)) {
+            for (const email of await settlementRecipients(db, poolRef, pool.participantIds)) {
                 await sendEmail(db, email, subject, html, { poolId, reason: "pool_settled" });
                 emailed++;
             }
@@ -119,6 +119,29 @@ export const settlePool = validated(
         return { success: true, settlement, emailed };
     },
 );
+
+/**
+ * Everyone on the roster, not only entry owners. `resolveMemberEmails` (shared
+ * with cancelPool) reads entry owners alone, which misses roster members who
+ * never made a pick — and the help text promises EVERY member hears the pool is
+ * over. Union of `participantIds` and the entry owners, deduplicated by uid
+ * then by address.
+ */
+async function settlementRecipients(
+    db: admin.firestore.Firestore,
+    poolRef: admin.firestore.DocumentReference,
+    participantIds: unknown,
+): Promise<string[]> {
+    const fromEntries = await resolveMemberEmails(db, poolRef);
+    const uids = Array.isArray(participantIds) ? [...new Set(participantIds.filter((u): u is string => typeof u === "string" && u.length > 0))] : [];
+    const emails = new Set(fromEntries);
+    for (const uid of uids) {
+        const snap = await db.collection("users").doc(uid).get();
+        const email = snap.exists ? (snap.data() as User).email : undefined;
+        if (email) emails.add(email);
+    }
+    return [...emails];
+}
 
 function refusal(code: "ALREADY_SETTLED" | "ALREADY_CLOSED" | "ALREADY_FINALIZED"): HttpsError {
     const text = {

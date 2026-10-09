@@ -204,22 +204,6 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     audience: HOST_ONLY,
     terms: ['pool-lifecycle-state'],
   },
-  {
-    // PLAN-SPLIT-POT-SETTLEMENT §2.4.
-    id: 'nfl.manager.settlePool',
-    title: 'Ending the pool with a split pot',
-    short: 'When the players still alive agree to split the pot, this ends the pool now and records all of them as sharing 1st place. It cannot be undone.',
-    long: [
-      'Everyone still alive shares 1st place. They are recorded as co-champions in their history, and the 1st place prize is split evenly between them.',
-      'The pot is the entry fee times the number of entries, the same figure the pool would have paid at the end of the season. Rebuy dues are not part of it.',
-      'The pool ends immediately. Nobody can make another pick, use a rebuy or join. Every member sees a banner saying the pot was split, and — unless you untick the box — is emailed. The note you type is shown in both.',
-      'Money is still settled between you and your players; nothing is paid out here. Only the pool’s owner sees this control; a co-commissioner cannot end a pool.',
-    ].join('\n\n'),
-    fields: [],
-    poolTypes: ['NFL_SURVIVOR'] as const,
-    audience: HOST_ONLY,
-    terms: ['pool-lifecycle-state'],
-  },
 ];
 
 /**
@@ -268,7 +252,6 @@ export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
   // T4 — the three audited exceptions, on the tab that renders them.
   { topic: 'nfl.manager.proxyPick', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 1 },
   { topic: 'nfl.manager.cancelPool', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 2 },
-  { topic: 'nfl.manager.settlePool', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 3 },
 
   { topic: 'nfl.manager.settingsLock', page: 'pool.nfl.manager.overview', section: 'general', order: 0 },
 ];
