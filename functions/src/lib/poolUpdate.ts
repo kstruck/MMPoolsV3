@@ -206,11 +206,6 @@ export function flattenSettingsPatch(
       out['settings.lockBufferMinutes'] = n;
       continue;
     }
-    // Survivor parity settings. `updatePoolSettingsSchema.updates` is
-    // `z.record(z.string(), z.unknown())` — permissive, which means these arrive
-    // UNVALIDATED. A negative `maxTeamUses` sliding through would read as
-    // "unlimited" to any `> 0` test, so reject rather than coerce: a mis-set
-    // value must be visible, not silently reinterpreted.
     // Pick Distribution visibility (PLAN-SPLIT-POT-SETTLEMENT Part C). Rejected
     // rather than coerced: a typo would otherwise be stored and silently read as
     // ALWAYS by `effectivePickDistribution`, showing a card the commissioner
@@ -223,6 +218,11 @@ export function flattenSettingsPatch(
       out['settings.pickDistribution'] = value;
       continue;
     }
+    // Survivor parity settings. `updatePoolSettingsSchema.updates` is
+    // `z.record(z.string(), z.unknown())` — permissive, which means these arrive
+    // UNVALIDATED. A negative `maxTeamUses` sliding through would read as
+    // "unlimited" to any `> 0` test, so reject rather than coerce: a mis-set
+    // value must be visible, not silently reinterpreted.
     if (key === 'tieCountsAs') {
       if (value !== 'WIN' && value !== 'LOSS') {
         rejected.push(`settings.tieCountsAs (must be WIN or LOSS)`);

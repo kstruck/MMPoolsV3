@@ -345,7 +345,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // The commissioner's Pick Distribution setting governs the POOL split here too
   // (codex r3 on PR-C). The site-wide line is a different aggregate and is not
   // covered (PLAN-SPLIT-POT-SETTLEMENT D10).
-  const { visibleIds: poolSplitVisible } = useDistributionVisibility(_pool, selectedWeek, weeklyGames);
+  const { mode: poolSplitMode, visibleIds: poolSplitVisible } = useDistributionVisibility(_pool, selectedWeek, weeklyGames);
   const poolSplitHidden = !!focusGame && !poolSplitVisible.has(focusGame.id);
   const focusPoolC = focusGame && !poolSplitHidden ? poolConsensus[focusGame.id] : null;
   const focusSiteC = focusGame ? siteConsensus[focusGame.id] : null;
@@ -781,12 +781,15 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                       Empty state until the aggregation jobs have run; never fabricated. */}
                   <div className="bg-page border border-line p-3.5 rounded-xl flex flex-col justify-between">
                     <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Consensus</span>
-                    {(focusPoolC?.total || focusSiteC?.total || focusWinProb) ? (
+                    {/* A hidden pool split still renders the rows (qodo #2 on #716):
+                        the empty-state copy would claim nobody has picked. Showing
+                        "Hidden" regardless of the raw total leaks nothing. */}
+                    {(poolSplitHidden || focusPoolC?.total || focusSiteC?.total || focusWinProb) ? (
                       <div className="space-y-2 text-[11px] font-display font-bold uppercase tracking-[0.04em] num">
                         <div className="flex justify-between items-center">
                           <span className="text-muted">Pool</span>
                           <span className="text-[color:var(--text)]">
-                            {poolSplitHidden ? <span className="text-faint" title="The commissioner shows this once picks lock">Hidden</span>
+                            {poolSplitHidden ? <span className="text-faint" title={poolSplitMode === 'OFF' ? 'The commissioner has hidden the pool split' : 'The commissioner shows this once picks lock'}>Hidden</span>
                               : focusPoolC?.total ? `${focusPoolC.awayAbbr} ${focusPoolC.awayPct}% · ${focusPoolC.homeAbbr} ${focusPoolC.homePct}%` : '—'}
                           </span>
                         </div>

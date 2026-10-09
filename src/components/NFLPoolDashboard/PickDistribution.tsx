@@ -107,9 +107,12 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
 
   // Compile pick distribution statistics from the selected server aggregate
   const distributionData = useMemo(() => {
-    if (shownGames.length === 0) return [];
+    // The setting governs the POOL split only (D10, qodo #5 on #716): the Site
+    // tab is a different aggregate and shows every game.
+    const list = isSite ? games : shownGames;
+    if (list.length === 0) return [];
 
-    return shownGames.map(game => {
+    return list.map(game => {
       // The two projections are the same shape by construction (`projDoc` in
       // functions/src/consensus.ts writes both), but the site hook has already
       // dropped rows with no picks and narrowed the types, so it is read directly
@@ -124,7 +127,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         awayPct: typeof c?.awayPct === 'number' ? c.awayPct : undefined,
       };
     });
-  }, [poolByGame, site.byGame, isSite, shownGames]);
+  }, [poolByGame, site.byGame, isSite, games, shownGames]);
 
   const tabClass = (active: boolean) =>
     `px-2.5 py-1 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-colors ${
@@ -183,7 +186,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
       </p>
 
       <div className="space-y-4">
-        {heldBack > 0 && (
+        {!isSite && heldBack > 0 && (
           <p className="font-body text-[12px] text-faint italic num">
             {shownGames.length === 0
               ? 'The commissioner shows each game’s split once its picks lock.'

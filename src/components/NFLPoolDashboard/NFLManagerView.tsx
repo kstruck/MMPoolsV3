@@ -1395,6 +1395,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               <select
                 id="pick-distribution-visibility"
                 value={shownPickDistribution}
+                // Locked while a save is in flight (qodo #1 on #716): a change made
+                // then would be marked clean by that save and never sent.
+                disabled={isSavingSettings}
                 onChange={e => { setPickDistribution(e.target.value as PickDistributionVisibility); setPickDistributionTouched(true); }}
                 className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
               >

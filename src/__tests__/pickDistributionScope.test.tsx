@@ -265,6 +265,13 @@ describe('PickDistribution visibility setting', () => {
     expect(screen.queryByText(/NE vs SEA/)).toBeNull();
   });
 
+  it('AFTER_LOCK hides only the POOL split: the Site tab still shows an open game (D10)', () => {
+    render(withSetting('AFTER_LOCK', Date.now() + 48 * HOUR));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
+    expect(screen.getByText(/NE vs SEA/)).toBeTruthy();
+    expect(screen.queryByText(/once its picks lock/)).toBeNull();
+  });
+
   it('AFTER_LOCK shows a game once its picks have locked', () => {
     render(withSetting('AFTER_LOCK', Date.now() - HOUR));
     expect(screen.getByText(/NE vs SEA/)).toBeTruthy();
