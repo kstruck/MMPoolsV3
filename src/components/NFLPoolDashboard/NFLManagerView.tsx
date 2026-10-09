@@ -2196,7 +2196,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 `settlePool` refuses a co-commissioner server-side (D2). Hidden once
                 the pool is over by any route — the callable would refuse anyway. */}
             {viewerIsOwner && type === 'NFL_SURVIVOR' && !poolIsOver(castPool) && (
-              <SettlePoolPanel pool={pool} entries={entries} />
+              <SettlePoolPanel pool={pool} />
             )}
 
             {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):

@@ -1,15 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Handshake } from 'lucide-react';
 import type { Pool } from '../../types';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { logger } from '../../utils/logger';
-import { rowDisplayName } from '../../utils/entrySelection';
 import { useToast } from '../ui/Toast';
 import { FieldLabel } from '../ui/Field';
-import { computeSeasonPrizeSnapshot } from '@shared/seasonPrizes';
-import { splitPrizes } from '@shared/prizeSplit';
-import { joinNames } from '@shared/settlement';
+import { joinNames, type SettlementPreview } from '@shared/settlement';
 
 /**
  * "End the pool — split the pot" (PLAN-SPLIT-POT-SETTLEMENT §2.4).
@@ -18,60 +15,45 @@ import { joinNames } from '@shared/settlement';
  * `viewerIsOwner` flag as Cancel, because `settlePool` refuses a
  * co-commissioner server-side (D2).
  *
- * 🛑 THE WINNERS ARE NOT A CHOICE (D3). The list is every ALIVE row, read-only,
- * and that exact list is what is sent. The server re-reads the ALIVE set under
- * the scoring lease and refuses a mismatch, so a stale screen (someone was
- * eliminated since it loaded) is refused rather than settling a field the
- * commissioner did not see.
- *
- * The pot shown is the one the server will record: the same
- * `computeSeasonPrizeSnapshot` + `splitPrizes` the finalizer runs, over
- * `pool.entryCount` (liable entries, PLAN-MULTI-ENTRY D8) — printed beside it so
- * the commissioner can check it (D6). Every winner ranks 1st, so their share
- * depends only on how many there are, never on the eliminated order.
+ * 🛑 THE WINNERS COME FROM THE SERVER, NOT FROM THE STANDINGS ROWS (codex
+ * code-review r1 P1). `buildMemberStandings` marks an entry that has not been
+ * scored yet as `unscored`, exactly like a roster-only member with no entry, so
+ * the client cannot tell an ALIVE survivor from someone who never played. The
+ * panel asks `settlePool` for a read-only preview — the ALIVE entries, the pot
+ * and the per-winner share, computed by the finalizer's own functions — shows
+ * it, and sends back exactly those ids. The server re-checks under the scoring
+ * lease and refuses if the field changed in between (D3).
  */
-interface SettlePoolPanelProps {
-  pool: Pool;
-  /** Standings rows (`buildMemberStandings`), the same array the Standings tab gets. */
-  entries: any[];
-}
-
-export const SettlePoolPanel: React.FC<SettlePoolPanelProps> = ({ pool, entries }) => {
+export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
   const toast = useToast();
   const [note, setNote] = useState('');
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
-  const castPool = pool as any;
+  // Stamped with its pool and checked at render, like the grid's reveal: the
+  // component is reused across pool navigation, and an effect reset lands one
+  // frame late.
+  const [state, setState] = useState<{ poolId: string; preview?: SettlementPreview; error?: string } | null>(null);
 
-  const alive = useMemo(
-    () => entries.filter(e => !e.unscored && e.status === 'ALIVE')
-      .sort((a, b) => String(a.id).localeCompare(String(b.id))),
-    [entries],
-  );
+  useEffect(() => {
+    let live = true;
+    dbService.previewSettlement(pool.id)
+      .then(preview => { if (live) setState({ poolId: pool.id, preview }); })
+      .catch(err => {
+        logger.error('Failed to load the settlement preview:', err);
+        if (live) setState({ poolId: pool.id, error: getUserMessage(err) });
+      });
+    return () => { live = false; };
+  }, [pool.id]);
 
-  const preview = useMemo(() => {
-    const entryCount = typeof castPool.entryCount === 'number' ? castPool.entryCount : undefined;
-    const snap = computeSeasonPrizeSnapshot(castPool.settings ?? {}, entryCount, Date.now());
-    if (!snap || alive.length === 0) return { entryCount, pot: snap?.pot ?? null, each: null as number | null };
-    const ranked = alive.map(e => ({ id: String(e.id), rank: 1 }));
-    try {
-      const split = splitPrizes({ places: snap.places, pot: snap.pot, ranked });
-      const amounts = ranked.map(r => split.awards[r.id] ?? 0);
-      const each = amounts.every(a => a === amounts[0]) ? amounts[0] : null;
-      return { entryCount, pot: snap.pot, each };
-    } catch {
-      // A malformed place list — the server publishes it UNPRICED (fail-closed).
-      return { entryCount, pot: snap.pot, each: null };
-    }
-  }, [castPool.entryCount, castPool.settings, alive]);
-
-  const names = alive.map(rowDisplayName);
+  const current = state?.poolId === pool.id ? state : null;
+  const preview = current?.preview;
+  const names = preview ? preview.alive.map(a => a.name) : [];
 
   const handleSettle = async () => {
-    if (alive.length === 0) return;
+    if (!preview || preview.alive.length === 0) return;
     const first = await toast.confirm({
       title: 'End this pool and split the pot?',
-      message: `This ends "${pool.name}" now. ${joinNames(names)} share 1st place${preview.each !== null ? ` — $${preview.each} each` : ''}. Picks close for everyone.`,
+      message: `This ends "${pool.name}" now. ${joinNames(names)} share 1st place${preview.prizePerEntry !== null ? ` — $${preview.prizePerEntry} each` : ''}. Picks close for everyone.`,
       confirmLabel: 'Continue',
       danger: true,
     });
@@ -89,7 +71,7 @@ export const SettlePoolPanel: React.FC<SettlePoolPanelProps> = ({ pool, entries 
     try {
       const res = await dbService.settlePool({
         poolId: pool.id,
-        entryIds: alive.map(e => String(e.id)),
+        entryIds: preview.alive.map(a => a.id),
         ...(note.trim() ? { note: note.trim() } : {}),
         notifyMembers: notify,
       });
@@ -115,23 +97,31 @@ export const SettlePoolPanel: React.FC<SettlePoolPanelProps> = ({ pool, entries 
         alive shares 1st place, the pool ends now, and nobody can make another pick. It cannot be undone.
       </p>
 
-      {alive.length === 0 ? (
+      {!current ? (
+        <p className="font-body text-[12px] text-faint italic">Checking who is still alive…</p>
+      ) : current.error ? (
+        <p className="font-body text-[12px] text-brandred-600">{current.error}</p>
+      ) : !preview || preview.alive.length === 0 ? (
         <p className="font-body text-[12px] text-faint italic">Nobody is still alive, so there is no pot to split.</p>
       ) : (
         <>
           <div className="bg-page border border-line rounded-md p-3 space-y-1">
             <p className="font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted">
-              Sharing 1st place ({alive.length})
+              Sharing 1st place ({preview.alive.length})
             </p>
             <p className="font-body text-sm text-[color:var(--text)]">{joinNames(names)}</p>
             <p className="font-body text-[12px] text-muted num">
               {preview.pot !== null
-                ? <>Pot ${preview.pot}, priced on {preview.entryCount} {preview.entryCount === 1 ? 'entry' : 'entries'}.{' '}
-                    {preview.each !== null ? <>Recorded as ${preview.each} each.</> : <>The per-player amount is not priced.</>}</>
+                ? <>Pot ${preview.pot}
+                    {preview.entryCount !== null ? <>, priced on {preview.entryCount} {preview.entryCount === 1 ? 'entry' : 'entries'}</> : null}.{' '}
+                    {preview.prizePerEntry !== null ? <>Recorded as ${preview.prizePerEntry} each.</> : <>The per-player amount is not priced.</>}</>
                 : <>This pool has no priced pot, so no amount is recorded.</>}
             </p>
             <p className="font-body text-[11px] text-faint">
-              Rebuy dues are not part of the pot. Money is still settled between you and your players.
+              {preview.rebuyDuesExcluded > 0
+                ? <>${preview.rebuyDuesExcluded} of rebuy dues are NOT part of this pot. </>
+                : <>Rebuy dues are not part of the pot. </>}
+              Money is still settled between you and your players.
             </p>
           </div>
           <div>

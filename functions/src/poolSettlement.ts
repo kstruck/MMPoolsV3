@@ -7,7 +7,7 @@ import { assertPoolOwnerOrManagerNoCo } from "./poolOps";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { isSimPool } from "./shared/testPool";
 import { withScoringLease, fencedWrite } from "./lib/scoringLease";
-import { maybeFinalizeNFLPool } from "./nflFinalize";
+import { maybeFinalizeNFLPool, computeFinalRanks, seasonPlacesPublication } from "./nflFinalize";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { sendEmail } from "./reminders";
 import { settlementEmail } from "./lib/settlementEmail";
@@ -18,8 +18,9 @@ import {
     settlementMoney,
     rebuyDuesOf,
     throughWeekOf,
+    followUpClaimable,
 } from "./lib/settlement";
-import { SETTLED, joinNames, type PoolSettlement } from "./shared/settlement";
+import { SETTLED, joinNames, type PoolSettlement, type SettlementPreview } from "./shared/settlement";
 import type { AuditLogEvent, User } from "./types";
 
 /**
@@ -70,10 +71,17 @@ export const settlePool = validated(
         const phase = settlementPhase(pool);
         if (phase.kind === "REFUSE") throw refusal(phase.code);
 
+        // Read-only preview (codex code-review r1 P1). Writes nothing and takes no
+        // lease; the real call re-reads and re-checks everything under the lease.
+        if (input.preview) {
+            if (phase.kind !== "FULL") throw refusal("ALREADY_SETTLED");
+            return { success: true, preview: await buildPreview(db, poolRef, pool) };
+        }
+
         let settlement: PoolSettlement;
         if (phase.kind === "FULL") {
             const result = await withScoringLease(db, poolId, Date.now(), (fence) =>
-                runFullSettlement(db, poolId, pool.name, fence, { uid, entryIds, note, notifyMembers }));
+                runFullSettlement(db, poolId, pool.name, fence, { uid, entryIds: entryIds ?? [], note, notifyMembers }));
             if (result === "LEASE_BUSY") {
                 throw new HttpsError("failed-precondition", "SCORING_IN_PROGRESS: The pool is being scored right now. Try again in a minute.");
             }
@@ -87,7 +95,10 @@ export const settlePool = validated(
             ? { adminAudit: true, email: settlement.notifyMembers }
             : { adminAudit: phase.adminAudit, email: phase.email };
 
-        if (owed.adminAudit) {
+        // Each step is CLAIMED in a transaction first (codex code-review r1 P2), so
+        // overlapping retries cannot both run it. A lost claim is not an error:
+        // another attempt is doing, or has done, that step.
+        if (owed.adminAudit && await claimFollowUp(db, poolRef, "adminAudit")) {
             await writeAdminAudit({
                 actorUid: uid,
                 actorEmail: request.auth!.token.email as string | undefined,
@@ -107,7 +118,7 @@ export const settlePool = validated(
         }
 
         let emailed = 0;
-        if (owed.email) {
+        if (owed.email && await claimFollowUp(db, poolRef, "email")) {
             const { subject, html } = settlementEmail(String(pool.name || "Your pool"), settlement);
             for (const email of await settlementRecipients(db, poolRef, pool.participantIds)) {
                 await sendEmail(db, email, subject, html, { poolId, reason: "pool_settled" });
@@ -119,6 +130,49 @@ export const settlePool = validated(
         return { success: true, settlement, emailed };
     },
 );
+
+/** Take the claim on one follow-up step, or report that it is not ours to run. */
+async function claimFollowUp(
+    db: admin.firestore.Firestore,
+    poolRef: admin.firestore.DocumentReference,
+    step: "adminAudit" | "email",
+): Promise<boolean> {
+    return db.runTransaction(async (tx) => {
+        const now = Date.now();
+        const settlement = (await tx.get(poolRef)).data()?.settlement as Partial<PoolSettlement> | undefined;
+        if (!followUpClaimable(settlement, step, now)) return false;
+        tx.update(poolRef, { [`settlement.${step === "email" ? "emailClaimedAt" : "adminAuditClaimedAt"}`]: now });
+        return true;
+    });
+}
+
+/**
+ * What the settlement WOULD record, from the finalizer's own functions — the
+ * same `computeFinalRanks` + `seasonPlacesPublication` it runs — so the panel
+ * cannot show a different field, pot or share than the write produces (unless
+ * the pool changes in between, which the real call re-checks and refuses).
+ */
+async function buildPreview(
+    db: admin.firestore.Firestore,
+    poolRef: admin.firestore.DocumentReference,
+    pool: Record<string, any>,
+): Promise<SettlementPreview> {
+    const entriesSnap = await poolRef.collection("entries").get();
+    const entries: Array<Record<string, any> & { id: string }> =
+        entriesSnap.docs.map(d => ({ ...(d.data() as Record<string, any>), id: d.id }));
+    const alive = entries.filter(e => e.status !== "ELIMINATED").sort((a, b) => a.id.localeCompare(b.id));
+    const membersSnap = await poolRef.collection("members").get();
+    const ranked = computeFinalRanks("NFL_SURVIVOR", entries);
+    const pub = seasonPlacesPublication(pool, ranked, entries.length);
+    const money = settlementMoney({ seasonPlaces: pub.seasonPlaces, seasonPrize: pub.seasonPrize }, alive.map(e => e.id));
+    return {
+        alive: alive.map(e => ({ id: e.id, name: String(e.entryName || e.userName || "Player") })),
+        pot: money.pot,
+        prizePerEntry: money.prizePerEntry,
+        entryCount: pub.seasonPrize ? pub.seasonPrize.entryCount : null,
+        rebuyDuesExcluded: rebuyDuesOf(membersSnap.docs.map(d => d.data())),
+    };
+}
 
 /**
  * Everyone on the roster, not only entry owners. `resolveMemberEmails` (shared

@@ -35,6 +35,26 @@ export interface PoolSettlement {
   /** Follow-up completion stamps (crash recovery). */
   adminAuditedAt?: number;
   emailedAt?: number;
+  /**
+   * Follow-up CLAIMS, taken in a transaction before the side effect runs, so
+   * two overlapping retries cannot both send (codex code-review r1 P2). A claim
+   * older than `FOLLOW_UP_CLAIM_MS` is treated as abandoned (a crashed attempt).
+   */
+  adminAuditClaimedAt?: number;
+  emailClaimedAt?: number;
+}
+
+/** How long a follow-up claim blocks a retry before it counts as abandoned. */
+export const FOLLOW_UP_CLAIM_MS = 10 * 60 * 1000;
+
+/** What the read-only preview returns (`settlePool` with `preview: true`). */
+export interface SettlementPreview {
+  alive: Array<{ id: string; name: string }>;
+  pot: number | null;
+  prizePerEntry: number | null;
+  /** The entry count the pot is priced on (`pool.entryCount`, liable entries). */
+  entryCount: number | null;
+  rebuyDuesExcluded: number;
 }
 
 /** "A", "A and B", "A, B and C". */

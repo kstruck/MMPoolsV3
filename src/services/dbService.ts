@@ -62,7 +62,7 @@ import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropC
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
 import type { PublicProfile } from "@shared/profile";
-import type { PoolSettlement } from "@shared/settlement";
+import type { PoolSettlement, SettlementPreview } from "@shared/settlement";
 
 /**
  * A `publicProfiles/{uid}` document as READ (not as written). Every field of the
@@ -1997,6 +1997,16 @@ export const dbService = {
         const fn = httpsCallable<Record<string, unknown>, { success: boolean; settlement: PoolSettlement; emailed: number }>(functions, 'settlePool');
         const res = await fn(withCorrelationId({ ...input, outcome: 'SPLIT' }));
         return { settlement: res.data.settlement, emailed: res.data.emailed };
+    },
+
+    // Read-only: who is still alive and what the settlement would record —
+    // computed server-side by the finalizer's own functions (codex code-review
+    // r1 P1: the standings projection cannot tell an unscored ALIVE entry from a
+    // roster-only member). The panel sends back exactly these ids.
+    previewSettlement: async (poolId: string): Promise<SettlementPreview> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; preview: SettlementPreview }>(functions, 'settlePool');
+        const res = await fn(withCorrelationId({ poolId, outcome: 'SPLIT', preview: true }));
+        return res.data.preview;
     },
 
     /** Commissioner nudge: email specific members (or all entries when targetUids is omitted) a picks/payment reminder. */

@@ -209,6 +209,43 @@ describe('settlePool — crash recovery', () => {
   });
 });
 
+describe('settlePool — read-only preview (codex code-review r1 P1)', () => {
+  it('returns every ALIVE entry doc — including one standings would show as unscored — with the exact money, and writes nothing', async () => {
+    await seed();
+    const before = JSON.stringify(await poolDoc());
+    const res = await wSettle({ data: { poolId: POOL, outcome: 'SPLIT', preview: true }, auth: auth(HOST) } as never) as any;
+    expect(res.preview).toEqual({
+      alive: [{ id: ALICE, name: ALICE }, { id: BOB, name: BOB }],
+      pot: 100, prizePerEntry: 50, entryCount: 4, rebuyDuesExcluded: 0,
+    });
+    expect(JSON.stringify(await poolDoc())).toBe(before);
+    expect((await poolRef().collection('audit').get()).size).toBe(0);
+  });
+
+  it('is refused to a co-commissioner and on a settled pool', async () => {
+    await seed();
+    await expect(wSettle({ data: { poolId: POOL, outcome: 'SPLIT', preview: true }, auth: auth(CO) } as never)).rejects.toThrow();
+    await settle(HOST, { notifyMembers: false });
+    await expect(wSettle({ data: { poolId: POOL, outcome: 'SPLIT', preview: true }, auth: auth(HOST) } as never)).rejects.toThrow(/ALREADY_SETTLED/);
+  });
+});
+
+describe('settlePool — overlapping FOLLOW_UP retries (codex code-review r1 P2)', () => {
+  it('two concurrent retries send each email exactly once in total', async () => {
+    await seed({
+      status: 'COMPLETED', closedVia: 'SETTLED',
+      settlement: {
+        kind: 'SPLIT', entryIds: [ALICE, BOB], winnerNames: [ALICE, BOB], settledAt: 7, settledBy: HOST,
+        note: null, throughWeek: 4, notifyMembers: true, prizePerEntry: 50, pot: 100,
+        rebuyDuesExcluded: 0, adminAuditedAt: 8,
+      },
+    });
+    const [a, b] = await Promise.all([settle(), settle()]);
+    expect(a.emailed + b.emailed).toBe(5);
+    expect([a.emailed, b.emailed].sort()).toEqual([0, 5]);
+  });
+});
+
 describe('a settled pool takes no more play (POOL_OVER)', () => {
   it('refuses a pick, a proxy pick, a rebuy and a new member', async () => {
     await seed();

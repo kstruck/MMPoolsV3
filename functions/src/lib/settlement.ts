@@ -1,6 +1,6 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import { isVoidedPool } from "./autoScoreDecisions";
-import { SETTLED, type PoolSettlement } from "../shared/settlement";
+import { SETTLED, FOLLOW_UP_CLAIM_MS, type PoolSettlement } from "../shared/settlement";
 
 /**
  * Pure decisions for `settlePool` (PLAN-SPLIT-POT-SETTLEMENT §2.2) and the
@@ -78,6 +78,23 @@ export function assertPoolAcceptsPlay(pool: SettleablePool | undefined | null): 
   if (poolIsOver(pool)) {
     throw new HttpsError('failed-precondition', 'POOL_OVER: This pool is over — no more picks, rebuys or new members.');
   }
+}
+
+/**
+ * May this attempt run a follow-up step? Not once it is done, and not while
+ * another attempt holds a live claim on it. Decided INSIDE a transaction by the
+ * caller, which then writes the claim.
+ */
+export function followUpClaimable(
+  settlement: Partial<PoolSettlement> | null | undefined,
+  step: 'adminAudit' | 'email',
+  now: number,
+): boolean {
+  const s = settlement ?? {};
+  const done = step === 'email' ? s.emailedAt : s.adminAuditedAt;
+  if (present(done)) return false;
+  const claimed = step === 'email' ? s.emailClaimedAt : s.adminAuditClaimedAt;
+  return !(typeof claimed === 'number' && now - claimed < FOLLOW_UP_CLAIM_MS);
 }
 
 /** Highest key of `scoredWeeks` that is true, or null. */

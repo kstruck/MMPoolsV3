@@ -7,6 +7,7 @@ import {
   throughWeekOf,
   settlementMoney,
   rebuyDuesOf,
+  followUpClaimable,
 } from '../lib/settlement';
 import { joinNames, type PoolSettlement } from '../shared/settlement';
 import { settlePoolSchema } from '../schemas/poolSettlement';
@@ -165,5 +166,31 @@ describe('settlementEmail — says only what the record knows', () => {
     expect(html).not.toContain('after week');
     expect(html).toContain('$25 of rebuy dues are not included');
     expect(html).toContain('Paid via Venmo');
+  });
+});
+
+describe('followUpClaimable — one attempt per follow-up step', () => {
+  const now = 1_000_000_000;
+  it('is claimable when neither done nor claimed', () => {
+    expect(followUpClaimable({}, 'email', now)).toBe(true);
+    expect(followUpClaimable(undefined, 'adminAudit', now)).toBe(true);
+  });
+  it('is never claimable once done', () => {
+    expect(followUpClaimable({ emailedAt: 1 }, 'email', now)).toBe(false);
+    expect(followUpClaimable({ adminAuditedAt: 1 }, 'adminAudit', now)).toBe(false);
+  });
+  it('a live claim blocks; an abandoned one (over 10 minutes) does not', () => {
+    expect(followUpClaimable({ emailClaimedAt: now - 60_000 }, 'email', now)).toBe(false);
+    expect(followUpClaimable({ emailClaimedAt: now - 11 * 60_000 }, 'email', now)).toBe(true);
+  });
+  it('the two steps claim independently', () => {
+    expect(followUpClaimable({ emailClaimedAt: now }, 'adminAudit', now)).toBe(true);
+  });
+});
+
+describe('settlePoolSchema — preview mode', () => {
+  it('preview needs no entryIds; a real call does', () => {
+    expect(settlePoolSchema.safeParse({ poolId: 'p', outcome: 'SPLIT', preview: true }).success).toBe(true);
+    expect(settlePoolSchema.safeParse({ poolId: 'p', outcome: 'SPLIT' }).success).toBe(false);
   });
 });

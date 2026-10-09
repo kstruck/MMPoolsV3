@@ -59,3 +59,14 @@ to-do list, not design defects. On the design questions it was asked:
 **Plan review closed.** Every finding across three rounds is accepted (some with
 a different fix, reasoning above) or rejected with evidence; none open. Code
 review continues on the PR diff (`codex exec review --base origin/main`).
+
+---
+
+# Code review (PR diff, `codex exec review --base origin/main`)
+
+## Code round 1 — HEAD `61f4a123` — 2 findings
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P1 | The panel derived the winners from the standings rows and dropped `unscored` ones; an ALIVE entry not yet scored is `unscored` there, so the server's `WINNERS_MUST_BE_ALIVE_SET` refused every settlement until the next scoring pass. | **Yes** — `buildMemberStandings` marks both an unscored entry and a roster-only member `unscored`, so the client cannot tell them apart. | **ACCEPTED** | `settlePool` gains a read-only `preview: true` mode: owner gate, phase check, then the ALIVE entries, pot, share and entry count computed by the finalizer's own `computeFinalRanks` + `seasonPlacesPublication`. The panel shows the preview and sends back exactly its ids. It also replaces the client-side pot math, so preview and write share one code path. Emulator test: preview equals the record and writes nothing. |
+| 2 | P2 | Two overlapping FOLLOW_UP retries can both send every email before either stamps `emailedAt`. | **Yes**. | **ACCEPTED** | Each follow-up step is claimed in a transaction (`settlement.emailClaimedAt` / `adminAuditClaimedAt`, `followUpClaimable`); a claim older than 10 minutes counts as abandoned. Emulator test: two concurrent retries send 5 emails in total, split 5/0. |
