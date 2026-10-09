@@ -10,6 +10,9 @@ import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/pic
 import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
 import { GridSortToggle } from './GridSortToggle';
 import { rowDisplayName } from '../../utils/entrySelection';
+import { now as serverNow } from '../../utils/serverClock';
+import { distributionGameVisible, effectivePickDistribution } from '@shared/pickDistribution';
+import type { NFLLockPool } from '@shared/nflLockMode';
 
 /**
  * CURRENT PICKS (Kevin's A2) — the page that did not exist.
@@ -90,6 +93,17 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
     [pool.id],
   );
   const splits = consensus?.poolId === pool.id ? consensus.byGame : undefined;
+
+  // The commissioner's Pick Distribution setting governs this row too
+  // (PLAN-SPLIT-POT-SETTLEMENT Part C): it is the same pool aggregate. OFF hides
+  // the row; AFTER_LOCK shows each game's split once that game's pick locks.
+  const majorityMode = effectivePickDistribution((pool as { settings?: { pickDistribution?: unknown } }).settings);
+  const [clock, setClock] = useState(() => serverNow());
+  useEffect(() => {
+    if (majorityMode !== 'AFTER_LOCK') return;
+    const id = setInterval(() => setClock(serverNow()), 60_000);
+    return () => clearInterval(id);
+  }, [majorityMode]);
 
   // Columns are the week's slate in kickoff order, so the grid reads left to
   // right in the order the games (and therefore the reveals) happen.
@@ -310,8 +324,11 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
               })}
 
               {/* MAJORITY — the pool's live split, from the server aggregate.
-                  It is a count and never a name, so it is shown at all times
-                  (Kevin's Q4 ruling) and does not wait on the reveal. */}
+                  It is a count and never a name, so by default it is shown at
+                  all times (Kevin's Q4 ruling) and does not wait on the reveal.
+                  The commissioner's Pick Distribution setting can hide it (OFF)
+                  or hold each game's cell until that game locks (AFTER_LOCK). */}
+              {majorityMode !== 'OFF' && (
               <tr className="bg-surface border-t-2 border-line">
                 <td className="sticky left-0 z-10 bg-surface py-3 px-3 font-display font-bold uppercase text-[11px] tracking-[0.08em] text-muted">
                   Majority
@@ -321,6 +338,11 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                     under their own headers (codex r2 on items 11/12). */}
                 <td className="py-3 px-3 text-center">{dash}</td>
                 {weekGames.map(g => {
+                  if (!distributionGameVisible(pool as unknown as NFLLockPool, week, g, weekGames, clock)) {
+                    return (
+                      <td key={g.id} className="py-3 px-3 text-center" title="Shown once this game's picks lock">{dash}</td>
+                    );
+                  }
                   const m = majorityFor(splits?.[g.id], g);
                   return (
                     <td key={g.id} className="py-3 px-3 text-center text-[12px] font-display font-bold uppercase tracking-[0.08em] num text-navy-700 dark:text-gold-400">
@@ -329,6 +351,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   );
                 })}
               </tr>
+              )}
             </tbody>
           </table>
         )}
@@ -345,10 +368,14 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Set</strong>{' '}
         counts the picks a player has saved out of {weekGames.length} this week — how MANY, never which,
         so it says nothing about who picked what. Your own is live the moment you save it, and everyone
-        else's is visible to the whole pool at any time. <strong>Majority</strong> is the share of
-        this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
-        An exact even split reads <strong>Split</strong>, and a <strong>—</strong> on that row means no picks
-        have been recorded for that game yet.
+        else's is visible to the whole pool at any time.
+        {majorityMode !== 'OFF' && (
+          <> <strong>Majority</strong> is the share of
+          this pool on the leading side, from the live pool consensus — an aggregate that never names anyone.
+          An exact even split reads <strong>Split</strong>, and a <strong>—</strong> on that row means no picks
+          have been recorded for that game yet
+          {majorityMode === 'AFTER_LOCK' ? ', or that the commissioner shows it only once that game’s picks lock' : ''}.</>
+        )}
         {progress && progress.total > 0 && (
           <> <strong>{progress.complete} of {progress.total} Players In</strong>, in the header, counts how many
           players have saved a pick for every game this week — a total, never a name, so everyone sees the

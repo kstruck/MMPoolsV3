@@ -191,6 +191,21 @@ export const NFL_SHARED_TOPICS: readonly HelpTopic[] = [
     audience: HOST_ONLY,
   },
   {
+    // PLAN-SPLIT-POT-SETTLEMENT Part C (Kevin, 2026-10-08).
+    id: 'settings.pickDistribution',
+    title: 'Pick Distribution',
+    short: 'Choose whether the pool home shows how the pool picked each game: always, only once each game locks, or never.',
+    long: [
+      'Always is the default. The Pick Distribution card on the pool home shows the share of the pool on each side of every game, live, while picks are still open.',
+      'After each game locks holds each game’s split back until picks for that game have closed. On a pool where the whole week locks at once, that means once the week locks.',
+      'Off hides the card. The same choice applies to the Majority row on the Current Picks page.',
+      'This hides the card; it does not make the numbers secret. The split never names anyone, and it was always a count, not a pick.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: NFL_SEASON_TYPES,
+    audience: HOST_ONLY,
+  },
+  {
     id: 'nfl.manager.cancelPool',
     title: 'Cancelling the pool',
     short: 'Marks the pool cancelled and emails every member the reason and who to ask about dues. It cannot be undone from here.',
@@ -241,6 +256,7 @@ export const NFL_SHARED_PLACEMENTS: readonly HelpPlacement[] = [
   // control, something that control did not do — see the topic in
   // `wizard-shared.ts`.
   { topic: 'isPublic', page: 'pool.nfl.manager.settings', section: 'settings', order: 4 },
+  { topic: 'settings.pickDistribution', page: 'pool.nfl.manager.settings', section: 'settings', order: 5 },
 
   // T4 — the contact pair, edited ONLY here. Neither has a create-wizard
   // control, which is why both sat in the schema allowlist until this ticket.

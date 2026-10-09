@@ -13,6 +13,7 @@ import { isPinnableMessageId } from '../shared/pinnedMessage';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '../shared/weeklyHardLock';
 import { MAX_TEAM_USES } from '../shared/survivorReuse';
 import { MAX_ENTRIES_PER_USER_CAP } from '../shared/multiEntry';
+import { isPickDistributionVisibility, PICK_DISTRIBUTION_VALUES } from '../shared/pickDistribution';
 
 export interface PoolSettingsUpdatePlan {
   // Fields to set on the pool doc.
@@ -210,6 +211,18 @@ export function flattenSettingsPatch(
     // UNVALIDATED. A negative `maxTeamUses` sliding through would read as
     // "unlimited" to any `> 0` test, so reject rather than coerce: a mis-set
     // value must be visible, not silently reinterpreted.
+    // Pick Distribution visibility (PLAN-SPLIT-POT-SETTLEMENT Part C). Rejected
+    // rather than coerced: a typo would otherwise be stored and silently read as
+    // ALWAYS by `effectivePickDistribution`, showing a card the commissioner
+    // believed they had hidden.
+    if (key === 'pickDistribution') {
+      if (!isPickDistributionVisibility(value)) {
+        rejected.push(`settings.pickDistribution (must be ${PICK_DISTRIBUTION_VALUES.join(', ')})`);
+        continue;
+      }
+      out['settings.pickDistribution'] = value;
+      continue;
+    }
     if (key === 'tieCountsAs') {
       if (value !== 'WIN' && value !== 'LOSS') {
         rejected.push(`settings.tieCountsAs (must be WIN or LOSS)`);

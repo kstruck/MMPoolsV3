@@ -242,3 +242,32 @@ describe('stateForQuery — the render-time invalidation', () => {
     expect(stateForQuery(held, '2026|2|1|NFL_SURVIVOR').loaded).toBe(false);
   });
 });
+
+// PLAN-SPLIT-POT-SETTLEMENT Part C — the commissioner's visibility setting.
+describe('PickDistribution visibility setting', () => {
+  const HOUR = 3_600_000;
+  const withSetting = (pickDistribution: string, startTime: number) => (
+    <PickDistribution
+      pool={{ ...pool, settings: { pickDistribution, lockMode: 'PER_GAME', lockBufferMinutes: 5, lockRuleVersion: 2 } } as unknown as CardProps['pool']}
+      games={[{ ...games[0], startTime, status: 'SCHEDULED' }] as unknown as CardProps['games']}
+      week={1}
+    />
+  );
+
+  it('OFF renders nothing', () => {
+    const { container } = render(withSetting('OFF', Date.now() - HOUR));
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('AFTER_LOCK holds back a game whose picks are still open, and says why', () => {
+    render(withSetting('AFTER_LOCK', Date.now() + 48 * HOUR));
+    expect(screen.getByText(/shows each game.s split once its picks lock/)).toBeTruthy();
+    expect(screen.queryByText(/NE vs SEA/)).toBeNull();
+  });
+
+  it('AFTER_LOCK shows a game once its picks have locked', () => {
+    render(withSetting('AFTER_LOCK', Date.now() - HOUR));
+    expect(screen.getByText(/NE vs SEA/)).toBeTruthy();
+    expect(screen.queryByText(/once its picks lock/)).toBeNull();
+  });
+});

@@ -3,6 +3,7 @@ import type { WeeklyPlace, WeeklyPrizeSnapshot } from '@shared/weeklyPrizes';
 import type { SeasonPlace, SeasonPrizeSnapshot } from '@shared/seasonPrizes';
 import type { WeeklyTiebreaker } from '@shared/nflTiebreaker';
 import type { PoolSettlement } from '@shared/settlement';
+import type { PickDistributionVisibility } from '@shared/pickDistribution';
 
 export interface NFLGame {
   id: string; // e.g. "espn_401671234"
@@ -112,6 +113,8 @@ export interface NFLPickemPool {
     paymentInstructions: string;
     isListedPublic: boolean;
     payouts: PayoutSettings;
+    /** Pick Distribution card visibility (`@shared/pickDistribution`). Absent = ALWAYS. */
+    pickDistribution?: PickDistributionVisibility;
     confidenceMode: boolean;
     lockMode: 'PER_GAME' | 'WEEKLY'; // honoured for confidence pools too once stamped (lockRuleVersion 2)
     /** Server-written stamp (PLAN-CONFIDENCE-PER-GAME-LOCK); absent = legacy rule. */
@@ -224,6 +227,8 @@ export interface NFLSurvivorPool {
     paymentInstructions: string;
     isListedPublic: boolean;
     payouts: PayoutSettings;
+    /** Pick Distribution card visibility (`@shared/pickDistribution`). Absent = ALWAYS. */
+    pickDistribution?: PickDistributionVisibility;
     maxStrikes: number; // 0 = sudden death (first loss/tie = eliminated), 1+ = mulligans
     maxRebuys: number; // Default 0
     rebuyDeadlineWeek: number; // e.g. Week 4
@@ -309,6 +314,8 @@ export interface NFLMarginPool {
     paymentInstructions: string;
     isListedPublic: boolean;
     payouts: PayoutSettings;
+    /** Pick Distribution card visibility (`@shared/pickDistribution`). Absent = ALWAYS. */
+    pickDistribution?: PickDistributionVisibility;
     payoutMode: 'SEASON' | 'WEEKLY' | 'HYBRID';
   };
 

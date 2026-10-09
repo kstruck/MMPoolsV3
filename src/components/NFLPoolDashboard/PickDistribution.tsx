@@ -4,6 +4,9 @@ import { dbService } from '../../services/dbService';
 import { useSiteConsensusState } from './pickSheet/useSiteConsensus';
 import { readStoredScope, writeStoredScope, type DistributionScope } from './pickSheet/distributionScope';
 import type { Pool, NFLGame } from '../../types';
+import { now as serverNow } from '../../utils/serverClock';
+import { distributionGameVisible, effectivePickDistribution } from '@shared/pickDistribution';
+import type { NFLLockPool } from '@shared/nflLockMode';
 
 interface PickDistributionProps {
   pool: Pool;
@@ -49,6 +52,25 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   week,
 }) => {
   const [scope, setScope] = useState<DistributionScope>(readStoredScope);
+
+  // 🔨 KEVIN 2026-10-08 — `settings.pickDistribution` (PLAN-SPLIT-POT-SETTLEMENT
+  // Part C). The commissioner may hide the card or hold each game's split until
+  // that game's pick locks. The parent does not render the card at all on OFF;
+  // the check here is the second guard on the same rule. A one-minute tick lets a
+  // split appear on its own when a lock passes, without a reload.
+  const visibility = effectivePickDistribution((pool as { settings?: { pickDistribution?: unknown } }).settings);
+  const [clock, setClock] = useState(() => serverNow());
+  useEffect(() => {
+    if (visibility !== 'AFTER_LOCK') return;
+    const id = setInterval(() => setClock(serverNow()), 60_000);
+    return () => clearInterval(id);
+  }, [visibility]);
+  const lockPool = pool as unknown as NFLLockPool & { settings?: { pickDistribution?: unknown } };
+  const shownGames = useMemo(
+    () => games.filter(g => distributionGameVisible(lockPool, week, g, games, clock)),
+    [games, lockPool, week, clock],
+  );
+  const heldBack = games.length - shownGames.length;
   const selectScope = (next: DistributionScope) => {
     setScope(next);
     writeStoredScope(next);
@@ -97,9 +119,9 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
 
   // Compile pick distribution statistics from the selected server aggregate
   const distributionData = useMemo(() => {
-    if (games.length === 0) return [];
+    if (shownGames.length === 0) return [];
 
-    return games.map(game => {
+    return shownGames.map(game => {
       // The two projections are the same shape by construction (`projDoc` in
       // functions/src/consensus.ts writes both), but the site hook has already
       // dropped rows with no picks and narrowed the types, so it is read directly
@@ -114,7 +136,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         awayPct: typeof c?.awayPct === 'number' ? c.awayPct : undefined,
       };
     });
-  }, [poolByGame, site.byGame, isSite, games, week]);
+  }, [poolByGame, site.byGame, isSite, shownGames]);
 
   const tabClass = (active: boolean) =>
     `px-2.5 py-1 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-colors ${
@@ -122,6 +144,9 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         ? 'bg-navy-700 text-white dark:bg-gold-400 dark:text-navy-900'
         : 'text-muted hover:text-[color:var(--text)]'
     }`;
+
+  // OFF: nothing. Every hook above has already run, so this early return is safe.
+  if (visibility === 'OFF') return null;
 
   return (
     <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-5">
@@ -170,6 +195,13 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
       </p>
 
       <div className="space-y-4">
+        {heldBack > 0 && (
+          <p className="font-body text-[12px] text-faint italic num">
+            {shownGames.length === 0
+              ? 'The commissioner shows each game’s split once its picks lock.'
+              : `${heldBack} more ${heldBack === 1 ? 'game appears' : 'games appear'} once ${heldBack === 1 ? 'its' : 'their'} picks lock.`}
+          </p>
+        )}
         {games.length === 0 ? (
           <p className="font-body text-[13px] text-faint italic text-center py-4">No active games scheduled.</p>
         ) : (

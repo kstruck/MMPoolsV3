@@ -18,6 +18,7 @@ import { helpRegistry } from '../../help/registry';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
+import { effectivePickDistribution, type PickDistributionVisibility } from '@shared/pickDistribution';
 import { buildProxyTeamGameIndex, proxyPickPayload, proxyTeamOptions } from '../../utils/proxyPickPayload';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
@@ -367,6 +368,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // toggle claim OFF on such a pool, and the save below would then have
   // de-listed it without anybody asking.
   const [isListedPublic, setIsListedPublic] = useState<boolean>(publicListingToggleValue(castPool));
+  // PLAN-SPLIT-POT-SETTLEMENT Part C: Pick Distribution card visibility.
+  const [pickDistribution, setPickDistribution] = useState<PickDistributionVisibility>(effectivePickDistribution(castPool.settings));
 
   const [editManagerName, setEditManagerName] = useState(pool.managerName || '');
   const [editContactEmail, setEditContactEmail] = useState(pool.contactEmail || '');
@@ -875,6 +878,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         entryFee,
         paymentInstructions,
         ...listing.settings,
+        // Validated server-side (functions/src/lib/poolUpdate.ts); always sent,
+        // so the stored value matches the control after any save.
+        pickDistribution,
         // Sent on every save; the server strips a value equal to the pool's
         // effective max (absent ⇒ 1) as a no-op, so this costs nothing until
         // it is actually raised (PLAN-MULTI-ENTRY D8).
@@ -1375,6 +1381,24 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 onChange={e => setIsListedPublic(e.target.checked)}
                 className="w-5 h-5 rounded border-line text-navy-700 focus:ring-navy-600 dark:focus:ring-gold-500 cursor-pointer"
               />
+            </div>
+
+            {/* PLAN-SPLIT-POT-SETTLEMENT Part C (Kevin, 2026-10-08). */}
+            <div>
+              <FieldLabel tone="muted" htmlFor="pick-distribution-visibility" helpId="settings.pickDistribution">Pick Distribution</FieldLabel>
+              <select
+                id="pick-distribution-visibility"
+                value={pickDistribution}
+                onChange={e => setPickDistribution(e.target.value as PickDistributionVisibility)}
+                className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
+              >
+                <option value="ALWAYS">Always show</option>
+                <option value="AFTER_LOCK">Show each game once its picks lock</option>
+                <option value="OFF">Hide</option>
+              </select>
+              <p className="font-body text-[10px] text-faint mt-1">
+                The card on the pool home showing how the pool picked each game. Also applies to the Majority row on Current Picks.
+              </p>
             </div>
 
             {/* Host Profile & Contact Links */}
