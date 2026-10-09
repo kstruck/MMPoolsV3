@@ -27,10 +27,22 @@ export const settlePoolSchema = z.strictObject({
     // WHOLE alive set, so a cap below the largest field makes big pools unsettleable.
     entryIds: z.array(z.string().min(1).max(100)).min(1).max(2000).optional(),
     note: z.string().trim().max(500).optional(),
+    /**
+     * The money the owner was SHOWN in the preview and confirmed (codex
+     * code-review r11). The server recomputes under the scoring lease and
+     * refuses with QUOTE_CHANGED if either differs — a member joining between
+     * preview and click raises `entryCount` without changing the ALIVE set.
+     * `null` = the preview showed no priced amount.
+     */
+    expectedPot: z.number().nullable().optional(),
+    expectedPrizePerEntry: z.number().nullable().optional(),
     notifyMembers: z.boolean().default(true),
 }).refine((d) => d.preview === true || (d.entryIds?.length ?? 0) > 0, {
     message: "entryIds is required unless preview is true",
     path: ["entryIds"],
+}).refine((d) => d.preview === true || (d.expectedPot !== undefined && d.expectedPrizePerEntry !== undefined), {
+    message: "expectedPot and expectedPrizePerEntry are required unless preview is true",
+    path: ["expectedPot"],
 });
 
 export type SettlePoolInput = z.infer<typeof settlePoolSchema>;

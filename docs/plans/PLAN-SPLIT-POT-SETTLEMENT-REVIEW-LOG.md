@@ -120,3 +120,14 @@ label, a React-compiler memo warning). Fixed to a delta of zero (1855 = the
 | # | Sev | Finding | Verified? | Verdict | Response |
 |---|---|---|---|---|---|
 | 1 | P2 | The scheduled "you haven't picked" reminder (`checkNFLNonPickerReminders`) skipped only `status === 'archived'`, so members of a settled pool would still be told to pick. | **Yes** — `reminders.ts:936`; it is the only reminder path NFL pools run (`:226`). | **ACCEPTED** | Gate is `poolIsOver(pool)` (settled, cancelled, closed, finalized, any-case archived). Tests: no mail and no notification for each of the four. |
+
+## Code round 10 — interrupted (codex usage limit), not counted as a review
+
+## Code round 11 — HEAD `34751201` (after qodo fixes) — 1 finding
+
+Over the 10-round cap under the CLAUDE.md §2c exception: rounds 11+ are forced
+by §2b (code written to close qodo's findings had never been seen by codex).
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P1 | The owner confirms the pot from the preview, but a join between preview and click raises `entryCount` without changing the ALIVE set, so the server records a larger pot than was confirmed. | **Yes**. | **ACCEPTED** | The client sends `expectedPot` / `expectedPrizePerEntry` (required by the schema on a real call; `null` = unpriced). The server recomputes with the SAME `quoteFor` the preview uses, on the pool as read under the lease, and refuses with `QUOTE_CHANGED` before anything is written. Joins are lease-checked since round 1, so the figure cannot move between the check and the finalizer. Emulator test. |

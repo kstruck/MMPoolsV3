@@ -79,7 +79,8 @@ async function seed(extra: Record<string, unknown> = {}) {
 }
 
 const settle = (uid = HOST, data: Record<string, unknown> = {}) =>
-  wSettle({ data: { poolId: POOL, outcome: 'SPLIT', entryIds: [BOB, ALICE], ...data }, auth: auth(uid) } as never) as Promise<SettleResult>;
+  // The seeded pool: 4 entries x $25, 100 % to 1st, two survivors -> $100 pot, $50 each.
+  wSettle({ data: { poolId: POOL, outcome: 'SPLIT', entryIds: [BOB, ALICE], expectedPot: 100, expectedPrizePerEntry: 50, ...data }, auth: auth(uid) } as never) as Promise<SettleResult>;
 
 beforeEach(async () => {
   for (const uid of [HOST, ALICE, BOB, CAROL, DAN, NEWBIE, CO]) {
@@ -355,8 +356,21 @@ describe('qodo review of #715', () => {
     for (const id of many) {
       await poolRef().collection('entries').doc(id).set({ id, poolId: POOL, ownerUid: id, userName: id, status: 'ALIVE', strikesUsed: 0 });
     }
-    const res = await settle(HOST, { entryIds: [ALICE, BOB, ...many], notifyMembers: false });
+    const pv = await wSettle({ data: { poolId: POOL, outcome: 'SPLIT', preview: true }, auth: auth(HOST) } as never) as SettleResult;
+    const q = pv.preview as { pot: number | null; prizePerEntry: number | null };
+    const res = await settle(HOST, { entryIds: [ALICE, BOB, ...many], notifyMembers: false, expectedPot: q.pot, expectedPrizePerEntry: q.prizePerEntry });
     expect(res.success).toBe(true);
     expect((await poolDoc()).settlement.entryIds).toHaveLength(62);
+  });
+});
+
+describe('codex code-review r11 — the confirmed pot', () => {
+  it('a pot that changed since the preview is refused with QUOTE_CHANGED, and nothing is written', async () => {
+    await seed();
+    await poolRef().update({ entryCount: 5 });          // someone joined after the preview
+    await expect(settle()).rejects.toThrow(/QUOTE_CHANGED/);
+    const p = await poolDoc();
+    expect(p.status).toBe('OPEN');
+    expect(p.finalizedAt).toBeUndefined();
   });
 });

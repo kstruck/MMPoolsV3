@@ -87,7 +87,10 @@ export const settlePool = validated(
         let settlement: PoolSettlement;
         if (phase.kind === "FULL") {
             const result = await withScoringLease(db, poolId, Date.now(), (fence) =>
-                runFullSettlement(db, poolId, pool.name, fence, { uid, entryIds: entryIds ?? [], note, notifyMembers }));
+                runFullSettlement(db, poolId, pool.name, fence, {
+                    uid, entryIds: entryIds ?? [], note, notifyMembers,
+                    expectedPot: input.expectedPot, expectedPrizePerEntry: input.expectedPrizePerEntry,
+                }));
             if (result === "LEASE_BUSY") {
                 throw new HttpsError("failed-precondition", "SCORING_IN_PROGRESS: The pool is being scored right now. Try again in a minute.");
             }
@@ -199,6 +202,14 @@ async function claimFollowUp(
  * cannot show a different field, pot or share than the write produces (unless
  * the pool changes in between, which the real call re-checks and refuses).
  */
+/** The money a settlement of this pool would record — one definition for the preview and the check. */
+function quoteFor(pool: Doc, entries: EntryRow[], aliveIds: string[]): { pot: number | null; prizePerEntry: number | null; entryCount: number | null } {
+    const ranked = computeFinalRanks("NFL_SURVIVOR", entries);
+    const pub = seasonPlacesPublication(pool, ranked, entries.length);
+    const money = settlementMoney({ seasonPlaces: pub.seasonPlaces, seasonPrize: pub.seasonPrize }, aliveIds);
+    return { ...money, entryCount: pub.seasonPrize ? pub.seasonPrize.entryCount : null };
+}
+
 async function buildPreview(
     db: admin.firestore.Firestore,
     poolRef: admin.firestore.DocumentReference,
@@ -208,14 +219,12 @@ async function buildPreview(
     const entries: EntryRow[] = entriesSnap.docs.map(d => ({ ...d.data(), id: d.id }));
     const alive = entries.filter(e => e.status !== "ELIMINATED").sort((a, b) => a.id.localeCompare(b.id));
     const membersSnap = await poolRef.collection("members").get();
-    const ranked = computeFinalRanks("NFL_SURVIVOR", entries);
-    const pub = seasonPlacesPublication(pool, ranked, entries.length);
-    const money = settlementMoney({ seasonPlaces: pub.seasonPlaces, seasonPrize: pub.seasonPrize }, alive.map(e => e.id));
+    const quote = quoteFor(pool, entries, alive.map(e => e.id));
     return {
         alive: alive.map(e => ({ id: e.id, name: String(e.entryName || e.userName || "Player") })),
-        pot: money.pot,
-        prizePerEntry: money.prizePerEntry,
-        entryCount: pub.seasonPrize ? pub.seasonPrize.entryCount : null,
+        pot: quote.pot,
+        prizePerEntry: quote.prizePerEntry,
+        entryCount: quote.entryCount,
         rebuyDuesExcluded: rebuyDuesOf(membersSnap.docs.map(d => d.data())),
     };
 }
@@ -264,7 +273,7 @@ async function runFullSettlement(
     poolId: string,
     poolName: unknown,
     fence: Parameters<typeof fencedWrite>[2],
-    args: { uid: string; entryIds: string[]; note: string | null; notifyMembers: boolean },
+    args: { uid: string; entryIds: string[]; note: string | null; notifyMembers: boolean; expectedPot: number | null | undefined; expectedPrizePerEntry: number | null | undefined },
 ): Promise<PoolSettlement> {
     const poolRef = db.collection("pools").doc(poolId);
 
@@ -288,6 +297,13 @@ async function runFullSettlement(
     }
     if (mismatch) {
         throw new HttpsError("failed-precondition", "WINNERS_MUST_BE_ALIVE_SET: The players still alive have changed since this page loaded. Reload and try again.");
+    }
+
+    // Step 6b — the money must be what the owner confirmed (codex code-review
+    // r11). Same functions the preview used, on the pool as read under the lease.
+    const quote = quoteFor(underLease, entries, alive.map(e => e.id));
+    if (quote.pot !== (args.expectedPot ?? null) || quote.prizePerEntry !== (args.expectedPrizePerEntry ?? null)) {
+        throw new HttpsError("failed-precondition", "QUOTE_CHANGED: The pot has changed since this page loaded (someone joined or left). Reload, check the new amount, and try again.");
     }
 
     const membersSnap = await poolRef.collection("members").get();

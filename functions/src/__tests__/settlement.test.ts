@@ -133,7 +133,7 @@ describe('rebuyDuesOf / joinNames', () => {
 
 describe('settlePoolSchema', () => {
   const ok = (d: unknown) => settlePoolSchema.safeParse(d).success;
-  const req = { poolId: 'p1', outcome: 'SPLIT', entryIds: ['a', 'b'] };
+  const req = { poolId: 'p1', outcome: 'SPLIT', entryIds: ['a', 'b'], expectedPot: 100, expectedPrizePerEntry: 50 };
   it('accepts the client payload and defaults notifyMembers to true', () => {
     expect(ok(req)).toBe(true);
     expect(settlePoolSchema.parse(req).notifyMembers).toBe(true);
@@ -199,5 +199,8 @@ describe('settlePoolSchema — preview mode', () => {
   it('preview needs no entryIds; a real call does', () => {
     expect(settlePoolSchema.safeParse({ poolId: 'p', outcome: 'SPLIT', preview: true }).success).toBe(true);
     expect(settlePoolSchema.safeParse({ poolId: 'p', outcome: 'SPLIT' }).success).toBe(false);
+    // codex r11: a real call must carry the amounts the owner confirmed (null = unpriced).
+    expect(settlePoolSchema.safeParse({ poolId: 'p', outcome: 'SPLIT', entryIds: ['a'] }).success).toBe(false);
+    expect(settlePoolSchema.safeParse({ poolId: 'p', outcome: 'SPLIT', entryIds: ['a'], expectedPot: null, expectedPrizePerEntry: null }).success).toBe(true);
   });
 });

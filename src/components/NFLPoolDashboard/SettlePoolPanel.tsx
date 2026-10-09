@@ -81,6 +81,9 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
         entryIds: preview.alive.map(a => a.id),
         ...(note.trim() ? { note: note.trim() } : {}),
         notifyMembers: notify,
+        // What the owner was shown; the server refuses if it moved (codex r11).
+        expectedPot: preview.pot,
+        expectedPrizePerEntry: preview.prizePerEntry,
       });
       toast.success(notify ? `Pool settled. Emailed ${res.emailed} member(s).` : 'Pool settled.');
       // A failed send is not a failed settlement — the pool IS over. Say so, and
@@ -105,6 +108,9 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
         poolId: pool.id,
         entryIds: settled.entryIds,
         notifyMembers: settled.notifyMembers,
+        // FOLLOW_UP never re-prices; these satisfy the schema only.
+        expectedPot: settled.pot,
+        expectedPrizePerEntry: settled.prizePerEntry,
       });
       if (res.followUpInProgress) {
         toast.error('Another attempt is already finishing this. Check back in a few minutes.');
