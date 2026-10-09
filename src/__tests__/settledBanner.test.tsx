@@ -8,7 +8,6 @@
  * when there is no settlement record.
  */
 import { describe, it, expect } from 'vitest';
-import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SettledBanner } from '../components/NFLPoolDashboard/SettledBanner';
 import { poolIsOver } from '../utils/poolIsOver';
