@@ -575,11 +575,25 @@ export const cancelPool = validated(
     }
 
     const now = Date.now();
-    await poolRef.update({
-        status: "CANCELED",
-        cancelledAt: now,
-        cancelReason: reason,
-    });
+    // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
+    // SETTLEMENT, codex code-review r4). A settlement runs the season finalizer
+    // under the lease and writes champion season-history rows BEFORE it flips the
+    // pool; a plain update landing in that gap left those rows on a pool that then
+    // reads as cancelled/closed. The same gap existed against the regular scorer.
+    // Now a live lease bounces this write (retried briefly), and a lifecycle
+    // write that commits first makes the settlement's next fenced write refuse.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        await assertNoScoringInProgress(tx, poolRef, Date.now());
+        const fresh = (await tx.get(poolRef)).data();
+        if (fresh?.status === "CANCELED") {
+            throw new HttpsError("failed-precondition", "This pool has already been canceled.");
+        }
+        tx.update(poolRef, {
+            status: "CANCELED",
+            cancelledAt: now,
+            cancelReason: reason,
+        });
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,
@@ -635,7 +649,21 @@ export const closePool = validated(
     }
 
     const now = Date.now();
-    await poolRef.update(adminCloseUpdate(now));
+    // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
+    // SETTLEMENT, codex code-review r4). A settlement runs the season finalizer
+    // under the lease and writes champion season-history rows BEFORE it flips the
+    // pool; a plain update landing in that gap left those rows on a pool that then
+    // reads as cancelled/closed. The same gap existed against the regular scorer.
+    // Now a live lease bounces this write (retried briefly), and a lifecycle
+    // write that commits first makes the settlement's next fenced write refuse.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        await assertNoScoringInProgress(tx, poolRef, Date.now());
+        const fresh = (await tx.get(poolRef)).data();
+        if (isTerminalStatus(fresh?.status as string | undefined)) {
+            throw new HttpsError("failed-precondition", `This pool is already ${fresh?.status} and cannot be closed.`);
+        }
+        tx.update(poolRef, adminCloseUpdate(now));
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,

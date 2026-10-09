@@ -84,3 +84,9 @@ review continues on the PR diff (`codex exec review --base origin/main`).
 |---|---|---|---|---|---|
 | 1 | P2 | `writeAdminAudit` returns `false` instead of throwing (`lib/adminAudit.ts:120`), and `adminAuditedAt` was stamped regardless. | **Yes**. | **ACCEPTED** | Stamp only on `true`; otherwise release the claim. The callable returns `adminAuditFailed`. |
 | 2 | P2 | After a failed send the follow-up stays owed, but the panel was hidden once the pool closed, so there was no product path to retry. | **Yes** — `NFLManagerView` gated the panel on `!poolIsOver`. | **ACCEPTED** | The panel also shows when `settlementFollowUpOwed(pool.settlement)`, in a "Finish up" mode whose Retry calls `settlePool` (FOLLOW_UP phase: only the owed steps, only un-notified members). |
+
+## Code round 4 — HEAD `42c6a6c8` — 1 finding
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P1 | `cancelPool` / `closePool` write without the scoring lease, so one landing between the finalizer's season-history writes and the settlement's flip leaves champion rows on a pool that reads cancelled/closed. | **Yes** — both were a plain `poolRef.update`. The same gap already existed against the regular scorer (the comment at `autoScoreDecisions.ts:80` names it). | **ACCEPTED** | Both now write in a transaction that runs `assertNoScoringInProgress` (wrapped in `retryWhileScoring`, as every other entry mutator is) and re-checks terminal status on the fresh read. A live lease bounces them with `SCORING_IN_PROGRESS`; a lifecycle write that commits first makes the settlement's next fenced write refuse before any history is written. Emulator tests for both directions. Behaviour change for site staff: a close attempted during a 5-minute scoring pass now asks them to retry instead of racing it. |

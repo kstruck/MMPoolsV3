@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { settlePool } from '../../poolSettlement';
 import { executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal } from '../../nflPools';
-import { proxyPick } from '../../poolExceptions';
+import { proxyPick, cancelPool, closePool } from '../../poolExceptions';
 
 /**
  * PLAN-SPLIT-POT-SETTLEMENT §2.6 — the whole settlement against the emulator.
@@ -20,6 +20,8 @@ const test = ftest();
 const db = admin.firestore();
 const wSettle = test.wrap(settlePool);
 const wProxy = test.wrap(proxyPick);
+const wCancel = test.wrap(cancelPool);
+const wClose = test.wrap(closePool);
 
 const HOST = 'st-host';
 const ALICE = 'st-alice';
@@ -283,5 +285,24 @@ describe('a settled pool takes no more play (POOL_OVER)', () => {
       .rejects.toThrow(/POOL_OVER/);
     await expect(joinNFLPoolInternal(db, { subjectUid: NEWBIE, subjectName: NEWBIE }, POOL))
       .rejects.toThrow(/POOL_OVER/);
+  });
+});
+
+describe('cancel / close respect the scoring lease (codex code-review r4)', () => {
+  it('a live lease (a settlement or a scoring pass in flight) bounces both, leaving the pool untouched', async () => {
+    await seed({ autoScore: { scoringLease: { owner: 'someone', until: Date.now() + 5 * 60 * 1000 } } });
+    await expect(wCancel({ data: { poolId: POOL, reason: 'testing the race' }, auth: auth(HOST) } as never))
+      .rejects.toThrow(/SCORING_IN_PROGRESS/);
+    await expect(wClose({ data: { poolId: POOL }, auth: auth(HOST) } as never))
+      .rejects.toThrow(/SCORING_IN_PROGRESS/);
+    const p = await poolDoc();
+    expect(p.status).toBe('OPEN');
+    expect(p.closedVia).toBeUndefined();
+  });
+
+  it('with no live lease, cancel still works', async () => {
+    await seed({ autoScore: { scoringLease: { owner: 'someone', until: Date.now() - 1000 } } });
+    await wCancel({ data: { poolId: POOL, reason: 'season over early' }, auth: auth(HOST) } as never);
+    expect((await poolDoc()).status).toBe('CANCELED');
   });
 });
