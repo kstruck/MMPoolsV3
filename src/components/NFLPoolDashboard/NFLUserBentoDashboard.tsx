@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { Badge, Button, RankChip, YouPill } from '../ui';
 import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../../config/season';
+import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
 
 interface NFLUserBentoDashboardProps {
   pool: Pool;
@@ -341,7 +342,12 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return dbService.subscribeToWinProb(focusGame.id, setFocusWinProb);
   }, [focusGame?.id]);
 
-  const focusPoolC = focusGame ? poolConsensus[focusGame.id] : null;
+  // The commissioner's Pick Distribution setting governs the POOL split here too
+  // (codex r3 on PR-C). The site-wide line is a different aggregate and is not
+  // covered (PLAN-SPLIT-POT-SETTLEMENT D10).
+  const { visibleIds: poolSplitVisible } = useDistributionVisibility(_pool, selectedWeek, weeklyGames);
+  const poolSplitHidden = !!focusGame && !poolSplitVisible.has(focusGame.id);
+  const focusPoolC = focusGame && !poolSplitHidden ? poolConsensus[focusGame.id] : null;
   const focusSiteC = focusGame ? siteConsensus[focusGame.id] : null;
 
   // Are THIS week's picks in? Pick'em is a sheet, so "in" means every game on
@@ -780,7 +786,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                         <div className="flex justify-between items-center">
                           <span className="text-muted">Pool</span>
                           <span className="text-[color:var(--text)]">
-                            {focusPoolC?.total ? `${focusPoolC.awayAbbr} ${focusPoolC.awayPct}% · ${focusPoolC.homeAbbr} ${focusPoolC.homePct}%` : '—'}
+                            {poolSplitHidden ? <span className="text-faint" title="The commissioner shows this once picks lock">Hidden</span>
+                              : focusPoolC?.total ? `${focusPoolC.awayAbbr} ${focusPoolC.awayPct}% · ${focusPoolC.homeAbbr} ${focusPoolC.homePct}%` : '—'}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
