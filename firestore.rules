@@ -222,7 +222,7 @@ service cloud.firestore {
           // from `settlement` alone, so a manager who could write it could
           // announce a split nobody agreed to; `finalizedAt` ends play on every
           // NFL path (lib/settlement.ts assertPoolAcceptsPlay).
-          'finalizedAt', 'firstFinalizedAt', 'settlement', 'settlementStartedAt',
+          'finalizedAt', 'firstFinalizedAt', 'finalizedVia', 'settlement',
           // Scorer-owned state (PLAN-REALTIME-SCORING §3a, PR-B′). Every one of
           // these is a field a manager could otherwise use to undo the reveal
           // guarantee or the scoring mutex:

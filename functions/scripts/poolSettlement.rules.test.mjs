@@ -83,7 +83,7 @@ async function check(label, promise) {
 console.log('1. Settlement and finalization fields are server-owned:');
 for (const [field, value] of [
     ['settlement', { kind: 'SPLIT', entryIds: [OWNER], winnerNames: ['Me'] }],
-    ['settlementStartedAt', 1],
+    ['finalizedVia', 'SETTLED'],
     ['finalizedAt', 1],
     ['firstFinalizedAt', 1],
 ]) {

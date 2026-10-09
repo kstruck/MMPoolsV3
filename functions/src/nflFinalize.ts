@@ -423,6 +423,11 @@ export async function maybeFinalizeNFLPool(
 
   const finalizeStamp = {
     finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+    // PLAN-SPLIT-POT-SETTLEMENT (codex code-review r5): WHO finalized, in the same
+    // write as `finalizedAt`, so `settlePool` can tell its own interrupted run
+    // (resumable) from a natural season end (refused) without a separate marker
+    // that a refused or crashed attempt could leave behind.
+    ...(opts?.force === 'SETTLED' ? { finalizedVia: 'SETTLED' } : {}),
     ...(pool.firstFinalizedAt ? {} : { firstFinalizedAt: admin.firestore.FieldValue.serverTimestamp() }),
   };
   // Season Places + frozen season prize ride the same write as `finalizedAt`

@@ -12,7 +12,7 @@ export interface SettleablePool {
   status?: unknown;
   closedVia?: unknown;
   finalizedAt?: unknown;
-  settlementStartedAt?: unknown;
+  finalizedVia?: unknown;
   settlement?: Partial<PoolSettlement> | null;
 }
 
@@ -40,7 +40,7 @@ export function settlementPhase(pool: SettleablePool): SettlementPhase {
       : { kind: 'REFUSE', code: 'ALREADY_SETTLED' };
   }
   if (isVoidedPool(pool) || present(pool.closedVia)) return { kind: 'REFUSE', code: 'ALREADY_CLOSED' };
-  if (present(pool.finalizedAt) && !present(pool.settlementStartedAt)) {
+  if (present(pool.finalizedAt) && pool.finalizedVia !== SETTLED) {
     return { kind: 'REFUSE', code: 'ALREADY_FINALIZED' };
   }
   return { kind: 'FULL' };

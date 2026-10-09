@@ -148,7 +148,7 @@ settlePoolSchema = z.strictObject({
 
 **Writes**, under `withScoringLease` (busy → `SCORING_IN_PROGRESS`, retry in a minute). 🛑 **Order is an invariant (review r1 #6):** `status` and `closedVia` are not touched until every finalizer write has committed — `maybeFinalizeNFLPool` and `checkFence` both refuse a COMPLETED pool, so the reverse order can never finish.
 
-5. Fenced write `settlementStartedAt: now` if absent — the crash-recovery marker.
+5. ~~Fenced write `settlementStartedAt`~~ — **superseded by code review r5**: the finalizer stamps `finalizedVia: 'SETTLED'` with `finalizedAt`, and nothing is written before the winners are validated.
 6. **Re-check guard 4 against a fresh entry read** taken after the lease was acquired (picks are lease-checked, so the ALIVE set cannot change while it is held).
 7. `maybeFinalizeNFLPool(db, poolId, { fence, force: 'SETTLED' })`; anything but `outcome.finalized === true` throws `FINALIZE_DECLINED: <reason>` and nothing further runs (review r2 #5). The new option ONLY skips `isSeasonComplete`. Everything else — voided/sim refusal, `computeFinalRanks` (ALIVE entries all rank 1), season history, profiles, `seasonPlaces`, frozen `seasonPrize`, `finalizedAt` — is the unchanged season-end code.
 8. Fenced flip: `status: 'COMPLETED'`, `closedVia: 'SETTLED'`, `closedAt`, and

@@ -40,8 +40,9 @@ import type { AuditLogEvent, User } from "./types";
  * dual-writes those; here they would fire `onPoolLocked` (stats) and
  * `onGameComplete` (a SQUARES post-game email) on an NFL pool.
  *
- * Crash recovery: `settlementStartedAt` lets a FULL settlement re-run after the
- * finalizer committed; the FOLLOW_UP phase completes the Super-Admin audit and
+ * Crash recovery: the finalizer stamps `finalizedVia: 'SETTLED'` with
+ * `finalizedAt`, which lets a FULL settlement re-run after the finalizer
+ * committed (and only then — a natural season end is refused); the FOLLOW_UP phase completes the Super-Admin audit and
  * the member emails after the flip committed (`lib/settlement.ts`).
  */
 export const settlePool = validated(
@@ -252,14 +253,12 @@ async function runFullSettlement(
 ): Promise<PoolSettlement> {
     const poolRef = db.collection("pools").doc(poolId);
 
-    // Step 5 — crash-recovery marker, under the fence. Re-judged on the pool as
-    // read in this transaction: a cancel that committed since the outer read is
-    // refused here (checkFence), anything else that moved is refused below.
-    await fencedWrite(db, poolRef, fence, (_tx, poolData) => {
-        const p = settlementPhase((poolData ?? {}) as any);
-        if (p.kind !== "FULL") throw refusal(p.kind === "REFUSE" ? p.code : "ALREADY_SETTLED");
-        return poolData?.settlementStartedAt ? {} : { settlementStartedAt: Date.now() };
-    });
+    // Step 5 — re-judge the phase on the pool as read under the lease. Nothing is
+    // written until the winners are validated below (codex code-review r5: a
+    // refused attempt must leave no state behind).
+    const underLease = (await poolRef.get()).data() ?? {};
+    const phaseNow = settlementPhase(underLease as any);
+    if (phaseNow.kind !== "FULL") throw refusal(phaseNow.kind === "REFUSE" ? phaseNow.code : "ALREADY_SETTLED");
 
     // Step 6 — the ALIVE set, read AFTER the lease is held. Picks and rebuys are
     // lease-checked, so it cannot move until the lease is released. "Alive" is

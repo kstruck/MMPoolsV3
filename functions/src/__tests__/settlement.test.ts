@@ -22,7 +22,7 @@ describe('settlementPhase — the plan table, top to bottom', () => {
   });
 
   it('a crashed attempt (marker + finalizedAt, still OPEN) is FULL again', () => {
-    expect(settlementPhase({ status: 'OPEN', finalizedAt: 123, settlementStartedAt: 100 })).toEqual({ kind: 'FULL' });
+    expect(settlementPhase({ status: 'OPEN', finalizedAt: 123, finalizedVia: 'SETTLED' })).toEqual({ kind: 'FULL' });
   });
 
   it('a naturally finalized pool is refused ALREADY_FINALIZED', () => {

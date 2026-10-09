@@ -110,7 +110,7 @@ describe('settlePool — a full settlement', () => {
     expect(p.isFinal).toBeUndefined();
     expect(p.scores).toBeUndefined();
     expect(p.finalizedAt).toBeTruthy();
-    expect(p.settlementStartedAt).toBeTruthy();
+    expect(p.finalizedVia).toBe('SETTLED');
 
     expect(p.settlement).toMatchObject({
       kind: 'SPLIT', entryIds: [ALICE, BOB].sort(), winnerNames: [ALICE, BOB].sort(),
@@ -169,6 +169,10 @@ describe('settlePool — refusals', () => {
     const p = await poolDoc();
     expect(p.status).toBe('OPEN');
     expect(p.finalizedAt).toBeUndefined();
+    // codex code-review r5: a refused attempt leaves NO state a later call could
+    // mistake for an interrupted settlement.
+    expect(p.finalizedVia).toBeUndefined();
+    expect(p.settlementStartedAt).toBeUndefined();
     expect((await poolRef().collection('audit').where('type', '==', 'POOL_SETTLED').get()).size).toBe(0);
   });
 
@@ -184,11 +188,11 @@ describe('settlePool — refusals', () => {
 
 describe('settlePool — crash recovery', () => {
   it('a crashed attempt (marker + finalizedAt, still OPEN) completes on retry', async () => {
-    await seed({ settlementStartedAt: 1, finalizedAt: admin.firestore.Timestamp.now() });
+    await seed({ finalizedVia: 'SETTLED', finalizedAt: admin.firestore.Timestamp.now() });
     await settle(HOST, { notifyMembers: false });
     const p = await poolDoc();
     expect(p.closedVia).toBe('SETTLED');
-    expect(p.settlementStartedAt).toBe(1);
+    expect(p.finalizedVia).toBe('SETTLED');
   });
 
   it('FOLLOW_UP sends only the owed emails and re-runs nothing else', async () => {
