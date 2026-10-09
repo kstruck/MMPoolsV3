@@ -14,7 +14,7 @@
 > could move their own pool OPEN→FINAL with one client write, which opened every
 > member's un-revealed entry to every participant. NFL `status` / `closedVia` /
 > `closedAt` / `isFinal` are now callable-only for managers, and `finalizedAt`,
-> `firstFinalizedAt`, `settlement`, `settlementStartedAt` are server-owned.
+> `firstFinalizedAt`, `finalizedVia`, `settlement` are server-owned.
 >
 > **Deploy (after merge):** step zero `git -C D:\march-melee-pools pull --ff-only origin main`,
 > `npm --prefix functions ci`, then functions BEFORE rules:
