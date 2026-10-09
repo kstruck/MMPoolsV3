@@ -6,7 +6,7 @@ import { getUserMessage } from '../../utils/errorMessages';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
 import { FieldLabel } from '../ui/Field';
-import { joinNames, type SettlementPreview } from '@shared/settlement';
+import { joinNames, type PoolSettlement, type SettlementPreview } from '@shared/settlement';
 
 /**
  * "End the pool — split the pot" (PLAN-SPLIT-POT-SETTLEMENT §2.4).
@@ -34,7 +34,12 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
   // frame late.
   const [state, setState] = useState<{ poolId: string; preview?: SettlementPreview; error?: string } | null>(null);
 
+  // A settled pool only reaches this panel when its follow-up is still owed
+  // (NFLManagerView): it offers the retry instead of a preview.
+  const settled = (pool as { settlement?: PoolSettlement }).settlement;
+
   useEffect(() => {
+    if (settled) return;
     let live = true;
     dbService.previewSettlement(pool.id)
       .then(preview => { if (live) setState({ poolId: pool.id, preview }); })
@@ -43,7 +48,7 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
         if (live) setState({ poolId: pool.id, error: getUserMessage(err) });
       });
     return () => { live = false; };
-  }, [pool.id]);
+  }, [pool.id, settled]);
 
   const current = state?.poolId === pool.id ? state : null;
   const preview = current?.preview;
@@ -78,7 +83,9 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
       toast.success(notify ? `Pool settled. Emailed ${res.emailed} member(s).` : 'Pool settled.');
       // A failed send is not a failed settlement — the pool IS over. Say so, and
       // say how many were missed, rather than claim everyone was told.
-      if (res.emailFailed > 0) toast.error(`${res.emailFailed} email(s) could not be sent. The pool is still settled.`);
+      if (res.emailFailed > 0 || res.adminAuditFailed) {
+        toast.error(`The pool is settled, but ${res.emailFailed > 0 ? `${res.emailFailed} email(s) could not be sent` : 'the record for site staff could not be written'}. Use Retry below.`);
+      }
     } catch (err) {
       logger.error('Failed to settle pool:', err);
       toast.error(getUserMessage(err));
@@ -86,6 +93,56 @@ export const SettlePoolPanel: React.FC<{ pool: Pool }> = ({ pool }) => {
       setBusy(false);
     }
   };
+
+  const handleRetry = async () => {
+    if (!settled) return;
+    setBusy(true);
+    try {
+      // FOLLOW_UP phase server-side: only the owed audit / emails run.
+      const res = await dbService.settlePool({
+        poolId: pool.id,
+        entryIds: settled.entryIds,
+        notifyMembers: settled.notifyMembers,
+      });
+      if (res.emailFailed > 0 || res.adminAuditFailed) {
+        toast.error(`Still not finished: ${res.emailFailed} email(s) failed${res.adminAuditFailed ? ' and the audit record could not be written' : ''}. Try again later.`);
+      } else {
+        toast.success(res.emailed > 0 ? `Done. Emailed ${res.emailed} more member(s).` : 'Done.');
+      }
+    } catch (err) {
+      logger.error('Failed to finish the settlement follow-up:', err);
+      toast.error(getUserMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (settled) {
+    return (
+      <div className="bg-gold-500/5 border border-gold-500/30 rounded-lg p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Handshake size={14} className="text-gold-700 dark:text-gold-400" aria-hidden="true" />
+          <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-gold-700 dark:text-gold-400">
+            Pool Settled — Finish Up
+          </p>
+        </div>
+        <p className="font-body text-[12px] text-muted leading-relaxed">
+          The pool is settled and over. Something after that did not finish
+          {settled.notifyMembers && !settled.emailedAt ? ': not every member has been emailed yet' : ': the record for site staff was not written'}.
+          Retrying only does what is missing — nobody who was already emailed is emailed again.
+        </p>
+        <div className="flex justify-end">
+          <button
+            onClick={handleRetry}
+            disabled={busy}
+            className="min-h-[44px] bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] px-6 rounded-lg flex items-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer text-xs"
+          >
+            {busy ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gold-500/5 border border-gold-500/30 rounded-lg p-5 space-y-4">

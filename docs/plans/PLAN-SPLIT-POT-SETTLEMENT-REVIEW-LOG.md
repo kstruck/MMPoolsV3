@@ -77,3 +77,10 @@ review continues on the PR diff (`codex exec review --base origin/main`).
 |---|---|---|---|---|---|
 | 1 | P1 | `sendEmail` returns `'failed'` rather than throwing (`lib/deliveryTally.ts:42`), and the loop stamped `emailedAt` regardless, so a transient enqueue failure was recorded as delivered for ever. | **Yes**. | **ACCEPTED** | Delivery tracked per member by uid in `settlement.notifiedUids` (queued, or skipped for a reason a retry cannot fix). `emailedAt` only when nothing failed; on a failure the claim is released so a retry reaches only the missed members. Uids, never addresses, because the pool doc is member-readable — the test asserts no `@` lands there. The client reports failures instead of claiming everyone was told. |
 | 2 | P2 | Recipients came from the first `pool` read, so a member who joined before the lease was missed. | **Yes**. | **ACCEPTED** | The roster is re-read after the flip. Test seeds a member added since, and asserts they are emailed. |
+
+## Code round 3 — HEAD `71b677fd` — 2 findings
+
+| # | Sev | Finding | Verified? | Verdict | Response |
+|---|---|---|---|---|---|
+| 1 | P2 | `writeAdminAudit` returns `false` instead of throwing (`lib/adminAudit.ts:120`), and `adminAuditedAt` was stamped regardless. | **Yes**. | **ACCEPTED** | Stamp only on `true`; otherwise release the claim. The callable returns `adminAuditFailed`. |
+| 2 | P2 | After a failed send the follow-up stays owed, but the panel was hidden once the pool closed, so there was no product path to retry. | **Yes** — `NFLManagerView` gated the panel on `!poolIsOver`. | **ACCEPTED** | The panel also shows when `settlementFollowUpOwed(pool.settlement)`, in a "Finish up" mode whose Retry calls `settlePool` (FOLLOW_UP phase: only the owed steps, only un-notified members). |

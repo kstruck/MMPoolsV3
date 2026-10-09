@@ -9,6 +9,20 @@
  */
 const VOIDED = new Set(['CANCELED', 'COMPLETED', 'ARCHIVED']);
 
+/**
+ * A settled pool whose follow-up is still owed: the Super-Admin audit row, or
+ * the member emails (some failed, or never sent). Mirrors the FOLLOW_UP row of
+ * `settlementPhase` (functions/src/lib/settlement.ts). The manager panel stays
+ * up in this state so the owner can retry from the product, not out of band.
+ */
+export function settlementFollowUpOwed(
+  settlement: { notifyMembers?: unknown; adminAuditedAt?: unknown; emailedAt?: unknown } | null | undefined,
+): boolean {
+  if (!settlement) return false;
+  const missing = (v: unknown) => v === undefined || v === null;
+  return missing(settlement.adminAuditedAt) || (settlement.notifyMembers === true && missing(settlement.emailedAt));
+}
+
 export function poolIsOver(pool: { status?: unknown; closedVia?: unknown; finalizedAt?: unknown } | null | undefined): boolean {
   if (!pool) return true;
   const status = typeof pool.status === 'string' ? pool.status.toUpperCase() : '';

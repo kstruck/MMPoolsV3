@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SettledBanner } from '../components/NFLPoolDashboard/SettledBanner';
-import { poolIsOver } from '../utils/poolIsOver';
+import { poolIsOver, settlementFollowUpOwed } from '../utils/poolIsOver';
 import type { PoolSettlement } from '@shared/settlement';
 
 const base: PoolSettlement = {
@@ -56,5 +56,17 @@ describe('poolIsOver (client mirror of the server POOL_OVER rule)', () => {
       { status: 'OPEN', closedVia: 'SETTLED' }, { status: 'OPEN', finalizedAt: {} }, null]) {
       expect(poolIsOver(p)).toBe(true);
     }
+  });
+});
+
+describe('settlementFollowUpOwed — keeps the retry reachable after the pool closes', () => {
+  it('is false with no settlement, or with everything done', () => {
+    expect(settlementFollowUpOwed(undefined)).toBe(false);
+    expect(settlementFollowUpOwed({ notifyMembers: true, adminAuditedAt: 1, emailedAt: 2 })).toBe(false);
+    expect(settlementFollowUpOwed({ notifyMembers: false, adminAuditedAt: 1 })).toBe(false);
+  });
+  it('is true while the audit or the requested emails are outstanding', () => {
+    expect(settlementFollowUpOwed({ notifyMembers: false })).toBe(true);
+    expect(settlementFollowUpOwed({ notifyMembers: true, adminAuditedAt: 1 })).toBe(true);
   });
 });

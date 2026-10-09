@@ -97,8 +97,12 @@ export const settlePool = validated(
         // Each step is CLAIMED in a transaction first (codex code-review r1 P2), so
         // overlapping retries cannot both run it. A lost claim is not an error:
         // another attempt is doing, or has done, that step.
+        let adminAuditFailed = false;
         if (owed.adminAudit && await claimFollowUp(db, poolRef, "adminAudit")) {
-            await writeAdminAudit({
+            // `writeAdminAudit` returns false rather than throwing when it cannot
+            // persist (codex code-review r3): stamp only on success, otherwise
+            // release the claim so the follow-up stays owed and retryable.
+            const audited = await writeAdminAudit({
                 actorUid: uid,
                 actorEmail: request.auth!.token.email as string | undefined,
                 action: "POOL_SETTLED",
@@ -113,7 +117,10 @@ export const settlePool = validated(
                 },
                 status: "success",
             });
-            await poolRef.update({ "settlement.adminAuditedAt": Date.now() });
+            adminAuditFailed = !audited;
+            await poolRef.update(audited
+                ? { "settlement.adminAuditedAt": Date.now() }
+                : { "settlement.adminAuditClaimedAt": FieldValue.delete() });
         }
 
         // 🛑 Delivery is tracked PER MEMBER, by uid (codex code-review r2 P1).
@@ -150,7 +157,7 @@ export const settlePool = validated(
             });
         }
 
-        return { success: true, settlement, emailed, emailFailed };
+        return { success: true, settlement, emailed, emailFailed, adminAuditFailed };
     },
 );
 
