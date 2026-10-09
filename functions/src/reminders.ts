@@ -78,15 +78,36 @@ export async function sendEmail(
         }
         const finalHtml = unsubUrl ? html.replace(/\{\{UNSUB_URL\}\}/g, unsubUrl) : html;
 
-        await db.collection("mail").add({
+        // `idempotencyKey` (optional) makes the enqueue once-only: the mail doc is
+        // CREATED under that id, so a retry after a crash between the enqueue and
+        // the caller's own progress stamp finds it and sends nothing (qodo #4 on
+        // #715, "settled members can receive repeat emails"). It is not stored.
+        const { idempotencyKey, ...mailContext } = context ?? {};
+        const mailDoc = {
             to,
             message: {
                 subject,
                 html: finalHtml,
             },
-            ...context, // e.g. poolId, reason
+            ...mailContext, // e.g. poolId, reason
             createdAt: FieldValue.serverTimestamp(),
-        });
+        };
+        if (typeof idempotencyKey === 'string' && idempotencyKey) {
+            try {
+                await db.collection("mail").doc(idempotencyKey.replace(/\//g, '_')).create(mailDoc);
+            } catch (createError) {
+                const code = (createError as { code?: unknown }).code;
+                if (code === 6 || code === 'already-exists') {
+                    // Queued by an earlier attempt: delivered, and a retry cannot improve
+                    // on that — so 'skipped', never a second copy.
+                    console.log(`Email to ${to} already queued (${idempotencyKey}); not re-sending`);
+                    return recordDelivery(tally, 'skipped');
+                }
+                throw createError;
+            }
+        } else {
+            await db.collection("mail").add(mailDoc);
+        }
         console.log(`Email queued for ${to}: ${subject}`);
         return recordDelivery(tally, 'queued');
     } catch (error) {
