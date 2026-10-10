@@ -441,7 +441,12 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
         <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Over</h3>
         <p className="font-body text-sm text-[color:var(--text)] leading-relaxed">
           This pool has ended and takes no more picks, so there is nothing left to chase here.
-          The final results are on the Scoring tab, and any money still owed is in the Payment Ledger.
+          {/* "Standings & Results" is the MAIN pool tab (NFLPoolDashboard's tab
+              list), not a commissioner sub-tab. The first version of this card
+              said "the Scoring tab", which is the weekly Score & Recap action and
+              shows no standings (qodo #2 on #723). The test pins the label
+              against that tab list so the two cannot drift. */}
+          The final results are under Standings &amp; Results, in the pool&rsquo;s main tabs, and any money still owed is in the Payment Ledger.
         </p>
       </div>
       ) : (

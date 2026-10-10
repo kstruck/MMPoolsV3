@@ -13,6 +13,8 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
+// The main tab list, as source text: the card must name a tab that exists there.
+import dashboardSource from '../components/NFLPoolDashboard/NFLPoolDashboard.tsx?raw';
 
 vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
 // Every dbService call is a no-op; every `subscribe*` hands back an unsubscribe.
@@ -61,6 +63,15 @@ describe('NFLManagerBentoDashboard — a pool that is over', () => {
     expect(text).not.toContain('Pending Pick Sheets');
     expect(text).not.toContain('Auto-reminders enabled');
     expect(text).not.toMatch(/Nudge/i);
+  });
+
+  it('points to a tab that really holds the results — Standings & Results, not the Scoring sub-tab (qodo #2 on #723)', () => {
+    const { container } = renderOverview({ ...base, status: 'COMPLETED', closedVia: 'SETTLED' });
+    const text = container.textContent ?? '';
+    expect(text).toContain('Standings & Results');
+    expect(text).not.toMatch(/Scoring tab/i);
+    // The name the card uses must be the label of a real main tab.
+    expect(dashboardSource).toContain("{ tab: 'standings', label: 'Standings & Results' }");
   });
 
   it('keeps the money side: Buy-ins at a glance is still there', () => {
