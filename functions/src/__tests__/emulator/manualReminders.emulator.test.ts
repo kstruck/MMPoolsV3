@@ -161,3 +161,54 @@ describe('sendManualReminder — who actually gets the email', () => {
     expect(await mailedTo()).toEqual([]);
   });
 });
+
+describe('sendManualReminder — a pool that is over takes no picks reminder', () => {
+  async function seedOverPool(over: Record<string, unknown>) {
+    await db.collection('pools').doc(POOL).set({
+      id: POOL, type: 'NFL_SURVIVOR', name: 'Over Pool', ownerId: 'mr_boss',
+      participantIds: ['mr_boss', 'mr_never'], status: 'OPEN',
+      settings: { entryFee: 25 }, ...over,
+    });
+    await Promise.all([seedUser('mr_boss', 'Boss'), seedUser('mr_never', 'Never Submitted')]);
+    await db.collection('pools').doc(POOL).collection('members').doc('mr_never').set({
+      uid: 'mr_never', poolId: POOL, userName: 'Never Submitted',
+      role: 'PARTICIPANT', paidStatus: 'UNPAID', joinedAt: JOINED,
+    });
+  }
+
+  // Every way a pool can be over, as `poolIsOver` reads them.
+  const ROUTES: Array<[string, Record<string, unknown>]> = [
+    ['settled (closedVia SETTLED)', { status: 'COMPLETED', closedVia: 'SETTLED' }],
+    ['completed', { status: 'COMPLETED' }],
+    ['cancelled', { status: 'CANCELED' }],
+    ['finalized', { finalizedAt: admin.firestore.Timestamp.now() }],
+  ];
+
+  for (const [label, over] of ROUTES) {
+    it(`refuses a PICKS reminder on a pool that is ${label}, and queues nothing`, async () => {
+      await seedOverPool(over);
+      await expect(
+        wrappedReminder({ data: { poolId: POOL, kind: 'PICKS' }, auth: BOSS } as never),
+      ).rejects.toThrow(/POOL_OVER/);
+      await expect(
+        wrappedReminder({ data: { poolId: POOL, kind: 'PICKS', targetUids: ['mr_never'] }, auth: BOSS } as never),
+      ).rejects.toThrow(/POOL_OVER/);
+      expect(await mailedTo()).toEqual([]);
+    });
+  }
+
+  it('does NOT refuse a PAYMENT reminder on a pool that is over — money can still be owed', async () => {
+    await seedOverPool({ status: 'COMPLETED', closedVia: 'SETTLED' });
+    await expect(
+      wrappedReminder({ data: { poolId: POOL, kind: 'PAYMENT' }, auth: BOSS } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it('still sends a PICKS reminder on a pool that is open', async () => {
+    await seedOverPool({});
+    const res = (await wrappedReminder({
+      data: { poolId: POOL, kind: 'PICKS' }, auth: BOSS,
+    } as never)) as { sent: number };
+    expect(res.sent).toBeGreaterThanOrEqual(1);
+  });
+});

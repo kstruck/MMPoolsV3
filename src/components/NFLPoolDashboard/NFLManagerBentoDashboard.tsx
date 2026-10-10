@@ -31,6 +31,7 @@ import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutst
 import { BanterFeed } from './BanterFeed';
 import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { formatDeadline } from '../../utils/formatTime';
+import { poolIsOver } from '../../utils/poolIsOver';
 
 interface NFLManagerBentoDashboardProps {
   pool: Pool;
@@ -426,7 +427,24 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
 
-      {/* CARD 1: POOL PERFORMANCE & SUBMISSIONS HEALTH */}
+      {/* CARD 1: POOL PERFORMANCE & SUBMISSIONS HEALTH.
+          On a pool that is over (settled, finalized, cancelled…) there is no
+          week left to chase: picks are closed, the lock time is past and the
+          reminder jobs skip it, so a live "pick completion" tracker with Nudge
+          buttons would contradict the banner above it and invite an email the
+          server now refuses. Say the pool is over instead. */}
+      {poolIsOver(pool) ? (
+      <div
+        className="bg-card border border-line rounded-xl p-6 shadow-card flex flex-col justify-center gap-2"
+        data-testid="pool-over-card"
+      >
+        <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Over</h3>
+        <p className="font-body text-sm text-[color:var(--text)] leading-relaxed">
+          This pool has ended and takes no more picks, so there is nothing left to chase here.
+          The final results are on the Scoring tab, and any money still owed is in the Payment Ledger.
+        </p>
+      </div>
+      ) : (
       <div
         className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
       >
@@ -548,6 +566,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           </span>
         </div>
       </div>
+      )}
 
       {/* CARD 2: BUY-IN REVENUE LEDGER & MEMBERS ACCREDITATION */}
       <div

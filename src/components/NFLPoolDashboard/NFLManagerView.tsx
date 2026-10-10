@@ -334,6 +334,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   const type = pool.type;
   const castPool = pool as any;
+  // A finished pool takes no more picks, so a "submit your picks" email would
+  // chase people for something they can no longer do. The server refuses a PICKS
+  // reminder on such a pool (`sendManualReminder`, POOL_OVER); this only decides
+  // what the UI offers. Payment reminders stay: money can still be owed.
+  const picksClosed = poolIsOver(castPool);
   const settings = castPool.settings || {};
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
@@ -1918,7 +1923,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => handleRemindBulk('PICKS')}
-                  disabled={bulkReminding !== null || unpickedCount === 0}
+                  disabled={bulkReminding !== null || unpickedCount === 0 || picksClosed}
+                  title={picksClosed ? 'This pool is over and takes no more picks' : undefined}
                   className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                 >
                   <BellRing size={12} />
@@ -2019,13 +2025,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           card is picks status / remind / co-comm only (Kevin, 2026-08-16). */}
                       <td className="py-3.5 px-5 text-right">
                         <button
-                          onClick={() => handleRemindOne(row.uid, !row.picked ? 'PICKS' : 'PAYMENT')}
+                          onClick={() => handleRemindOne(row.uid, !row.picked && !picksClosed ? 'PICKS' : 'PAYMENT')}
                           disabled={
                             remindingUid !== null ||
                             bulkReminding !== null ||
-                            (row.picked && !owesMoney(row))
+                            ((row.picked || picksClosed) && !owesMoney(row))
                           }
-                          title={!row.picked ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : 'Picked and settled — nothing to remind'}
+                          title={!row.picked && !picksClosed ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : picksClosed ? 'This pool is over and nothing is owed — nothing to remind' : 'Picked and settled — nothing to remind'}
                           className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />

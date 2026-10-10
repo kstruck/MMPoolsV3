@@ -1,0 +1,79 @@
+// @vitest-environment jsdom
+//
+// (Opt-in, same convention as pickDistributionScope.test.tsx — the repo default is node.)
+/**
+ * COMMISSIONER OVERVIEW ON A POOL THAT IS OVER.
+ *
+ * Measured live 2026-10-09 on a settled Survivor pool: the banner said "No more
+ * picks can be made" while the Overview below it still showed a Week 5 pick
+ * completion rate, eight "Pending Pick Sheets" with Nudge Email buttons, and
+ * "Auto-reminders enabled". The server now refuses a PICKS reminder on such a
+ * pool (`sendManualReminder`, POOL_OVER); this pins that the screen no longer
+ * offers one, and that an OPEN pool is unchanged.
+ */
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, cleanup } from '@testing-library/react';
+
+vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
+// Every dbService call is a no-op; every `subscribe*` hands back an unsubscribe.
+vi.mock('../services/dbService', () => ({
+  dbService: new Proxy({}, { get: () => () => () => {} }),
+}));
+vi.mock('../components/ui/Toast', () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), confirm: vi.fn(async () => false) }),
+}));
+
+import { NFLManagerBentoDashboard } from '../components/NFLPoolDashboard/NFLManagerBentoDashboard';
+
+afterEach(cleanup);
+
+const base = { id: 'p1', type: 'NFL_SURVIVOR', name: 'P', ownerId: 'o', seasonType: 2, participantIds: ['u1', 'u2'], settings: { entryFee: 25 } };
+const members = [
+  { uid: 'u1', userName: 'Pat', role: 'PARTICIPANT', paidStatus: 'PAID', joinedAt: 1 },
+  { uid: 'u2', userName: 'Sam', role: 'PARTICIPANT', paidStatus: 'UNPAID', joinedAt: 1 },
+];
+
+function renderOverview(pool: Record<string, unknown>) {
+  return render(
+    <NFLManagerBentoDashboard
+      pool={pool as never}
+      entries={[]}
+      members={members}
+      games={[]}
+      week={5}
+      user={null}
+      onSelectTab={() => {}}
+    />,
+  );
+}
+
+describe('NFLManagerBentoDashboard — a pool that is over', () => {
+  it.each([
+    ['settled', { status: 'COMPLETED', closedVia: 'SETTLED' }],
+    ['cancelled', { status: 'CANCELED' }],
+    ['finalized', { finalizedAt: 1 }],
+  ])('a %s pool shows "Pool Over" instead of the live pick tracker and the Nudge buttons', (_label, over) => {
+    const { container, queryByTestId } = renderOverview({ ...base, ...over });
+    expect(queryByTestId('pool-over-card')).not.toBeNull();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Pool Over');
+    expect(text).not.toContain('Submission Health');
+    expect(text).not.toContain('Pending Pick Sheets');
+    expect(text).not.toContain('Auto-reminders enabled');
+    expect(text).not.toMatch(/Nudge/i);
+  });
+
+  it('keeps the money side: Buy-ins at a glance is still there', () => {
+    const { container } = renderOverview({ ...base, status: 'COMPLETED', closedVia: 'SETTLED' });
+    expect(container.textContent).toContain('Buy-ins at a glance');
+  });
+
+  it('an OPEN pool is unchanged: the pick tracker and Nudge buttons are shown', () => {
+    const { container, queryByTestId } = renderOverview({ ...base, status: 'OPEN' });
+    expect(queryByTestId('pool-over-card')).toBeNull();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Submission Health');
+    expect(text).toContain('Pending Pick Sheets');
+    expect(text).toMatch(/Nudge/i);
+  });
+});
