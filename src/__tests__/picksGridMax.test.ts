@@ -3,7 +3,14 @@ import type { NFLGame } from '../types';
 import type { PicksGridCell } from '../utils/picksGrid';
 import { tallyGridRow, formatWinLoss, maxUnknownTitle } from '../utils/picksGridMax';
 
-const game = (id: string, status: NFLGame['status'] = 'SCHEDULED') => ({ id, status } as unknown as NFLGame);
+// A FINAL game carries a real score (away 24, home 20) unless told otherwise —
+// a scoreless FINAL is a separate case, pinned by its own test.
+const game = (id: string, status: NFLGame['status'] = 'SCHEDULED', extra: Record<string, unknown> = {}) => ({
+    id, status,
+    homeTeam: { abbreviation: 'HOM' }, awayTeam: { abbreviation: 'AWY' },
+    ...(status === 'FINAL' ? { scores: { home: 20, away: 24 } } : {}),
+    ...extra,
+} as unknown as NFLGame);
 const pick = (result: 'W' | 'L' | 'PUSH' | 'VOID' | null, confidence?: number): PicksGridCell => ({
     kind: 'PICK', team: 'KC', result, ...(confidence === undefined ? {} : { confidence }),
 });
@@ -39,12 +46,14 @@ describe('tallyGridRow — own row, standard scoring', () => {
         expect(t).toMatchObject({ wins: 1, losses: 0, earned: 1, max: 3 });
     });
 
-    it('a FINAL game the feed reported no scores for stays ungraded and is not winnable', () => {
+    it('a FINAL the feed reported no scores for is ungraded: not in W-L, but still winnable, so Max keeps it (qodo #2 on #722)', () => {
+        const slate = [game('s1', 'FINAL', { scores: undefined })];
         const t = tallyGridRow({
-            weekGames: GAMES, cells: cells(pick(null), NO_PICK, NO_PICK, NO_PICK, NO_PICK),
+            weekGames: slate, cells: new Map([['s1', pick(null)]]),
             setCount: 1, revealMode: 'PER_GAME', isOwnRow: true, confidenceMode: false,
         });
-        expect(t).toMatchObject({ wins: 0, losses: 0, max: 0 });
+        expect(t).toMatchObject({ wins: 0, losses: 0, earned: 0, max: 1 });
+        expect(formatWinLoss(t)).toBeNull();
     });
 
     it('an own row that picked nothing is 0-0 with Max 0, not unknown', () => {
@@ -125,6 +134,43 @@ describe("tallyGridRow — another player's row", () => {
             setCount: 0, revealMode: 'WEEK', isOwnRow: false, confidenceMode: true,
         });
         expect(t.max).toBe(0);
+    });
+
+    it('a hidden FINAL that tied, or exactly covered the spread, grades PUSH and is not winnable (qodo #1 on #721)', () => {
+        const tie = [game('t1', 'FINAL', { scores: { home: 21, away: 21 } })];
+        expect(tallyGridRow({
+            weekGames: tie, cells: new Map([['t1', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        }).max).toBe(0);
+        // ATS: home 20 + spread 4 = away 24 — an exact cover, a PUSH.
+        const cover = [game('t2', 'FINAL', { spread: { value: 4 } })];
+        expect(tallyGridRow({
+            weekGames: cover, cells: new Map([['t2', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false, pickMode: 'ATS',
+        }).max).toBe(0);
+        // The same game straight-up is a decided win/loss, so it is still counted.
+        expect(tallyGridRow({
+            weekGames: cover, cells: new Map([['t2', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        }).max).toBe(1);
+    });
+
+    it('a hidden FINAL the feed reported no scores for is still winnable, so it stays in Max (qodo #2 on #722)', () => {
+        const scoreless = [game('s1', 'FINAL', { scores: undefined })];
+        expect(tallyGridRow({
+            weekGames: scoreless, cells: new Map([['s1', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        }).max).toBe(1);
+    });
+
+    it('confidence: when every hidden game is cancelled the weights cannot matter, so Max is exact (qodo #2 on #721)', () => {
+        const slate = [game('c1', 'CANCELLED'), game('c2', 'CANCELLED')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['c1', HIDDEN], ['c2', HIDDEN]]),
+            setCount: 1, revealMode: 'WEEK', isOwnRow: false, confidenceMode: true,
+        });
+        expect(t.max).toBe(0);
+        expect(t.maxUnknown).toBeUndefined();
     });
 
     it('a hidden FINAL game stays counted: the reveal can lag the game, and that pick may already be a win', () => {

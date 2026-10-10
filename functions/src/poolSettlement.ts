@@ -19,6 +19,7 @@ import {
     rebuyDuesOf,
     throughWeekOf,
     followUpClaimable,
+    settlementMailKey,
 } from "./lib/settlement";
 import { SETTLED, joinNames, type PoolSettlement, type SettlementPreview } from "./shared/settlement";
 import type { AuditLogEvent, User } from "./types";
@@ -166,7 +167,7 @@ export const settlePool = validated(
                     // and the notifiedUids stamp below cannot send a second copy.
                     ? await sendEmail(db, email, subject, html, {
                         poolId, reason: "pool_settled",
-                        idempotencyKey: `pool-settled-${poolId}-${settlement.settledAt}-${memberUid}`,
+                        idempotencyKey: settlementMailKey(poolId, settlement.settledAt, memberUid),
                     })
                     : "skipped";
                 if (outcome === "failed") { emailFailed++; continue; }

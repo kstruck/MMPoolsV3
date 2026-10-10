@@ -16,7 +16,7 @@ const report = (...advisories: ReturnType<typeof adv>[]) => ({
   },
 });
 const NOW = new Date('2026-10-20T00:00:00Z');
-const entry = (ghsa: string, expires = '2026-11-09') => ({ ghsa, reason: 'no patched release', expires });
+const entry = (ghsa: string, expires = '2026-11-09', pkg = 'braces') => ({ ghsa, package: pkg, reason: 'no patched release', expires });
 
 describe('audit gate', () => {
   it('fails an advisory that is not on the allow-list', () => {
@@ -62,14 +62,30 @@ describe('audit gate', () => {
     expect(r.failures.map((f: { name: string }) => f.name)).toEqual(['proxy-addr']);
   });
 
-  it('ignores moderate advisories and counts each advisory once', () => {
-    const r = report(adv('a', 'GHSA-aaaa-bbbb-cccc'), adv('b', 'GHSA-aaaa-bbbb-cccc'), adv('m', 'GHSA-1111-2222-3333', 'moderate'));
+  it('ignores moderate advisories and counts each (advisory, package) pair once', () => {
+    const r = report(adv('a', 'GHSA-aaaa-bbbb-cccc'), adv('a', 'GHSA-aaaa-bbbb-cccc'), adv('m', 'GHSA-1111-2222-3333', 'moderate'));
     expect(collectAdvisories(r)).toHaveLength(1);
+  });
+
+  it('a waiver covers ONE package: the same advisory on a second package still fails (qodo #2 on #717)', () => {
+    const r = evaluateAudit(
+      report(adv('braces', 'GHSA-aaaa-bbbb-cccc'), adv('other-pkg', 'GHSA-aaaa-bbbb-cccc')),
+      { entries: [entry('GHSA-aaaa-bbbb-cccc')] },     // waived for braces only
+      NOW,
+    );
+    expect(r.allowed.map((a: { name: string }) => a.name)).toEqual(['braces']);
+    expect(r.failures.map((f: { name: string }) => f.name)).toEqual(['other-pkg']);
+  });
+
+  it('an entry with no package waives nothing', () => {
+    const noPackage = { ghsa: 'GHSA-aaaa-bbbb-cccc', reason: 'x', expires: '2026-11-09' };
+    const r = evaluateAudit(report(adv('braces', 'GHSA-aaaa-bbbb-cccc')), { entries: [noPackage] }, NOW);
+    expect(r.failures).toHaveLength(1);
   });
 
   it('reports an allow-list entry that no longer matches anything', () => {
     const r = evaluateAudit(report(), { entries: [entry('GHSA-aaaa-bbbb-cccc')] }, NOW);
-    expect(r.unusedEntries).toEqual(['GHSA-aaaa-bbbb-cccc']);
+    expect(r.unusedEntries).toEqual(['GHSA-aaaa-bbbb-cccc|braces']);
     expect(r.failures).toEqual([]);
   });
 });

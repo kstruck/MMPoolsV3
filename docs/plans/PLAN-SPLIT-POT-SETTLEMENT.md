@@ -166,7 +166,7 @@ settlePoolSchema = z.strictObject({
    **The pool audit event `POOL_SETTLED` is written in this same transaction** (`tx.set` inside `fencedWrite`'s `apply`), so it exists if and only if the flip committed — a `cancelPool` that wins the gap leaves no false audit (review r2 #3).
    🛑 **NOT `isLocked` / `isFinal` / `scores.gameStatus`** (sweep S1): `onPoolLocked` (`statsTrigger.ts:186`) fires on `isLocked` false→true and adds a pot to `stats/global`; `onGameComplete` (`postGameEmail.ts:37`) fires on `scores.gameStatus`→`post` and sends a **Squares** email built from `squares[]`. Both skip only `closedVia === 'ADMIN_CLOSE'`. NFL season pools never set those fields, and every NFL reader decides terminal-ness from `status` / `finalizedAt` / `closedVia`.
 9. `writeAdminAudit('POOL_SETTLED')`, then stamp `settlement.adminAuditedAt`.
-10. If `notifyMembers`: one email per member (`resolveMemberEmails` + `sendEmail`, reason `pool_settled`) — winners by name, `prizePerEntry` only when known, the rebuy line when `rebuyDuesExcluded > 0`, the note — then stamp `settlement.emailedAt`. Steps 9–10 are the `FOLLOW_UP` phase on a retry. At-least-once: a crash between the last send and the stamp re-sends.
+10. If `notifyMembers`: one email per member (`resolveMemberEmails` + `sendEmail`, reason `pool_settled`) — winners by name, `prizePerEntry` only when known, the rebuy line when `rebuyDuesExcluded > 0`, the note — then stamp `settlement.emailedAt`. Steps 9–10 are the `FOLLOW_UP` phase on a retry. Once-only per member (PR #720, qodo #4 on #715): each email is enqueued under a stable mail document id built from the pool, the settlement and the member (`settlementMailKey`), so a crash between the enqueue and the `notifiedUids` stamp cannot send a second copy. A mail document the mail extension stamped `delivery.state: 'ERROR'` is the one exception — it never reached anyone, so a retry deletes it and creates it afresh, which sends it again.
 
 **Entry visibility after the flip.** `firestore.rules:730-735` opens an NFL pool's entries to its participants once `status` is `COMPLETED`, so a settled pool's picks — including any already saved for the unplayed week — become readable. Intended: the pool is over, exactly as at a natural season end.
 
@@ -241,8 +241,10 @@ export function tallyGridRow(args: {
 
 * `wins` / `losses`: count of `PICK` cells with `result === 'W'` / `'L'`. PUSH, VOID, null (undecided) do not count.
 * `earned`: standard → `wins`; confidence → Σ weight over `W` cells.
-* `remaining`: Σ over `PICK` cells with `result === null` and the game not final/cancelled (weight or 1), **plus** for a non-own row the unrevealed picks: `max(0, setCount − revealedPickCount)` × 1 in standard mode. In confidence mode an unrevealed pick's weight is unknowable → `max = null`. `setCount === undefined` (reveal not arrived) → `max = null`.
-* `max = earned + remaining`.
+* `remaining`: Σ over `PICK` cells with `result === null` on a game that can still pay (weight or 1), **plus** for a non-own row the unrevealed picks: `max(0, setCount − revealedPickCount)` × 1 in standard mode, **capped at the number of hidden games that can still pay**. `setCount === undefined` (reveal not arrived) → `max = null`.
+* A game **can still pay** unless it is CANCELLED (VOID), or FINAL and graded PUSH (a tie or an exact ATS cover — independent of the side picked). A FINAL the feed reported **no scores** for is *not* settled — the scorer will grade it when scores arrive — so it still counts. A hidden FINAL that is a decided win or loss also still counts: the reveal can lag the game, that pick may already be a win, and dropping it could put Max below the real score.
+* **Confidence:** an unrevealed pick's weight is unknowable, so `max = null` — but only if some hidden game that can still pay holds an unrevealed pick. When no hidden pick can matter (the saved-pick count equals the revealed picks, or every hidden game is cancelled or a PUSH) the answer is exact.
+* `max = earned + remaining`. **Max is an upper bound, never below the player's real score.** (Revised after review: PR #721 and its qodo/codex findings.)
 
 Rendered as **W-L** (`3-1`, `—` when nothing graded yet) and **Max** (`12`, `?` when null, with a title explaining why). Both after Week Pts. The Majority row shows `—` in both.
 

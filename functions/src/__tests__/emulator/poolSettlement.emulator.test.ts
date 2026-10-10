@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { settlePool } from '../../poolSettlement';
+import { settlementMailKey } from '../../lib/settlement';
 import { executeSurvivorRebuyInternal, joinNFLPoolInternal, submitNFLPicksInternal } from '../../nflPools';
 import { proxyPick, cancelPool, closePool } from '../../poolExceptions';
 
@@ -269,7 +270,7 @@ describe('settlePool — per-member delivery (codex code-review r2)', () => {
 
 describe('settlePool — an email already queued is never sent twice (qodo #4 on #715)', () => {
   it('a crash after the enqueue but before the notifiedUids stamp: the retry sends the rest and leaves that mail doc alone', async () => {
-    const mailId = (uid: string) => `pool-settled-${POOL}-7-${uid}`;
+    const mailId = (uid: string) => settlementMailKey(POOL, 7, uid);
     await seed({
       status: 'COMPLETED', closedVia: 'SETTLED',
       settlement: {
