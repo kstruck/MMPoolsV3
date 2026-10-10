@@ -65,6 +65,7 @@ import {
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
+import { assertPoolAcceptsPlay } from './lib/settlement';
 import { resolveGameSpreads } from './lib/frozenSpreads';
 import { pickSubjectName } from './lib/displayName';
 import { fetchNFLWeekSchedule } from './nflSchedule';
@@ -372,7 +373,10 @@ export async function joinNFLPoolInternal(
 
   const pool = poolSnap.data() as any;
 
-  await db.runTransaction(async (transaction) => {
+  // Lease-checked like its two siblings (PLAN-SPLIT-POT-SETTLEMENT review r1 #2):
+  // a join moves `entryCount`, which a settlement's finalizer prices the pot on.
+  await retryWhileScoring(() => db.runTransaction(async (transaction) => {
+    await assertNoScoringInProgress(transaction, poolRef, Date.now());
     const poolDoc = await transaction.get(poolRef);
     // Member Record read (before any writes) so we can seed it without clobbering paid state.
     const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
@@ -394,6 +398,11 @@ export async function joinNFLPoolInternal(
     const membersForCount = typeof poolData.entryCount === 'number'
       ? null
       : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
+
+    // Nobody joins a pool that is over — not even an existing participant
+    // re-running join: that branch can create a Member Record and move
+    // `entryCount` (codex code-review r6). The only caller is the Join page.
+    assertPoolAcceptsPlay(poolData);
 
     const participantIds = poolData.participantIds || [];
     if (participantIds.includes(uid)) {
@@ -434,7 +443,7 @@ export async function joinNFLPoolInternal(
       ...stageEnrollment(transaction, db, poolId, poolData, uid, 'PARTICIPANT', Date.now()),
       ...entryCountWrite(poolData, membersForCount, stamp.liabilityDelta),
     });
-  });
+  }));
 
   await writeAuditEvent({
     poolId,
@@ -648,6 +657,9 @@ export async function submitNFLPicksInternal(
     // The display name, read in THIS attempt (see the `let` above).
     subjectName = pickSubjectName((await transaction.get(db.collection('users').doc(uid))).data()?.name, ctx.subjectName);
     if (!poolInTx) throw new HttpsError('not-found', 'Pool not found.');
+    // PLAN-SPLIT-POT-SETTLEMENT §2.3: a voided, closed (settled) or finalized
+    // pool takes no more play. Judged on the pool AS READ IN THIS TRANSACTION.
+    assertPoolAcceptsPlay(poolInTx);
     // IMPLICIT JOIN (PLAN-ADMIN-PICK-IMPLICIT-JOIN). `assertNFLPickMembership`
     // admits three kinds of caller: a participant, the owner/manager, and a
     // SUPER_ADMIN. Only the first is guaranteed to be in `participantIds`, and
@@ -1419,6 +1431,9 @@ export async function executeSurvivorRebuyInternal(
     // the strike ledger, so interleaving it with a scoring pass that is writing
     // strikes from a pre-rebuy snapshot re-eliminates the player who just paid.
     await assertNoScoringInProgress(transaction, poolRef, Date.now());
+    // PLAN-SPLIT-POT-SETTLEMENT §2.3: a voided, closed (settled) or finalized
+    // pool takes no more play. Judged on the pool AS READ IN THIS TRANSACTION.
+    assertPoolAcceptsPlay((await transaction.get(poolRef)).data());
     // Entry n of uid (lib/multiEntry.ts) — a rebuy never CREATES an entry.
     const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
     const entryRef = target.ref;

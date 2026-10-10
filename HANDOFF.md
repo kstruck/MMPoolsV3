@@ -1,5 +1,31 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-10-08 — **SURVIVOR SPLIT-POT SETTLEMENT (PLAN-SPLIT-POT-SETTLEMENT Part A). PR OPEN, NOT MERGED, NOT DEPLOYED.**
+>
+> Branch `claude/survivor-pool-features-plan-c4213f`. Plan, review log (3 codex
+> rounds) and sweeps are in `docs/plans/PLAN-SPLIT-POT-SETTLEMENT*.md`; Kevin
+> approved §6 as recommended. Parts B (Current Picks W-L / Max columns) and C
+> (Pick Distribution visibility setting) are NOT started — separate PRs.
+>
+> **What it adds.** `settlePool` callable + "End the Pool — Split the Pot" panel
+> (Manager tab → Settings, Survivor, owner only); a settled-pool banner; a
+> `POOL_OVER` refusal on every NFL play path (pick, proxy pick, rebuy, join),
+> which none of them had; and a **rules authorization fix**: an NFL manager
+> could move their own pool OPEN→FINAL with one client write, which opened every
+> member's un-revealed entry to every participant. NFL `status` / `closedVia` /
+> `closedAt` / `isFinal` are now callable-only for managers, and `finalizedAt`,
+> `firstFinalizedAt`, `finalizedVia`, `settlement` are server-owned.
+>
+> **Deploy (after merge):** step zero `git -C D:\march-melee-pools pull --ff-only origin main`,
+> `npm --prefix functions ci`, then functions BEFORE rules:
+> `npx firebase deploy --only functions`, then `npx firebase deploy --only firestore:rules`,
+> then the frontend in Coolify. Verify: `npx firebase functions:list | Select-String "settlePool"`.
+>
+> **Then settle pool `EJSGHCqc8Q8uv8godJKF` from the UI.** Its `entryCount` is 11
+> with 8 entry docs and 10 members (read-only, 2026-10-08), so the panel will
+> price the pot at $25 × 11 = $275. Kevin confirms that figure on the panel
+> before clicking (D6); if it is wrong, stop — `entryCount` is server-owned.
+
 > ## 🟡 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY WILL PROMPT TO DELETE `createParticipantProfile`.**
 >
 > Branch `claude/name-sync-followup-690`. #690 merged 2026-09-11 with three

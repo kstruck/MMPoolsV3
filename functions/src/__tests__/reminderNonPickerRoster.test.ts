@@ -161,6 +161,20 @@ describe('checkNFLNonPickerReminders — roster-based, T-24h', () => {
         expect(mail.poolId).toBe(POOL_ID);
     });
 
+    // PLAN-SPLIT-POT-SETTLEMENT (codex code-review r9): an over pool gets no
+    // "you haven't picked" email — the same roster that is reminded above.
+    it.each([
+        ['settled', { status: 'COMPLETED', closedVia: 'SETTLED' }],
+        ['cancelled', { status: 'CANCELED' }],
+        ['finalized', { finalizedAt: 1 }],
+        ['archived (lowercase)', { status: 'archived' }],
+    ])('sends nothing on a %s pool', async (_label, over) => {
+        const { db, store, pool } = seedPool('NFL_PICKEM');
+        await checkNFLNonPickerReminders(db, { ...pool, ...over } as ReminderPool, NOW);
+        expect(mailTo(store)).toEqual([]);
+        expect(notificationKeys(store)).toEqual([]);
+    });
+
     it('is idempotent across polls: a second pass in the same window sends nothing new', async () => {
         const { db, store, pool } = seedPool('NFL_PICKEM');
         await checkNFLNonPickerReminders(db, pool, NOW);
