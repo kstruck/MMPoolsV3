@@ -5,7 +5,7 @@ import { checkBillingAccess } from "./billing";
 import { assertPaidParticipantCeiling } from "./poolOps";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { sendEmail } from "./reminders";
-import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { validated } from "./lib/validated";
 import { hasConfirmedRole } from "./lib/confirmedRole";
@@ -305,15 +305,18 @@ export const submitBracketEntryInternal = async (
             if (poolData) {
                 const finalEntryName = (data.name && typeof data.name === 'string' && data.name.trim().length > 0) ? data.name.trim() : "Your Bracket";
 
-                const emailHtml = renderEmailHtml(`
-                    <p>Hi ${userRec.displayName || 'there'},</p>
-                    <p>Your bracket entry <strong>${finalEntryName}</strong> for the pool <strong>${poolData.name}</strong> has been successfully submitted!</p>
+                // (title, body) — the two arguments were swapped before
+                // 2026-09-05, so the body rendered inside the <h1>. Found when
+                // renderEmailHtml started escaping its title.
+                const emailHtml = renderEmailHtml("Bracket Submitted", `
+                    <p>Hi ${escapeHtml(userRec.displayName || 'there')},</p>
+                    <p>Your bracket entry <strong>${escapeHtml(finalEntryName)}</strong> for the pool <strong>${escapeHtml(poolData.name)}</strong> has been successfully submitted!</p>
                     <p>You can view your picks and track your performance here:</p>
                     <div style="text-align: center; margin: 30px 0;">
                         <a href="${BASE_URL}/pool/${poolId}" style="display: inline-block; padding: 12px 24px; background-color: #fca311; color: #14213d; text-decoration: none; border-radius: 4px; font-weight: bold;">View My Bracket</a>
                     </div>
                     <p>Good luck!</p>
-                `, "Bracket Submitted");
+                `);
 
                 await sendEmail(
                     db,

@@ -4,7 +4,7 @@ import * as admin from "firebase-admin";
 import { GameState } from "./types";
 import { writeAuditEvent } from "./audit";
 import { sendEmail } from "./reminders";
-import { renderEmailHtml } from "./emailStyles";
+import { renderEmailHtml, escapeHtml } from "./emailStyles";
 import { checkBillingAccess } from "./billing";
 import { SQUARE_PRIVATE, buildSquarePrivate } from "./squarePrivate";
 import { assertNotBannedLive } from "./lib/systemGuards";
@@ -142,7 +142,7 @@ export const reserveSquare = validated(
         const subject = `Grid Full: ${result.poolName}`;
         const html = renderEmailHtml(
             "Your Grid is Full!",
-            `<p>Great news! All squares in your pool <strong>${result.poolName}</strong> have been reserved.</p>
+            `<p>Great news! All squares in your pool <strong>${escapeHtml(result.poolName)}</strong> have been reserved.</p>
              <p>It's time to generate the numbers and lock the pool!</p>`,
             `https://www.marchmeleepools.com/pool/${poolId}`,
             "Go to Pool"

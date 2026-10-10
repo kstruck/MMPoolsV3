@@ -421,7 +421,7 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
         const subject = `🚫 Locked: Your pool "${after.name}" has reached the Free Plan limit!`;
         const body = `
             <p>Hi there,</p>
-            <p>Your pool <strong>${after.name}</strong> has reached the maximum limit of <strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong> allowed on the Free Plan.</p>
+            <p>Your pool <strong>${escapeHtml(after.name)}</strong> has reached the maximum limit of <strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong> allowed on the Free Plan.</p>
             
             <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 12px; padding: 16px; margin: 20px 0; color: #991b1b; font-family: sans-serif;">
                 <p style="margin: 0; font-weight: bold; font-size: 16px;">Participant Entries Locked 🚫</p>
@@ -442,7 +442,7 @@ export const onPoolParticipantChange = onDocumentWritten("pools/{poolId}", async
         const subject = `⚠️ Action Required: Your pool "${after.name}" is approaching the Free Plan limit!`;
         const body = `
             <p>Hi there,</p>
-            <p>Your pool <strong>${after.name}</strong> currently has <strong>${count} participants</strong>, approaching the maximum limit of <strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong> allowed on the Free Plan.</p>
+            <p>Your pool <strong>${escapeHtml(after.name)}</strong> currently has <strong>${count} participants</strong>, approaching the maximum limit of <strong>${FREE_PLAN_PARTICIPANT_CAP} participants</strong> allowed on the Free Plan.</p>
             
             <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 16px; margin: 20px 0; color: #92400e; font-family: sans-serif;">
                 <p style="margin: 0; font-weight: bold; font-size: 16px;">Approaching Limit: ${count}/${FREE_PLAN_PARTICIPANT_CAP} Players ⚠️</p>
