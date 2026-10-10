@@ -180,6 +180,53 @@ async function logAudit(db: admin.firestore.Firestore, poolId: string, message: 
 
 // --- SCHEDULED REMINDER LOGIC ---
 
+// --- WHICH CHECKS A POOL GETS ---
+
+export type ReminderCheck = 'SQUARES_PAYMENT' | 'SQUARES_LOCK' | 'PLAYOFF' | 'BRACKET' | 'NFL_NON_PICKER';
+
+/** The fields of a pool document that decide its reminder checks. */
+export interface ReminderRoutedPool extends SettleablePool {
+    type?: unknown;
+    reminders?: { payment?: { enabled?: unknown } | null; lock?: { enabled?: unknown } | null } | null;
+}
+
+/**
+ * The reminder checks `runReminders` runs for one pool, in order.
+ *
+ * A pool that is over — cancelled, closed by any route, settled or finalized
+ * (`poolIsOver`) — gets NO "it locks soon" check: not the squares lock
+ * countdown (which also auto-locks the grid and draws its digits), not the
+ * playoff pre-lock notice, not the bracket 24h / 1h / locked notices. Each of
+ * those tells a member to act on a pool that takes no more action. Before
+ * this, only the NFL non-picker check asked the question (#723's audit left
+ * the other four unread), so a cancelled pool with a lock time still ahead
+ * of it emailed every member on schedule.
+ *
+ * Two checks are deliberately NOT gated here:
+ *  - NFL_NON_PICKER carries its own `poolIsOver` return, placed after the
+ *    `season` check it has always had. It is still dispatched so that one
+ *    place owns that rule.
+ *  - SQUARES_PAYMENT is unchanged. It chases money a member still owes the
+ *    host, which the pool ending does not settle, and it also auto-releases
+ *    unpaid squares; whether either should stop on a finished pool is a
+ *    product decision that has not been made.
+ */
+export function reminderChecksFor(pool: ReminderRoutedPool): ReminderCheck[] {
+    const type = pool.type;
+    const over = poolIsOver(pool);
+    if (type === 'SQUARES' || type === 'PROPS' || !type) {
+        const checks: ReminderCheck[] = [];
+        if (!pool.reminders) return checks;
+        if (pool.reminders.payment?.enabled && type === 'SQUARES') checks.push('SQUARES_PAYMENT');
+        if (pool.reminders.lock?.enabled && (type === 'SQUARES' || !type) && !over) checks.push('SQUARES_LOCK');
+        return checks;
+    }
+    if (type === 'NFL_PLAYOFFS') return over ? [] : ['PLAYOFF'];
+    if (type === 'BRACKET') return over ? [] : ['BRACKET'];
+    if (type === 'NFL_PICKEM' || type === 'NFL_SURVIVOR' || type === 'NFL_MARGIN') return ['NFL_NON_PICKER'];
+    return [];
+}
+
 // Cadence: every 15 minutes. The reminder tiers are hour-granularity windows
 // (T-24h..T-18h and T-4h..T-0h — lib/nflNonPickers.ts), so 5-minute polling bought no earlier delivery
 // — it just ran the whole-collection pool scan 3x as often. Kevin's call,
@@ -247,26 +294,14 @@ export const runReminders = functions.scheduler.onSchedule(
             const poolData = doc.data();
             const pool = { id: doc.id, ...poolData } as unknown as Pool; // Better type casting
 
-            // --- TYPE: SQUARES or PROPS --- 
-            if (pool.type === 'SQUARES' || pool.type === 'PROPS' || !pool.type) {
-                if (!pool.reminders) continue;
-                if (pool.reminders.payment?.enabled && pool.type === 'SQUARES') await checkPaymentReminders(db, pool as GameState, now, delivery);
-                if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type)) await checkLockReminders(db, pool as GameState, now, delivery);
-            }
-
-            // --- TYPE: NFL PLAYOFFS ---
-            else if (pool.type === 'NFL_PLAYOFFS') {
-                await checkPlayoffReminders(db, pool, now, delivery);
-            }
-
-            // --- TYPE: BRACKET ---
-            else if (pool.type === 'BRACKET') {
-                await checkBracketReminders(db, pool as BracketPool, now, delivery);
-            }
-
-            // --- TYPE: NFL SEASON POOLS (Pick'em / Survivor / Margin) ---
-            else if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') {
-                await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now, weekCache, delivery);
+            // Which checks this pool gets — and which a finished pool does NOT —
+            // is decided in one pure place: reminderChecksFor.
+            for (const check of reminderChecksFor(poolData as ReminderRoutedPool)) {
+                if (check === 'SQUARES_PAYMENT') await checkPaymentReminders(db, pool as GameState, now, delivery);
+                else if (check === 'SQUARES_LOCK') await checkLockReminders(db, pool as GameState, now, delivery);
+                else if (check === 'PLAYOFF') await checkPlayoffReminders(db, pool as PlayoffPool, now, delivery);
+                else if (check === 'BRACKET') await checkBracketReminders(db, pool as BracketPool, now, delivery);
+                else await checkNFLNonPickerReminders(db, pool as NFLSeasonPool, now, weekCache, delivery);
             }
 
         } catch (poolError: unknown) {
