@@ -194,22 +194,24 @@ export interface ReminderRoutedPool extends SettleablePool {
  * The reminder checks `runReminders` runs for one pool, in order.
  *
  * A pool that is over — cancelled, closed by any route, settled or finalized
- * (`poolIsOver`) — gets NO "it locks soon" check: not the squares lock
- * countdown (which also auto-locks the grid and draws its digits), not the
- * playoff pre-lock notice, not the bracket 24h / 1h / locked notices. Each of
- * those tells a member to act on a pool that takes no more action. Before
- * this, only the NFL non-picker check asked the question (#723's audit left
- * the other four unread), so a cancelled pool with a lock time still ahead
- * of it emailed every member on schedule.
+ * (`poolIsOver`) — gets NO playoff pre-lock notice and NO bracket 24h / 1h /
+ * locked notice. Each of those tells a member to act on a pool that takes no
+ * more action. Before this, only the NFL non-picker check asked the question
+ * (#723's audit left the other four unread), so a cancelled playoff or bracket
+ * pool with a lock time still ahead of it emailed every member on schedule.
+ * Those two checks send notices; the only things they write are their own
+ * already-sent markers and the audit line for the send.
  *
- * Two checks are deliberately NOT gated here:
+ * Three checks are deliberately NOT gated here:
  *  - NFL_NON_PICKER carries its own `poolIsOver` return, placed after the
  *    `season` check it has always had. It is still dispatched so that one
  *    place owns that rule.
- *  - SQUARES_PAYMENT is unchanged. It chases money a member still owes the
- *    host, which the pool ending does not settle, and it also auto-releases
- *    unpaid squares; whether either should stop on a finished pool is a
- *    product decision that has not been made.
+ *  - SQUARES_LOCK and SQUARES_PAYMENT are unchanged. Besides emailing, the
+ *    lock check AUTO-LOCKS the grid and draws its digits, and the payment
+ *    check AUTO-RELEASES unpaid squares. Withholding either on a finished
+ *    pool changes what is written to a production pool, so it takes a
+ *    PLAN-*.md (mmp-change-control §1; qodo #1 on #726) and a product
+ *    decision that has not been made.
  */
 export function reminderChecksFor(pool: ReminderRoutedPool): ReminderCheck[] {
     // Spelled `pool.type === '<TYPE>'` on purpose: scanBounds.test.ts reads this
@@ -220,7 +222,7 @@ export function reminderChecksFor(pool: ReminderRoutedPool): ReminderCheck[] {
         const checks: ReminderCheck[] = [];
         if (!pool.reminders) return checks;
         if (pool.reminders.payment?.enabled && pool.type === 'SQUARES') checks.push('SQUARES_PAYMENT');
-        if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type) && !over) checks.push('SQUARES_LOCK');
+        if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type)) checks.push('SQUARES_LOCK');
         return checks;
     }
     if (pool.type === 'NFL_PLAYOFFS') return over ? [] : ['PLAYOFF'];

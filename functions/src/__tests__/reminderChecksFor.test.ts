@@ -9,8 +9,12 @@ import { reminderChecksFor, type ReminderRoutedPool } from '../reminders';
  *
  * #723 stopped pick reminders on a finished NFL pool but read only two of the
  * six reminder paths. The other four had no finished-pool question at all, so a
- * cancelled bracket, playoff or squares pool with its lock time still ahead
- * emailed every member "it locks soon" on schedule.
+ * cancelled bracket or playoff pool with its lock time still ahead emailed
+ * every member "it locks soon" on schedule.
+ *
+ * The two SQUARES checks are pinned as UNCHANGED on a finished pool: they also
+ * write to the pool (auto-lock + digit draw, auto-release), so gating them is a
+ * production-data change that takes a plan (qodo #1 on #726).
  */
 
 const ON = { payment: { enabled: true }, lock: { enabled: true } };
@@ -64,7 +68,7 @@ describe('reminderChecksFor — a pool still in play keeps every check it had', 
     });
 });
 
-describe('reminderChecksFor — a finished pool gets no "it locks soon" check', () => {
+describe('reminderChecksFor — a finished pool gets no "it locks soon" notice', () => {
     it.each(OVER)('BRACKET, %s: no check', (_label, over) => {
         expect(reminderChecksFor({ type: 'BRACKET', ...over })).toEqual([]);
     });
@@ -72,19 +76,16 @@ describe('reminderChecksFor — a finished pool gets no "it locks soon" check', 
     it.each(OVER)('NFL_PLAYOFFS, %s: no check', (_label, over) => {
         expect(reminderChecksFor({ type: 'NFL_PLAYOFFS', ...over })).toEqual([]);
     });
-
-    it.each(OVER)('SQUARES, %s: the lock check is dropped', (_label, over) => {
-        expect(reminderChecksFor({ type: 'SQUARES', reminders: ON, ...over })).not.toContain('SQUARES_LOCK');
-    });
-
-    it.each(OVER)('a legacy untyped pool, %s: no check', (_label, over) => {
-        expect(reminderChecksFor({ reminders: ON, ...over })).toEqual([]);
-    });
 });
 
-describe('reminderChecksFor — the two checks this rule deliberately leaves alone', () => {
-    it.each(OVER)('SQUARES, %s: the payment check still runs (unpaid squares are still owed)', (_label, over) => {
-        expect(reminderChecksFor({ type: 'SQUARES', reminders: ON, ...over })).toEqual(['SQUARES_PAYMENT']);
+describe('reminderChecksFor — the checks this rule deliberately leaves alone', () => {
+    // Both SQUARES checks write to the pool as well as emailing. Unchanged here.
+    it.each(OVER)('SQUARES, %s: payment and lock checks both still run', (_label, over) => {
+        expect(reminderChecksFor({ type: 'SQUARES', reminders: ON, ...over })).toEqual(['SQUARES_PAYMENT', 'SQUARES_LOCK']);
+    });
+
+    it.each(OVER)('a legacy untyped pool, %s: the lock check still runs', (_label, over) => {
+        expect(reminderChecksFor({ reminders: ON, ...over })).toEqual(['SQUARES_LOCK']);
     });
 
     it.each(OVER)('an NFL season pool, %s: still dispatched — checkNFLNonPickerReminders owns its own guard', (_label, over) => {
@@ -96,7 +97,7 @@ describe('runReminders reaches the gated checks only through reminderChecksFor',
     const text = readFileSync(join(__dirname, '..', 'reminders.ts'), 'utf8');
 
     // A second, direct call site would send the reminder this rule withholds.
-    it.each(['checkLockReminders', 'checkPlayoffReminders', 'checkBracketReminders'])(
+    it.each(['checkPlayoffReminders', 'checkBracketReminders'])(
         '%s has exactly one call site, inside the reminderChecksFor loop',
         (fn) => {
             const calls = text.split(`await ${fn}(`).length - 1;
