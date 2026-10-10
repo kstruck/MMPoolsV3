@@ -18,10 +18,12 @@ import { helpRegistry } from '../../help/registry';
 import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
+import { effectivePickDistribution, type PickDistributionVisibility } from '@shared/pickDistribution';
 import { buildProxyTeamGameIndex, proxyPickPayload, proxyTeamOptions } from '../../utils/proxyPickPayload';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
 import { usesWeeklyHardLock, normalizeLockBufferMinutes } from '@shared/weeklyHardLock';
+import { nflLockMode, isWeekLockedFor } from '@shared/nflLockMode';
 import { effectiveWeeklyTiebreaker, tiebreakerAsksForPrediction } from '@shared/nflTiebreaker';
 import { WEEKLY_TIEBREAKER_OPTIONS } from '@shared/nflTiebreakerOptions';
 import { hybridSplitProblem } from '@shared/hybridSplit';
@@ -29,6 +31,8 @@ import { DUPLICATE_RANK_MESSAGE, uniqueRanks } from '@shared/schemas/common';
 import { effectiveMaxTeamUses, effectiveTieCountsAs } from '@shared/survivorReuse';
 import { effectiveMaxEntriesPerUser, MAX_ENTRIES_PER_USER_CAP, MULTI_ENTRY_WIZARD_ENABLED } from '@shared/multiEntry';
 import { ConfirmActionModal } from '../admin/ConfirmActionModal';
+import { SettlePoolPanel } from './SettlePoolPanel';
+import { poolIsOver, settlementFollowUpOwed, settlementResumable } from '../../utils/poolIsOver';
 import { HelpRoutePublisher } from '../../help/publish';
 import { useUrlTab } from '../help/useUrlTab';
 import { NFL_KICKOFF_MS } from '../../config/season';
@@ -330,6 +334,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   const type = pool.type;
   const castPool = pool as any;
+  // A finished pool takes no more picks, so a "submit your picks" email would
+  // chase people for something they can no longer do. The server refuses a PICKS
+  // reminder on such a pool (`sendManualReminder`, POOL_OVER); this only decides
+  // what the UI offers. Payment reminders stay: money can still be owed.
+  const picksClosed = poolIsOver(castPool);
   const settings = castPool.settings || {};
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
@@ -364,6 +373,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   // toggle claim OFF on such a pool, and the save below would then have
   // de-listed it without anybody asking.
   const [isListedPublic, setIsListedPublic] = useState<boolean>(publicListingToggleValue(castPool));
+  // PLAN-SPLIT-POT-SETTLEMENT Part C: Pick Distribution card visibility.
+  const [pickDistribution, setPickDistribution] = useState<PickDistributionVisibility>(effectivePickDistribution(castPool.settings));
+  // Sent only when changed HERE (codex r2 on PR-C): an unrelated save must not
+  // overwrite a value another commissioner set while this view was open.
+  const [pickDistributionTouched, setPickDistributionTouched] = useState(false);
+  // Until edited, the control shows the LIVE pool value, not the mount-time one.
+  const shownPickDistribution = pickDistributionTouched ? pickDistribution : effectivePickDistribution(castPool.settings);
 
   const [editManagerName, setEditManagerName] = useState(pool.managerName || '');
   const [editContactEmail, setEditContactEmail] = useState(pool.contactEmail || '');
@@ -372,7 +388,14 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
 
   // Pick'em-specific
   const [confidenceMode, setConfidenceMode] = useState<boolean>(settings.confidenceMode ?? false);
-  const [lockMode, setLockMode] = useState<'PER_GAME' | 'WEEKLY'>(settings.lockMode ?? 'PER_GAME');
+  // The EFFECTIVE mode, not the raw stored value: a legacy (unstamped) confidence
+  // pool stores the wizard default PER_GAME while it plays weekly, so showing the
+  // stored value would offer a save that changes nothing the member can see.
+  // Showing what the pool actually plays means a save writes what the
+  // commissioner saw (PLAN-CONFIDENCE-PER-GAME-LOCK §3.5).
+  const [lockMode, setLockMode] = useState<'PER_GAME' | 'WEEKLY'>(
+    pool.type === 'NFL_PICKEM' ? nflLockMode(pool.type, settings) : (settings.lockMode ?? 'PER_GAME'),
+  );
   // Survivor/Margin use a hard weekly deadline whose only knob is this buffer, and
   // the server snaps it to {60,30,5} — so show a legacy value (e.g. 10) as the
   // preset the server would actually apply rather than a value the picker cannot
@@ -487,10 +510,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [cancelReason, setCancelReason] = useState('');
   const [isCanceling, setIsCanceling] = useState(false);
 
-  // Force weekly lock when confidence mode is on
-  useEffect(() => {
-    if (confidenceMode) setLockMode('WEEKLY');
-  }, [confidenceMode]);
+  // (The effect that forced WEEKLY whenever confidence mode was on is GONE —
+  // PLAN-CONFIDENCE-PER-GAME-LOCK, Kevin 2026-09-10: the manager's Lock Mode is
+  // honoured for confidence pools too.)
 
   // --- Weekly Games ---
   const weeklyGames = useMemo(() => gamesForPoolWeek(games, castPool, week), [games, castPool, week]);
@@ -839,6 +861,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   };
 
   const handleSaveSettings = async () => {
+    // D4 (PLAN-CONFIDENCE-PER-GAME-LOCK, Kevin 2026-09-10): NO server guard on a
+    // mid-week lock-mode change — but the commissioner is told what it does.
+    // A WEEKLY→PER_GAME flip on a week whose first kickoff has passed reopens
+    // every game not yet started, on a week where members have already seen
+    // each other's sheets. A warning, not a gate: the save proceeds on OK.
+    if (type === 'NFL_PICKEM' && lockMode !== nflLockMode(castPool.type, castPool.settings)
+        && isWeekLockedFor(castPool, week, weeklyGames, serverNow())) {
+      const reopens = weeklyGames.filter(g => g.status === 'SCHEDULED' && g.startTime > serverNow()).length;
+      const msg = lockMode === 'PER_GAME'
+        ? `Week ${week} has already locked. Switching to per-game lock reopens ${reopens} ${reopens === 1 ? 'game' : 'games'} that have not kicked off — members can change those picks${confidenceMode ? ' and weights' : ''}, and they have already seen each other's sheets for this week. Games that have started stay locked. Continue?`
+        : `Week ${week} is in progress. Switching to weekly lock closes every remaining game in it right now. Continue?`;
+      if (!window.confirm(msg)) return;
+    }
     setIsSavingSettings(true);
     setSettingsFeedback(null);
     try {
@@ -853,6 +888,9 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         entryFee,
         paymentInstructions,
         ...listing.settings,
+        // Validated server-side (functions/src/lib/poolUpdate.ts). Only when the
+        // control was changed in this view — see `pickDistributionTouched`.
+        ...(pickDistributionTouched ? { pickDistribution } : {}),
         // Sent on every save; the server strips a value equal to the pool's
         // effective max (absent ⇒ 1) as a no-op, so this costs nothing until
         // it is actually raised (PLAN-MULTI-ENTRY D8).
@@ -951,6 +989,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
       // another session between the two saves. What was just written is now the
       // stored truth, so the next save has nothing of its own to say.
       setWeeklyPlacesTouched(false);
+      setPickDistributionTouched(false);
       toast.success('Pool settings saved!');
       // Drives the per-section buttons' green "Saved!" state. Cleared on a timer
       // rather than left latched, so the NEXT save is visibly a new event —
@@ -1355,6 +1394,27 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               />
             </div>
 
+            {/* PLAN-SPLIT-POT-SETTLEMENT Part C (Kevin, 2026-10-08). */}
+            <div>
+              <FieldLabel tone="muted" htmlFor="pick-distribution-visibility" helpId="settings.pickDistribution">Pick Distribution</FieldLabel>
+              <select
+                id="pick-distribution-visibility"
+                value={shownPickDistribution}
+                // Locked while a save is in flight (qodo #1 on #716): a change made
+                // then would be marked clean by that save and never sent.
+                disabled={isSavingSettings}
+                onChange={e => { setPickDistribution(e.target.value as PickDistributionVisibility); setPickDistributionTouched(true); }}
+                className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
+              >
+                <option value="ALWAYS">Always show</option>
+                <option value="AFTER_LOCK">Show each game once its picks lock</option>
+                <option value="OFF">Hide</option>
+              </select>
+              <p className="font-body text-[10px] text-faint mt-1">
+                The card on the pool home showing how the pool picked each game. Also applies to the Majority row on Current Picks.
+              </p>
+            </div>
+
             {/* Host Profile & Contact Links */}
             <div className="space-y-4 pt-4 border-t border-line">
               <p className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Host Profile & Contact Links</p>
@@ -1431,14 +1491,19 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                   <FieldLabel tone="muted" helpId="settings.lockMode">Lock Mode</FieldLabel>
                   <select
                     value={lockMode}
-                    disabled={confidenceMode}
                     onChange={e => setLockMode(e.target.value as 'PER_GAME' | 'WEEKLY')}
-                    className={`w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui ${confidenceMode ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    className="w-full font-body bg-page border border-line rounded-md px-4 py-2.5 text-[color:var(--text)] text-sm focus:outline-none focus:ring-2 focus:ring-navy-600 dark:focus:ring-gold-500 transition-ui"
                   >
                     <option value="PER_GAME">Per-Game (each game locks at kickoff)</option>
                     <option value="WEEKLY">Weekly (all locks at first kickoff)</option>
                   </select>
-                  {confidenceMode && <p className="font-body text-[10px] text-gold-600 dark:text-gold-400 font-bold mt-1">* Forced Weekly in Confidence Mode</p>}
+                  {confidenceMode && (
+                    <p className="font-body text-[10px] text-muted mt-1">
+                      {lockMode === 'PER_GAME'
+                        ? 'Per game: each pick and its weight lock at that game’s kickoff, and a game a member misses forfeits the highest weight.'
+                        : 'Weekly: every pick and weight is set before the first kickoff.'}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1858,7 +1923,8 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => handleRemindBulk('PICKS')}
-                  disabled={bulkReminding !== null || unpickedCount === 0}
+                  disabled={bulkReminding !== null || unpickedCount === 0 || picksClosed}
+                  title={picksClosed ? 'This pool is over and takes no more picks' : undefined}
                   className="min-h-[44px] inline-flex items-center gap-1.5 px-4 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-gold-400/10 border border-gold-500/40 text-gold-600 dark:text-gold-400 hover:bg-gold-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                 >
                   <BellRing size={12} />
@@ -1959,13 +2025,13 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                           card is picks status / remind / co-comm only (Kevin, 2026-08-16). */}
                       <td className="py-3.5 px-5 text-right">
                         <button
-                          onClick={() => handleRemindOne(row.uid, !row.picked ? 'PICKS' : 'PAYMENT')}
+                          onClick={() => handleRemindOne(row.uid, !row.picked && !picksClosed ? 'PICKS' : 'PAYMENT')}
                           disabled={
                             remindingUid !== null ||
                             bulkReminding !== null ||
-                            (row.picked && !owesMoney(row))
+                            ((row.picked || picksClosed) && !owesMoney(row))
                           }
-                          title={!row.picked ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : 'Picked and settled — nothing to remind'}
+                          title={!row.picked && !picksClosed ? 'Email a picks reminder' : owesMoney(row) ? 'Email a payment reminder' : picksClosed ? 'This pool is over and nothing is owed — nothing to remind' : 'Picked and settled — nothing to remind'}
                           className="min-h-[44px] inline-flex items-center gap-1.5 px-3 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] bg-navy-800 text-white hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer"
                         >
                           <BellRing size={10} />
@@ -2164,10 +2230,22 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
               )}
             </div>
 
+            {/* ── End the pool, split the pot ── PLAN-SPLIT-POT-SETTLEMENT §2.4.
+                Survivor only, and owner-only for the same reason as Cancel below:
+                `settlePool` refuses a co-commissioner server-side (D2). Hidden once
+                the pool is over by any route — the callable would refuse anyway —
+                EXCEPT a settled pool that still owes its follow-up (a failed
+                email or audit): the panel then offers the retry (codex r3) — and a
+                settlement interrupted between finalize and flip, which the server
+                resumes as a full settlement (codex r7). */}
+            {viewerIsOwner && type === 'NFL_SURVIVOR' && (!poolIsOver(castPool) || settlementResumable(castPool) || settlementFollowUpOwed(castPool.settlement)) && (
+              <SettlePoolPanel pool={pool} />
+            )}
+
             {/* ── Cancel Pool ── owner/managerUid/SA ONLY (PLAN-CO-COMMISSIONERS C8/D4):
                 `cancelPool` refuses a co-commissioner server-side, so do not walk them
                 through two destructive confirmations into a permission error. */}
-            {viewerIsOwner && (
+            {viewerIsOwner && !poolIsOver(castPool) && (
             <div className="bg-brandred-600/5 border border-brandred-600/25 rounded-lg p-5 space-y-4">
               <div className="flex items-center gap-2">
                 <Ban size={14} className="text-brandred-600" />

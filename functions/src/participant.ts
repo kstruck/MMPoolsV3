@@ -2,13 +2,10 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
-import * as v1 from "firebase-functions/v1";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
 import { createClaimCodeSchema, claimByCodeSchema } from "./schemas/participantOps";
-import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
-import { UserRecord } from "firebase-functions/v1/auth";
 import { claimMySquaresSchema } from "./schemas/participantOps";
 
 // Types derived from frontend (simplified for backend)
@@ -21,27 +18,14 @@ interface ClaimCode {
     uses: number;
 }
 
-// 1. onUserCreated: Create participant profile
-// v1 trigger — setGlobalOptions (v2) does not reach it; cap instances inline.
-export const onUserCreated = v1.runWith({ maxInstances: 10 }).auth.user().onCreate(async (user: UserRecord) => {
-    const db = admin.firestore();
-    const { uid, email, displayName, photoURL } = user;
-
-    try {
-        await db.collection("users").doc(uid).set({
-            id: uid,
-            email: email || "",
-            name: displayName || "New User",
-            photoURL: photoURL || null,
-            role: "MEMBER", // Default role (T6 canonical)
-            createdAt: Date.now(),
-            provider: user.providerData[0]?.providerId || "unknown",
-        });
-        logger.info(`Created user profile for ${uid}`);
-    } catch (error) {
-        logger.error(`Error creating user profile for ${uid}`, error);
-    }
-});
+// 1. (removed 2026-09-11) `onUserCreated` / `createParticipantProfile` — this
+// file used to export a SECOND Auth-create trigger that wrote `users/{uid}` with
+// its own schema (`photoURL`, `provider`, numeric `createdAt`, and once upon a
+// time `name: "New User"` — the 2026-09-10 standings bug). Two triggers on one
+// event, two schemas, one document. userSync.ts `onUserCreated` is the single
+// server-side creator now (`createUserProfileIfMissing`, transactional,
+// never overwrites); its schema carries `provider`, the one field the client
+// read from this one.
 
 // 2. createClaimCode: Generate a code for guest
 export const createClaimCode = validated(

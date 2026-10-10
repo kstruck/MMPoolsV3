@@ -23,6 +23,8 @@ import { NFLStandingsTab } from './NFLStandingsTab';
 import { NFLPoolRules } from './NFLPoolRules';
 import { NFLManagerView } from './NFLManagerView';
 import { PickDistribution } from './PickDistribution';
+import { SettledBanner } from './SettledBanner';
+import { effectivePickDistribution } from '@shared/pickDistribution';
 import { NFLUserBentoDashboard } from './NFLUserBentoDashboard';
 import { AICommissioner } from '../AICommissioner';
 import { useToast } from '../ui/Toast';
@@ -1117,6 +1119,9 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
             </div>
           ) : (
             <>
+              {/* PLAN-SPLIT-POT-SETTLEMENT: above every tab, for every viewer. */}
+              <SettledBanner settlement={'settlement' in pool ? pool.settlement : undefined} />
+
               {/* TAB 0: BENTO DASHBOARD OVERVIEW */}
               {activeTab === 'dashboard' && (
                 <>
@@ -1356,11 +1361,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
                           </div>
                         </div>
 
-                        <PickDistribution
-                          pool={pool}
-                          games={weeklyGames}
-                          week={selectedWeek}
-                        />
+                        {/* Commissioner setting (PLAN-SPLIT-POT-SETTLEMENT Part C):
+                            OFF hides the card outright. */}
+                        {effectivePickDistribution(castPool.settings) !== 'OFF' && (
+                          <PickDistribution
+                            pool={pool}
+                            games={weeklyGames}
+                            week={selectedWeek}
+                          />
+                        )}
                       </div>
                     </div>
                   )}

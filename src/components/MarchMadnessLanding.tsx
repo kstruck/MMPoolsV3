@@ -17,13 +17,13 @@ interface MarchMadnessLandingProps {
 /* Nav / hero / footer stay navy chrome in both themes; the content sections
    between them flip cream <-> navy via CSS-var surfaces (bg-page/surface/card). */
 
-export const MarchMadnessLanding: React.FC<MarchMadnessLandingProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
+export const MarchMadnessLanding: React.FC<MarchMadnessLandingProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool }) => {
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

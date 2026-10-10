@@ -41,10 +41,13 @@ const superAdmin = { uid: 'admin-1', token: { role: 'SUPER_ADMIN' } } as any;
 
 // Claim+doc (PLAN-API-TRUST-BOUNDARY Phase 3): every SUPER_ADMIN claim must be
 // backed by a users/{uid}.role doc; suites share one emulator DB and another
-// file's wipe can delete it, so re-seed per test.
-beforeEach(async () => {
-    await db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN' }, { merge: true });
-});
+// file's wipe can delete it, so re-seed per test — AND before the pick'em
+// `beforeAll` below, which calls a SUPER_ADMIN callable before any
+// `beforeEach` has run. Run alone (fresh emulator) that hook failed with
+// "Sim harness callables are SUPER_ADMIN only"; in the full suite it only
+// passed when an earlier file happened to leave the doc behind (2026-09-11).
+const seedAdminRole = () => db.collection('users').doc('admin-1').set({ role: 'SUPER_ADMIN' }, { merge: true });
+beforeEach(seedAdminRole);
 
 const T = (abbr: string) => ({ id: abbr, name: abbr, abbreviation: abbr });
 const HOUR = 60 * 60 * 1000;
@@ -65,6 +68,7 @@ describe('golden arc — real-path pick’em lifecycle', () => {
     const BOB = `sim-${runId}-bob`;
 
     beforeAll(async () => {
+        await seedAdminRole();
         await wStart({ data: { runId, scenarioId: 'golden-pickem' }, auth: superAdmin } as never);
         await seedSimPool(poolId, runId, 'NFL_PICKEM', {
             entryFee: 10, lockMode: 'PER_GAME', payoutMode: 'SEASON',

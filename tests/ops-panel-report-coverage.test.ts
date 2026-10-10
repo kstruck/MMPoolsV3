@@ -86,7 +86,9 @@ describe('the Run Log shows every counter the server reports', () => {
     // Exactly the THREE paged migrations, so a fourth added later is not
     // silently left on the old pattern. Writing this assertion is what found the
     // third one (publishedWeeks) still hand-listing its fields.
-    expect(src.match(/addReportPage\(agg, r\);/g)).toHaveLength(3);
+    // Four paged runners: member records, published weeks, payment truth, and
+    // the confidence lock-mode backfill (PLAN-CONFIDENCE-PER-GAME-LOCK T5).
+    expect(src.match(/addReportPage\(agg, r\);/g)).toHaveLength(4);
     // No `agg.<counter> += r.<counter> || 0` survives anywhere.
     expect(src).not.toMatch(/agg\.[a-zA-Z]+\s*\+=\s*r\.[a-zA-Z]+\s*\|\|\s*0/);
   });

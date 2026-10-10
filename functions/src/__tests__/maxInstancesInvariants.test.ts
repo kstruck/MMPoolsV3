@@ -5,7 +5,10 @@ import { join } from "node:path";
 /**
  * 2026-08-23 cloud audit: nothing capped function fan-out, so a retry storm
  * could scale to the project default with an unbounded bill. The cap lives in
- * lib/globalOptions.ts (v2) + inline runWith on the three v1 triggers.
+ * lib/globalOptions.ts (v2) + inline runWith on the two v1 triggers
+ * (three until 2026-09-11, when participant.ts lost its Auth-create trigger —
+ * the file is checked below only for a v1 import so it cannot quietly grow one
+ * back uncapped).
  */
 const SRC = join(__dirname, "..");
 
@@ -21,8 +24,13 @@ describe("maxInstances caps", () => {
         expect(firstImport).toContain("./lib/globalOptions");
     });
 
+    it("participant.ts no longer imports firebase-functions/v1 (its Auth trigger was removed 2026-09-11)", () => {
+        const text = readFileSync(join(SRC, "participant.ts"), "utf8");
+        expect(text).not.toMatch(/firebase-functions\/v1/);
+    });
+
     it("every v1 trigger carries its own runWith maxInstances", () => {
-        for (const f of ["userSync.ts", "announcements.ts", "participant.ts"]) {
+        for (const f of ["userSync.ts", "announcements.ts"]) {
             const text = readFileSync(join(SRC, f), "utf8");
             // Definition sites are `= functions.<...>` / `= v1.<...>`; a bare one
             // (no runWith between the namespace and the trigger builder) is uncapped.
@@ -30,7 +38,23 @@ describe("maxInstances caps", () => {
             // never follow `= `, so they don't trip this.
             const bare = text.match(/= (functions|v1)\.(auth|firestore)[.\s]/g) ?? [];
             expect(bare, `${f}: v1 trigger without runWith maxInstances: ${bare.join(", ")}`).toEqual([]);
-            expect(text, `${f}: expected at least one runWith maxInstances cap`).toMatch(/runWith\(\{ maxInstances: \d+ \}\)/);
+            expect(text, `${f}: expected at least one runWith maxInstances cap`).toMatch(/runWith\(\{ maxInstances: \d+[^}]*\}\)/);
         }
+    });
+
+    it("userSync's Auth-create trigger retries on failure (the only server-side profile creator since 2026-09-11)", () => {
+        const text = readFileSync(join(SRC, "userSync.ts"), "utf8");
+        expect(text).toMatch(/runWith\(\{ maxInstances: \d+, failurePolicy: true \}\)\.auth\.user\(\)\.onCreate/);
+        // ...and the handler rethrows rather than swallowing — a caught-and-logged
+        // failure acknowledges the event and nothing replays it. Bounded to the
+        // onCreate callback itself (up to its closing `});`), so a rethrow in
+        // some LATER handler cannot satisfy this on the creator's behalf
+        // (qodo #691 round 2, finding 4).
+        const start = text.indexOf("auth.user().onCreate");
+        expect(start).toBeGreaterThan(-1);
+        const end = text.indexOf("\n});", start);
+        expect(end).toBeGreaterThan(start);
+        const handler = text.slice(start, end);
+        expect(handler).toMatch(/catch \(error\) \{[\s\S]*?throw error;\s*\}/);
     });
 });

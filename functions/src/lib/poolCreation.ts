@@ -10,6 +10,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { getCreateInputSchema } from '../shared/schemas';
 import type { PoolType } from '../shared/poolTypes';
 import { isNflSeasonType } from '../shared/poolTypes';
+import { isPickDistributionVisibility, PICK_DISTRIBUTION_VALUES } from '../shared/pickDistribution';
 import { ensureMemberRecord } from './memberRecord';
 import { clampUnsellableAddons } from '../shared/schemas/quote';
 
@@ -56,6 +57,17 @@ export function assertCreatePayloadIsObject(
  * only gates, it does not transform.
  */
 export function validateCreateInput(type: PoolType, data: unknown): void {
+  // The create schemas do not declare `settings.pickDistribution` and the
+  // payload is persisted as given, so an unchecked value would be stored and
+  // then read back as 'ALWAYS' — a commissioner who meant to hide the card
+  // would have it shown. Same rule as the update path (poolUpdate.ts).
+  const pickDistribution = (data as { settings?: { pickDistribution?: unknown } } | null)?.settings?.pickDistribution;
+  if (pickDistribution !== undefined && !isPickDistributionVisibility(pickDistribution)) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Invalid pool configuration: settings.pickDistribution — must be ${PICK_DISTRIBUTION_VALUES.join(', ')}`,
+    );
+  }
   const schema = getCreateInputSchema(type);
   if (!schema) return;
   const result = schema.safeParse(data);

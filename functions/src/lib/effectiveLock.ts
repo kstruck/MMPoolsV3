@@ -7,6 +7,20 @@
 export interface LockSettings {
   lockBufferMinutes?: number;
   weekLockOverrides?: Record<number, number>;
+  /**
+   * PLAN-CONFIDENCE-PER-GAME-LOCK: in a confidence pool a game's lock can be
+   * moved later by an override or a buffer edit only up to its KICKOFF, never
+   * past it, and a game that has left SCHEDULED is locked whatever the clock
+   * says. Set by `effectiveLockSettings` from `settings.confidenceMode`; the
+   * client's `shared/nflLockMode.ts` derives the same flag (`lockStopsAtKickoff`).
+   */
+  kickoffCeiling?: boolean;
+}
+
+/** The game shape the status-aware predicate reads. */
+export interface LockGame {
+  startTime: number;
+  status?: string | null;
 }
 
 export function lockBufferMs(settings: LockSettings | undefined): number {
@@ -22,6 +36,7 @@ export function lockBufferMs(settings: LockSettings | undefined): number {
 // shared/weeklyHardLock.ts for why these pools need it at all. Re-exported here
 // so lock callers have a single import site.
 import { usesWeeklyHardLock, normalizeLockBufferMinutes, resolveHardWeekLock, frozenHardLockFor } from '../shared/weeklyHardLock';
+import { lockStopsAtKickoff } from '../shared/nflLockMode';
 
 export {
   LOCK_BUFFER_PRESETS,
@@ -163,18 +178,38 @@ export async function ensureHardLockFreeze(
  * once their own game locks, so it keeps commissioner extensions.
  */
 export function effectiveLockSettings(
-  settings: LockSettings | undefined,
+  settings: (LockSettings & { confidenceMode?: boolean }) | undefined,
   poolType: string | undefined,
 ): LockSettings {
-  if (!usesWeeklyHardLock(poolType)) return settings ?? {};
+  if (!usesWeeklyHardLock(poolType)) {
+    // Straight Pick'em settings pass through UNTOUCHED (extensions still work);
+    // only a confidence pool gains the kickoff ceiling.
+    return lockStopsAtKickoff(settings) ? { ...(settings ?? {}), kickoffCeiling: true } : (settings ?? {});
+  }
   return { lockBufferMinutes: normalizeLockBufferMinutes(settings?.lockBufferMinutes) };
 }
 
-/** Effective lock time (epoch ms) for one game in a given week. A week override extends it later. */
+/**
+ * Effective lock time (epoch ms) for one game in a given week. A week override
+ * extends it later — up to kickoff and no further when `kickoffCeiling` is set
+ * (confidence pools, PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a). Same arithmetic as
+ * `shared/nflLockMode.ts` `gameLockAt`; the invariant test holds them together.
+ */
 export function effectiveGameLockAt(gameStartTime: number, week: number, settings: LockSettings | undefined): number {
   const base = gameStartTime - lockBufferMs(settings);
   const override = settings?.weekLockOverrides?.[week];
-  return override !== undefined ? Math.max(base, override) : base;
+  const at = override !== undefined ? Math.max(base, override) : base;
+  return settings?.kickoffCeiling ? Math.min(at, gameStartTime) : at;
+}
+
+/**
+ * Status-aware lock for one GAME: in a confidence pool a game that has left
+ * SCHEDULED is locked whatever `startTime` says (feed corrections after real
+ * kickoff must not reopen it — codex r2 #1). Otherwise the clock rule.
+ */
+export function isGameLockedForGame(now: number, game: LockGame, week: number, settings: LockSettings | undefined): boolean {
+  if (settings?.kickoffCeiling && typeof game.status === 'string' && game.status !== 'SCHEDULED') return true;
+  return now >= effectiveGameLockAt(game.startTime, week, settings);
 }
 
 /** Effective WEEK lock = the effective lock of the earliest game in the week. */

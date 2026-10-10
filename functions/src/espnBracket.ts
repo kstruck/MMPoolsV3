@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import { ESPN_SITE_API } from './lib/espnHost';
+import { fetchScoreboardSpanEvents } from './lib/espnScoreboardSpan';
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -1002,7 +1002,21 @@ export const syncBracketTournament = validated(
 );
 
 // Scheduled task: Runs every 10 minutes during March Madness
-export const scheduledBracketSync = onSchedule("every 10 minutes", withHeartbeat('scheduledBracketSync', async () => {
+// ⚠️ timeoutSeconds MUST stay under the 10-minute cadence so two runs can never
+// overlap — same invariant nflAutoScoreJob documents. This job carried NO
+// explicit timeout and therefore ran on the v2 default of 60 SECONDS, alone
+// among the scheduled jobs in this repo. That was already thin and became
+// actively unsafe when the ESPN range break (PR #696) turned one request per
+// tournament into 27: the loop below is sequential, so a slow tournament used
+// to cost every later one its run. 300s with the per-request deadline in
+// lib/espnScoreboardSpan.ts bounds the worst case at ~50s per tournament.
+// Cadence is unchanged, so SCHEDULED_JOB_EXPECTATIONS needs no edit.
+// (qodo review of PR #696.)
+export const scheduledBracketSync = onSchedule({
+    schedule: "every 10 minutes",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+}, withHeartbeat('scheduledBracketSync', async () => {
     const db = admin.firestore();
     // Query all active (non-finalized) tournaments
     const activeTournaments = await db.collection('tournaments')
@@ -1125,66 +1139,63 @@ interface ESPNEvent {
     };
 }
 
-interface ESPNResponse {
-    leagues: {
-        id: string;
-        uid: string;
-        name: string;
-        abbreviation: string;
-        slug: string;
-    }[];
-    season: { type: number; year: number };
-    events: ESPNEvent[];
-}
-
 // --- ESPN Fetch & Import Logic ---
 
 async function fetchESPNTournamentData(seasonYear: number): Promise<ESPNEvent[]> {
-    // 2025 Dates: Selection Sunday (March 16) to Championship (April 7)
-    // We can just fetch a wide range or distinct "groups" for tournament (group=100 usually for NCAA Tournament)
-    // But specific date range is safer if group ID changes.
-    // For 2026: 20260317-20260406
+    // Selection Sunday through the championship, with margin on both ends
+    // (2026: 20260315..20260410). group 100 is the NCAA Tournament.
+    //
+    // This USED to be one `dates=start-end` range request. ESPN stopped serving
+    // date ranges on 2026-09-15 and answers them HTTP 400 — see the comment on
+    // fetchScoreboardSpanEvents. It is now one request per day, unioned.
+    const { events, failedDates, requestedDates } = await fetchScoreboardSpanEvents<ESPNEvent>({
+        leaguePath: 'basketball/mens-college-basketball',
+        start: `${seasonYear}0315`,
+        end: `${seasonYear}0410`,
+        limit: 200, // per day; the whole bracket is only 67 games
+        groups: 100,
+    }, {
+        onDayFailed: (date, error) => logger.warn(`Failed to fetch ESPN tournament data for ${date}:`, error),
+    });
 
-    // Better yet, just fetch "postseason" via specific endpoint logic if available, 
-    // but the scoreboard endpoint with dates is reliable.
-    const start = `${seasonYear}0315`;
-    const end = `${seasonYear}0410`;
-    const limit = 200; // Should cover all 67 games
-
-    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=100`; // group 100 is typically NCAA Tournament
-
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
-        }
-        const data = await response.json() as ESPNResponse;
-        return data.events || [];
-    } catch (error) {
-        logger.error("Failed to fetch ESPN data:", error);
-        throw error;
+    if (failedDates.length > 0) {
+        // Partial spans are usable (the failed days may simply be the ones with
+        // no games) but must be visible, because a missing day looks exactly
+        // like a round that has not tipped off yet.
+        logger.warn(
+            `ESPN tournament span ${seasonYear}: ${failedDates.length} of ` +
+            `${requestedDates.length} days failed, importing the other days`,
+            { failedDates },
+        );
     }
+
+    return events;
 }
 async function fetchESPNConferenceTournamentData(seasonYear: number, groupId: number): Promise<ESPNEvent[]> {
-    const start = `${seasonYear}0305`;
-    const end = `${seasonYear}0318`; // Includes selection sunday margin
-    const limit = 50;
+    // Conference tournament window, ending with margin past Selection Sunday.
+    // Per-day requests for the same reason as fetchESPNTournamentData above.
+    //
+    // Postseason is type 3 in ESPN API (sometimes conference tourneys are marked 3, sometimes not,
+    // but limiting by group + dates should guarantee only the tournament games are pulled).
+    const { events, failedDates, requestedDates } = await fetchScoreboardSpanEvents<ESPNEvent>({
+        leaguePath: 'basketball/mens-college-basketball',
+        start: `${seasonYear}0305`,
+        end: `${seasonYear}0318`,
+        limit: 50, // per day
+        groups: groupId,
+    }, {
+        onDayFailed: (date, error) => logger.warn(`Failed to fetch ESPN conf data for ${date} (group ${groupId}):`, error),
+    });
 
-    const url = `${ESPN_SITE_API}/basketball/mens-college-basketball/scoreboard?dates=${start}-${end}&limit=${limit}&groups=${groupId}`;
-
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`ESPN API Error: ${response.status} ${response.statusText}`);
-        }
-        const data = await response.json() as ESPNResponse;
-        // Postseason is type 3 in ESPN API (sometimes conference tourneys are marked 3, sometimes not, 
-        // but limiting by group + date range should guarantee only the tournament games are pulled).
-        return data.events || [];
-    } catch (error) {
-        logger.error("Failed to fetch ESPN conf data:", error);
-        throw error;
+    if (failedDates.length > 0) {
+        logger.warn(
+            `ESPN conference span ${seasonYear} group ${groupId}: ${failedDates.length} of ` +
+            `${requestedDates.length} days failed, importing the other days`,
+            { failedDates },
+        );
     }
+
+    return events;
 }
 
 function mapESPNConferenceGamesToSkeleton(

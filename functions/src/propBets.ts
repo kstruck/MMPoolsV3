@@ -8,8 +8,43 @@ import { validated } from "./lib/validated";
 import { purchasePropCardSchema } from "./schemas/squaresProps";
 import { gradePropSchema, updatePropCardSchema } from "./schemas/propBets";
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
+import { resolveSubjectName } from "./lib/displayName";
 
-// 1. Purchase Prop Card (Supports multiple cards per user)
+export interface PropCardIdentity {
+    /** The uid, or `guest:<email>` for a guest purchase. */
+    userId: string;
+    finalUserName: string;
+    userEmail: string | undefined;
+}
+
+/**
+ * Who is buying, and what name goes on the card.
+ *
+ * A signed-in buyer's card carries the PROFILE name (`users/{uid}.name`), read
+ * here, with the caller-supplied / token name only as the fallback for a
+ * missing or placeholder profile — the same profile-first rule every other pool
+ * copy follows (lib/displayName.ts `resolveSubjectName`). Until this read, a
+ * card stamped whatever the client sent, so a card bought after a profile fix
+ * still showed the old name and `onUserNameChanged` had nothing to correct
+ * (qodo #691 finding 2). A guest has no profile; the typed name is the name.
+ */
+export async function resolvePropCardIdentity(
+    db: admin.firestore.Firestore,
+    auth: { uid: string; token: { name?: unknown; email?: string } } | undefined,
+    input: { userName?: string; email?: string },
+): Promise<PropCardIdentity> {
+    if (auth) {
+        const finalUserName = (await resolveSubjectName(db, auth.uid, input.userName || auth.token.name)) || 'Anonymous';
+        return { userId: auth.uid, finalUserName, userEmail: auth.token.email };
+    }
+    // Guest Mode
+    if (!input.userName || !input.email) {
+        throw new HttpsError('unauthenticated', 'Must be logged in OR provide Name and Email to play as guest.');
+    }
+    // Create a stable ID for the guest based on email to track card limits
+    return { userId: `guest:${input.email.toLowerCase().trim()}`, finalUserName: input.userName, userEmail: input.email };
+}
+
 // 1. Purchase Prop Card (Supports multiple cards per user)
 export const purchasePropCard = validated(
     // PUBLIC (guest flow): answers is qId -> option index, shape-enforced at
@@ -17,28 +52,9 @@ export const purchasePropCard = validated(
     { schema: purchasePropCardSchema, label: "purchasePropCard", auth: "public", appCheck: "monitor" },
     async (input, request) => {
     // Auth Handling
-    let userId: string;
-    let finalUserName: string;
-    let userEmail: string | undefined;
-
     const { poolId, answers, tiebreakerVal, userName, cardName, email } = input;
-
-    if (request.auth) {
-        userId = request.auth.uid;
-        finalUserName = userName || request.auth.token.name || 'Anonymous';
-        userEmail = request.auth.token.email; // Optional
-    } else {
-        // Guest Mode
-        if (!userName || !email) {
-            throw new HttpsError('unauthenticated', 'Must be logged in OR provide Name and Email to play as guest.');
-        }
-        // Create a stable ID for the guest based on email to track card limits
-        userId = `guest:${email.toLowerCase().trim()}`;
-        finalUserName = userName;
-        userEmail = email;
-    }
-
     const db = admin.firestore();
+    const { userId, finalUserName, userEmail } = await resolvePropCardIdentity(db, request.auth, { userName, email });
 
     // Check if pool is locked
     const poolRef = db.collection('pools').doc(poolId);

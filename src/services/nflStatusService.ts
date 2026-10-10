@@ -68,7 +68,7 @@ export function computePendingStatus(pool: Pool, entry: any, seasonGames: NFLGam
         // …and the extension, so the CTA does not expire while the server and
         // the sheet both still accept picks (qodo #9).
         const overrideMs = weekLockOverrideFor(castPool, week);
-        const status = getWeekStatus(pool.type as string, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs);
+        const status = getWeekStatus(pool.type as string, entry, weekGames, week, lockBufferMinutes, lockMode, overrideMs, castPool);
         const deadline = weekDeadline(weekGames, lockBufferMinutes, lockMode, overrideMs);
         if (status === 'due' && deadline !== null && deadline > now) {
             return { poolId: pool.id, dueWeek: week, deadline };

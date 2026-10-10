@@ -74,7 +74,7 @@ jobs:
       - name: Run NPM Audit
         run: |
           for i in 1 2 3; do
-            out=$(npm audit --audit-level=high 2>&1) && { echo "$out"; exit 0; }
+            out=$(node scripts/auditGate.mjs 2>&1) && { echo "$out"; exit 0; }
             echo "$out"
             grep -q "audit endpoint returned an error" <<<"$out" || exit 1
             echo "npm registry error (attempt $i/3) — retrying in 20s"
@@ -96,7 +96,7 @@ jobs:
         working-directory: functions
         run: |
           for i in 1 2 3; do
-            out=$(npm audit --audit-level=high 2>&1) && { echo "$out"; exit 0; }
+            out=$(node ../scripts/auditGate.mjs 2>&1) && { echo "$out"; exit 0; }
             echo "$out"
             grep -q "audit endpoint returned an error" <<<"$out" || exit 1
             echo "npm registry error (attempt $i/3) — retrying in 20s"

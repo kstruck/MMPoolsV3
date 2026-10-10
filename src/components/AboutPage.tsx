@@ -16,13 +16,13 @@ interface AboutPageProps {
 
 /* Marketing page is navy chrome end-to-end — always dark in both themes. */
 
-export const AboutPage: React.FC<AboutPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
+export const AboutPage: React.FC<AboutPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool }) => {
     return (
         <div className="min-h-screen text-[color:var(--text)] font-body bg-page flex flex-col">
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

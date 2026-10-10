@@ -1,5 +1,252 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-10-08 — **SURVIVOR SPLIT-POT SETTLEMENT (PLAN-SPLIT-POT-SETTLEMENT Part A). PR OPEN, NOT MERGED, NOT DEPLOYED.**
+>
+> Branch `claude/survivor-pool-features-plan-c4213f`. Plan, review log (3 codex
+> rounds) and sweeps are in `docs/plans/PLAN-SPLIT-POT-SETTLEMENT*.md`; Kevin
+> approved §6 as recommended. Parts B (Current Picks W-L / Max columns) and C
+> (Pick Distribution visibility setting) are NOT started — separate PRs.
+>
+> **What it adds.** `settlePool` callable + "End the Pool — Split the Pot" panel
+> (Manager tab → Settings, Survivor, owner only); a settled-pool banner; a
+> `POOL_OVER` refusal on every NFL play path (pick, proxy pick, rebuy, join),
+> which none of them had; and a **rules authorization fix**: an NFL manager
+> could move their own pool OPEN→FINAL with one client write, which opened every
+> member's un-revealed entry to every participant. NFL `status` / `closedVia` /
+> `closedAt` / `isFinal` are now callable-only for managers, and `finalizedAt`,
+> `firstFinalizedAt`, `finalizedVia`, `settlement` are server-owned.
+>
+> **Deploy (after merge):** step zero `git -C D:\march-melee-pools pull --ff-only origin main`,
+> `npm --prefix functions ci`, then functions BEFORE rules:
+> `npx firebase deploy --only functions`, then `npx firebase deploy --only firestore:rules`,
+> then the frontend in Coolify. Verify: `npx firebase functions:list | Select-String "settlePool"`.
+>
+> **Then settle pool `EJSGHCqc8Q8uv8godJKF` from the UI.** Its `entryCount` is 11
+> with 8 entry docs and 10 members (read-only, 2026-10-08), so the panel will
+> price the pot at $25 × 11 = $275. Kevin confirms that figure on the panel
+> before clicking (D6); if it is wrong, stop — `entryCount` is server-owned.
+
+> ## 🟡 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY WILL PROMPT TO DELETE `createParticipantProfile`.**
+>
+> Branch `claude/name-sync-followup-690`. #690 merged 2026-09-11 with three
+> findings accepted and deferred; this is them.
+>
+> **What changed.**
+> 1. `propagateUserName` (functions/src/lib/displayName.ts) reaches two more
+>    copies of the name: **prop-bet cards** (`pools/{*}/propCards/*.userName`,
+>    collection-group on `userId`, new `propCards.userId` fieldOverride in
+>    `firestore.indexes.json`) and the **NFL-playoff `entries` MAP on the pool
+>    document** (`pools` query on `participantIds array-contains uid`, then one
+>    transaction per pool that re-reads the pool and updates
+>    `entries.<id>.userName` by `FieldPath` — so a deleted entry is never
+>    recreated and a dotted entry id is never mis-parsed). `entryName` is never
+>    touched. `PropagateResult` gains `propCards` / `playoffEntries`; the
+>    trigger log line shows both.
+> 2. **`createParticipantProfile` is GONE.** Two gen-1 Auth-create triggers
+>    used to write `users/{uid}` with two schemas. `userSync.ts onUserCreated`
+>    is the one creator now: `createUserProfileIfMissing`, a transaction that
+>    creates on the userSync schema (plus `provider`, which the client reads
+>    for the change-password panel / verify-email banner) and, when the doc
+>    exists, refreshes `email` / `searchEmail` / `searchName` / `lastLogin`
+>    and never `name`.
+> 3. Tests in the same PR: emulator `userNameSync.emulator.test.ts` P2 (now on
+>    the userSync creator, schema asserted), P7 (playoff map: only this uid's
+>    entries, `entryName` kept, deleted entry not resurrected, Pick'em pool
+>    skipped, supersession), P8 (prop cards: several per uid, guest card and
+>    other people's cards untouched, idempotent); unit `displayName.test.ts`
+>    (`stalePlayoffEntryIds`), `userSyncName.test.ts` (`newUserProfileFields`);
+>    `maxInstancesInvariants.test.ts` now asserts participant.ts has NO v1
+>    import instead of expecting a cap there.
+>
+> 4. From the qodo cycle on the PR (rounds 2–3): `purchasePropCard` now
+>    stamps the PROFILE name on a signed-in buyer's card
+>    (`resolvePropCardIdentity`, profile-first via `resolveSubjectName`;
+>    guests unchanged); `onUserCreated` runs with `failurePolicy: true` and
+>    RETHROWS, so a transient failure in the now-sole profile creator is
+>    retried by the platform (the create-if-absent transaction makes a retry
+>    safe, and its exists-path FILLS missing index fields only — a replayed
+>    event never puts the sign-up email back over an admin edit); the server
+>    creator writes `createdAt: Date.now()` (numeric, per the client contract
+>    — a Firestore Timestamp there rendered as an invalid date on the Members
+>    tab).
+>
+> **Deploy notes — READ BEFORE `firebase deploy`.** Step zero, always
+> (CLAUDE.md §3): `git -C D:\march-melee-pools pull --ff-only origin main`,
+> then `npm --prefix functions ci`. Then, functions BEFORE rules:
+> `npx firebase deploy --only functions,firestore:indexes`.
+> ⚠️ **This deploy REMOVES a function.** The CLI will stop and ask
+> `The following functions are found in your project but do not exist in your
+> local source code: createParticipantProfile(us-central1) ... Would you like
+> to proceed with deletion?` — answer **`y`** (or pass `--force` to skip the
+> prompt). Deleting it is the point: with it gone, `onUserCreated` (userSync)
+> is the only server-side profile creator. If you answer `n`, the deploy
+> continues but the OLD trigger keeps running alongside the new code and keeps
+> writing its old schema — the split-brain this PR removes. Verify after:
+> `npx firebase functions:list | Select-String "createParticipantProfile"`
+> must print NOTHING, and `Select-String "onUserCreated"` must still print the
+> userSync one. The `propCards.userId` collection-group index ships in the same
+> command (`firestore:indexes` target); until it is built the trigger FAILS on
+> the prop-card query and is RETRIED by the platform (`retry: true`), same as
+> #690's two indexes — a name change in that window is not lost. The emulator
+> needs no index, so a green suite does not prove it shipped.
+>
+> **Known, not fixed here (scoring code, named for a follow-up):**
+> `scorePlayoffPools` (functions/src/playoffPools.ts ~L135) writes each
+> rescored entry back WHOLE (`entries.<id> = { ...entry, totalScore }`) from
+> its own pre-write read, so a name propagated between that read and its batch
+> commit is put back to the old value until the next name edit. Narrow window,
+> self-healing on the next edit; the fix is a `entries.<id>.totalScore` dotted
+> write, which touches scoring and takes its own PR.
+>
+> Names already fixed BEFORE this deploys do not back-propagate to playoff
+> maps / prop cards: the trigger fires on a CHANGE — after the deploy, edit the
+> name to something else, save, set it back, save again.
+
+> ## 🟡 2026-09-11 — **NFL PICK REMINDERS: ROSTER-BASED TARGETS + T-24h TIER — PR [#689](https://github.com/kstruck/MMPoolsV3/pull/689) OPEN. NOT MERGED, NOT DEPLOYED — the live job is still the entries-only one.**
+>
+> - Review: 5 codex rounds (r2–r4 each found a cancelled-game / lock-mode
+>   divergence from the server's `weekLockDecision`, fixed in turn; r5 clean),
+>   qodo reported + re-reviewed twice — 11 items, 4 fixed, 2 deferred, 5
+>   rejected with reasoning on the PR. Merge needs `--admin` (sole author).
+>
+> - **Why (measured, not inferred).** 2026 regular-season Week 1 (first kickoff
+>   Wed 2026-09-09 8:20 PM ET, lock 8:15 PM) produced **zero** `NFL_NONPICK_*`
+>   notification docs and zero reminder mail for all four live NFL pools
+>   (`ubHD4bgszL05oURYubrn` Donkeys 2026, 22 entries; `EJSGHCqc8Q8uv8godJKF`;
+>   `QwnpqM95ovc3nZuNhVjC`; `RXCaFRqa1buTau8uYoda` CANCELED). `runReminders`
+>   ran clean every 15 min through both windows — 28 passes Sep 8 12:04–18:49Z
+>   (T-36h band), 16 passes Sep 9 20:04Z–00:49Z (T-4h band), each logging
+>   `Found 8 pools`, no errors (Cloud Functions logs via `functions:log`). The
+>   50 `NFL_NONPICK_*` docs that exist are all preseason. Cause: an NFL entry
+>   document is created by the member's FIRST `submitNFLPicks`; `joinNFLPool`
+>   writes participantIds + Member Record, no entry. `checkNFLNonPickerReminders`
+>   iterated `entries` only, so "joined, never picked" — the person the reminder
+>   is for — did not exist to it. Donkeys had 5 members (`rev=1`, joined Sep
+>   2–4, first submit Sep 8–9) who were due a T-36h email and 2 (`TEMdI1xd`,
+>   `ZR5yc8a6`) due a T-4h email under the OLD tiers; survivor pool
+>   participantIds 10 vs entries 8 shows the same gap. `sendManualReminder` was
+>   fixed for this in #338 (`lib/reminderTargets.ts`); the automated job never was.
+> - **What ships:** `functions/src/lib/nflNonPickers.ts` (pure `nflReminderTier`
+>   24H/4H windows + `nflNonPickerUids` roster rule reusing
+>   `resolveReminderTargets`; MANAGER-with-no-entry skipped as hosting-only);
+>   `checkNFLNonPickerReminders` reads `members` + `entries`; T-36h tier
+>   REPLACED by T-24h (18–24h before the week's first game locks) per Kevin's
+>   "1 day before"; email says "Week N's first game locks" on per-game pools.
+>   Tests: `nflNonPickers.test.ts`, `reminderNonPickerRoster.test.ts`
+>   (in-memory Firestore double, asserts notification + mail docs).
+> - **Deploy once merged (CLAUDE.md §3):** `git pull` → `npm --prefix functions ci`
+>   → `npx firebase deploy --only functions:runReminders`. Nothing to arm — the
+>   job is live and has no kill switch. First real proof: Week 2 first kickoff
+>   Thu 2026-09-17 8:15 PM ET → T-24h window opens **Wed 2026-09-16 8:15 PM ET**;
+>   expect `notifications/NFL_NONPICK_24H:{poolId}:{uid}:2` docs for every
+>   roster member without complete Week 2 picks.
+> - **Correction to the 2026-09-08 box below:** "zero uploads after 2026-09-01"
+>   is stale. The Cloud Functions audit log shows `UpdateFunction` on
+>   `runReminders` by kstruck@gmail.com via FirebaseCLI/15.29.0 at
+>   **2026-09-09T14:24:37Z** (revision `runreminders-00186-miw`, hash
+>   `cd5231b1…`), i.e. a functions deploy happened Wed Sep 9 10:24 AM ET. What
+>   that deploy contained is NOT measured here (origin/main at that moment was
+>   `3fda50d7`, #677); re-check #654's deploy state with the timestamp method
+>   before relying on either claim.
+> - Tooling notes from this session: the census service account
+>   (`C:\keys\mmp-census.json`) can read Firestore but NOT Cloud Logging
+>   (`Permission denied for all log views`); `npx firebase functions:log
+>   --lines N` returns a different, arbitrary time window per N (400 → last
+>   4h, 600 → Sep 9–10, 1000 → Sep 8–9, 1500 → Sep 7–9), so loop over several
+>   N and union the files to cover a range; there is no `--since` flag.
+
+> ## 🟡 2026-09-10 — **"NEW USER" IN STANDINGS: ROOT CAUSE CLOSED, PROFILE NAME NOW PROPAGATES TO EVERY POOL. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY OWED (FUNCTIONS + FIRESTORE INDEXES).**
+>
+> Kevin found members named **"New User"** on an NFL Pick'em standings page and
+> in its Payment Ledger, and after fixing their names on the super-admin
+> Members tab the pool pages did not change. Both were real, finished email
+> signups. Branch `claude/new-user-pool-deletion-d030bf`.
+>
+> **Root cause (three defects, all pre-existing):**
+> 1. `createParticipantProfile` (functions/src/participant.ts) did an
+>    unconditional `set()` with `name: displayName || "New User"`. It fires on
+>    the Auth create event, BEFORE the client calls `updateProfile`, so
+>    `displayName` is empty for every email signup; whenever it landed last it
+>    overwrote the typed name (and the client's referral fields). The pool
+>    join then copied "New User" into the Member Record and every entry.
+> 2. Nothing refreshed those copies. `/profile` and the Members tab write
+>    `users/{uid}.name` only; pick submissions stamped the LOGIN TOKEN's name
+>    first (`nflPools.ts`), so a fixed profile lost to the stale token on the
+>    next pick.
+> 3. Every sign-in wrote Auth's `displayName` back over the profile
+>    (`authService.ts` `syncUserToFirestore`), so a fixed name reverted at the
+>    next login.
+>
+> **What shipped on the branch:** `users/{uid}.name` is the ONE source of
+> truth. `shared/displayName.ts` (placeholder list + `pickPreferredName`, both
+> sides); `functions/src/lib/displayName.ts` (`resolveSubjectName` profile-first,
+> `propagateUserName` across `pools/*/members` + `pools/*/entries`,
+> `stampSearchName`); new trigger **`onUserNameChanged`** on `users/{uid}`
+> (`functions/src/userNameSync.ts`, exported); `createParticipantProfileIfMissing`
+> (transaction, never overwrites); `syncAllUsers` keeps a real stored name;
+> client sign-in keeps the stored name and merges the new-user write;
+> `firestore.indexes.json` gains collection-group field overrides on
+> `members.uid` and `entries.ownerUid` for the two propagation queries.
+> Tests: functions unit ×2 files, emulator `userNameSync.emulator.test.ts`,
+> root `displayNameShared.test.ts`. Codex: round 1 found 3 (all absorbed),
+> see the PR body for the final round count.
+>
+> **Deploy notes.** Step zero, always (CLAUDE.md §3):
+> `git -C D:\march-melee-pools pull --ff-only origin main` — if it does not
+> fast-forward, STOP and resolve before deploying; a deploy from a stale
+> checkout reports `Deploy complete!` and ships the old code. Then
+> `npm --prefix functions ci`, then — functions BEFORE rules, per §3 —
+> `npx firebase deploy --only functions,firestore:indexes`, and only after
+> that finishes `npx firebase deploy --only firestore:rules` (this PR changes
+> no rules; the order still holds for anything pending from another PR). The
+> trigger is a NEW export — verify with
+> `npx firebase functions:list | Select-String "onUserNameChanged"`. The
+> index overrides ship in the same deploy (`firestore:indexes` target); until
+> the collection-group indexes are built the trigger FAILS and is RETRIED by
+> the platform (`retry: true`; a name change in that window is not lost). The
+> emulator needs no index, so a green suite does not prove it shipped.
+>
+> **Not in scope, still true:** there is NO "remove member" callable for NFL
+> pools — the helpers in `lib/memberRecord.ts` have zero production callers
+> (measured at `97227933`:
+> `grep -rn "voidMemberRecord\|reconcileMembership" functions/src --include=*.ts | grep -v test`
+> returns only their definitions in `lib/memberRecord.ts` and two comment
+> mentions in `manualReminders.ts` / `setPaidStatus.ts`; #580 says the same); the
+> Payment Ledger's Delete is `deleteNFLEntry` and refuses once a week has
+> scored, for super admins too — by design (Kevin 2026-08-25). Names already
+> fixed BEFORE this deploys do not back-propagate: the trigger fires on a
+> CHANGE, so after the deploy edit the name to something else, save, then
+> set it back and save again — each save pushes into every pool copy.
+
+> ## 🟡 2026-09-10 — **PR #687 OPEN: confidence pools may lock per game (PLAN-CONFIDENCE-PER-GAME-LOCK). NOT MERGED, NOT DEPLOYED, BACKFILL NOT RUN, DONKEYS NOT FLIPPED.**
+>
+> - Kevin's ruling 2026-09-10 (six decisions in the plan header): a confidence
+>   Pick'em pool may lock PER GAME; a started game's pick AND weight are
+>   immutable by every path; a missed game forfeits the highest weight still
+>   open; Week 1 of "Donkeys 2026" (`ubHD4bgszL05oURYubrn`, 22 entries, $550
+>   weekly pot, host Jim Lenz — aware) is to be REOPENED once live.
+> - What ships: `shared/nflLockMode.ts` is the one rule, imported by submit,
+>   reveal and proxyPick; `settings.lockRuleVersion: 2` stamp (server-written,
+>   creators stamp new pools, backfill stamps legacy); `backfillConfidenceLockMode`
+>   op + Operations-panel cards; kickoff ceiling + status-aware lock in
+>   confidence pools; `CONFIDENCE_LOCKED`, `TIEBREAK_LOCKED`,
+>   `PROXY_CONFIDENCE_UNSUPPORTED`, `CONFIDENCE_MODE_LOCKED_AFTER_SUBMISSIONS`,
+>   `SETTINGS_CHANGED`. Review: 10 codex rounds (the cap), qodo pending at open.
+> - **Deploy order once merged (CLAUDE.md §3):** `git pull` → `npm --prefix
+>   functions ci` → `npx firebase deploy --only functions` (verify
+>   `functions:list | Select-String backfillConfidenceLockMode`) → SuperAdmin →
+>   Operations → **Backfill Confidence Lock Mode** dry run, read
+>   `plannedWrites` (Donkeys WILL appear, with its stored lock mode), then live,
+>   then live again → 0 → Coolify www redeploy (needle `CONFIDENCE_LOCKED` in
+>   the crawled chunks) → Donkeys: Manager → Settings → Lock Mode → Per-Game →
+>   confirm the mid-week dialog → Save.
+> - **Standing rule from this change:** never `git checkout --detach` in a
+>   worktree while a `codex exec review` is running there — it reviewed an
+>   empty diff (round 4 had to be re-run).
+> - Pre-existing, filed as a task chip: `goldenArc.emulator.test.ts` fails its
+>   first `beforeAll` when `autoScore`/`fixtureMatrix` precede it (reproduced on
+>   origin/main `59deb790`).
+
 > ## 🟢 2026-09-08 — **HANDOFF.md CUT FROM 4,206 LINES TO A HANDOFF. HISTORY MOVED TO `docs/archive/`, VERBATIM. NO CODE, NO DEPLOY, NO PROD DATA TOUCHED.**
 >
 > - Everything older than the 2026-08-26 box — the 2026-08-25 launch-day box

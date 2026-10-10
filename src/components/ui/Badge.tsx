@@ -7,6 +7,7 @@ export type BadgeStatus =
     | 'unpaid'
     | 'open'
     | 'locked'
+    | 'canceled'
     | 'winner'
     | 'everyScore';
 
@@ -16,6 +17,7 @@ const STYLES: Record<BadgeStatus, string> = {
     unpaid: 'bg-[#FBEEDD] text-[#B4530A] border border-[#F2D6B0]',
     open: 'bg-[#E5EDF6] text-[#142A4C] border border-[#CBDCEC]',
     locked: 'bg-cream text-muted border border-line',
+    canceled: 'bg-brandred-600/10 text-brandred-600 border border-brandred-600/30',
     winner: 'bg-[#FBF3E0] text-gold-700 border border-[#EAD9A8]',
     everyScore: 'bg-[#5B2A86] text-white',
 };
@@ -26,6 +28,7 @@ const LABELS: Record<BadgeStatus, string> = {
     unpaid: 'Unpaid',
     open: 'Open',
     locked: 'Locked',
+    canceled: 'Canceled',
     winner: 'Winner',
     everyScore: 'Every Score',
 };

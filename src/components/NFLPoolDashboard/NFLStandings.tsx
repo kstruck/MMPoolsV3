@@ -68,6 +68,10 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
 }) => {
   const navigate = useNavigate();
   const type = pool.type;
+  // PLAN-SPLIT-POT-SETTLEMENT: the server-owned settlement record names the
+  // co-champions by ENTRY id; it outranks the row's own (maybe unscored) status.
+  const settledIds = new Set('settlement' in pool && pool.settlement ? pool.settlement.entryIds : []);
+  const coChampion = (row: { id?: unknown }): boolean => typeof row.id === 'string' && settledIds.has(row.id);
   // Item 9: which ROW (entry id, never uid — PLAN-MULTI-ENTRY §0b) is expanded.
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   // PoolRoute reuses this component across pools and entry ids repeat across
@@ -320,7 +324,13 @@ export const NFLStandings: React.FC<NFLStandingsProps> = ({
                     {type === 'NFL_SURVIVOR' && (
                       <>
                         <td className="py-4 px-6 text-center">
-                          {entry.unscored ? dash : entry.status === 'ALIVE' ? (
+                          {/* qodo #9 on #715: the settlement record names the co-champions,
+                              so an unscored row that is one of them is not a dash. */}
+                          {coChampion(entry) ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">
+                              <Heart size={8} className="fill-[#0F7B4A]/20" /> {settledIds.size === 1 ? 'Champion' : 'Co-champion'}
+                            </span>
+                          ) : entry.unscored ? dash : entry.status === 'ALIVE' ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E4F5EC] border border-[#BEE7D0] font-display font-bold text-[10px] text-[#0F7B4A] uppercase tracking-[0.08em]">
                               <Heart size={8} className="fill-[#0F7B4A]/20" /> Alive
                             </span>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { effectiveWeeklyTiebreaker } from '@shared/nflTiebreaker';
+import { nflLockMode } from '@shared/nflLockMode';
 import { HelpCircle, Shield, Award, Calendar, DollarSign, RefreshCw, Zap, Trophy, Lock, Settings } from 'lucide-react';
 import type { Pool } from '../../types';
 import { PayoutsPanel } from '../PayoutsPanel';
@@ -118,8 +119,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
             <li className="flex justify-between border-b border-line pb-2">
               <span className="font-bold">Lock Frequency Mode:</span>
               <span className="font-display font-bold uppercase text-[11px] tracking-[0.08em]">
-                {type === 'NFL_PICKEM' && settings.confidenceMode ? 'Strictly Weekly' :
-                 type === 'NFL_PICKEM' && settings.lockMode === 'PER_GAME' ? 'Per-Game Kickoff' : 'Weekly (First Game Kickoff)'}
+                {nflLockMode(type, settings) === 'PER_GAME' ? 'Per-Game Kickoff' : 'Weekly (First Game Kickoff)'}
               </span>
             </li>
             <li className="leading-relaxed text-[12px] text-muted">
@@ -214,7 +214,7 @@ export const NFLPoolRules: React.FC<NFLPoolRulesProps> = ({ pool, isManager, onE
                 </p>
                 <p className="leading-relaxed text-[12px] text-muted">
                   {settings.confidenceMode
-                    ? `Assign a unique confidence weight from 1 to N for each game. Higher weight earns more points upon success. All games must have unique confidence ranks assigned.`
+                    ? `Assign a unique confidence weight from 1 to N for each game you pick. Higher weight earns more points upon success. ${nflLockMode(type, settings) === 'PER_GAME' ? 'Each game’s pick and weight lock at that game’s kickoff, and a game you miss forfeits the highest weight.' : 'Every weight is set before the week’s first kickoff.'}`
                     : 'Every correct pick earns 1 point. Confidence rankings are disabled in this pool.'}
                 </p>
               </div>

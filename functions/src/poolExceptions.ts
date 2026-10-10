@@ -30,6 +30,8 @@ import { nextEntryRevision, ENTRY_REVISION_FIELD } from "./lib/entryRevision";
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from "./shared/survivorReuse";
 import { extensionRefusal } from "./lib/publishedWeeks";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
+import { nflLockMode } from "./shared/nflLockMode";
+import { assertPoolAcceptsPlay, poolIsOver } from "./lib/settlement";
 
 // Commissioner exception tools (UX overhaul Phase 3.6).
 // Real seasons have exceptions — a member in the hospital, a mis-set deadline,
@@ -309,6 +311,9 @@ export const proxyPick = validated(
         await assertNoScoringInProgress(transaction, poolRef, now);
         const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
         if (!poolInTx) throw new HttpsError("not-found", "Pool not found.");
+        // PLAN-SPLIT-POT-SETTLEMENT §2.3 (review r2 #1): proxyPick has its OWN
+        // transaction, so the submit core's guard does not cover it.
+        assertPoolAcceptsPlay(poolInTx);
         // Entry n of the target (lib/multiEntry.ts): same resolution, same cap
         // as the member's own submit — a commissioner cannot proxy a fourth
         // entry into a three-entry pool.
@@ -335,7 +340,17 @@ export const proxyPick = validated(
 
         if (type === "NFL_PICKEM") {
             const settings = pool.settings || {};
-            const weeklyLockMode = settings.confidenceMode || settings.lockMode === "WEEKLY";
+            // A confidence sheet is a pick AND a weight, and this callable carries
+            // only picks — so on a confidence pool it could only ever write half
+            // an entry (neither a ranked pick nor a missed game). Refused outright
+            // (PLAN-CONFIDENCE-PER-GAME-LOCK §3.3, codex r1 #6); weight support
+            // is the recorded follow-up.
+            if (settings.confidenceMode) {
+                throw new HttpsError("failed-precondition",
+                    "PROXY_CONFIDENCE_UNSUPPORTED: a confidence pool needs a weight with every pick, and a proxy pick cannot carry one. Ask the member to submit, or extend the deadline.");
+            }
+            // ONE rule, imported (T2) — never restated here again.
+            const weeklyLockMode = nflLockMode(type, settings) === "WEEKLY";
 
             // Validate each pick: game must exist this week, team must be playing in it.
             for (const [gameId, pickedTeam] of Object.entries(picks as Record<string, string>)) {
@@ -558,13 +573,36 @@ export const cancelPool = validated(
     if (pool.status === "CANCELED") {
         throw new HttpsError("failed-precondition", "This pool has already been canceled.");
     }
+    if (poolIsOver(pool)) {
+        throw new HttpsError("failed-precondition", "POOL_OVER: This pool is already over and cannot be canceled.");
+    }
 
     const now = Date.now();
-    await poolRef.update({
-        status: "CANCELED",
-        cancelledAt: now,
-        cancelReason: reason,
-    });
+    // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
+    // SETTLEMENT, codex code-review r4). A settlement runs the season finalizer
+    // under the lease and writes champion season-history rows BEFORE it flips the
+    // pool; a plain update landing in that gap left those rows on a pool that then
+    // reads as cancelled/closed. The same gap existed against the regular scorer.
+    // Now a live lease bounces this write (retried briefly), and a lifecycle
+    // write that commits first makes the settlement's next fenced write refuse.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        await assertNoScoringInProgress(tx, poolRef, Date.now());
+        const fresh = (await tx.get(poolRef)).data();
+        if (fresh?.status === "CANCELED") {
+            throw new HttpsError("failed-precondition", "This pool has already been canceled.");
+        }
+        // qodo #1 on #715: an over pool (settled, closed, finalized) cannot be
+        // cancelled — that would overwrite a settlement and email members a
+        // cancellation for a pool that already ended.
+        if (poolIsOver(fresh)) {
+            throw new HttpsError("failed-precondition", "POOL_OVER: This pool is already over and cannot be canceled.");
+        }
+        tx.update(poolRef, {
+            status: "CANCELED",
+            cancelledAt: now,
+            cancelReason: reason,
+        });
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,
@@ -620,7 +658,27 @@ export const closePool = validated(
     }
 
     const now = Date.now();
-    await poolRef.update(adminCloseUpdate(now));
+    // 🛑 IN A TRANSACTION THAT RESPECTS THE SCORING LEASE (PLAN-SPLIT-POT-
+    // SETTLEMENT, codex code-review r4). A settlement runs the season finalizer
+    // under the lease and writes champion season-history rows BEFORE it flips the
+    // pool; a plain update landing in that gap left those rows on a pool that then
+    // reads as cancelled/closed. The same gap existed against the regular scorer.
+    // Now a live lease bounces this write (retried briefly), and a lifecycle
+    // write that commits first makes the settlement's next fenced write refuse.
+    await retryWhileScoring(() => db.runTransaction(async (tx) => {
+        await assertNoScoringInProgress(tx, poolRef, Date.now());
+        const fresh = (await tx.get(poolRef)).data();
+        if (isTerminalStatus(fresh?.status as string | undefined)) {
+            throw new HttpsError("failed-precondition", `This pool is already ${fresh?.status} and cannot be closed.`);
+        }
+        // qodo #1 on #715: a settlement interrupted between finalize and flip is
+        // resumed by settlePool; an admin close here would strand it. A naturally
+        // finalized pool can still be closed (the Super-Admin tidy-up flow).
+        if (fresh?.finalizedVia === "SETTLED") {
+            throw new HttpsError("failed-precondition", "SETTLEMENT_IN_PROGRESS: Finish the split-pot settlement from the Manager tab instead.");
+        }
+        tx.update(poolRef, adminCloseUpdate(now));
+    }));
 
     await writeAuditEvent({
         poolId: pool.id,

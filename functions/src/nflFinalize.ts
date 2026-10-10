@@ -329,7 +329,19 @@ export function seasonHistoryDocId(
 export async function maybeFinalizeNFLPool(
   db: Firestore,
   poolId: string,
-  opts?: { allowSim?: boolean; fence?: ScoringFence },
+  opts?: {
+    allowSim?: boolean;
+    fence?: ScoringFence;
+    /**
+     * PLAN-SPLIT-POT-SETTLEMENT §2.2 step 7. `'SETTLED'` finalizes NOW, with the
+     * entries as they stand, skipping ONLY the season-completeness test — the
+     * remaining players agreed to split, so the season is over for this pool
+     * even though the NFL's is not. Every other guard (not NFL, voided, sim)
+     * and every write is the unchanged season-end path. Only `settlePool`
+     * passes it, under its scoring lease.
+     */
+    force?: 'SETTLED';
+  },
 ): Promise<FinalizeOutcome> {
   // Season-history and `finalizedAt` writes go through the caller's scoring
   // fence when there is one (PLAN-REALTIME-SCORING §3a): this function snapshots
@@ -354,9 +366,11 @@ export async function maybeFinalizeNFLPool(
     return { finalized: false, reason: 'sim pool (finalize only via simFinalizePool)' };
   }
 
-  const completeness = await isSeasonComplete(db, pool);
-  if (!completeness.complete) {
-    return { finalized: false, reason: completeness.reason, stalledGameIds: completeness.stalledGameIds };
+  if (opts?.force !== 'SETTLED') {
+    const completeness = await isSeasonComplete(db, pool);
+    if (!completeness.complete) {
+      return { finalized: false, reason: completeness.reason, stalledGameIds: completeness.stalledGameIds };
+    }
   }
 
   const entriesSnap = await poolRef.collection('entries').get();
@@ -409,6 +423,11 @@ export async function maybeFinalizeNFLPool(
 
   const finalizeStamp = {
     finalizedAt: admin.firestore.FieldValue.serverTimestamp(),
+    // PLAN-SPLIT-POT-SETTLEMENT (codex code-review r5): WHO finalized, in the same
+    // write as `finalizedAt`, so `settlePool` can tell its own interrupted run
+    // (resumable) from a natural season end (refused) without a separate marker
+    // that a refused or crashed attempt could leave behind.
+    ...(opts?.force === 'SETTLED' ? { finalizedVia: 'SETTLED' } : {}),
     ...(pool.firstFinalizedAt ? {} : { firstFinalizedAt: admin.firestore.FieldValue.serverTimestamp() }),
   };
   // Season Places + frozen season prize ride the same write as `finalizedAt`

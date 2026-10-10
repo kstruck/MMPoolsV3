@@ -272,7 +272,13 @@ FIRST=$( { gh api --paginate $R/issues/<N>/comments \
 # 8-minute floor, so the run prints PARTIAL and re-arming prints PARTIAL again.
 # That is fail-CLOSED and correct — a repeating PARTIAL means "the timestamp
 # fetch is broken, fix it", never "qodo is clean, proceed".
-FIRST_EPOCH=$(date -u -d "$FIRST" +%s 2>/dev/null || echo "")
+# ⚠️ GUARD THE EMPTY CASE (measured on #691, 2026-09-11): GNU `date -d ""` is
+# NOT an error — it returns TODAY 00:00 UTC — so an empty FIRST (the review
+# comment had not landed when FIRST was computed) yielded elapsed = seconds
+# since midnight, the 480s floor was trivially "met", and the watcher printed
+# QODO REPORTED on the strength of a clock that measured nothing. Empty must
+# fall through to the process clock below, which cannot reach the floor.
+FIRST_EPOCH=$( [ -n "$FIRST" ] && date -u -d "$FIRST" +%s 2>/dev/null || echo "" )
 elapsed() {
   if [ -n "$FIRST_EPOCH" ]; then echo $(( $(date -u +%s) - FIRST_EPOCH ));
   else echo $((SECONDS - START)); fi
