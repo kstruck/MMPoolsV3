@@ -51,14 +51,14 @@ function renderOverview(pool: Record<string, unknown>) {
 
 describe('NFLManagerBentoDashboard — a pool that is over', () => {
   it.each([
-    ['settled', { status: 'COMPLETED', closedVia: 'SETTLED' }],
-    ['cancelled', { status: 'CANCELED' }],
-    ['finalized', { finalizedAt: 1 }],
-  ])('a %s pool shows "Pool Over" instead of the live pick tracker and the Nudge buttons', (_label, over) => {
+    ['settled', { status: 'COMPLETED', closedVia: 'SETTLED' }, 'Pool Over'],
+    ['cancelled', { status: 'CANCELED' }, 'Pool Cancelled'],
+    ['finalized', { finalizedAt: 1 }, 'Pool Over'],
+  ])('a %s pool shows the ended card instead of the live pick tracker and the Nudge buttons', (_label, over, heading) => {
     const { container, queryByTestId } = renderOverview({ ...base, ...over });
     expect(queryByTestId('pool-over-card')).not.toBeNull();
     const text = container.textContent ?? '';
-    expect(text).toContain('Pool Over');
+    expect(text).toContain(heading);
     expect(text).not.toContain('Submission Health');
     expect(text).not.toContain('Pending Pick Sheets');
     expect(text).not.toContain('Auto-reminders enabled');
@@ -72,6 +72,30 @@ describe('NFLManagerBentoDashboard — a pool that is over', () => {
     expect(text).not.toMatch(/Scoring tab/i);
     // The name the card uses must be the label of a real main tab.
     expect(dashboardSource).toContain("{ tab: 'standings', label: 'Standings & Results' }");
+  });
+
+  it('a CANCELLED pool has no results, so the card does not send anyone to look for them (qodo on #724)', () => {
+    const { container, queryByTestId } = renderOverview({ ...base, status: 'CANCELED' });
+    const card = queryByTestId('pool-over-card')?.textContent ?? '';
+    expect(card).toContain('Pool Cancelled');
+    expect(card).toContain('It has no final results.');
+    expect(card).not.toContain('Standings & Results');
+    expect(card).toContain('Payment Ledger');
+    // A cancelled pool that ALSO carries closedVia / lower-case status is still cancelled.
+    cleanup();
+    const again = renderOverview({ ...base, status: 'canceled', closedVia: 'CANCELLED' });
+    expect(again.queryByTestId('pool-over-card')?.textContent).toContain('Pool Cancelled');
+    expect(container).toBeTruthy();
+  });
+
+  it('every sentence on the card is separated by a space — nothing runs together', () => {
+    for (const over of [{ status: 'COMPLETED', closedVia: 'SETTLED' }, { status: 'CANCELED' }]) {
+      const { queryByTestId } = renderOverview({ ...base, ...over });
+      const card = queryByTestId('pool-over-card')?.textContent ?? '';
+      // A full stop followed directly by a capital letter is two sentences joined.
+      expect(card).not.toMatch(/[a-z]\.[A-Z]/);
+      cleanup();
+    }
   });
 
   it('keeps the money side: Buy-ins at a glance is still there', () => {
