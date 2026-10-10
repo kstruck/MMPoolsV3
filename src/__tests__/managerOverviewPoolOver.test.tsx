@@ -66,7 +66,8 @@ describe('NFLManagerBentoDashboard — a pool that is over', () => {
   });
 
   it('points to a tab that really holds the results — Standings & Results, not the Scoring sub-tab (qodo #2 on #723)', () => {
-    const { container } = renderOverview({ ...base, status: 'COMPLETED', closedVia: 'SETTLED' });
+    // A settled pool, as the server leaves it: the finalizer has stamped finalizedAt.
+    const { container } = renderOverview({ ...base, status: 'COMPLETED', closedVia: 'SETTLED', finalizedAt: 1 });
     const text = container.textContent ?? '';
     expect(text).toContain('Standings & Results');
     expect(text).not.toMatch(/Scoring tab/i);
@@ -88,8 +89,42 @@ describe('NFLManagerBentoDashboard — a pool that is over', () => {
     expect(container).toBeTruthy();
   });
 
+  it('promises results ONLY when the finalizer published them (finalizedAt) — every other ending makes no such promise (qodo on #724, round 2)', () => {
+    // Ended WITHOUT a finalize: an admin close, a bare COMPLETED, an archive, an
+    // unknown future closedVia. None may send the commissioner to look for results.
+    const noResults = [
+      { status: 'COMPLETED', closedVia: 'ADMIN_CLOSE' },
+      { status: 'COMPLETED' },
+      { status: 'ARCHIVED' },
+      { status: 'OPEN', closedVia: 'SOMETHING_NEW' },
+      { status: 'COMPLETED', closedVia: 'SETTLED' },            // settled record but no finalize stamp: still no promise
+    ];
+    for (const over of noResults) {
+      const card = renderOverview({ ...base, ...over }).queryByTestId('pool-over-card')?.textContent ?? '';
+      expect(card, JSON.stringify(over)).toContain('Pool Over');
+      expect(card, JSON.stringify(over)).not.toContain('Standings & Results');
+      expect(card, JSON.stringify(over)).not.toMatch(/final results/i);
+      expect(card, JSON.stringify(over)).toContain('Payment Ledger');
+      cleanup();
+    }
+    // Finalized by any route: the promise is made.
+    for (const over of [{ finalizedAt: 1 }, { status: 'COMPLETED', closedVia: 'SETTLED', finalizedAt: { seconds: 1 } }]) {
+      const card = renderOverview({ ...base, ...over }).queryByTestId('pool-over-card')?.textContent ?? '';
+      expect(card, JSON.stringify(over)).toContain('The final results are under Standings & Results');
+      cleanup();
+    }
+    // Cancelled wins over finalized: a cancelled pool never promises results.
+    const cancelled = renderOverview({ ...base, status: 'CANCELED', finalizedAt: 1 }).queryByTestId('pool-over-card')?.textContent ?? '';
+    expect(cancelled).toContain('It has no final results.');
+    expect(cancelled).not.toContain('Standings & Results');
+  });
+
   it('every sentence on the card is separated by a space — nothing runs together', () => {
-    for (const over of [{ status: 'COMPLETED', closedVia: 'SETTLED' }, { status: 'CANCELED' }]) {
+    for (const over of [
+      { status: 'COMPLETED', closedVia: 'SETTLED', finalizedAt: 1 },   // results message
+      { status: 'COMPLETED', closedVia: 'ADMIN_CLOSE' },               // closed, no results
+      { status: 'CANCELED' },                                          // cancelled
+    ]) {
       const { queryByTestId } = renderOverview({ ...base, ...over });
       const card = queryByTestId('pool-over-card')?.textContent ?? '';
       // A full stop followed directly by a capital letter is two sentences joined.
