@@ -212,18 +212,20 @@ export interface ReminderRoutedPool extends SettleablePool {
  *    product decision that has not been made.
  */
 export function reminderChecksFor(pool: ReminderRoutedPool): ReminderCheck[] {
-    const type = pool.type;
+    // Spelled `pool.type === '<TYPE>'` on purpose: scanBounds.test.ts reads this
+    // file for exactly that text to prove every dispatched type is also in the
+    // q1 union query of runReminders.
     const over = poolIsOver(pool);
-    if (type === 'SQUARES' || type === 'PROPS' || !type) {
+    if (pool.type === 'SQUARES' || pool.type === 'PROPS' || !pool.type) {
         const checks: ReminderCheck[] = [];
         if (!pool.reminders) return checks;
-        if (pool.reminders.payment?.enabled && type === 'SQUARES') checks.push('SQUARES_PAYMENT');
-        if (pool.reminders.lock?.enabled && (type === 'SQUARES' || !type) && !over) checks.push('SQUARES_LOCK');
+        if (pool.reminders.payment?.enabled && pool.type === 'SQUARES') checks.push('SQUARES_PAYMENT');
+        if (pool.reminders.lock?.enabled && (pool.type === 'SQUARES' || !pool.type) && !over) checks.push('SQUARES_LOCK');
         return checks;
     }
-    if (type === 'NFL_PLAYOFFS') return over ? [] : ['PLAYOFF'];
-    if (type === 'BRACKET') return over ? [] : ['BRACKET'];
-    if (type === 'NFL_PICKEM' || type === 'NFL_SURVIVOR' || type === 'NFL_MARGIN') return ['NFL_NON_PICKER'];
+    if (pool.type === 'NFL_PLAYOFFS') return over ? [] : ['PLAYOFF'];
+    if (pool.type === 'BRACKET') return over ? [] : ['BRACKET'];
+    if (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') return ['NFL_NON_PICKER'];
     return [];
 }
 
