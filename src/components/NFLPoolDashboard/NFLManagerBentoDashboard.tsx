@@ -66,6 +66,10 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   onOpenLedger,
 }) => {
   const castPool = pool as any;
+  // Cancelled is the one ending with no results (`cancelPool` voids the pool).
+  const poolCancelled = String(castPool?.status ?? '').toUpperCase() === 'CANCELED';
+  // Final standings exist only once the season finalizer has run — see the card.
+  const poolHasFinalResults = castPool?.finalizedAt !== undefined && castPool?.finalizedAt !== null;
   const toast = useToast();
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
@@ -438,10 +442,36 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
         className="bg-card border border-line rounded-xl p-6 shadow-card flex flex-col justify-center gap-2"
         data-testid="pool-over-card"
       >
-        <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">Pool Over</h3>
+        {/* The card promises results ONLY when they were published, and the one
+            signal for that is `finalizedAt`: the season finalizer is its only
+            writer (functions/src/nflFinalize.ts) and stamps it after committing
+            the final standings. A settlement runs that finalizer, so a settled
+            pool has it too.
+
+            Listing the endings WITHOUT results instead was tried and holed twice
+            in review: first a CANCELLED pool was sent to look for results, then
+            an ADMIN-CLOSED one (COMPLETED + closedVia ADMIN_CLOSE, which
+            publishes nothing) — qodo on #724, both rounds. Any future way to end
+            a pool lands in the no-promise message by default.
+
+            "Standings & Results" is the MAIN pool tab (NFLPoolDashboard's tab
+            list), not a commissioner sub-tab. The first version of this card
+            said "the Scoring tab", which is the weekly Score & Recap action and
+            shows no standings (qodo #2 on #723). The test pins the label against
+            that tab list so the two cannot drift.
+
+            Each message is ONE string on purpose: split across JSX lines with a
+            comment between them, the sentences lose their space and run
+            together — the same defect the settled banner shipped with. */}
+        <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
+          {poolCancelled ? 'Pool Cancelled' : 'Pool Over'}
+        </h3>
         <p className="font-body text-sm text-[color:var(--text)] leading-relaxed">
-          This pool has ended and takes no more picks, so there is nothing left to chase here.
-          The final results are on the Scoring tab, and any money still owed is in the Payment Ledger.
+          {poolCancelled
+            ? 'This pool was cancelled and takes no more picks, so there is nothing left to chase here. It has no final results. Any money still to settle is in the Payment Ledger.'
+            : poolHasFinalResults
+              ? 'This pool has ended and takes no more picks, so there is nothing left to chase here. The final results are under Standings & Results, in the pool’s main tabs, and any money still owed is in the Payment Ledger.'
+              : 'This pool has been closed and takes no more picks, so there is nothing left to chase here. Any money still owed is in the Payment Ledger.'}
         </p>
       </div>
       ) : (
