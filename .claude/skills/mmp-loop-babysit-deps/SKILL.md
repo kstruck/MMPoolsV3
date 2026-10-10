@@ -5,14 +5,23 @@ description: Build/test dependabot PRs in an isolated worktree and auto-merge on
 
 # Dependabot Babysitter
 
-Loop 4 of 5 (build order per PLAN-LOOPS.md). The first loop that can merge code —
+Loop 4 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). The first loop that can merge code —
 build last of the four scheduled loops, most scrutiny before trusting it. **Not yet
 activated** — manual invoke only, and auto-merge disabled by default even when
 manually run, until Kevin approves.
 
 ## Steps
 
-1. `gh pr list --repo kstruck/MMPoolsV3 --state open --author app/dependabot --json number,title,headRefName`
+1. List dependabot's open PRs. **In the cloud there is no `gh`** — use
+   `mcp__github__list_pull_requests` (`owner: kstruck`, `repo: MMPoolsV3`,
+   `state: open`) and keep the ones authored by `app/dependabot`. On the Windows
+   box: `gh pr list --repo kstruck/MMPoolsV3 --state open --author app/dependabot
+   --json number,title,headRefName`.
+
+   ⚠️ Steps 3–4 need a real checkout and a Node-capable host. The cloud container
+   can do the listing and the commenting; whether it can run this repo's build is
+   a per-run question, and **if the build cannot run the verdict is
+   `INCONCLUSIVE`, never a green comment.**
 2. For each PR, determine the semver bump type from the title (patch/minor/major).
 3. **Isolate the checkout — non-negotiable.** Create or reuse a dedicated git worktree
    for this PR's branch (per mmp-change-control worktree-isolation rule and the
@@ -42,6 +51,12 @@ manually run, until Kevin approves.
      attempt a fix inside this skill — that's separate, explicit work.
 7. Remove the worktree after the run (or leave it if Kevin wants to inspect a failure —
    note which in the PR comment).
+8. Append one row per PR to `LOOP-LOG.tsv` at the repo root — one tab-separated row per run
+   (`date loop commit verdict metric idea lesson`, spec in
+   `docs/plans/PLAN-LOOPS.md`). Append only; never rewrite an earlier row.
+   **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never
+   `CLEAN`**, and `metric` carries the number the verifier produced.
+   `commit` is the PR's head SHA and `idea` names the bump (`bump vitest 3.1→3.2`).
 
 ## Rules
 
@@ -57,6 +72,7 @@ manually run, until Kevin approves.
   pass/fail; it does not merge anything until Kevin explicitly turns that on (separate
   from the general loop-activation approval, since this is the highest-consequence of
   the five).
-- **Do not wire this to `/loop` or `CronCreate` yet.** Manual invoke only until Kevin
-  explicitly approves scheduled/unattended activation — and auto-merge is a further,
-  separate approval on top of that.
+- **Still parked**, and it is the last of the five to be trusted, by design.
+  Manual invoke only until Kevin approves scheduled/unattended activation — and
+  **auto-merge is a further, separate approval on top of that**, unchanged on
+  2026-09-19.

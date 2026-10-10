@@ -5,7 +5,7 @@ description: Formalizes the existing audit-to-ticket-to-phase workflow into a re
 
 # Ticket/Phase Execution Loop
 
-Loop 5 of 5 (build order per PLAN-LOOPS.md). Lowest new-build risk — this formalizes a
+Loop 5 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). Lowest new-build risk — this formalizes a
 pattern already used successfully (memory: ticket-phase-execution-workflow), it doesn't
 invent new machinery. Session-invoked, not scheduled.
 
@@ -20,7 +20,12 @@ invent new machinery. Session-invoked, not scheduled.
    pass.
 5. Record progress (what was done, what verify step confirmed it, what's next) in the
    ticket's own tracking doc or memory — so the next invocation doesn't re-derive
-   context from scratch.
+   context from scratch. Also append one row to `LOOP-LOG.tsv` at the repo root — one tab-separated row per run
+   (`date loop commit verdict metric idea lesson`, spec in
+   `docs/plans/PLAN-LOOPS.md`). Append only; never rewrite an earlier row.
+   **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never
+   `CLEAN`**, and `metric` carries the number the verifier produced.
+   `idea` is the ticket and phase (`T7 phase 2`).
 6. **Stop at the proceed-gate.** Report what was done and what's next, then wait for
    Kevin's explicit go-ahead before starting the next phase. Never chain into the next
    phase automatically.
@@ -36,6 +41,7 @@ invent new machinery. Session-invoked, not scheduled.
 - This loop touches real code — same worktree-isolation discipline as any other change
   in this repo applies (see mmp-change-control). It is not exempt just because it's
   "just formalizing an existing pattern."
-- No activation concern here in the scheduling sense (it's not cron'd), but the
-  proceed-gate IS the approval mechanism — never treat "loop completed a phase" as
-  license to keep going without Kevin's sign-off.
+- **Still parked** in the charter's sense: it is session-invoked and never
+  cron'd, so there is no scheduling approval to give. The **proceed-gate IS the
+  approval mechanism** — never treat "loop completed a phase" as license to keep
+  going without Kevin's sign-off.
