@@ -1,0 +1,97 @@
+import { describe, it, expect, vi } from 'vitest';
+import { sendEmail } from '../reminders';
+import { settlementMailKey } from '../lib/settlement';
+
+/**
+ * qodo #4 on #715: a retry after a crash between the enqueue and the caller's
+ * progress stamp must not send the email twice. `idempotencyKey` makes the mail
+ * doc CREATE-once. The db is a stub; the opt-out lookups fail open by design
+ * ("Unsubscribe infra unavailable — sending without opt-out check").
+ */
+function stubDb(createImpl: (data: unknown) => Promise<unknown>, existing?: Record<string, unknown>) {
+    const create = vi.fn(createImpl);
+    const add = vi.fn(async () => ({ id: 'auto' }));
+    const del = vi.fn(async () => undefined);
+    const get = vi.fn(async () => ({ data: () => existing }));
+    const doc = vi.fn(() => ({ create, get, delete: del }));
+    return { db: { collection: vi.fn(() => ({ doc, add })) } as never, create, add, doc, del, get };
+}
+const ALREADY_EXISTS = () => { throw Object.assign(new Error('exists'), { code: 6 }); };
+
+describe('sendEmail idempotencyKey', () => {
+    it('creates the mail doc under the key and does not store the key', async () => {
+        const { db, create, add, doc } = stubDb(async () => undefined);
+        const out = await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { poolId: 'p1', reason: 'pool_settled', idempotencyKey: 'pool-settled-p1-1-u1' });
+        expect(out).toBe('queued');
+        expect(doc).toHaveBeenCalledWith('pool-settled-p1-1-u1');
+        expect(add).not.toHaveBeenCalled();
+        const stored = create.mock.calls[0][0] as Record<string, unknown>;
+        expect(stored).toMatchObject({ to: 'a@b.com', poolId: 'p1', reason: 'pool_settled' });
+        expect(stored).not.toHaveProperty('idempotencyKey');
+    });
+
+    it('a second send with the same key sends nothing and reports skipped', async () => {
+        const { db } = stubDb(async () => { throw Object.assign(new Error('exists'), { code: 6 }); });
+        expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('skipped');
+        const grpcName = stubDb(async () => { throw Object.assign(new Error('exists'), { code: 'already-exists' }); });
+        expect(await sendEmail(grpcName.db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('skipped');
+    });
+
+    it('an existing mail doc the extension marked ERROR is re-queued, not treated as delivered (qodo #2 on #720)', async () => {
+        // First create hits the existing doc; after the delete, the second succeeds.
+        let calls = 0;
+        const { db, del, create } = stubDb(async () => { if (calls++ === 0) ALREADY_EXISTS(); return undefined; }, { delivery: { state: 'ERROR' } });
+        const out = await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { poolId: 'p1', idempotencyKey: 'k' });
+        expect(out).toBe('queued');
+        // Deleted, then CREATED afresh (a create under any trigger), with no `delivery` field.
+        expect(del).toHaveBeenCalledTimes(1);
+        expect(create).toHaveBeenCalledTimes(2);
+        expect(create.mock.calls[1][0]).toMatchObject({ to: 'a@b.com', poolId: 'p1' });
+        expect(create.mock.calls[1][0]).not.toHaveProperty('delivery');
+    });
+
+    it('if a concurrent attempt re-creates the doc after the delete, this one stands down', async () => {
+        const { db, del } = stubDb(async () => ALREADY_EXISTS(), { delivery: { state: 'ERROR' } });
+        expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('skipped');
+        expect(del).toHaveBeenCalledTimes(1);
+    });
+
+    it('an existing mail doc that is pending, processing or delivered is left alone', async () => {
+        for (const existing of [undefined, { delivery: { state: 'PENDING' } }, { delivery: { state: 'PROCESSING' } }, { delivery: { state: 'SUCCESS' } }]) {
+            const { db, del } = stubDb(async () => ALREADY_EXISTS(), existing);
+            expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('skipped');
+            expect(del).not.toHaveBeenCalled();
+        }
+    });
+
+    it('settlementMailKey: distinct (pool, settlement, member) triples never collide, even with hyphens in the ids (qodo #3 on #720)', () => {
+        // A plain "-" join gave the SAME id for both of these.
+        expect(settlementMailKey('a-1', 2, 'b')).not.toBe(settlementMailKey('a', 1, '2-b'));
+        expect(settlementMailKey('p', 7, 'u')).toBe('pool-settled|p|7|u');
+        // The separator itself, and the characters encodeURIComponent leaves alone.
+        for (const sep of ['|', '~', '%', '-', '_', '.']) {
+            expect(settlementMailKey(`a${sep}1`, 2, 'b')).not.toBe(settlementMailKey('a', 1, `2${sep}b`));
+            expect(settlementMailKey('a', `1${sep}2`, 'b')).not.toBe(settlementMailKey('a', 1, `2${sep}b`));
+        }
+        // Safe as a Firestore document id: no slash.
+        expect(settlementMailKey('p/q', 7, 'u/v')).not.toContain('/');
+    });
+
+    it('any other create error is a failed enqueue, so the caller retries it', async () => {
+        const { db } = stubDb(async () => { throw Object.assign(new Error('unavailable'), { code: 14 }); });
+        expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'k' })).toBe('failed');
+    });
+
+    it('a key with a slash cannot escape the collection', async () => {
+        const { db, doc } = stubDb(async () => undefined);
+        await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { idempotencyKey: 'a/b' });
+        expect(doc).toHaveBeenCalledWith('a_b');
+    });
+
+    it('without a key it still uses add(), unchanged', async () => {
+        const { db, create, add } = stubDb(async () => undefined);
+        expect(await sendEmail(db, 'a@b.com', 'S', '<p>x</p>', { poolId: 'p1' })).toBe('queued');
+        expect(add).toHaveBeenCalledTimes(1);
+        expect(create).not.toHaveBeenCalled();
+    });
+});

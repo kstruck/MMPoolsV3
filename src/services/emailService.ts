@@ -1,23 +1,21 @@
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { logger } from '../utils/logger';
+import { now as serverNow } from '../utils/serverClock';
+import { activeEmailPromo, EMAIL_PROMO_BASE_URL, renderEmailPromoHtml, renderEmailPromoText } from '@shared/emailPromo';
 
-// Generate promo signature with optional referral link
+// Promo signature — the same blurb the server template ends with
+// (shared/emailPromo.ts), linked through the owner's referral code when known.
 const getPromoSignature = (ownerReferralCode?: string) => {
-    const referralUrl = ownerReferralCode
-        ? `https://www.marchmeleepools.com?ref=${ownerReferralCode}`
-        : 'https://www.marchmeleepools.com';
+    // Server-corrected clock: a skewed device must not pick a special outside
+    // its window (qodo on #698).
+    const promo = activeEmailPromo(serverNow());
+    const ctaUrl = ownerReferralCode
+        ? `${EMAIL_PROMO_BASE_URL}?ref=${encodeURIComponent(ownerReferralCode)}`
+        : promo.ctaUrl;
 
-    const text = `
-
----
-Want to create and host your own pool? Go to ${referralUrl} and create a pool for your office, friends, or favorite charity today!`;
-
-    const html = `
-<hr style="border: 1px solid #eee; margin: 20px 0;" />
-<p style="font-size: 12px; color: #666; text-align: center;">
-  Want to create and host your own pool? Go to <a href="${referralUrl}" style="color: #4f46e5;">MarchMeleePools.com</a> and create a pool for your office, friends, or favorite charity today!
-</p>`;
+    const text = `\n\n---\n${renderEmailPromoText(promo, { ctaUrl })}`;
+    const html = renderEmailPromoHtml(promo, { ctaUrl });
 
     return { text, html };
 };

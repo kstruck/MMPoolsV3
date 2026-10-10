@@ -12,6 +12,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import type { User, Pool } from '../types';
 import { effectiveMaxEntriesPerUser } from '@shared/multiEntry';
+import { nflLockMode } from '@shared/nflLockMode';
 import { PayoutsPanel } from './PayoutsPanel';
 import { Button } from './ui';
 
@@ -127,7 +128,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
             </p>
             <button
               onClick={() => navigate('/')}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all"
+              className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-ui"
             >
               Back to Home
             </button>
@@ -163,7 +164,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                     {(castPool.contactMethod === 'email' || castPool.contactMethod === 'both' || !castPool.contactMethod) && pool.contactEmail && (
                       <a
                         href={`mailto:${pool.contactEmail}`}
-                        className="p-1 bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-[#9FB0CC] border border-navy-600/20 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-navy-600/10 hover:bg-navy-600/20 text-navy-700 dark:text-[#9FB0CC] border border-navy-600/20 rounded-md transition-ui fine:hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Email Host: ${pool.contactEmail}`}
                       >
                         <Mail size={12} />
@@ -172,7 +173,7 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                     {(castPool.contactMethod === 'phone' || castPool.contactMethod === 'both') && castPool.contactPhone && (
                       <a
                         href={`tel:${castPool.contactPhone}`}
-                        className="p-1 bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 border border-gold-500/30 rounded-md transition-all hover:scale-105 flex items-center justify-center cursor-pointer"
+                        className="p-1 bg-gold-500/10 hover:bg-gold-500/20 text-gold-700 dark:text-gold-400 border border-gold-500/30 rounded-md transition-ui fine:hover:scale-105 flex items-center justify-center cursor-pointer"
                         title={`Call/SMS Host: ${castPool.contactPhone}`}
                       >
                         <Phone size={12} />
@@ -258,7 +259,11 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
               {pool.type === 'NFL_PICKEM' && (() => {
                 const s = castPool?.settings || {};
                 const isConfidence = !!s.confidenceMode;
-                const lockMode = s.lockMode ?? 'PER_GAME';
+                // The ONE lock rule (`shared/nflLockMode.ts`), never `s.lockMode`
+                // read raw: a legacy confidence pool stores PER_GAME while it
+                // plays weekly, and this preview was the seventh copy of the old
+                // "confidence forces weekly" clause (PLAN-CONFIDENCE-PER-GAME-LOCK).
+                const lockMode = nflLockMode(pool.type, s);
                 // `s.pointsPerPick` and `s.primetimeBonus` USED TO BE READ HERE
                 // and are not any more. Neither has ever been read by anything
                 // that scores — `scorePickemEntry` awards exactly 1 point per
@@ -285,11 +290,11 @@ export const JoinPool: React.FC<JoinPoolProps> = ({ user, onOpenAuth, onLogout, 
                       <Check size={14} className="text-gold-600 dark:text-gold-400 mt-0.5 shrink-0" />
                       Lock Mode:{' '}
                       <strong className="text-[color:var(--text)] font-bold ml-1">
-                        {isConfidence
-                          ? 'Weekly (required by Confidence Mode)'
-                          : lockMode === 'PER_GAME'
-                            ? 'Per-Game (each game locks at kickoff)'
-                            : 'Weekly (all picks lock at first kickoff)'}
+                        {lockMode === 'PER_GAME'
+                          ? (isConfidence
+                              ? 'Per-Game (each pick and its weight lock at that game’s kickoff)'
+                              : 'Per-Game (each game locks at kickoff)')
+                          : 'Weekly (all picks lock at first kickoff)'}
                       </strong>
                     </li>
                   </ul>

@@ -249,7 +249,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
                 </OverlayRoot>
             )}
             {message && (
-                <div className={`px-4 py-3 rounded-xl mb-4 text-sm flex items-center justify-between border animate-in fade-in slide-in-from-bottom-4 ${message.type === 'success' ? 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]' : 'bg-brandred-600/10 border-brandred-600/30 text-brandred-600'}`}>
+                <div className={`px-4 py-3 rounded-xl mb-4 text-sm flex items-center justify-between border animate-in fade-in ${message.type === 'success' ? 'bg-[#E4F5EC] border-[#BEE7D0] text-[#0F7B4A]' : 'bg-brandred-600/10 border-brandred-600/30 text-brandred-600'}`}>
                     <span>{message.text}</span>
                     <button onClick={() => setMessage(null)} className="opacity-70 hover:opacity-100 transition-opacity"><X size={16} /></button>
                 </div>
@@ -275,7 +275,7 @@ export const PaymentLedger: React.FC<PaymentLedgerProps> = ({ pool, entries }) =
             </div>
 
             {/* Commissioner Settings Section */}
-            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-gold-500/40 shadow-card">
+            <div className="bg-card border border-line rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-ui hover:border-gold-500/40 shadow-card">
                 <div className="flex items-start gap-3">
                     <div className="p-3 bg-gold-500/10 rounded-xl text-gold-600 mt-0.5 animate-pulse">
                         <AlertCircle size={22} />

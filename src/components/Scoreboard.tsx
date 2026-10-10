@@ -5,6 +5,7 @@ import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import type { User } from '../types';
 import { HelpRoutePublisher } from '../help/publish';
+import { fetchScoreboardWindow } from '../services/espnScoreboardWindow';
 
 interface Game {
     id: string;
@@ -78,24 +79,32 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
             const future = new Date(today);
             future.setDate(today.getDate() + 7);
 
-            const formatDate = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, '');
-            const dateStr = `${formatDate(past)}-${formatDate(future)}`;
+            let fetchedGames: Game[] = [];
 
-            let url = '';
             if (activeTab === 'basketball') {
-                // College Basketball (Mens) - NCAA Tournament (groups=100)
-                url = `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`;
+                // College Basketball (Mens) - NCAA Tournament (groups=100).
+                // No `dates=`, so the range outage below does not reach it.
+                const response = await fetch(
+                    `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`,
+                );
+                if (!response.ok) throw new Error('Failed to fetch scores');
+                const data: { events: Game[] } = await response.json();
+                fetchedGames = data.events || [];
             } else {
-                // Football
+                // ⚠️ NOT `dates=<start>-<end>`. ESPN began answering every date
+                // RANGE with HTTP 400 on 2026-09-15, which is what made this page
+                // show "Failed to fetch scores" on every refresh. The window is
+                // now assembled from the month(s) it spans — one or two requests
+                // — and filtered locally. See src/services/espnScoreboardWindow.ts for
+                // the measurements, including why `limit` must stay at or below
+                // 500.
                 const leaguePath = activeTab === 'college' ? 'college-football' : 'nfl';
-                url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?dates=${dateStr}&limit=200`;
+                const { events, monthsFailed } = await fetchScoreboardWindow<Game>(leaguePath, past, future);
+                fetchedGames = events;
+                // Partial failure is stated rather than silently shown as a short
+                // list — the games we did get are still worth rendering.
+                if (monthsFailed > 0) setError('Some scores could not be loaded. Showing what we have.');
             }
-
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('Failed to fetch scores');
-
-            const data: { events: Game[] } = await response.json();
-            let fetchedGames = data.events || [];
 
             // For basketball, always include LIVE games + any game featuring an AP Top 25 team
             if (activeTab === 'basketball') {
@@ -341,7 +350,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                         return (
                             <div
                                 key={game.id}
-                                className={`bg-navy-900 border rounded-xl p-4 transition-all ${isLive
+                                className={`bg-navy-900 border rounded-xl p-4 transition-ui ${isLive
                                     ? 'border-brandred-600/50'
                                     : 'border-[rgba(230,206,150,0.16)] hover:border-[rgba(230,206,150,0.35)]'
                                     }`}
@@ -462,19 +471,19 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 <div className="flex gap-2 mb-6">
                     <button
                         onClick={() => setActiveTab('nfl')}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'nfl' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 flex items-center gap-2 ${activeTab === 'nfl' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
                         <Shield size={16} /> NFL
                     </button>
                     <button
                         onClick={() => setActiveTab('college')}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'college' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 flex items-center gap-2 ${activeTab === 'college' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
                         <GraduationCap size={16} /> College Football
                     </button>
                     <button
                         onClick={() => setActiveTab('basketball')}
-                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 flex items-center gap-2 ${activeTab === 'basketball' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
+                        className={`px-6 py-3 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 flex items-center gap-2 ${activeTab === 'basketball' ? 'bg-gold-foil text-navy-900' : 'bg-navy-900 text-[#9FB0CC] hover:bg-navy-800'}`}
                     >
                         <Volleyball size={16} /> NCAA Basketball
                     </button>
@@ -506,7 +515,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
 
                 {/* categorized games sections */}
                 {!loading && (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div className="animate-in fade-in">
                         {/* Basketball: always show LIVE section first */}
                         {activeTab === 'basketball' && renderLiveSection(categorizedGames.live)}
 

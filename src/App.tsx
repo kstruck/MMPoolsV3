@@ -391,7 +391,7 @@ const App: React.FC = () => {
           <Route path="/contact" element={
             <ContactPage
               user={user}
-              onLogin={() => handleOpenAuth('login')}
+              onLogin={handleOpenAuth}
               onLogout={handleLogout}
               onCreatePool={handleCreatePoolClick}
             />

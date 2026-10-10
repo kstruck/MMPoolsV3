@@ -62,7 +62,7 @@ export const MatchNode: React.FC<MatchNodeProps> = ({ game, picks, onPick, readO
     const nodeWidth = comparisonPicks ? 'w-32 sm:w-36' : 'w-40';
 
     return (
-        <div className={`flex flex-col border border-line bg-card rounded overflow-hidden ${nodeWidth} shadow-sm transition-all ${isChampionship ? 'scale-110 border-gold-500/60 shadow-[0_2px_8px_rgba(140,109,51,0.2)]' : 'hover:border-gold-500/50'} ${diffStatus ? 'z-10' : ''}`}>
+        <div className={`flex flex-col border border-line bg-card rounded overflow-hidden ${nodeWidth} shadow-sm transition-ui ${isChampionship ? 'scale-110 border-gold-500/60 shadow-[0_2px_8px_rgba(140,109,51,0.2)]' : 'hover:border-gold-500/50'} ${diffStatus ? 'z-10' : ''}`}>
             <TeamSlot
                 teamId={displayHomeId}
                 seed={extractSeedFromId(displayHomeId) ?? teamCtx[displayHomeId ?? '']?.seed}

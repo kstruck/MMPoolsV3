@@ -4,17 +4,18 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { writeAuditEvent, type AuditOptions } from "./audit";
 import { checkBillingAccess } from "./billing";
 import { writeLedgerEvent } from "./paymentLedger";
-import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, stripPrivilegedPoolFields, computeLaunchMode, assertPaidParticipantCeiling, simRunIdForCreate, assertSeasonNotForgedSim, isPoolOwnerOrManager } from "./poolOps";
 import { loadBillingConfig, resolveCouponForQuote } from "./billing";
 import { validLaunchCouponCode } from "./lib/launchCoupon";
 import { normalizeAddonSelection } from "./lib/launchFields";
 import { assertPoolCreationAllowed, assertNotMaintenance, assertNotBannedLive } from "./lib/systemGuards";
 import { isPoolType, type PoolType } from "./shared/poolTypes";
 import { nflWeekLabel } from "./shared/nflWeekLabel";
+import { sendNFLPickConfirmation, type CommittedPickSave } from "./nflPickConfirmation";
 import { ensureMemberRecord, membersCol } from "./lib/memberRecord";
 import { assertEntryAdmitted, assertEntryNameFree, entryCountWrite, entryHasPick, freeDefaultEntryName, ownerStateAfter, resolveOwnedEntry } from "./lib/multiEntry";
 import type { MemberRecord } from "./shared/memberRecord";
-import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
+import { effectiveWeekLockAt, isGameLocked as isGameLockedAt, isGameLockedForGame, effectiveLockSettings, usesWeeklyHardLock, weekLockDecision, ensureHardLockFreeze } from "./lib/effectiveLock";
 import { isTerminalGame, isWeekComplete } from "./lib/weekCompletion";
 import {
   validateCreateInput,
@@ -35,6 +36,7 @@ import {
 import {
   scorePickemEntry,
   validateConfidenceValues,
+  validatePerGameConfidence,
   computeSurvivorWeekUpdate,
   computeMNFTiebreakerTotal,
   buildWeeklyRecap,
@@ -63,7 +65,9 @@ import {
 import { nextEntryRevision, ENTRY_REVISION_FIELD } from './lib/entryRevision';
 import { countTeamUses, effectiveMaxTeamUses, UNLIMITED_TEAM_USES } from './shared/survivorReuse';
 import { isVoidedPool } from './lib/autoScoreDecisions';
+import { assertPoolAcceptsPlay } from './lib/settlement';
 import { resolveGameSpreads } from './lib/frozenSpreads';
+import { pickSubjectName } from './lib/displayName';
 import { fetchNFLWeekSchedule } from './nflSchedule';
 import { recomputeWeekConsensus } from './consensus';
 import { validated } from "./lib/validated";
@@ -72,6 +76,8 @@ import { joinNFLPoolSchema, executeSurvivorRebuySchema, scoreNFLWeekSchema } fro
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { FREE_PLAN_PARTICIPANT_CAP, FREE_PLAN_FULL_MESSAGE } from "./shared/freePlanCap";
 import { rethrowOrInternal } from "./lib/safeError";
+import { stampLockRuleVersion } from "./lib/lockRuleVersion";
+import { nflLockMode, confidenceSlateFor } from "./shared/nflLockMode";
 
 /**
  * The week label a HUMAN reads — "HOF Weekend", not "Week 1".
@@ -190,6 +196,8 @@ export const createNFLPool = validated(
     // computed above the creation guard).
     if (simRunId) newPool.simRunId = simRunId;
     assertSeasonNotForgedSim(newPool.season, simRunId);
+    // PLAN-CONFIDENCE-PER-GAME-LOCK: a new pool's stored lockMode is the truth.
+    stampLockRuleVersion(newPool);
 
     const userRef = db.collection('users').doc(uid);
 
@@ -286,6 +294,61 @@ export interface MemberActionContext {
 }
 
 /**
+ * The two seat gates a NEW participant must pass, in one place so the explicit
+ * join (`joinNFLPoolInternal`) and the implicit one (`submitNFLPicksInternal`,
+ * PLAN-ADMIN-PICK-IMPLICIT-JOIN) cannot drift. `participantCount` is the roster
+ * size BEFORE this joiner. Pure; exported for unit tests.
+ */
+export function assertJoinCapacity(
+  poolData: { billing?: { status?: string; paid?: { maxPlayersAllowed?: number } } | null },
+  participantCount: number,
+): void {
+  const billingStatus = poolData.billing?.status ?? 'free';
+  if (billingStatus === 'free' && participantCount >= FREE_PLAN_PARTICIPANT_CAP) {
+    // G9 — MEMBER-appropriate copy. This is the message the 11th INVITEE
+    // sees, and it used to explain the platform's billing tiers to someone
+    // who has no billing relationship with us: "Free Plan", "upgrade to
+    // premium", "pool manager". Nothing in it told them what to do, and it
+    // read as though they had done something wrong. Say what happened, whose
+    // move it is, and nothing about our pricing.
+    throw new HttpsError('failed-precondition', FREE_PLAN_FULL_MESSAGE);
+  }
+  // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
+  // its purchased participant ceiling. No-op for free/trial pools.
+  assertPaidParticipantCeiling(poolData.billing, participantCount);
+}
+
+/**
+ * EVERY write that enrolls `uid` as a participant, staged into the caller's
+ * transaction — one definition shared by the explicit join
+ * (`joinNFLPoolInternal`) and the implicit one (`submitNFLPicksInternal`), so
+ * the two paths cannot drift (qodo #5 on PR #686). The roster slot is returned
+ * as a PATCH rather than written, so each caller can merge it into the pool
+ * update it already issues (`entryCount` rides the same write). `name`/`type`
+ * are coalesced to `null`: firebase-admin here does not set
+ * `ignoreUndefinedProperties`, and an `undefined` field would reject the whole
+ * transaction — entry and Member Record included (qodo #1).
+ */
+export function stageEnrollment(
+  tx: admin.firestore.Transaction,
+  db: admin.firestore.Firestore,
+  poolId: string,
+  poolData: { name?: unknown; type?: unknown },
+  uid: string,
+  role: string,
+  joinedAt: number,
+): { participantIds: admin.firestore.FieldValue } {
+  tx.set(db.collection('users').doc(uid).collection('participations').doc(poolId), {
+    poolId,
+    joinedAt,
+    name: poolData.name ?? null,
+    type: poolData.type ?? null,
+    role,
+  }, { merge: true });
+  return { participantIds: FieldValue.arrayUnion(uid) };
+}
+
+/**
  * Join flow, extracted verbatim from the joinNFLPool callable (auth/maintenance
  * checks stay in the wrapper — they are auth-plane concerns). Enrolls the SUBJECT:
  * participantIds, participation doc, Member Record, join audit event.
@@ -302,7 +365,6 @@ export async function joinNFLPoolInternal(
   }
 
   const poolRef = db.collection('pools').doc(poolId);
-  const userRef = db.collection('users').doc(uid);
 
   const poolSnap = await poolRef.get();
   if (!poolSnap.exists) {
@@ -310,12 +372,23 @@ export async function joinNFLPoolInternal(
   }
 
   const pool = poolSnap.data() as any;
-  const joinerName = ctx.subjectName || (await userRef.get()).data()?.name || 'Member';
 
-  await db.runTransaction(async (transaction) => {
+  // Lease-checked like its two siblings (PLAN-SPLIT-POT-SETTLEMENT review r1 #2):
+  // a join moves `entryCount`, which a settlement's finalizer prices the pot on.
+  await retryWhileScoring(() => db.runTransaction(async (transaction) => {
+    await assertNoScoringInProgress(transaction, poolRef, Date.now());
     const poolDoc = await transaction.get(poolRef);
     // Member Record read (before any writes) so we can seed it without clobbering paid state.
     const memberSnap = await transaction.get(membersCol(db, poolId).doc(uid));
+    // Profile first, token second (lib/displayName.ts): the profile is what the
+    // person or an admin last set; the token is what Auth knew at sign-in.
+    // READ IN THE TRANSACTION, so the profile is in its conflict set: a name
+    // edit (and its propagation) landing between a pre-transaction read and
+    // this commit would otherwise be overwritten by the captured, older value
+    // (qodo #690 finding 2). A concurrent edit now retries the transaction,
+    // which re-reads and stamps the newer name.
+    const profileSnap = await transaction.get(db.collection('users').doc(uid));
+    const joinerName = pickSubjectName(profileSnap.data()?.name, ctx.subjectName) || 'Member';
     const poolData = poolDoc.data();
     if (!poolData) throw new HttpsError('not-found', 'Pool data not found');
 
@@ -325,6 +398,11 @@ export async function joinNFLPoolInternal(
     const membersForCount = typeof poolData.entryCount === 'number'
       ? null
       : (await transaction.get(membersCol(db, poolId))).docs.map(d => d.data() as Record<string, unknown>);
+
+    // Nobody joins a pool that is over — not even an existing participant
+    // re-running join: that branch can create a Member Record and move
+    // `entryCount` (codex code-review r6). The only caller is the Join page.
+    assertPoolAcceptsPlay(poolData);
 
     const participantIds = poolData.participantIds || [];
     if (participantIds.includes(uid)) {
@@ -340,19 +418,7 @@ export async function joinNFLPoolInternal(
       return;
     }
 
-    const billingStatus = poolData.billing?.status ?? 'free';
-    if (billingStatus === 'free' && participantIds.length >= FREE_PLAN_PARTICIPANT_CAP) {
-      // G9 — MEMBER-appropriate copy. This is the message the 11th INVITEE
-      // sees, and it used to explain the platform's billing tiers to someone
-      // who has no billing relationship with us: "Free Plan", "upgrade to
-      // premium", "pool manager". Nothing in it told them what to do, and it
-      // read as though they had done something wrong. Say what happened, whose
-      // move it is, and nothing about our pricing.
-      throw new HttpsError('failed-precondition', FREE_PLAN_FULL_MESSAGE);
-    }
-    // Paid-ceiling gate (NOTES-WAVE2 A2, PLAN 6b(iii)): a PAID pool cannot exceed
-    // its purchased participant ceiling. No-op for free/trial pools.
-    assertPaidParticipantCeiling(poolData.billing, participantIds.length);
+    assertJoinCapacity(poolData, participantIds.length);
 
     // 3 (moved up so its liability delta can ride the pool write below).
     // Seed the Member Record (roster + payment truth, ADR 0003) — additive.
@@ -371,21 +437,13 @@ export async function joinNFLPoolInternal(
       },
       memberSnap.exists ? (memberSnap.data() as MemberRecord) : null, Date.now());
 
-    // 1. Add participant to pool collection (+ the liable-entry count, D8)
+    // 1 + 2. Roster slot and the user-profile participation mirror — one
+    // shared definition (`stageEnrollment`), merged with the liable-entry count (D8).
     transaction.update(poolRef, {
-      participantIds: FieldValue.arrayUnion(uid),
+      ...stageEnrollment(transaction, db, poolId, poolData, uid, 'PARTICIPANT', Date.now()),
       ...entryCountWrite(poolData, membersForCount, stamp.liabilityDelta),
     });
-
-    // 2. Add participation to user profile
-    transaction.set(userRef.collection('participations').doc(poolId), {
-      poolId,
-      joinedAt: Date.now(),
-      name: poolData.name,
-      type: poolData.type,
-      role: 'PARTICIPANT'
-    });
-  });
+  }));
 
   await writeAuditEvent({
     poolId,
@@ -422,7 +480,12 @@ export function assertNFLPickMembership(
   tokenRole?: string,
 ): void {
   const isMember = Array.isArray(pool.participantIds) && pool.participantIds.includes(uid);
-  const isOwnerOrManager = pool.ownerId === uid || pool.managerUid === uid || pool.createdByUid === uid;
+  // `ownerId` is canonical and `createdByUid` only a fallback when it is absent
+  // (poolOps `isPoolOwnerOrManager`, PLAN-CO-COMMISSIONERS D3). This gate used
+  // to treat the two as coequal, which admitted a stale creator on any pool
+  // whose two fields disagree — harmless-ish while a pick wrote no roster slot,
+  // durable membership once the implicit join landed (qodo #3 on PR #686).
+  const isOwnerOrManager = isPoolOwnerOrManager(pool, uid);
   if (!isMember && !isOwnerOrManager && tokenRole !== 'SUPER_ADMIN') {
     throw new HttpsError('permission-denied', 'NOT_POOL_MEMBER: Join this pool before submitting picks.');
   }
@@ -439,8 +502,19 @@ export async function submitNFLPicksInternal(
   db: admin.firestore.Firestore,
   ctx: MemberActionContext,
   payload: { poolId?: string; week?: number; picks?: any; confidence?: any; tiebreakerPrediction?: number; entryIndex?: number; entryName?: string; displayedTiebreakTargetIds?: string[] },
+  // Out-param for the callable wrapper's pick confirmation email. Set to the
+  // id of the entry this call WROTE; left unset on a requestId replay (a client
+  // resend of a save that already landed), so a resend emails nothing. An
+  // out-param rather than a new return field: the response shape is a contract
+  // the client and the emulator suites compare exactly.
+  committed?: CommittedPickSave,
 ): Promise<{ success: true }> {
   const uid = ctx.subjectUid;
+  // What the attempt that COMMITTED wrote, captured inside the transaction so
+  // the email describes THIS save — a read after commit could already see a
+  // concurrent later save (codex r2). Reset per attempt: the body re-runs on
+  // retry, and a later attempt can be a replay.
+  let written: CommittedPickSave | undefined;
   // deep clean input
   const data = JSON.parse(JSON.stringify(payload || {}));
   const { poolId, week, picks, confidence, tiebreakerPrediction } = data;
@@ -474,17 +548,19 @@ export async function submitNFLPicksInternal(
 
   assertNFLPickMembership(pool, uid, ctx.actorRole);
 
-  // Display name for the rows this submission writes. The ID token's `name` is
-  // minted at sign-in and registration sets `displayName` AFTER that (
-  // src/services/authService.ts), so anyone who registers → joins → picks in one
-  // sitting has no token name for the life of that token (~1h) and every row they
-  // touched read "Participant". Same fallback chain joinNFLPoolInternal already
-  // uses; `undefined` when neither source has a name, so the call sites can prefer
-  // a name already stored over overwriting it with the placeholder. Read outside
-  // the transaction — it is not part of any invariant the transaction defends.
-  const subjectName: string | undefined = ctx.subjectName
-    || (await db.collection('users').doc(uid).get()).data()?.name
-    || undefined;
+  // Display name for the rows this submission writes. PROFILE FIRST, token
+  // second (lib/displayName.ts). The token's `name` is minted at sign-in: it is
+  // empty for the life of the token (~1h) when someone registers → joins → picks
+  // in one sitting, and it is STALE after a profile edit — which is how a fixed
+  // name kept reverting on the next pick (2026-09-10). `undefined` when neither
+  // source has a name, so the call sites can prefer a name already stored over
+  // overwriting it with the placeholder.
+  // ASSIGNED INSIDE THE TRANSACTION (qodo #690 finding 2): the profile read
+  // joins the transaction's conflict set, so a name edit landing between the
+  // read and the commit retries the attempt instead of stamping the older
+  // value over the newer propagated one. `retryWhileScoring` re-runs the
+  // callback, and each run re-reads — hence `let`, refreshed per attempt.
+  let subjectName: string | undefined;
 
   const type = pool.type;
   // MUTABLE, and refreshed at the top of every transaction attempt below. The
@@ -553,8 +629,16 @@ export async function submitNFLPicksInternal(
   const effectiveWeekLock = decision.freezeTo !== undefined
     ? await ensureHardLockFreeze(poolRef, db.runTransaction.bind(db) as never, week, decision.lockAt)
     : decision.lockAt;
-  // `effectiveWeekLock` is a fixed instant, so only the clock has to move.
-  let weekLocked = now >= effectiveWeekLock;
+  // `effectiveWeekLock` is a fixed instant, so only the clock has to move — except
+  // in a confidence pool, where a game that has left SCHEDULED closes the week
+  // whatever the feed's `startTime` now says (PLAN-CONFIDENCE-PER-GAME-LOCK
+  // §3.2a, codex r3): the status half never moves either.
+  // STARTED (live or final) — not CANCELLED: a game cancelled before kickoff is
+  // locked by itself but is no evidence the week's first kickoff happened
+  // (codex r11).
+  const weekStatusLocked = lockSettings.kickoffCeiling === true
+    && games.some(g => g.status === 'IN_PROGRESS' || g.status === 'FINAL');
+  let weekLocked = weekStatusLocked || now >= effectiveWeekLock;
 
   await retryWhileScoring(() => db.runTransaction(async (transaction) => {
     // Reads first (Firestore requires it) and the lease read first of all: a
@@ -564,12 +648,43 @@ export async function submitNFLPicksInternal(
     // Fresh clock per ATTEMPT — this body re-runs on a Firestore contention retry
     // and on a lease-busy retry, and every lock check below reads `now`.
     now = Date.now();
-    weekLocked = now >= effectiveWeekLock;
+    written = undefined;
+    weekLocked = weekStatusLocked || now >= effectiveWeekLock;
     await assertNoScoringInProgress(transaction, poolRef, now);
     // The pool doc as of THIS attempt: the max is judged against it (raise-only,
     // so a concurrent raise can only admit more) and `entryCount` is read off it.
     const poolInTx = (await transaction.get(poolRef)).data() as Record<string, any> | undefined;
+    // The display name, read in THIS attempt (see the `let` above).
+    subjectName = pickSubjectName((await transaction.get(db.collection('users').doc(uid))).data()?.name, ctx.subjectName);
     if (!poolInTx) throw new HttpsError('not-found', 'Pool not found.');
+    // PLAN-SPLIT-POT-SETTLEMENT §2.3: a voided, closed (settled) or finalized
+    // pool takes no more play. Judged on the pool AS READ IN THIS TRANSACTION.
+    assertPoolAcceptsPlay(poolInTx);
+    // IMPLICIT JOIN (PLAN-ADMIN-PICK-IMPLICIT-JOIN). `assertNFLPickMembership`
+    // admits three kinds of caller: a participant, the owner/manager, and a
+    // SUPER_ADMIN. Only the first is guaranteed to be in `participantIds`, and
+    // that array is what every roster reader keys off — My Entries
+    // (`ParticipantDashboard.tsx`), the participant count, reminder targets,
+    // payout records and the Firestore rules. Measured 2026-09-10 on prod pool
+    // ubHD4bgszL05oURYubrn: a SUPER_ADMIN who submitted picks without ever
+    // calling joinNFLPool got a Member Record and an entry, but no
+    // `participantIds` slot, so the pool he was PAID into was invisible to him.
+    // A pick that is accepted is a membership, so this write makes the roster
+    // say so. The seat gates still apply to the bypass — a super admin joins a
+    // full pool exactly as any other new participant would not (§D1); the
+    // owner/manager is the host and is never counted against their own ceiling.
+    //
+    // RE-ASSERTED AGAINST THE IN-TRANSACTION DOC (qodo #2 on PR #686). The gate
+    // above ran on a snapshot read before this transaction opened. A member the
+    // commissioner removes in that window is absent from `poolInTx`'s roster,
+    // and reading that absence as "join" would recreate the slot, the Member
+    // Record and the mirror — undoing a completed removal. So an ordinary caller
+    // must still be on THIS roster; only the host and a confirmed SUPER_ADMIN may
+    // be enrolled by a pick. Same precedence as the gate: `ownerId` canonical.
+    assertNFLPickMembership(poolInTx, uid, ctx.actorRole);
+    const rosterInTx: string[] = Array.isArray(poolInTx.participantIds) ? poolInTx.participantIds : [];
+    const implicitJoin = !rosterInTx.includes(uid);
+    const isHost = isPoolOwnerOrManager(poolInTx, uid);
     // Which doc is "entry n of uid" — deterministic id, owned-entries set, and
     // the auto-id fallback, all read in this transaction (lib/multiEntry.ts).
     const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
@@ -601,6 +716,11 @@ export async function submitNFLPicksInternal(
     if (requestId && existingEntry?.lastRequestId === requestId) {
       return;
     }
+    // Seat gates for the implicit join — AFTER the replay no-op above (qodo #8
+    // on PR #686): a replay of a request that already landed must stay a
+    // no-op success, never a capacity refusal, even for a caller whose first
+    // landing predates the implicit join and left them off the roster.
+    if (implicitJoin && !isHost) assertJoinCapacity(poolInTx, rosterInTx.length);
 
     // --- LOCK CHECKS & POOL SPECIFIC VALIDATIONS ---
 
@@ -622,8 +742,103 @@ export async function submitNFLPicksInternal(
     let frozenTargetWrite: Record<string, string[]> | null = null;
 
     if (type === 'NFL_PICKEM') {
-      const settings = pool.settings;
-      const weeklyLockMode = settings.confidenceMode || settings.lockMode === 'WEEKLY';
+      // The settings AS OF THIS ATTEMPT (codex r7): a manager enabling
+      // confidence mode can commit between the pre-transaction read and here,
+      // and Firestore then re-runs this body against the new pool doc. Reading
+      // the stale copy would write a confidence entry with no weights — and the
+      // confidence-mode gate would then refuse to correct the setting, because
+      // that entry now holds a pick. The lock instants above were computed from
+      // the pre-transaction settings, so a mode change mid-flight is refused
+      // rather than applied to arithmetic done under the other mode; the
+      // client's ordinary retry lands on a consistent read.
+      const settings = (poolInTx.settings ?? pool.settings) as typeof pool.settings;
+      // `lockRevision` covers the rest: every lock-affecting save bumps it
+      // (buffer, extension, mode), so one comparison catches a deadline edit
+      // that landed after the pre-transaction arithmetic (qodo #9 on #687).
+      if (settings.confidenceMode !== pool.settings?.confidenceMode
+          || settings.lockMode !== pool.settings?.lockMode
+          || settings.lockRuleVersion !== pool.settings?.lockRuleVersion
+          || (settings as { lockRevision?: number }).lockRevision !== (pool.settings as { lockRevision?: number } | undefined)?.lockRevision) {
+        throw new HttpsError('aborted', 'SETTINGS_CHANGED: the pool\'s lock settings changed while your picks were being saved. Please submit again.');
+      }
+      // ONE rule, imported (PLAN-CONFIDENCE-PER-GAME-LOCK T2) — never restated
+      // here again. A confidence pool plays weekly only while unstamped (legacy)
+      // or when its lockMode says so.
+      const weeklyLockMode = nflLockMode(type, settings) === 'WEEKLY';
+      // D3: on a PER_GAME pool the tiebreaker prediction closes with its TARGET
+      // game(s); computed inside the tiebreak block below, read after it.
+      let tiebreakTargetLockedNow = false;
+      // What actually lands in `weeklyTiebreakers[week]` — D3 may drop it.
+      let predictionToWrite: number | undefined = tiebreakerPrediction;
+
+      // THIS WEEK'S KEYS ONLY (codex r6 on the diff). The pick sheet hydrates the
+      // entry's whole-season `picks` / `confidence` maps and sends them back on
+      // every save, so a Week-2 submission carries Week-1 keys. A key outside
+      // this week's slate is never validated and never written; a resent prior
+      // week (even a stale draft of it) therefore cannot overwrite that week,
+      // and a stray key cannot land under `merge`. Whether it is REFUSED or
+      // IGNORED keeps each branch's long-standing contract:
+      //   - WEEKLY tolerated any other-week key (a pick for another week's game
+      //     never marked this week and never failed the save —
+      //     `blindPicks.emulator.test.ts`);
+      //   - PER_GAME refused an id not on this week's slate ("Game … not found"
+      //     — `hofDressRehearsal`: a preseason pool must not see the
+      //     regular-season slate), and still does for a key the entry has never
+      //     held. A key the entry already holds is history being resent, and is
+      //     ignored.
+      const onlyThisWeek = <T>(map: Record<string, T>, stored: Record<string, T>): Record<string, T> => {
+        const out: Record<string, T> = {};
+        for (const [k, v] of Object.entries(map)) {
+          if (weekGameIds.has(k)) out[k] = v;
+          else if (!weeklyLockMode && stored[k] === undefined) {
+            throw new HttpsError('invalid-argument', `Game ${k} not found.`);
+          }
+        }
+        return out;
+      };
+      const weekPicks: Record<string, string> = onlyThisWeek(
+        picks as Record<string, string>, (existingEntry?.picks ?? {}) as Record<string, string>);
+      const weekWeights: Record<string, number> = settings.confidenceMode
+        ? onlyThisWeek((confidence || {}) as Record<string, number>, (existingEntry?.confidence ?? {}) as Record<string, number>)
+        : {};
+
+      // FRESH STATUS FOR WHAT THIS SAVE CHANGES (qodo #5 on #687). The slate was
+      // read before the transaction; a game that flips SCHEDULED → IN_PROGRESS
+      // between that read and this commit is invisible to Firestore's conflict
+      // detection unless its doc is read HERE. In a confidence pool "started"
+      // is the whole rule, so the games whose pick or weight this save would
+      // change are re-read inside the transaction (reads precede every write
+      // below) and their live status overrides the pre-read copy. Straight
+      // pools keep the clock rule and need no read.
+      const liveById = new Map<string, NFLGame>();
+      if (lockSettings.kickoffCeiling === true) {
+        // The WHOLE slate, in either mode. WEEKLY: any game starting closes the
+        // sheet (codex r11). PER_GAME: a game that started since the pre-read
+        // and that this save does NOT touch still changes the confidence slate
+        // — it becomes a MISS, which shrinks the range — so judging the sheet
+        // on its stale SCHEDULED status would refuse a valid save as
+        // "incomplete" (codex r12). At most the week's games, confidence pools
+        // only; reads precede every write below.
+        const snaps = await Promise.all(games.map(g => transaction.get(db.collection('nfl_games').doc(g.id))));
+        for (const s of snaps) {
+          const d = s.data() as Partial<NFLGame> | undefined;
+          const base = games.find(g => g.id === s.id);
+          // Status AND kickoff (codex r14): a still-SCHEDULED game rescheduled
+          // since the pre-read must be judged on its new time, not the old.
+          if (base && d) {
+            liveById.set(s.id, {
+              ...base,
+              ...(typeof d.status === 'string' ? { status: d.status as NFLGame['status'] } : {}),
+              ...(typeof d.startTime === 'number' ? { startTime: d.startTime } : {}),
+            });
+          }
+        }
+      }
+      const live = (g: NFLGame): NFLGame => liveById.get(g.id) ?? g;
+      // Started — live or final — not merely non-SCHEDULED (a cancellation is
+      // not a kickoff; codex r11).
+      const liveStatusLocksWeek = lockSettings.kickoffCeiling === true
+        && games.some(g => { const s = live(g).status; return s === 'IN_PROGRESS' || s === 'FINAL'; });
 
       // PLAN-WEEKLY-PRIZES §2b / §9 A6 — freeze the week's tiebreak TARGET on
       // the first submission, once per pool-week, and hold every later
@@ -649,6 +864,21 @@ export async function submitNFLPicksInternal(
         const frozenTarget = frozenTiebreakTargetFor(poolInTx as { frozenTiebreakTargets?: Record<string, unknown> }, week);
         const canonicalTarget = resolveTiebreakTargetIds(games, tiebreakRule);
         const authoritative = applyFrozenTarget(frozenTarget, games, tiebreakRule);
+        // D3 (PLAN-CONFIDENCE-PER-GAME-LOCK): the prediction is an answer about
+        // the TARGET game(s), so it closes when they do — when the week has no
+        // target, when the week's last game does. Pre-existing hole: the
+        // PER_GAME branch never checked it, so a member could rewrite the
+        // number after Monday night kicked off.
+        const targetGames = authoritative.length > 0
+          ? games.filter(g => authoritative.includes(g.id))
+          : [games.reduce((last, g) => (g.startTime > last.startTime ? g : last), games[0])];
+        // `some`, not `every` (codex r4): a legacy MNF_COMBINED target is the SUM
+        // of two Monday games, and once the first has started a member holding
+        // the prediction open until the second locks would be revising a total
+        // with half the outcome known.
+        // Transaction-fresh status (codex r13): the target may have kicked off
+        // since the pre-read, and `live()` already holds what this attempt saw.
+        tiebreakTargetLockedNow = targetGames.some(g => isGameLockedForGame(now, live(g), week, lockSettings));
         // Hoisted: both the rejection below and the freeze guard further down
         // are scoped to the ONE week whose meaning this release changed.
         const noMondayGame = games.every(g => g.isMonday !== true);
@@ -728,29 +958,90 @@ export async function submitNFLPicksInternal(
       }
 
       if (weeklyLockMode) {
-        if (weekLocked) {
+        if (weekLocked || liveStatusLocksWeek) {
           throw new HttpsError('failed-precondition', 'WEEK_LOCKED: All picks in weekly lock pools are locked.');
         }
 
         // Validate unique confidence set if enabled
         if (settings.confidenceMode) {
-          const confResult = validateConfidenceValues(picks, confidence || {}, games);
+          const confResult = validateConfidenceValues(weekPicks, weekWeights, games);
           if (!confResult.valid) {
             throw new HttpsError('invalid-argument', confResult.error ?? 'Invalid confidence values.');
           }
         }
       } else {
-        // PER_GAME lock checks
-        for (const [gameId, pickedTeam] of Object.entries(picks)) {
+        // PER_GAME lock checks — status-aware in a confidence pool, where a game
+        // that has left SCHEDULED is locked whatever the clock says
+        // (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a).
+        const lockedNow = (g: NFLGame) => isGameLockedForGame(now, live(g), week, lockSettings);
+        for (const [gameId, pickedTeam] of Object.entries(weekPicks)) {
           const game = games.find(g => g.id === gameId);
           if (!game) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
-
-          const isGameLocked = isGameLockedAt(now, game.startTime, week, lockSettings);
           const oldPick = existingEntry?.picks?.[gameId];
-
-          if (isGameLocked && oldPick !== pickedTeam) {
+          if (lockedNow(game) && oldPick !== pickedTeam) {
             throw new HttpsError('failed-precondition', `GAME_LOCKED: Pick for game ${gameId} is locked.`);
           }
+        }
+
+        // PER_GAME confidence (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2, D2): a locked
+        // game's WEIGHT is as immutable as its pick, and the merged sheet — what
+        // the entry holds after this write — is judged as a whole over the
+        // confidence slate (a CANCELLED game nobody picked is not in it).
+        if (settings.confidenceMode) {
+          const submittedWeights: Record<string, number> = weekWeights;
+          const storedPicks = (existingEntry?.picks ?? {}) as Record<string, string>;
+          const storedWeights = (existingEntry?.confidence ?? {}) as Record<string, number>;
+          // Every weight key names a game in THIS week's slate (codex r1 #7):
+          // the schema allows an independent map, and a stray key would be
+          // written under merge and never validated again.
+          for (const gameId of Object.keys(submittedWeights)) {
+            if (!weekGameIds.has(gameId)) throw new HttpsError('invalid-argument', `Game ${gameId} not found.`);
+          }
+          // The slate first: a weight on a game that is not in play (a CANCELLED
+          // game nobody picked) is a clearer refusal than "locked".
+          const slate = confidenceSlateFor(games, storedPicks, lockedNow, storedWeights);
+          const slateSet = new Set(slate.slateIds);
+          for (const gameId of Object.keys(submittedWeights)) {
+            if (!slateSet.has(gameId)) {
+              throw new HttpsError('invalid-argument', `Game ${gameId} is not in play this week.`);
+            }
+          }
+          // Locked weight — whether or not a pick was sent alongside it.
+          for (const game of games) {
+            const sent = submittedWeights[game.id];
+            if (sent !== undefined && lockedNow(game) && sent !== storedWeights[game.id]) {
+              throw new HttpsError('failed-precondition', `CONFIDENCE_LOCKED: Confidence for game ${game.id} is locked.`);
+            }
+          }
+          const merged = { picks: {} as Record<string, string>, confidence: {} as Record<string, number> };
+          for (const id of slate.slateIds) {
+            const p = picks[id] ?? storedPicks[id];
+            if (p !== undefined) merged.picks[id] = p;
+            const w = submittedWeights[id] ?? storedWeights[id];
+            if (w !== undefined) merged.confidence[id] = w;
+          }
+          const openIds = new Set(games.filter(g => !lockedNow(g)).map(g => g.id));
+          const confResult = validatePerGameConfidence(merged, slate, openIds);
+          if (!confResult.valid) {
+            throw new HttpsError('invalid-argument', confResult.error ?? 'Invalid confidence values.');
+          }
+        }
+
+        // D3: once the tiebreak target has locked, a prediction the member
+        // already holds cannot CHANGE (refused, so they know); a prediction they
+        // never recorded cannot be recorded now (dropped, not refused — their
+        // open picks still save, and the number never lands). An unchanged
+        // resend is fine — the sheet always sends the number it holds.
+        // `goldenArc` submits a first pick on an open Sunday game with the
+        // Monday target already live; refusing the whole save there would block
+        // a valid pick over a number that is simply not taken.
+        if (tiebreakerPrediction !== undefined && tiebreakTargetLockedNow) {
+          const stored = existingEntry?.weeklyTiebreakers?.[week];
+          if (stored !== undefined && tiebreakerPrediction !== stored) {
+            throw new HttpsError('failed-precondition',
+              'TIEBREAK_LOCKED: the tiebreaker game has started, so the prediction can no longer be changed.');
+          }
+          if (stored === undefined) predictionToWrite = undefined;
         }
       }
 
@@ -767,11 +1058,18 @@ export async function submitNFLPicksInternal(
         entryIndex,
         ...(entryName ? { entryName } : {}),
         userName: subjectName || existingEntry?.userName || 'Participant',
-        picks: { ...(existingEntry?.picks || {}), ...picks },
-        ...(settings.confidenceMode && confidence ? { confidence } : {}),
+        picks: { ...(existingEntry?.picks || {}), ...weekPicks },
+        // The MERGED map, explicitly: the validator judged `stored ∪ submitted`,
+        // so that is what gets persisted. Relying on `{ merge: true }` to
+        // deep-merge the nested map would leave a weight the client dropped as
+        // stale (locked, changed, unsaved) at the mercy of the merge semantics —
+        // and a locked weight that vanished would score that pick 0 (codex r5).
+        ...(settings.confidenceMode && confidence
+          ? { confidence: { ...((existingEntry?.confidence ?? {}) as Record<string, number>), ...weekWeights } }
+          : {}),
         weeklyTiebreakers: {
           ...(existingEntry?.weeklyTiebreakers || {}),
-          ...(tiebreakerPrediction !== undefined ? { [week]: tiebreakerPrediction } : {})
+          ...(predictionToWrite !== undefined ? { [week]: predictionToWrite } : {})
         },
         totalScore: existingEntry?.totalScore ?? 0,
         submittedAt: now,
@@ -787,8 +1085,17 @@ export async function submitNFLPicksInternal(
         [ENTRY_REVISION_FIELD]: nextEntryRevision((existingEntry as any)?.[ENTRY_REVISION_FIELD]),
       }, { merge: true });
 
-      committedPickForWeek = Object.keys(picks).some(gameId => weekGameIds.has(gameId));
+      committedPickForWeek = Object.keys(weekPicks).length > 0;
       writtenPicks = pickemEntry.picks;
+      // Confidence: the merged map when this save wrote one; otherwise the
+      // `merge: true` set leaves the stored map in place, so report that.
+      written = {
+        entryId: entryRef.id,
+        ...(entryName ? { entryName } : {}),
+        picks: pickemEntry.picks,
+        confidence: pickemEntry.confidence ?? (existingEntry?.confidence as Record<string, number> | undefined) ?? null,
+        tiebreaker: pickemEntry.weeklyTiebreakers?.[week] ?? null,
+      };
 
     } else if (type === 'NFL_SURVIVOR') {
       const survivorEntry = (existingEntry as SurvivorEntry) || {
@@ -889,6 +1196,7 @@ export async function submitNFLPicksInternal(
       survivorEntry.userName = subjectName || survivorEntry.userName || 'Participant';
 
       writtenPicks = survivorEntry.picks;
+      written = { entryId: entryRef.id, ...(entryName ? { entryName } : {}), picks: { ...survivorEntry.picks } as Record<string, string> };
       transaction.set(entryRef, {
         ...survivorEntry,
         entryIndex,
@@ -954,6 +1262,7 @@ export async function submitNFLPicksInternal(
       marginEntry.userName = subjectName || marginEntry.userName || 'Participant';
 
       writtenPicks = marginEntry.picks;
+      written = { entryId: entryRef.id, ...(entryName ? { entryName } : {}), picks: { ...marginEntry.picks } as Record<string, string> };
       transaction.set(entryRef, {
         ...marginEntry,
         entryIndex,
@@ -997,7 +1306,17 @@ export async function submitNFLPicksInternal(
     // D8: `pool.entryCount` counts LIABLE entries — moved by exactly what this
     // write changed about the member's liability (0 on an ordinary resubmit).
     const countPatch = entryCountWrite(poolInTx, membersForCount, stamp.liabilityDelta);
-    if (Object.keys(countPatch).length > 0) transaction.update(poolRef, countPatch);
+    // The implicit join rides the SAME pool write as the count, in the same
+    // transaction as the entry and the Member Record: the roster can never say
+    // "member" without the entry, or hold the entry without saying "member".
+    // `arrayUnion` is idempotent, so a retry that re-runs this body is safe.
+    const poolPatch = {
+      ...countPatch,
+      ...(implicitJoin
+        ? stageEnrollment(transaction, db, poolId, poolInTx, uid, existingMember?.role ?? (isHost ? 'MANAGER' : 'PARTICIPANT'), now)
+        : {}),
+    };
+    if (Object.keys(poolPatch).length > 0) transaction.update(poolRef, poolPatch);
     // Only a submission that actually PLAYED the week freezes its target — an
     // empty / wrong-week submission (schema-valid, PLAN-EMPTY-SUBMISSION-FEE)
     // must not pin a target before any real entrant has one (codex r3 on #452).
@@ -1018,6 +1337,7 @@ export async function submitNFLPicksInternal(
     console.error('[submitNFLPicks] consensus recompute failed:', e);
   }
 
+  if (committed && written) Object.assign(committed, written);
   return { success: true };
 }
 
@@ -1031,8 +1351,10 @@ export const submitNFLPicks = validated(
   async (input, request) => {
     await assertNotBannedLive(request.auth!.uid);
     const token = request.auth!.token as { name?: string; role?: string };
-    return submitNFLPicksInternal(
-      admin.firestore(),
+    const db = admin.firestore();
+    const committed: CommittedPickSave = {};
+    const result = await submitNFLPicksInternal(
+      db,
       {
         actorUid: request.auth!.uid,
         // Unconfirmed SUPER_ADMIN claims stripped (Phase 3) — feeds
@@ -1044,7 +1366,23 @@ export const submitNFLPicks = validated(
         requestId: input.requestId,
       },
       input,
+      committed,
     );
+    // Pick confirmation email (nflPickConfirmation.ts). Only here — a member
+    // saving their own picks — never in the Internal, which proxy picks and
+    // the sim harness also drive. Built from what the transaction WROTE, not
+    // the input: the server merges earlier picks and can drop a submitted
+    // tiebreaker (codex r1). Never throws; a requestId replay leaves
+    // `committed` empty and sends nothing.
+    if (committed.entryId) {
+      await sendNFLPickConfirmation(db, {
+        uid: request.auth!.uid,
+        poolId: input.poolId,
+        week: input.week,
+        saved: committed,
+      });
+    }
+    return result;
   },
 );
 
@@ -1093,6 +1431,9 @@ export async function executeSurvivorRebuyInternal(
     // the strike ledger, so interleaving it with a scoring pass that is writing
     // strikes from a pre-rebuy snapshot re-eliminates the player who just paid.
     await assertNoScoringInProgress(transaction, poolRef, Date.now());
+    // PLAN-SPLIT-POT-SETTLEMENT §2.3: a voided, closed (settled) or finalized
+    // pool takes no more play. Judged on the pool AS READ IN THIS TRANSACTION.
+    assertPoolAcceptsPlay((await transaction.get(poolRef)).data());
     // Entry n of uid (lib/multiEntry.ts) — a rebuy never CREATES an entry.
     const target = await resolveOwnedEntry(transaction, poolRef, uid, entryIndex);
     const entryRef = target.ref;
@@ -1493,7 +1834,10 @@ async function scoreWeekPass(
   }
 
   const lockSettings = effectiveLockSettings(pool?.settings, pool?.type);
-  const gameLockClosed = (g: NFLGame) => isGameLockedAt(now, g.startTime, week, lockSettings);
+  // Status-aware in a confidence pool (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2a):
+  // a FINAL game whose feed `startTime` moved later is still closed, so its
+  // result is gradable and revealable — the same predicate the submit path uses.
+  const gameLockClosed = (g: NFLGame) => isGameLockedForGame(now, g, week, lockSettings);
   const revealed = (g: NFLGame) => isTerminalGame(g) && gameLockClosed(g);
 
   // Pick'em grades off this set. On a complete pass it IS `games`, so nothing

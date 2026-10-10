@@ -65,7 +65,7 @@ export const AddonUpgradeButton: React.FC<{
       type="button"
       onClick={buy}
       disabled={busy}
-      className={className ?? 'mt-2 inline-flex items-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed'}
+      className={className ?? 'mt-2 inline-flex items-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-ui duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed'}
     >
       <Sparkles size={13} aria-hidden="true" /> {busy ? 'Opening checkout…' : `Add ${label}`}
     </button>

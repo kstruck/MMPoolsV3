@@ -34,7 +34,7 @@ export const RegionTabs: React.FC<RegionTabsProps> = ({ activeRegion, onRegionCh
                         onClick={() => !isLocked && onRegionChange(region.id)}
                         disabled={isLocked}
                         className={`
-              flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all
+              flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-ui
               ${isActive
                                 ? 'bg-gold-foil text-navy-900 shadow-lg shadow-[rgba(140,109,51,0.28)]'
                                 : 'bg-card text-muted hover:text-[color:var(--text)]'

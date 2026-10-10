@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { markEntryPaidStatusSchema } from '../schemas/tournamentAdmin';
 import { calculatePlayoffScoresSchema } from '../schemas/playoffEntries';
-import { backfillMemberRecordsSchema, backfillPublishedWeeksSchema, reconcilePaymentTruthSchema } from '../schemas/migrations';
+import { backfillMemberRecordsSchema, backfillPublishedWeeksSchema, backfillConfidenceLockModeSchema, reconcilePaymentTruthSchema } from '../schemas/migrations';
 import { importNFLScheduleSchema } from '../schemas/nflSchedule';
 import { searchUsersByEmailSchema } from '../schemas/userManagement';
 import { recomputeMyProfileSchema } from '../schemas/userProfile';
@@ -72,6 +72,14 @@ describe('backfillMemberRecords — dry-run must default SAFE at the schema laye
     expect(backfillPublishedWeeksSchema.parse({ startAfter: null }).startAfter).toBeUndefined();
     expect(backfillPublishedWeeksSchema.safeParse({ startAfter: 42 }).success).toBe(false);
   });
+  it('backfillConfidenceLockMode accepts the identical null first-page cursor and defaults dryRun TRUE', () => {
+    expect(backfillConfidenceLockModeSchema.safeParse({ dryRun: true, limit: 200, startAfter: null }).success).toBe(true);
+    expect(backfillConfidenceLockModeSchema.parse({ startAfter: null }).startAfter).toBeUndefined();
+    expect(backfillConfidenceLockModeSchema.parse({}).dryRun).toBe(true);
+    expect(backfillConfidenceLockModeSchema.safeParse({ startAfter: 42 }).success).toBe(false);
+    expect(backfillConfidenceLockModeSchema.safeParse({ limit: 201 }).success).toBe(false);
+  });
+
   it('caps limit at the handler ceiling', () => {
     expect(backfillMemberRecordsSchema.safeParse({ limit: 101 }).success).toBe(false);
   });

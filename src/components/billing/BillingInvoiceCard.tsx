@@ -525,7 +525,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                 <button
                     type="button"
                     onClick={() => setActivePaymentTab('single')}
-                    className={`py-2 px-3 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    className={`py-2 px-3 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center justify-center gap-1.5 ${
                         activePaymentTab === 'single'
                             ? 'bg-navy-800 text-white shadow-lg'
                             : 'text-muted hover:text-[color:var(--text)]'
@@ -537,7 +537,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                 <button
                     type="button"
                     onClick={() => setActivePaymentTab('bundle')}
-                    className={`py-2 px-3 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    className={`py-2 px-3 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center justify-center gap-1.5 ${
                         activePaymentTab === 'bundle'
                             ? 'bg-navy-800 text-white shadow-lg'
                             : 'text-muted hover:text-[color:var(--text)]'
@@ -550,7 +550,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
 
             {/* Cancelled / abandoned checkout notice (shown on both tabs) */}
             {checkoutCancelled && (
-                <div className="p-3.5 bg-[#FBEEDD] border border-[#F2D6B0] rounded-xl flex items-start gap-2.5 animate-in fade-in duration-300">
+                <div className="p-3.5 bg-[#FBEEDD] border border-[#F2D6B0] rounded-xl flex items-start gap-2.5 animate-in fade-in">
                     <AlertTriangle size={16} className="text-[#B4530A] shrink-0 mt-0.5" />
                     <div className="text-xs text-left">
                         <strong className="text-[#B4530A] block font-bold">Checkout wasn't completed</strong>
@@ -562,10 +562,10 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
             )}
 
             {activePaymentTab === 'single' ? (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     {/* Credits or Unlimited Annual Pass Banner */}
                     {hasUnlimitedPass && (
-                        <div className="bg-[#E4F5EC] border border-[#BEE7D0] rounded-xl p-4 flex gap-3 items-center animate-in fade-in duration-300">
+                        <div className="bg-[#E4F5EC] border border-[#BEE7D0] rounded-xl p-4 flex gap-3 items-center animate-in fade-in">
                             <Sparkles className="text-[#0F7B4A] shrink-0" size={20} />
                             <div className="text-xs">
                                 <strong className="text-[color:var(--text)] flex items-center gap-1.5"><Sparkles size={12} className="text-gold-500" /> 1-Year Unlimited Pass Active!</strong>
@@ -575,7 +575,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     )}
 
                     {!hasUnlimitedPass && (freePoolsAvailable > 0 || !!eligibleCredit) && (
-                        <label className="bg-page hover:bg-surface border border-gold-500/25 rounded-xl p-4 flex gap-3 items-center cursor-pointer transition-all animate-in fade-in duration-300">
+                        <label className="bg-page hover:bg-surface border border-gold-500/25 rounded-xl p-4 flex gap-3 items-center cursor-pointer transition-ui animate-in fade-in">
                             <input
                                 type="checkbox"
                                 checked={useCredit}
@@ -598,7 +598,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
 
                     {/* Trial Banner */}
                     {isWizard && (
-                        <div className="bg-surface border border-line rounded-xl p-4 flex gap-3 items-start animate-in fade-in duration-300">
+                        <div className="bg-surface border border-line rounded-xl p-4 flex gap-3 items-start animate-in fade-in">
                             <ShieldCheck className="text-gold-500 shrink-0 mt-0.5" size={20} />
                             <div className="text-xs space-y-1">
                                 <strong className="text-[color:var(--text)] flex items-center gap-1.5"><Rocket size={13} className="text-gold-500" /> 14-Day Free Trial Included!</strong>
@@ -613,7 +613,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         "Free Limit Reached" state, read off the server quote so the
                         warning and the button can never disagree. */}
                     {buttonState.kind === 'free-limit-reached' && (
-                        <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start animate-in fade-in duration-300">
+                        <div className="bg-[#FCEEED] border border-brandred-500/30 rounded-xl p-4 flex gap-3 items-start animate-in fade-in">
                             <AlertTriangle className="text-brandred-600 shrink-0 mt-0.5" size={20} />
                             <div className="text-xs space-y-1">
                                 <strong className="text-brandred-600 flex items-center gap-1.5 font-bold">Active Free Pool Limit Reached</strong>
@@ -654,7 +654,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     if (!feat || !feat.isPremium) return null;
 
                                     return (
-                                        <label key={key} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-page border border-line hover:border-navy-600 cursor-pointer transition-all hover:bg-surface group">
+                                        <label key={key} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-page border border-line hover:border-navy-600 cursor-pointer transition-ui hover:bg-surface group">
                                             <input
                                                 type="checkbox"
                                                 checked={!!value}
@@ -795,7 +795,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 <button
                                     type="button"
                                     onClick={handleRemoveCoupon}
-                                    className="bg-navy-800 hover:bg-navy-700 text-white text-xs px-4 py-2 rounded-xl transition-all font-display font-bold uppercase tracking-[0.05em] animate-in fade-in"
+                                    className="bg-navy-800 hover:bg-navy-700 text-white text-xs px-4 py-2 rounded-xl transition-ui font-display font-bold uppercase tracking-[0.05em] animate-in fade-in"
                                 >
                                     Remove
                                 </button>
@@ -803,7 +803,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 <button
                                     type="submit"
                                     disabled={isValidatingCoupon || !couponInput.trim()}
-                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-40 text-white text-xs px-5 py-2.5 rounded-xl transition-all font-display font-bold uppercase tracking-[0.05em] shrink-0 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
+                                    className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-40 text-white text-xs px-5 py-2.5 rounded-xl transition-ui font-display font-bold uppercase tracking-[0.05em] shrink-0 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
                                 >
                                     {isValidatingCoupon ? 'Verifying...' : 'Apply Code'}
                                 </button>
@@ -859,7 +859,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                             <button
                                 onClick={handleCheckout}
                                 disabled={buttonState.disabled}
-                                className={`w-full font-display font-bold uppercase tracking-[0.05em] py-3.5 rounded-xl text-sm transition-all flex items-center justify-center gap-2 group hover:scale-[1.01] ${
+                                className={`w-full font-display font-bold uppercase tracking-[0.05em] py-3.5 rounded-xl text-sm transition-ui flex items-center justify-center gap-2 group fine:hover:scale-[1.01] ${
                                     buttonState.muted
                                         ? 'bg-cream border border-line text-faint cursor-not-allowed hover:scale-100'
                                         : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)]'
@@ -874,7 +874,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     <>
                                         <CreditCard size={18} />
                                         {buttonState.label}
-                                        {!buttonState.muted && <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />}
+                                        {!buttonState.muted && <ArrowRight size={14} className="fine:group-hover:translate-x-1 transition-transform" />}
                                     </>
                                 )}
                             </button>
@@ -893,7 +893,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                     )}
                 </div>
             ) : (
-                <div className="space-y-4 animate-in fade-in duration-300 text-left">
+                <div className="space-y-4 animate-in fade-in text-left">
                     <div className="bg-surface border border-line rounded-xl p-4 flex gap-3 items-start">
                         <Sparkles className="text-gold-500 shrink-0 mt-0.5" size={18} />
                         <div className="text-xs space-y-1">
@@ -917,7 +917,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                     : `$${(b.price / poolsIncluded).toFixed(2)} / pool`;
 
                                 return (
-                                    <div key={b.id} className="bg-page border border-line rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/40 transition-all shadow-md group">
+                                    <div key={b.id} className="bg-page border border-line rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/40 transition-ui shadow-md group">
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-center">
                                                 <span className="bg-[#FBF3E0] border border-[#EAD9A8] text-gold-700 text-[9px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded">
@@ -969,7 +969,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                     }
                                                 }}
                                                 disabled={isCheckoutLoading}
-                                                className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-2.5 px-4 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
+                                                className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-2.5 px-4 rounded-lg text-xs transition-ui flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
                                             >
                                                 {isCheckoutLoading ? (
                                                     <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -987,7 +987,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                         ) : (
                             <>
                                 {/* Default 3-Pool Bundle */}
-                                <div className="bg-page border border-line rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/40 transition-all shadow-md group">
+                                <div className="bg-page border border-line rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/40 transition-ui shadow-md group">
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
                                             <span className="bg-[#FBF3E0] border border-[#EAD9A8] text-gold-700 text-[9px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded">
@@ -1030,7 +1030,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                 }
                                             }}
                                             disabled={isCheckoutLoading}
-                                            className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-2.5 px-4 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
+                                            className="w-full bg-brandred-600 hover:bg-brandred-500 text-white font-display font-bold uppercase tracking-[0.05em] py-2.5 px-4 rounded-lg text-xs transition-ui flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(196,52,46,0.28)]"
                                         >
                                             {isCheckoutLoading ? (
                                                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1045,7 +1045,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                 </div>
 
                                 {/* Default Unlimited Pass */}
-                                <div className="bg-page border border-gold-500/30 rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/60 transition-all shadow-md group">
+                                <div className="bg-page border border-gold-500/30 rounded-xl p-4 flex flex-col justify-between hover:border-gold-500/60 transition-ui shadow-md group">
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
                                             <span className="bg-[#FBF3E0] border border-[#EAD9A8] text-gold-700 text-[9px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded">
@@ -1094,7 +1094,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                                 }
                                             }}
                                             disabled={isCheckoutLoading}
-                                            className="w-full bg-gold-foil text-navy-900 hover:brightness-105 font-display font-bold uppercase tracking-[0.05em] py-2.5 px-4 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
+                                            className="w-full bg-gold-foil text-navy-900 hover:brightness-105 font-display font-bold uppercase tracking-[0.05em] py-2.5 px-4 rounded-lg text-xs transition-ui flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(140,109,51,0.28)]"
                                         >
                                             {isCheckoutLoading ? (
                                                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

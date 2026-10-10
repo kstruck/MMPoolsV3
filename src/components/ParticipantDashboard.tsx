@@ -8,6 +8,8 @@ import { formatDeadline } from '../utils/formatTime';
 import { nflWeekLabel } from '../utils/nflWeekLabel';
 import { poolSeasonType } from '../utils/nflPending';
 import { isSuperAdmin, isPoolOwner, isNamedNFLCoCommissioner } from '../utils/auth';
+import { getPoolTabStatus, isMyEntryPool, isCanceledPool, clockRefreshDelayMs, bracketLockAtMs } from '../utils/rosterHub';
+import { now as serverNow, syncServerClock } from '../utils/serverClock';
 import { getTeamLogo } from '../constants';
 import { dbService } from '../services/dbService';
 import { settingsService } from '../services/settingsService';
@@ -46,12 +48,30 @@ import { GlobalStandingsCard } from './Dashboards/GlobalStandingsCard';
 import { GlobalCommissionerDashboard } from './Dashboards/GlobalCommissionerDashboard';
 import { Badge, Button } from './ui';
 import { poolTypeLabel, poolOptionLabels } from '../utils/poolTypeLabel';
+import {
+    buildPoolTypeSplit,
+    buildCumulativePaidWinnings,
+    earningsEmptyState,
+    poolMixEmptyState,
+    type PaidWin
+} from '../utils/dashboardCharts';
 
 const BRAND = {
   emeraldGlow: 'rgba(201, 168, 103, 0.15)',
   amberGlow: 'rgba(196, 52, 46, 0.12)',
   indigoGlow: 'rgba(36, 80, 127, 0.15)',
 };
+
+// Recharts style/margin props, hoisted to module scope. They are constants —
+// nothing in them depends on props or state — so allocating a fresh object
+// literal on every render only gave the chart children a new identity each time
+// and defeated their memoisation. Module scope rather than useMemo because
+// there is no dependency to track. (qodo #1 on PR #670.)
+const CHART_MARGIN = { top: 10, right: 10, left: -20, bottom: 0 };
+const CHART_TOOLTIP_STYLE = { backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' };
+const CHART_TOOLTIP_ITEM_STYLE = { fontSize: '11px', fontWeight: 'black', color: '#D9BC80' };
+const CHART_TOOLTIP_LABEL_STYLE = { fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' } as const;
+const PIE_TOOLTIP_STYLE = { backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' };
 
 interface ParticipantDashboardProps {
     user: User;
@@ -75,6 +95,25 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     }, [location.search]);
     const [searchQuery, setSearchQuery] = useState('');
     const [poolWinners, setPoolWinners] = useState<Record<string, Winner[]>>({});
+    // An empty roster/ledger is only worth ASSERTING when a feed actually
+    // succeeded. Both flags exist so the Insights empty states can say "we could
+    // not load this" instead of "you have none" after a failure — the same class
+    // of untrue statement this PR removes. (qodo #19 and #20 on PR #670.)
+    const [poolsFailed, setPoolsFailed] = useState(false);
+    // Every pool feed has RESPONDED. `mergeAndUpdate` runs on the first feed's
+    // callback and `processPools` clears `isLoading` there, so an empty roster
+    // mid-load is indistinguishable from a real one — and a partial merge would
+    // be drawn as a complete distribution. The charts wait for all of them.
+    // (qodo re-review #4 on PR #670.)
+    const [poolsSettled, setPoolsSettled] = useState(false);
+    // PER POOL, not one global flag. `processPools` re-subscribes to winners on
+    // every pool-feed snapshot and never unsubscribes the previous listeners, so
+    // a listener for a pool the user has since LEFT stays alive and can still
+    // error. A single boolean would latch on that and hold the trend chart at
+    // "Winnings unavailable" forever, although every current pool had loaded
+    // fine. Keyed by pool id, entries for pools no longer in `myPools` are
+    // simply never read. (codex round 3 on PR #670.)
+    const [winnerErrors, setWinnerErrors] = useState<Record<string, true>>({});
     const [bracketEntryCounts, setBracketEntryCounts] = useState<Record<string, number>>({});
     const [settings, setSettings] = useState<SystemSettings | null>(null);
     // "Picks due" badges for NFL season pools: season schedule + my entry per pool
@@ -83,6 +122,19 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
     useEffect(() => {
         return settingsService.subscribe(setSettings);
+    }, []);
+
+    // The clock the pool-classifying memos read (`getPoolTabStatus`, the lock
+    // banner). Held in state so the two events that move it and change no other
+    // dependency still recompute the memos: the server clock sync resolving —
+    // it only mutates module state and re-renders nobody (codex r3 on PR #688)
+    // — and the nearest lock deadline passing while the page sits open (codex
+    // r4; the timer is below `earliestLock`). Every consumer lists `nowMs`.
+    const [nowMs, setNowMs] = useState(() => serverNow());
+    useEffect(() => {
+        let cancelled = false;
+        void syncServerClock().then(() => { if (!cancelled) setNowMs(serverNow()); });
+        return () => { cancelled = true; };
     }, []);
 
     // Subscribe to the schedule of each distinct season among my NFL pools
@@ -110,6 +162,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         const map: Record<string, PoolPendingStatus> = {};
         for (const p of myPools) {
             if (!isNFLSeasonPool(p)) continue;
+            // A canceled pool has no picks due — without this it floated to the
+            // top of every list as "picks due" after the commissioner killed it.
+            if (isCanceledPool(p)) continue;
             const games = seasonGames[String((p as any).season)] ?? [];
             if (games.length === 0) continue;
             const status = computePendingStatus(p, myNflEntries[p.id] ?? null, games);
@@ -118,6 +173,16 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return map;
     }, [myPools, seasonGames, myNflEntries]);
 
+    // The roster minus canceled pools. EVERY "active entries" aggregate on this
+    // page reads this one collection — Pools Entered, the loyalty tier, lifetime
+    // squares/wins/winnings, the participation split and its centre total, the
+    // winnings-known gate, and the projected buy-in — so a canceled pool cannot
+    // be out of one number and in the next (qodo #2/#3/#4 on PR #688). The tab
+    // lists and "All Pools" keep `myPools`: a canceled pool is still shown there,
+    // under Completed, with its badge.
+    const enteredPools = useMemo(() => myPools.filter(p => !isCanceledPool(p)), [myPools]);
+    const enteredPoolCount = enteredPools.length;
+
     const userLoyaltyTier = useMemo(() => {
         const tiers = settings?.loyaltyTiers || [
             { id: 'tier_contender', name: 'Contender', minPools: 0, description: 'Accrued based on lifetime pool entries' },
@@ -125,13 +190,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         ];
         // Sort descending by minPools so we match the highest matching tier
         const sorted = [...tiers].sort((a, b) => b.minPools - a.minPools);
-        const count = myPools.length;
+        // A canceled pool never ran, so it is not a lifetime entry.
+        const count = enteredPoolCount;
         const matched = sorted.find(t => count >= t.minPools);
         return matched || { name: 'Contender', description: 'Accrued based on lifetime pool entries' };
-    }, [settings?.loyaltyTiers, myPools.length]);
+    }, [settings?.loyaltyTiers, enteredPoolCount]);
 
     useEffect(() => {
         setIsLoading(true);
+        setPoolsFailed(false);
+        setPoolsSettled(false);
+        setWinnerErrors({});
         let unsubParticipating: () => void = () => { };
         let unsubOwned: () => void = () => { };
         let unsubCoCommissioned: () => void = () => { };
@@ -178,6 +247,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unique.forEach(pool => {
                 dbService.subscribeToWinners(pool.id, (winners) => {
                     setPoolWinners(prev => ({ ...prev, [pool.id]: winners }));
+                    // A later success clears an earlier failure for this pool —
+                    // otherwise one transient error would hold the chart at
+                    // "unavailable" even after the feed recovered.
+                    setWinnerErrors(prev => {
+                        if (!prev[pool.id]) return prev;
+                        const next = { ...prev };
+                        delete next[pool.id];
+                        return next;
+                    });
+                }, (err) => {
+                    logger.error('Winners subscription error', pool.id, err);
+                    setWinnerErrors(prev => ({ ...prev, [pool.id]: true }));
                 });
             });
         };
@@ -185,8 +266,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         if (isSuperAdmin(user)) {
             unsubAll = dbService.subscribeToAllPools((pools) => {
                 processPools(pools);
+                setPoolsSettled(true);
             }, (error) => {
                 logger.error("SuperAdmin Pool Fetch Error", error);
+                setPoolsFailed(true);
                 setIsLoading(false);
             });
         } else {
@@ -194,6 +277,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             let participatingPools: Pool[] = [];
             let ownedPools: Pool[] = [];
             let coCommissionedPools: Pool[] = [];
+
+            // Which of the three feeds have answered at least once. A feed that
+            // ERRORS never sets its flag, so the roster stays "not known" and the
+            // charts say "Roster unavailable" rather than "No pools yet".
+            const responded = { participating: false, owned: false, coCommissioned: false };
+            const noteResponded = (feed: keyof typeof responded) => {
+                responded[feed] = true;
+                if (responded.participating && responded.owned && responded.coCommissioned) {
+                    setPoolsSettled(true);
+                }
+            };
 
             const mergeAndUpdate = () => {
                 const merged = [...participatingPools, ...ownedPools, ...coCommissionedPools];
@@ -205,16 +299,20 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unsubParticipating = dbService.subscribeToParticipatingPools(user.id, (pools) => {
                 participatingPools = pools;
                 mergeAndUpdate();
+                noteResponded('participating');
             }, (err) => {
                 logger.error("Participating Pools Error", err);
+                setPoolsFailed(true);
                 setIsLoading(false);
             });
 
             unsubOwned = dbService.subscribeToPools((pools) => {
                 ownedPools = pools;
                 mergeAndUpdate();
+                noteResponded('owned');
             }, (err) => {
                 logger.error("Owned Pools Error", err);
+                setPoolsFailed(true);
             }, user.id);
 
             // Commissioner Hub feed for NFL co-commissioners (PLAN-CO-COMMISSIONERS
@@ -224,8 +322,10 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             unsubCoCommissioned = dbService.subscribeToCoCommissionedPools(user.id, (pools) => {
                 coCommissionedPools = pools;
                 mergeAndUpdate();
+                noteResponded('coCommissioned');
             }, (err) => {
                 logger.error("Co-commissioned Pools Error", err);
+                setPoolsFailed(true);
             });
         }
 
@@ -261,29 +361,26 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         return () => { isMounted = false; };
     }, [myPools, user.id]);
 
-    const getPoolTabStatus = (pool: Pool): 'open' | 'live' | 'completed' => {
-        if (pool.type === 'BRACKET') {
-            const bPool = pool as BracketPool;
-            const isCompleted = bPool.status === 'COMPLETED';
-            const isLive = bPool.status === 'LOCKED' || (bPool.lockAt > 0 && Date.now() >= bPool.lockAt && !isCompleted);
-            if (isCompleted) return 'completed';
-            if (isLive) return 'live';
-            return 'open';
-        } else {
-            const isCompleted = (pool as GameState).scores?.gameStatus === 'post';
-            const isLocked = (pool as GameState).isLocked;
-            if (isCompleted) return 'completed';
-            if (isLocked) return 'live';
-            return 'open';
-        }
-    };
-
     const lifetimeStats = useMemo(() => {
         let totalSquares = 0;
         let totalWinnings = 0;
         let totalWins = 0;
+        // My wins, for the Paid Winnings Trend. Collected in THIS loop rather
+        // than a second one so that "is this my win" is decided exactly once —
+        // a separate walk could drift from the total on the Net Winnings card
+        // and the chart would quietly disagree with the number above it.
+        //
+        // `paidAt` is passed through RAW. It is a Firestore Timestamp on the
+        // client, not epoch millis, and `buildCumulativePaidWinnings` owns that
+        // normalisation (and the dropping of undated wins) so the shape
+        // handling sits behind unit tests instead of in this render path.
+        const paidWins: PaidWin[] = [];
 
-        myPools.forEach(pool => {
+        // A canceled pool keeps its squares / entries / winner rows in the doc
+        // (cancelPool writes status only), and none of them are lifetime
+        // squares, wins, or winnings — hence `enteredPools`, not `myPools`, or
+        // "0 Pools Entered" could sit beside non-zero wins (codex r1).
+        enteredPools.forEach(pool => {
             if (pool.type === 'SQUARES') {
                 const sPool = pool as GameState;
                 const userSquares = sPool.squares.filter(s => s.reservedByUid === user.id);
@@ -295,6 +392,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     if (isMyWin) {
                         totalWins++;
                         totalWinnings += winner.amount || 0;
+                        paidWins.push({ amount: winner.amount || 0, paidAt: winner.paidAt });
                     }
                 });
 
@@ -313,42 +411,18 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         });
 
         return {
-            totalPools: myPools.length,
+            totalPools: enteredPoolCount,
             totalSquares,
             totalWins,
-            totalWinnings
+            totalWinnings,
+            paidWins
         };
-    }, [myPools, poolWinners, user.id, bracketEntryCounts]);
+    }, [enteredPools, poolWinners, user.id, bracketEntryCounts, enteredPoolCount]);
 
-    // Data aggregation for Participation Split (Recharts PieChart)
-    const poolTypeSplitData = useMemo(() => {
-        let squares = 0;
-        let MMbrackets = 0;
-        let playoffs = 0;
-        let nfl = 0;
-
-        myPools.forEach(p => {
-            if (p.type === 'SQUARES') squares++;
-            else if (p.type === 'BRACKET') MMbrackets++;
-            else if (p.type === 'NFL_PLAYOFFS') playoffs++;
-            else if (p.type?.startsWith('NFL_')) nfl++;
-        });
-
-        const data = [
-            { name: 'Squares', value: squares, color: '#C9A867' },
-            { name: 'Brackets', value: MMbrackets, color: '#24507F' },
-            { name: 'NFL Playoffs', value: playoffs, color: '#8C6D33' },
-            { name: 'NFL Pickem/Margin', value: nfl, color: '#1A3B62' }
-        ].filter(item => item.value > 0);
-
-        if (data.length === 0) {
-            return [
-                { name: 'Active Squares', value: 2, color: '#C9A867' },
-                { name: 'NFL Pools', value: 1, color: '#1A3B62' }
-            ];
-        }
-        return data;
-    }, [myPools]);
+    // Data aggregation for Participation Split (Recharts PieChart).
+    // Empty when the user has no pools — the chart is replaced with guidance
+    // rather than the placeholder slices this used to fabricate.
+    const poolTypeSplitData = useMemo(() => buildPoolTypeSplit(enteredPools), [enteredPools]);
 
     // Earliest upcoming lock deadline (Countdown alerts)
     const earliestLock = useMemo<any>(() => {
@@ -356,38 +430,76 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
         let earliestPool: Pool | null = null;
 
         myPools.forEach(p => {
+            if (isCanceledPool(p)) return;
             let lockTime = 0;
-            if (p.type === 'BRACKET') lockTime = (p as any).lockAt || 0;
+            // Normalised (number | ISO string | Timestamp), same reader as the
+            // tab rule, so the refresh timer and the classification agree on
+            // when a legacy bracket locks (qodo r3 on #688).
+            if (p.type === 'BRACKET') lockTime = bracketLockAtMs(p) ?? 0;
             else if (p.type === 'NFL_PLAYOFFS') lockTime = new Date((p as any).lockDate).getTime() || 0;
             else if (p.type === 'SQUARES') lockTime = new Date((p as any).scores?.startTime).getTime() || 0;
 
-            if (lockTime > Date.now() && lockTime < earliest) {
+            if (lockTime > nowMs && lockTime < earliest) {
                 earliest = lockTime;
                 earliestPool = p;
             }
         });
 
         return earliestPool ? { pool: earliestPool, time: earliest } : null;
-    }, [myPools]);
+    }, [myPools, nowMs]);
 
-    // Cumulative earnings trend (Recharts AreaChart)
-    const cumulativeEarningsData = useMemo(() => {
-        const totalW = lifetimeStats.totalWinnings;
-        return [
-            { month: 'Sep', Earnings: 0 },
-            { month: 'Oct', Earnings: Math.round(totalW * 0.15) },
-            { month: 'Nov', Earnings: Math.round(totalW * 0.35) },
-            { month: 'Dec', Earnings: Math.round(totalW * 0.5) },
-            { month: 'Jan', Earnings: Math.round(totalW * 0.7) },
-            { month: 'Feb', Earnings: totalW || 120 }
-        ];
-    }, [lifetimeStats.totalWinnings]);
+    // When the nearest deadline passes, move the clock so the tab memos
+    // re-classify (a bracket past `lockAt` is Live before the lock job flips
+    // its status). `earliestLock` then recomputes past that deadline and arms
+    // the next one; the delay maths lives in `clockRefreshDelayMs` (tested).
+    useEffect(() => {
+        if (!earliestLock) return;
+        const id = window.setTimeout(() => setNowMs(serverNow()), clockRefreshDelayMs(earliestLock.time, serverNow()));
+        return () => window.clearTimeout(id);
+    }, [earliestLock]);
+
+    // Cumulative earnings trend (Recharts AreaChart).
+    //
+    // Real payouts only. `Winner` has no "won at" timestamp — `paidAt` (stamped
+    // when a commissioner marks a payout cleared) is the only date a win
+    // carries, so the series is built from those and the card says so. Wins with
+    // no payout date contribute nothing rather than an invented month.
+    const cumulativeEarningsData = useMemo(
+        () => buildCumulativePaidWinnings(lifetimeStats.paidWins),
+        [lifetimeStats.paidWins]
+    );
+
+    // The winners feed has ANSWERED only when every Squares pool has reported.
+    // Winner listeners are attached after the pool feeds resolve, so before that
+    // `poolWinners` is `{}` and a zero total is ignorance, not a fact.
+    // The roster is KNOWN only when every feed answered and none failed.
+    const poolsKnown = !poolsFailed && poolsSettled;
+
+    // ...and the winnings are known only when the roster is, first. `.every()`
+    // over `myPools` is vacuously true when a failed feed never delivered the
+    // user's Squares pool at all, so without `poolsKnown` a broken roster read
+    // would still assert "No winnings yet". (qodo re-review #6, High.)
+    const winningsKnown = useMemo(
+        // Over `enteredPools`: a canceled Squares pool contributes nothing to the
+        // winnings total, so its winner feed failing must not blank the chart.
+        () => poolsKnown && enteredPools
+            .filter(p => p.type === 'SQUARES')
+            .every(p => poolWinners[p.id] !== undefined && !winnerErrors[p.id]),
+        [poolsKnown, enteredPools, poolWinners, winnerErrors]
+    );
+
+    const earningsEmpty = useMemo(
+        () => earningsEmptyState(lifetimeStats.totalWinnings, winningsKnown),
+        [lifetimeStats.totalWinnings, winningsKnown]
+    );
+
+    const poolMixEmpty = useMemo(() => poolMixEmptyState(poolsKnown), [poolsKnown]);
 
     // Financial Metrics
     const projectedPotEarnings = useMemo(() => {
         let pot = 0;
         let entriesPaid = 0;
-        myPools.forEach(p => {
+        enteredPools.forEach(p => {
             const fee = (p as any).settings?.entryFee || (p as any).costPerSquare || 20;
             pot += fee * (bracketEntryCounts[p.id] || 1);
             if (p.type === 'BRACKET') {
@@ -396,7 +508,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             }
         });
         return { cost: pot, paid: entriesPaid };
-    }, [myPools, bracketEntryCounts, user.id]);
+    }, [enteredPools, bracketEntryCounts, user.id]);
 
     // Derived State for Filtering
     const filteredPools = useMemo(() => {
@@ -410,12 +522,12 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
             if (!matchesSearch) return false;
 
-            const status = getPoolTabStatus(pool);
+            const status = getPoolTabStatus(pool, nowMs);
             if (activeTab === 'open') return status === 'open';
             if (activeTab === 'live') return status === 'live';
             if (activeTab === 'completed') return status === 'completed';
             // My Entries: pools I participate in (membership), independent of ownership.
-            if (activeTab === 'entries') return (pool as any).participantIds?.includes(user.id) ?? false;
+            if (activeTab === 'entries') return isMyEntryPool(pool, user.id);
 
             return true;
         }).sort((a, b) => {
@@ -424,15 +536,15 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
             const bPending = pendingByPool[b.id] ? 0 : 1;
             return aPending - bPending;
         });
-    }, [myPools, searchQuery, activeTab, pendingByPool]);
+    }, [myPools, searchQuery, activeTab, pendingByPool, nowMs, user.id]);
 
     const counts = useMemo(() => {
-        const open = myPools.filter(p => getPoolTabStatus(p) === 'open').length;
-        const completed = myPools.filter(p => getPoolTabStatus(p) === 'completed').length;
-        const live = myPools.filter(p => getPoolTabStatus(p) === 'live').length;
-        const entries = myPools.filter(p => (p as any).participantIds?.includes(user.id)).length;
+        const open = myPools.filter(p => getPoolTabStatus(p, nowMs) === 'open').length;
+        const completed = myPools.filter(p => getPoolTabStatus(p, nowMs) === 'completed').length;
+        const live = myPools.filter(p => getPoolTabStatus(p, nowMs) === 'live').length;
+        const entries = myPools.filter(p => isMyEntryPool(p, user.id)).length;
         return { all: myPools.length, open, live, completed, entries };
-    }, [myPools, user.id]);
+    }, [myPools, user.id, nowMs]);
 
     /**
      * The tab strip, built ONCE and used twice: rendered below, and published to
@@ -463,7 +575,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
     const offeredTabs = useMemo(() => tabStrip.map(t => t.id), [tabStrip]);
 
     const getStatusBadge = (pool: Pool) => {
-        const tabStatus = getPoolTabStatus(pool);
+        if (isCanceledPool(pool)) return <Badge status="canceled">Canceled</Badge>;
+        const tabStatus = getPoolTabStatus(pool, nowMs);
 
         if (tabStatus === 'completed') return <Badge status="locked">Completed</Badge>;
         if (tabStatus === 'live') return <Badge status="live">Live Now</Badge>;
@@ -504,8 +617,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
 
                 {/* Lifetime Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-                        <div className="w-10 h-10 rounded-xl bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC] flex items-center justify-center group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-ui duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-navy-600/10 dark:bg-navy-600/30 border border-navy-600/20 text-navy-700 dark:text-[#9FB0CC] flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <LayoutGrid size={20} />
                         </div>
                         <div>
@@ -513,8 +626,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalPools}</p>
                         </div>
                     </div>
-                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-ui duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <TrendingUp size={20} />
                         </div>
                         <div>
@@ -522,8 +635,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalSquares}</p>
                         </div>
                     </div>
-                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-all duration-150">
-                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center group-hover:scale-105 transition-all">
+                    <div className="bg-card border border-line rounded-2xl p-4 shadow-card flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/40 transition-ui duration-150">
+                        <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 text-gold-700 dark:text-gold-400 flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <Trophy size={20} />
                         </div>
                         <div>
@@ -531,9 +644,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             <p className="text-2xl font-display font-bold text-[color:var(--text)] num leading-none">{lifetimeStats.totalWins}</p>
                         </div>
                     </div>
-                    <div className="bg-card border border-gold-500/40 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/60 transition-all duration-150"
+                    <div className="bg-card border border-gold-500/40 rounded-2xl p-4 flex items-center gap-4 relative overflow-hidden group hover:border-gold-500/60 transition-ui duration-150"
                          style={{ boxShadow: `0 4px 15px ${BRAND.emeraldGlow}` }}>
-                        <div className="w-10 h-10 rounded-xl bg-gold-foil text-navy-950 flex items-center justify-center group-hover:scale-105 transition-all">
+                        <div className="w-10 h-10 rounded-xl bg-gold-foil text-navy-950 flex items-center justify-center fine:group-hover:scale-105 transition-ui">
                             <DollarSign size={20} />
                         </div>
                         <div>
@@ -549,7 +662,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`px-4 py-3.5 text-xs font-display font-bold uppercase tracking-[0.08em] border-b-2 transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
+                            className={`px-4 py-3.5 text-xs font-display font-bold uppercase tracking-[0.08em] border-b-2 transition-ui whitespace-nowrap flex items-center gap-2 ${activeTab === tab.id
                                 ? 'border-gold-500 text-[color:var(--text)]'
                                 : 'border-transparent text-muted hover:text-[color:var(--text)]'
                                 }`}
@@ -575,7 +688,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                     <GlobalCommissionerDashboard user={user} managedPools={myPools.filter(p => isPoolOwner(user, p) || isNamedNFLCoCommissioner(user, p))} />
                 ) : activeTab === 'insights' ? (
                     /* INSIGHTS TAB - PREMIUM RECHARTS DASHBOARD */
-                    <div className="space-y-8 animate-in fade-in duration-300">
+                    <div className="space-y-8 animate-in fade-in">
 
                         {/* Lock Warning Banner */}
                         {earliestLock && (
@@ -620,30 +733,47 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             {/* Cumulative Earnings AreaChart */}
                             <div className="lg:col-span-3 bg-card border border-line rounded-3xl p-6 shadow-card relative flex flex-col justify-between">
                                 <div>
-                                    <h3 className="text-sm font-display font-bold text-muted uppercase tracking-[0.16em] mb-1">Lifetime Winnings Trend</h3>
-                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Cumulative payout progression by month</p>
+                                    <h3 className="text-sm font-display font-bold text-muted uppercase tracking-[0.16em] mb-1">Paid Winnings Trend</h3>
+                                    <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Cumulative payouts marked cleared by your commissioners</p>
                                 </div>
 
-                                <div className="h-56 w-full mt-6">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={cumulativeEarningsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
-                                                    <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
-                                                </linearGradient>
-                                            </defs>
-                                            <XAxis dataKey="month" stroke="#7C8698" fontSize={9} fontWeight="bold" />
-                                            <YAxis stroke="#7C8698" fontSize={9} fontWeight="bold" />
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px' }}
-                                                itemStyle={{ fontSize: '11px', fontWeight: 'black', color: '#D9BC80' }}
-                                                labelStyle={{ fontSize: '9px', fontWeight: '900', color: '#9FB0CC', textTransform: 'uppercase' }}
-                                            />
-                                            <Area type="monotone" dataKey="Earnings" stroke="#C9A867" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                {/*
+                                  * `winningsKnown` gates the CHART, not just the empty
+                                  * state. A series that loaded and then lost a listener
+                                  * is a PARTIAL trend, and drawing it unlabelled presents
+                                  * incomplete data as complete — the defect this PR is
+                                  * about. (qodo re-review #5.)
+                                  */}
+                                {cumulativeEarningsData.length > 0 && winningsKnown ? (
+                                    <div className="h-56 w-full mt-6">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={cumulativeEarningsData} margin={CHART_MARGIN}>
+                                                <defs>
+                                                    <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#C9A867" stopOpacity={0.25}/>
+                                                        <stop offset="95%" stopColor="#C9A867" stopOpacity={0}/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <XAxis dataKey="month" stroke="#7C8698" fontSize={9} fontWeight="bold" />
+                                                <YAxis stroke="#7C8698" fontSize={9} fontWeight="bold" />
+                                                <Tooltip
+                                                    contentStyle={CHART_TOOLTIP_STYLE}
+                                                    itemStyle={CHART_TOOLTIP_ITEM_STYLE}
+                                                    labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+                                                />
+                                                <Area type="monotone" dataKey="Earnings" stroke="#C9A867" strokeWidth={2.5} fillOpacity={1} fill="url(#colorEarnings)" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                ) : (
+                                    /* No fabricated curve. Real payouts or nothing. */
+                                    <div className="h-56 w-full mt-6 flex flex-col items-center justify-center text-center px-4">
+                                        <TrendingUp className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
+                                        <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">{earningsEmpty.headline}</p>
+                                        {/* tabular-nums: the detail can embed a live dollar total (qodo #15). */}
+                                        <p className="text-xs text-muted font-body max-w-xs leading-relaxed tabular-nums">{earningsEmpty.detail}</p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Participation Split Pie Chart */}
@@ -653,40 +783,66 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     <p className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em]">Active participation by pool category</p>
                                 </div>
 
-                                <div className="h-48 w-full mt-6 relative flex items-center justify-center">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={poolTypeSplitData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={45}
-                                                outerRadius={65}
-                                                paddingAngle={4}
-                                                dataKey="value"
-                                            >
-                                                {poolTypeSplitData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                                ))}
-                                            </Pie>
-                                            <Tooltip contentStyle={{ backgroundColor: '#0E1C34', borderColor: 'rgba(230,206,150,0.16)', borderRadius: '12px', fontSize: '10px' }} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
+                                {/* Same rule as the trend: a partial merge is not a distribution. */}
+                                {poolTypeSplitData.length > 0 && poolsKnown ? (
+                                    <>
+                                        <div className="h-48 w-full mt-6 relative flex items-center justify-center">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={poolTypeSplitData}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={45}
+                                                        outerRadius={65}
+                                                        paddingAngle={4}
+                                                        dataKey="value"
+                                                    >
+                                                        {poolTypeSplitData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip contentStyle={PIE_TOOLTIP_STYLE} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
 
-                                    <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                                        <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{myPools.length}</span>
-                                        <span className="text-[7px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Total Pools</span>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4 text-[9px] font-display font-bold uppercase tracking-[0.08em]">
-                                    {poolTypeSplitData.map((entry, idx) => (
-                                        <div key={idx} className="flex items-center gap-1.5" style={{ color: entry.color }}>
-                                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-                                            {entry.name} (<span className="num">{entry.value}</span>)
+                                            <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
+                                                <span className="text-2xl font-display font-bold text-[color:var(--text)] leading-none num">{enteredPools.length}</span>
+                                                <span className="text-[7px] font-display font-bold text-muted uppercase tracking-[0.08em] mt-0.5">Total Pools</span>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+
+                                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 mt-4 text-[9px] font-display font-bold uppercase tracking-[0.08em]">
+                                            {poolTypeSplitData.map((entry, idx) => (
+                                                <div key={idx} className="flex items-center gap-1.5" style={{ color: entry.color }}>
+                                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
+                                                    {entry.name} (<span className="num">{entry.value}</span>)
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    /* No pools, no slices. This used to draw two invented ones. */
+                                    <div className="mt-6 flex flex-col items-center justify-center text-center px-2">
+                                        {poolMixEmpty.showActions
+                                            ? <Trophy className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />
+                                            : <AlertTriangle className="w-10 h-10 mb-3 text-faint" aria-hidden="true" />}
+                                        <p className="text-sm font-display font-bold uppercase text-[color:var(--text)] mb-1.5">{poolMixEmpty.headline}</p>
+                                        <p className="text-xs text-muted font-body leading-relaxed mb-5">
+                                            {poolMixEmpty.detail}
+                                        </p>
+                                        {poolMixEmpty.showActions && (
+                                            <div className="flex flex-col sm:flex-row gap-2 justify-center w-full">
+                                                <Button variant="primary" size="sm" onClick={() => navigate('/browse')}>
+                                                    Browse Public Pools
+                                                </Button>
+                                                <Button variant="secondary" size="sm" onClick={() => navigate('/create-pool')}>
+                                                    Create a Pool
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                         </div>
@@ -768,11 +924,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                             const isSquares = pool.type === 'SQUARES';
                             const isPlayoff = pool.type === 'NFL_PLAYOFFS';
                             // Season-to-season retention: completed NFL season pools the user
-                            // commissions can be re-run via the wizard, pre-seeded (?cloneFrom=)
+                            // commissions can be re-run via the wizard, pre-seeded (?cloneFrom=).
+                            // Not a canceled one: it sorts under Completed for the tabs, but it
+                            // is a voided pool, not a finished season to clone (codex r4 on #688).
                             const canRerun =
                                 (pool.type === 'NFL_PICKEM' || pool.type === 'NFL_SURVIVOR' || pool.type === 'NFL_MARGIN') &&
                                 (pool.ownerId === user.id || pool.managerUid === user.id) &&
-                                getPoolTabStatus(pool) === 'completed';
+                                !isCanceledPool(pool) &&
+                                getPoolTabStatus(pool, nowMs) === 'completed';
 
                             let userEntryCount = 0;
                             let percentFull = 0;
@@ -812,7 +971,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                 <div
                                     key={pool.id}
                                     onClick={() => navigate(`/pool/${(pool as BracketPool).slug || (pool as GameState).urlSlug || pool.id}`)}
-                                    className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition-all duration-150 hover:-translate-y-1 shadow-card hover:shadow-card-hover cursor-pointer relative overflow-hidden flex flex-col justify-between"
+                                    className="group bg-card border border-line hover:border-gold-500 rounded-3xl p-5 transition-ui duration-150 fine:hover:-translate-y-1 shadow-card hover:shadow-card-hover cursor-pointer relative overflow-hidden flex flex-col justify-between"
                                 >
                                     <div>
                                         <div className="flex justify-between items-start mb-4">
@@ -875,8 +1034,8 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                             {isSquares && (
                                                 <div className="h-1.5 w-full bg-line rounded-full overflow-hidden">
                                                     <div
-                                                        className="h-full bg-gold-foil transition-all duration-500"
-                                                        style={{ width: `${percentFull}%` }}
+                                                        className="h-full w-full origin-left bg-gold-foil transition-transform duration-300 ease-out"
+                                                        style={{ transform: `scaleX(${Math.min(percentFull, 100) / 100})` }}
                                                     />
                                                 </div>
                                             )}
@@ -893,7 +1052,7 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({ user
                                     )}
                                     <div className="flex items-center justify-between text-[10px] text-faint border-t border-line pt-3 mt-auto font-display font-bold uppercase tracking-[0.05em]">
                                         <span className="flex items-center gap-1"><UserIcon size={10} /> Host: {pool.managerName || 'Unknown'}</span>
-                                        <span className="group-hover:translate-x-1 transition-transform flex items-center gap-1 text-gold-700 dark:text-gold-400 font-display font-bold">
+                                        <span className="fine:group-hover:translate-x-1 transition-transform flex items-center gap-1 text-gold-700 dark:text-gold-400 font-display font-bold">
                                             View Dashboard <ChevronRight size={10} />
                                         </span>
                                     </div>

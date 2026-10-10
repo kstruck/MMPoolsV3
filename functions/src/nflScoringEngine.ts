@@ -224,6 +224,68 @@ export function validateConfidenceValues(
   return { valid: true };
 }
 
+/**
+ * The PER_GAME confidence rule (PLAN-CONFIDENCE-PER-GAME-LOCK §3.2, D2).
+ *
+ * Judged on the MERGED sheet — what the entry will hold after this write —
+ * over the confidence slate `confidenceSlateFor` computed (a CANCELLED game
+ * nobody picked is not in it). Rules, in order:
+ *
+ *  1. every OPEN game in the slate has a pick — the range depends on how many
+ *     games the member missed, and k can only grow as games lock, so a sheet
+ *     that leaves an open game unpicked while spending a high value elsewhere
+ *     could become invalid under its own k later (§3.2);
+ *  2. every picked game has a weight;
+ *  3. an OPEN game's weight is one of `slate.availableValues` — the week's
+ *     range minus what is frozen on locked picks, minus the top k of the rest,
+ *     so a missed game forfeits the highest value the member could still have
+ *     used (Kevin: "for a 16 game week, they would lose 16"). A weight frozen
+ *     on a locked pick is grandfathered: it is checked for uniqueness, never
+ *     against a range that shrank after it locked (codex r5 on the diff);
+ *  4. no weight is used twice.
+ *
+ * Locked games are the caller's concern (`CONFIDENCE_LOCKED` / `GAME_LOCKED`
+ * before this runs); here they simply contribute their frozen pick and weight.
+ * Error codes are the ones the sheet already knows.
+ */
+export function validatePerGameConfidence(
+  merged: { picks: Record<string, string>; confidence: Record<string, number> },
+  slate: { slateIds: readonly string[]; missedIds: readonly string[]; availableValues: readonly number[]; minValue: number; maxValue: number },
+  openIds: ReadonlySet<string>,
+): { valid: boolean; error?: string } {
+  const missed = new Set(slate.missedIds);
+  const available = new Set(slate.availableValues);
+  const assigned = new Set<number>();
+  for (const gameId of slate.slateIds) {
+    const pick = merged.picks[gameId];
+    if (pick === undefined) {
+      if (openIds.has(gameId)) {
+        return { valid: false, error: `INCOMPLETE_CONFIDENCE_SUBMISSION: Missing pick for game ${gameId}` };
+      }
+      if (missed.has(gameId)) continue; // forfeited — nothing to weight
+      continue; // locked, unpicked, not in missedIds: cannot happen by construction; tolerate
+    }
+    const value = merged.confidence[gameId];
+    if (value === undefined || value === null) {
+      // A LOCKED pick with no weight is a pre-release artefact (a proxy pick on
+      // a legacy pool — proxyPick could never carry a weight). Nothing can be
+      // supplied for it now, it scores 0 exactly as it always has, and it must
+      // not hold the member's open games hostage (codex r9). An OPEN pick with
+      // no weight is the member's to fix.
+      if (!openIds.has(gameId)) continue;
+      return { valid: false, error: `INCOMPLETE_CONFIDENCE_SUBMISSION: Missing confidence value for game ${gameId}` };
+    }
+    if (openIds.has(gameId) && (!Number.isInteger(value) || !available.has(value))) {
+      return { valid: false, error: `OUT_OF_RANGE_CONFIDENCE: Value ${value} must be between ${slate.minValue} and ${slate.maxValue}` };
+    }
+    if (assigned.has(value)) {
+      return { valid: false, error: `DUPLICATE_CONFIDENCE_VALUES: Value ${value} assigned more than once` };
+    }
+    assigned.add(value);
+  }
+  return { valid: true };
+}
+
 // ============================================================================
 // Survivor Scoring Logic
 // ============================================================================

@@ -16,13 +16,17 @@ export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdate
 export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
 export { onSystemConfigWritten } from "./systemConfigAudit";
 export { onUserCreated, syncAllUsers } from "./userSync";
+export { onUserNameChanged } from "./userNameSync"; // profile name -> every pool copy (members/entries)
 export { deleteUserAccount, sendAdminPasswordReset, sendSecuritySMSAlert, testSmsHttp, searchUsersByEmail, sendUserEmail } from "./userManagement";
 export { runReminders, onWinnerComputed } from "./reminders";
 export { notifyPasswordReset } from "./securityNotices"; // PLAN-AUDIT-AUTH-HARDENING A3
 export { autoLockPools } from "./autoLock"; // NEW: Dedicated 1-minute auto-lock scheduler
 export { autoClosePools } from "./autoClosePools"; // T2: daily stuck-pool close sweep (dry-run + kill-switch)
 export { onPoolLocked, recalculateGlobalStats, recomputeGlobalStatsDaily } from "./statsTrigger";
-export { onUserCreated as createParticipantProfile, createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
+// `createParticipantProfile` (a second Auth-create trigger with its own profile
+// schema) was removed 2026-09-11; `onUserCreated` in userSync.ts is the one
+// server-side profile creator. Deploy prompts to delete the old function.
+export { createClaimCode, claimMySquares, claimByCode, syncParticipantIndices } from "./participant";
 export { createPool, updatePoolSettings, recalculatePoolWinners, toggleWinnerPaid, fixParticipantIds, clearLegacyCoManagers } from "./poolOps";
 export { setPoolCoCommissioner } from "./coCommissioners";
 export { backfillPools } from "./backfill";
@@ -120,6 +124,7 @@ export { manageEmailPrefs } from "./emailPrefsPage";
 
 // --- COMMISSIONER EXCEPTION TOOLS (audited mid-season corrections) ---
 export { extendWeekDeadline, proxyPick, cancelPool, closePool } from "./poolExceptions";
+export { settlePool } from "./poolSettlement";
 
 // --- POOL INVITES (bulk email invites) ---
 export { sendPoolInvites } from "./invites";
@@ -131,6 +136,7 @@ export { backfillFrozenSpreads } from "./migrations/backfillFrozenSpreads";
 export { backfillMemberRecords } from "./migrations/backfillMemberRecords";
 export { backfillProfileData } from "./migrations/backfillProfileData";
 export { backfillPublishedWeeks } from "./migrations/backfillPublishedWeeks";
+export { backfillConfidenceLockMode } from "./migrations/backfillConfidenceLockMode";
 export { reconcilePaymentTruth } from "./migrations/reconcilePaymentTruth";
 
 // --- CONSENSUS + LIVE WIN PROBABILITY (ADR 0004) ---

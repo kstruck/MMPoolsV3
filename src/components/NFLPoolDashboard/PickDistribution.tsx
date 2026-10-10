@@ -4,6 +4,7 @@ import { dbService } from '../../services/dbService';
 import { useSiteConsensusState } from './pickSheet/useSiteConsensus';
 import { readStoredScope, writeStoredScope, type DistributionScope } from './pickSheet/distributionScope';
 import type { Pool, NFLGame } from '../../types';
+import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
 
 interface PickDistributionProps {
   pool: Pool;
@@ -49,6 +50,15 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
   week,
 }) => {
   const [scope, setScope] = useState<DistributionScope>(readStoredScope);
+
+  // 🔨 KEVIN 2026-10-08 — `settings.pickDistribution` (PLAN-SPLIT-POT-SETTLEMENT
+  // Part C). The commissioner may hide the card or hold each game's split until
+  // that game's pick locks. The parent does not render the card at all on OFF;
+  // the check here is the second guard on the same rule. A one-minute tick lets a
+  // split appear on its own when a lock passes, without a reload.
+  const { mode: visibility, visibleIds } = useDistributionVisibility(pool, week, games);
+  const shownGames = useMemo(() => games.filter(g => visibleIds.has(g.id)), [games, visibleIds]);
+  const heldBack = games.length - shownGames.length;
   const selectScope = (next: DistributionScope) => {
     setScope(next);
     writeStoredScope(next);
@@ -97,9 +107,12 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
 
   // Compile pick distribution statistics from the selected server aggregate
   const distributionData = useMemo(() => {
-    if (games.length === 0) return [];
+    // The setting governs the POOL split only (D10, qodo #5 on #716): the Site
+    // tab is a different aggregate and shows every game.
+    const list = isSite ? games : shownGames;
+    if (list.length === 0) return [];
 
-    return games.map(game => {
+    return list.map(game => {
       // The two projections are the same shape by construction (`projDoc` in
       // functions/src/consensus.ts writes both), but the site hook has already
       // dropped rows with no picks and narrowed the types, so it is read directly
@@ -114,7 +127,7 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         awayPct: typeof c?.awayPct === 'number' ? c.awayPct : undefined,
       };
     });
-  }, [poolByGame, site.byGame, isSite, games, week]);
+  }, [poolByGame, site.byGame, isSite, games, shownGames]);
 
   const tabClass = (active: boolean) =>
     `px-2.5 py-1 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-colors ${
@@ -122,6 +135,9 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
         ? 'bg-navy-700 text-white dark:bg-gold-400 dark:text-navy-900'
         : 'text-muted hover:text-[color:var(--text)]'
     }`;
+
+  // OFF: nothing. Every hook above has already run, so this early return is safe.
+  if (visibility === 'OFF') return null;
 
   return (
     <div className="bg-card border border-line rounded-xl p-6 shadow-card space-y-5">
@@ -170,6 +186,13 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
       </p>
 
       <div className="space-y-4">
+        {!isSite && heldBack > 0 && (
+          <p className="font-body text-[12px] text-faint italic num">
+            {shownGames.length === 0
+              ? 'The commissioner shows each game’s split once its picks lock.'
+              : `${heldBack} more ${heldBack === 1 ? 'game appears' : 'games appear'} once ${heldBack === 1 ? 'its' : 'their'} picks lock.`}
+          </p>
+        )}
         {games.length === 0 ? (
           <p className="font-body text-[13px] text-faint italic text-center py-4">No active games scheduled.</p>
         ) : (
@@ -210,15 +233,15 @@ export const PickDistribution: React.FC<PickDistributionProps> = ({
                   {/* Split distribution bar */}
                   <div className="h-2 w-full bg-line rounded-full overflow-hidden flex">
                     <div
-                      className="bg-navy-600 transition-all duration-500"
+                      className="bg-navy-600 transition-width duration-300 ease-out"
                       style={{ width: `${awayPct}%` }}
                     />
                     <div
-                      className="bg-transparent transition-all duration-500"
+                      className="bg-transparent transition-width duration-300 ease-out"
                       style={{ width: `${100 - awayPct - homePct}%` }}
                     />
                     <div
-                      className="bg-gold-foil transition-all duration-500"
+                      className="bg-gold-foil transition-width duration-300 ease-out"
                       style={{ width: `${homePct}%` }}
                     />
                   </div>

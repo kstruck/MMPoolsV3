@@ -31,6 +31,7 @@ import { buildPoolRoster, rosterPotStats, outstandingDue, duesRates, memberOutst
 import { BanterFeed } from './BanterFeed';
 import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
 import { formatDeadline } from '../../utils/formatTime';
+import { poolIsOver } from '../../utils/poolIsOver';
 
 interface NFLManagerBentoDashboardProps {
   pool: Pool;
@@ -65,6 +66,10 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   onOpenLedger,
 }) => {
   const castPool = pool as any;
+  // Cancelled is the one ending with no results (`cancelPool` voids the pool).
+  const poolCancelled = String(castPool?.status ?? '').toUpperCase() === 'CANCELED';
+  // Final standings exist only once the season finalizer has run — see the card.
+  const poolHasFinalResults = castPool?.finalizedAt !== undefined && castPool?.finalizedAt !== null;
   const toast = useToast();
   const [aiMood, setAiMood] = useState<'savage' | 'professional' | 'analyst'>('savage');
   const [banterText, setBanterText] = useState('');
@@ -426,9 +431,52 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
 
-      {/* CARD 1: POOL PERFORMANCE & SUBMISSIONS HEALTH */}
+      {/* CARD 1: POOL PERFORMANCE & SUBMISSIONS HEALTH.
+          On a pool that is over (settled, finalized, cancelled…) there is no
+          week left to chase: picks are closed, the lock time is past and the
+          reminder jobs skip it, so a live "pick completion" tracker with Nudge
+          buttons would contradict the banner above it and invite an email the
+          server now refuses. Say the pool is over instead. */}
+      {poolIsOver(pool) ? (
       <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        className="bg-card border border-line rounded-xl p-6 shadow-card flex flex-col justify-center gap-2"
+        data-testid="pool-over-card"
+      >
+        {/* The card promises results ONLY when they were published, and the one
+            signal for that is `finalizedAt`: the season finalizer is its only
+            writer (functions/src/nflFinalize.ts) and stamps it after committing
+            the final standings. A settlement runs that finalizer, so a settled
+            pool has it too.
+
+            Listing the endings WITHOUT results instead was tried and holed twice
+            in review: first a CANCELLED pool was sent to look for results, then
+            an ADMIN-CLOSED one (COMPLETED + closedVia ADMIN_CLOSE, which
+            publishes nothing) — qodo on #724, both rounds. Any future way to end
+            a pool lands in the no-promise message by default.
+
+            "Standings & Results" is the MAIN pool tab (NFLPoolDashboard's tab
+            list), not a commissioner sub-tab. The first version of this card
+            said "the Scoring tab", which is the weekly Score & Recap action and
+            shows no standings (qodo #2 on #723). The test pins the label against
+            that tab list so the two cannot drift.
+
+            Each message is ONE string on purpose: split across JSX lines with a
+            comment between them, the sentences lose their space and run
+            together — the same defect the settled banner shipped with. */}
+        <h3 className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted">
+          {poolCancelled ? 'Pool Cancelled' : 'Pool Over'}
+        </h3>
+        <p className="font-body text-sm text-[color:var(--text)] leading-relaxed">
+          {poolCancelled
+            ? 'This pool was cancelled and takes no more picks, so there is nothing left to chase here. It has no final results. Any money still to settle is in the Payment Ledger.'
+            : poolHasFinalResults
+              ? 'This pool has ended and takes no more picks, so there is nothing left to chase here. The final results are under Standings & Results, in the pool’s main tabs, and any money still owed is in the Payment Ledger.'
+              : 'This pool has been closed and takes no more picks, so there is nothing left to chase here. Any money still owed is in the Payment Ledger.'}
+        </p>
+      </div>
+      ) : (
+      <div
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -485,7 +533,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             <span className="font-display font-bold uppercase text-[12px] tracking-[0.08em] text-muted block mb-1">Pending Pick Sheets (<span className="num">{unsubmittedPlayers.length}</span>)</span>
             {unsubmittedPlayers.length > 0 ? (
               unsubmittedPlayers.slice(0, 5).map((player, idx) => (
-                <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-page border-line transition-all duration-150 hover:bg-surface">
+                <div key={idx} className="flex justify-between items-center p-3 rounded-lg border bg-page border-line transition-ui duration-150 hover:bg-surface">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-md bg-navy-800 font-display font-bold text-xs text-white flex items-center justify-center uppercase">
                       {player.name.substring(0,2).toUpperCase()}
@@ -521,7 +569,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                       : player.hasEntry
                         ? undefined
                         : 'This member has not started an entry — nudging them is exactly the point.'}
-                    className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-all duration-150 hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="min-h-[44px] bg-gold-400/10 border border-gold-500/40 hover:bg-gold-400/20 text-gold-600 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 rounded-md transition-ui duration-150 fine:hover:-translate-y-px disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {/* The label still distinguishes the two states — a
                         commissioner wants to know who has not started — but the
@@ -548,10 +596,11 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
           </span>
         </div>
       </div>
+      )}
 
       {/* CARD 2: BUY-IN REVENUE LEDGER & MEMBERS ACCREDITATION */}
       <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-6">
@@ -561,7 +610,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
             </div>
             <button
               onClick={onOpenLedger}
-              className="bg-navy-800 hover:bg-navy-700 transition-all duration-150 hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
+              className="bg-navy-800 hover:bg-navy-700 transition-ui duration-150 fine:hover:-translate-y-px text-white font-display font-bold text-[10px] uppercase tracking-[0.05em] px-3.5 py-1.5 rounded-md shadow-card"
             >
               Open Payment Ledger
             </button>
@@ -622,7 +671,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 return (
                   <div
                     key={player.uid}
-                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-all duration-150"
+                    className="flex justify-between items-center p-3 rounded-lg border border-line bg-page hover:bg-surface transition-ui duration-150"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-md font-display font-bold text-xs flex items-center justify-center bg-navy-800 text-white">
@@ -646,7 +695,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                       <button
                         onClick={() => togglePayment(player.uid, false, player.hasMember)}
                         disabled={togglingId === player.uid}
-                        className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-all duration-150 hover:-translate-y-px"
+                        className="flex items-center gap-2 bg-navy-800 hover:bg-navy-700 text-white px-3.5 py-1.5 rounded-md text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 fine:hover:-translate-y-px"
                       >
                         {togglingId === player.uid ? 'Saving...' : 'Mark Paid'}
                       </button>
@@ -679,7 +728,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
 
       {/* CARD 3: COMMISSIONER AI BANTER WIDGET */}
       <div
-        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+        className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
       >
         <div>
           <div className="flex justify-between items-center mb-4">
@@ -714,7 +763,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 type="button"
                 aria-pressed={aiMood === mood.id}
                 onClick={() => setAiMood(mood.id as 'savage' | 'professional' | 'analyst')}
-                className={`text-left p-3.5 rounded-lg border transition-all duration-150 ${
+                className={`text-left p-3.5 rounded-lg border transition-ui duration-150 ${
                   aiMood === mood.id
                     ? 'bg-card border-gold-500 shadow-card scale-[1.02]'
                     : 'bg-page border-line opacity-60 hover:opacity-100'
@@ -742,7 +791,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
               <button
                 type="submit"
                 disabled={!banterText.trim() || banterBusy !== null}
-                className="flex items-center justify-center gap-1.5 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1.5 bg-brandred-600 hover:bg-brandred-500 text-white px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-ui duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send size={13} aria-hidden="true" /> {banterBusy === 'post' ? 'Posting...' : 'Post as me'}
               </button>
@@ -751,7 +800,7 @@ export const NFLManagerBentoDashboard: React.FC<NFLManagerBentoDashboardProps> =
                 onClick={handleAskAI}
                 disabled={!banterText.trim() || banterBusy !== null || !aiUnlocked}
                 title={aiUnlocked ? 'The AI writes the post in the selected tone' : 'AI Commissioner is not unlocked on this pool'}
-                className="flex items-center justify-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-all duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-1.5 border border-gold-500/60 text-gold-700 dark:text-gold-300 px-4 py-2.5 rounded-md font-display font-bold uppercase text-[10px] tracking-[0.08em] transition-ui duration-150 hover:bg-gold-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Sparkles size={13} aria-hidden="true" /> {banterBusy === 'ai' ? 'Asking...' : 'Let AI write it'}
               </button>

@@ -16,13 +16,13 @@ interface AboutPageProps {
 
 /* Marketing page is navy chrome end-to-end — always dark in both themes. */
 
-export const AboutPage: React.FC<AboutPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
+export const AboutPage: React.FC<AboutPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool }) => {
     return (
         <div className="min-h-screen text-[color:var(--text)] font-body bg-page flex flex-col">
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />
@@ -73,7 +73,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ user, isManager = false, o
                         </div>
                         <div className="pt-6 border-t border-line flex items-center justify-between font-display font-bold uppercase text-xs tracking-[0.08em] text-gold-600 dark:text-gold-400 group cursor-pointer" onClick={() => window.location.href = '/how-it-works'}>
                             <span>Learn how our platform works</span>
-                            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                            <ArrowRight size={14} className="fine:group-hover:translate-x-1 transition-transform" />
                         </div>
                     </div>
 

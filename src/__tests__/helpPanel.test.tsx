@@ -24,7 +24,19 @@ import { helpRegistry, staticCopy } from '../help/registry';
 import { onCurrentRoute } from '../help/route-match';
 import { __resetOverlayStack, useOverlayOwner } from '../components/ui/overlayStack';
 
-beforeAll(() => {
+beforeAll(async () => {
+  // Warm the lazy admin chunk ONCE, before any timed assertion depends on it.
+  //
+  // Two tests below open the panel as an admin and `waitFor` the copy that
+  // `loadAdminRegistry()` fetches with `import('./content/super-admin')`. The
+  // first such import in a worker pays vitest's transform + evaluation of that
+  // module, and under a full-suite run on a loaded machine that alone exceeded
+  // `waitFor`'s 1 s default: the same assertion failed once on each of #678 and
+  // #681, then passed alone and on rerun. Importing here moves that cost out of
+  // the timed window. The code path under test is unchanged — the panel still
+  // goes through `loadAdminRegistry()` and its `import()`; the module is simply
+  // already in the loader cache, which is also what a warm browser sees.
+  await import('../help/content/super-admin');
   // `useIsMobile` asks for it and jsdom does not implement it. Desktop, so the
   // panel is a drawer rather than a modal — the mobile branch only adds a
   // backdrop and `aria-modal`.
@@ -766,7 +778,11 @@ describe('the admin help chunk on an admin route (codex round 2 on T14)', () => 
     // The chunk is fetched when the panel opens, so the copy arrives async.
     // Matched on the SUMMARY, which only the page heading renders — the title
     // appears twice, as the heading and as the current row in "All pages".
-    await waitFor(() => expect(screen.getByText(/creates a test pool/)).toBeTruthy());
+    // Chunk resolution plus a React commit; the module itself is pre-warmed in
+    // `beforeAll`, and the widened timeout is the belt to that brace.
+    await waitFor(() => expect(screen.getByText(/creates a test pool/)).toBeTruthy(), {
+      timeout: 5000,
+    });
     // …and it is the current page, not merely listed.
     expect(
       screen.getByRole('button', { name: 'Tournament Simulator' }).getAttribute('aria-current'),
@@ -827,7 +843,9 @@ describe('search filtering (codex R3 on T14)', () => {
     fireEvent.keyDown(document, { key: '?' });
     await waitFor(() => expect(isOpen()).toBe(true));
     // Wait for the admin chunk, or the query runs against the base registry.
-    await waitFor(() => expect(screen.getAllByText(/Overview: Dashboard/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText(/Overview: Dashboard/).length).toBeGreaterThan(0), {
+      timeout: 5000,
+    });
 
     fireEvent.change(screen.getByPlaceholderText('Search help'), { target: { value: 'the' } });
     await waitFor(() =>

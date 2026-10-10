@@ -15,13 +15,13 @@ interface CharityPageProps {
 
 /* Marketing page is navy chrome end-to-end — always dark in both themes. */
 
-export const CharityPage: React.FC<CharityPageProps> = ({ user, isManager = false, onLogin, onLogout, onCreatePool }) => {
+export const CharityPage: React.FC<CharityPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool }) => {
     return (
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
             <Header
                 user={user || null}
                 isManager={isManager}
-                onOpenAuth={onLogin}
+                onOpenAuth={(mode) => (mode === 'register' ? onSignup : onLogin)()}
                 onLogout={onLogout || (() => { })}
                 onCreatePool={onCreatePool}
             />

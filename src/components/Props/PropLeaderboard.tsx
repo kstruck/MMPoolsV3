@@ -70,7 +70,7 @@ export const PropLeaderboard: React.FC<PropLeaderboardProps> = ({ gameState, cur
     };
 
     return (
-        <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card animate-in fade-in slide-in-from-bottom-4 delay-100 font-body">
+        <div className="bg-card rounded-xl border border-line overflow-hidden shadow-card animate-in fade-in delay-100 font-body">
             <div className="p-4 bg-surface border-b border-line flex justify-between items-center">
                 <h3 className="font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
                     <Trophy size={18} className="text-gold-500" /> Leaderboard

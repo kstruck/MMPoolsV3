@@ -21,7 +21,7 @@ export const PlayoffPayoutCard: React.FC<PlayoffPayoutCardProps> = ({ pool, paid
             </div>
 
             <div className="p-6 flex-1 flex flex-col justify-center">
-                <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                <div className="animate-in fade-in slide-in-from-left-4 duration-200">
                     <div className="space-y-3">
                         {/* Total Collected */}
                         <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2">

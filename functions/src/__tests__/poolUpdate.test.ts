@@ -8,6 +8,15 @@ import {
 } from '../lib/poolUpdate';
 import { normalizePhase, isGroupEditable, classifyUpdateKey } from '../shared/editability';
 
+describe('flattenSettingsPatch — pickDistribution (PLAN-SPLIT-POT-SETTLEMENT Part C)', () => {
+  it.each(['ALWAYS', 'AFTER_LOCK', 'OFF'])('stores %s as a dotted write', (v) => {
+    expect(flattenSettingsPatch({ settings: { pickDistribution: v } }, 'NFL_PICKEM')['settings.pickDistribution']).toBe(v);
+  });
+  it.each(['OFFF', '', 'off', 1, null, true])('rejects %s rather than storing it', (v) => {
+    expect(() => flattenSettingsPatch({ settings: { pickDistribution: v } }, 'NFL_SURVIVOR')).toThrow(/pickDistribution/);
+  });
+});
+
 describe('normalizePhase', () => {
   it('locked wins over status', () => {
     expect(normalizePhase({ isLocked: true, status: 'OPEN' })).toBe('locked');
@@ -231,9 +240,9 @@ describe('touchesLockSettings — which saves must serialize with the scoring le
     expect(touchesLockSettings({ [`settings.${key}`]: 1 })).toBe(true);
   });
 
-  it('includes confidenceMode, which silently converts a pool to weekly locking', () => {
-    // Submission derives weekly-lock mode from
-    // `settings.confidenceMode || settings.lockMode === 'WEEKLY'`.
+  it('includes confidenceMode, which changes when picks lock (legacy weekly clause; kickoff ceiling)', () => {
+    // `shared/nflLockMode.ts` reads it: on an unstamped pool it forces weekly,
+    // on a stamped one it turns the kickoff ceiling on (PLAN-CONFIDENCE-PER-GAME-LOCK).
     expect(LOCK_AFFECTING_SETTINGS_KEYS).toContain('confidenceMode');
   });
 

@@ -111,7 +111,10 @@ describe('source pins', () => {
     const mv = read('src/components/NFLPoolDashboard/NFLManagerView.tsx');
     const cancel = mv.indexOf('Cancel Pool ──');
     expect(cancel).toBeGreaterThan(-1);
-    expect(mv.slice(cancel, cancel + 600)).toMatch(/\{viewerIsOwner && \(/);
+    // The STRICT owner flag still leads the gate. PLAN-SPLIT-POT-SETTLEMENT added
+    // `!poolIsOver(castPool)` after it (qodo #1 on #715: no cancelling a settled
+    // pool) — an extra restriction, never a widening.
+    expect(mv.slice(cancel, cancel + 600)).toMatch(/\{viewerIsOwner && (\(|!poolIsOver\(castPool\) && \()/);
     const dash = read('src/components/NFLPoolDashboard/NFLPoolDashboard.tsx');
     expect(dash).toContain('<BillingGate pool={pool as any} isCommissioner={isPoolManager(user, pool)}>');
     expect(dash).not.toMatch(/isCommissioner=\{isManager\}/);

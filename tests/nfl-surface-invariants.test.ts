@@ -471,7 +471,12 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     // Guard the guard — see the nav block. Both strings live only in comments.
     expect(sheet).toContain('strand the member');
     expect(code).not.toContain('strand the member');
-    expect(code).toContain('availableConfidenceValues.map'); // code survived
+    // The option list is now a per-game expression (a locked game lists only its
+    // frozen weight; an open game lists what it may still take plus what it holds
+    // — PLAN-CONFIDENCE-PER-GAME-LOCK), so the surviving-code check names the
+    // list and the map separately.
+    expect(code).toContain('...availableConfidenceValues]'); // code survived
+    expect(code).toContain(').map(v => {');
   });
 
   it('the per-game dropdown disables values from the shared rule, not a local re-derivation', () => {
@@ -480,9 +485,16 @@ describe('confidence weights — graying is wired, and the duplicate backstop su
     expect(code).toContain('disabled={taken}');
   });
 
-  it('the owners map is built from THIS week\'s games only', () => {
-    // Folding the whole entry in would gray out weights spent on other weeks.
-    expect(code).toContain('confidenceValueOwners(games.map(g => g.id), confidence)');
+  it('the owners map is built from THIS week\'s games only, minus the games the member missed', () => {
+    // Folding the whole entry in would gray out weights spent on other weeks;
+    // folding a MISSED game in (locked, never picked — its draft weight is
+    // dropped at submit) would gray out a value the member still needs
+    // (PLAN-CONFIDENCE-PER-GAME-LOCK, codex r3 on the diff).
+    // `auditWeights` is this week's games only: a locked game counts its SAVED
+    // weight, a missed game counts nothing, an open game counts the draft
+    // (codex r3 and r9 on the diff).
+    expect(code).toContain('confidenceValueOwners(Object.keys(auditWeights), auditWeights)');
+    expect(code).toContain('isGameLocked(g) ? (entry?.confidence?.[g.id] as number | undefined) : confidence[g.id]');
   });
 
   it('the duplicate detection is still present and still blocks the submit', () => {
@@ -963,7 +975,7 @@ describe('the tiebreaker explanation has ONE source, and both surfaces read it',
  * on the Majority row before ITS game map.
  */
 describe('current picks grid — the Majority row has a cell for every fixed column', () => {
-  it('Player, Set, Week Pts headers ↔ label, dash, dash before weekGames.map', () => {
+  it('Player, Set, Week Pts, W-L, Max headers ↔ label + four dashes before weekGames.map', () => {
     const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'), 'utf8');
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     // Every marker is asserted present before it is used to slice, so a
@@ -984,7 +996,7 @@ describe('current picks grid — the Majority row has a cell for every fixed col
     const majorityBlock = code.slice(majorityStart, majorityGamesMap);
     // label cell is the <td> that wraps "Majority" itself, opened before the marker
     const fixedMajorityCells = 1 + (majorityBlock.match(/<td\b/g) ?? []).length;
-    expect(fixedHeaders).toBe(3);
+    expect(fixedHeaders).toBe(5);
     expect(fixedMajorityCells).toBe(fixedHeaders);
   });
 });

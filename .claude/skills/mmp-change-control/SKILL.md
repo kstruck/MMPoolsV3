@@ -47,7 +47,7 @@ Classify FIRST. The gate is determined by blast radius, not effort.
 
 | Class | Definition | Gate required |
 |---|---|---|
-| **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` (**judgement up to 10 rounds; past 10 ask Kevin with a reason** — CLAUDE.md §2c, his ruling 2026-07-27, which replaced the earlier 5-round cap. Stop on evidence — a clean round your own read of the diff agrees with — not on the counter; if you stop with findings still open, name them in the PR body), PR through CI. **qodo is DORMANT as of 2026-08-19 (Kevin: "Turn off the Qodo reviews for now") — do NOT wait for it and do NOT load `mmp-qodo-cycle`; CLAUDE.md §2b carries the ruling and the held procedure.** So the stopping rule is TWO conditions: a codex round clean AND your own read of the diff agrees. It becomes three again when §2b is restored. "qodo clean" means it REPORTED and every finding is fixed or rejected with reasoning on the PR — not that a fresh pass came back empty; it was observed not re-reviewing after a fix push. **No plan doc.** Own worktree if another session may be active (Rule 4). |
+| **Ordinary change** | Anything that touches none of the Rule-3 triggers below — **any file count**, from a one-line typo to a 14-file refactor | Own branch off `origin/main`, all five gates green, `codex exec review --base origin/main` (**judgement up to 10 rounds; past 10 ask Kevin with a reason** — CLAUDE.md §2c, his ruling 2026-07-27, which replaced the earlier 5-round cap. Stop on evidence — a clean round your own read of the diff agrees with — not on the counter; if you stop with findings still open, name them in the PR body), PR through CI. **qodo is LIVE again as of 2026-09-01 (Kevin: "Qodo back on, go ahead and start using for each PR going forward") — run it on EVERY PR and load `mmp-qodo-cycle`; CLAUDE.md §2b carries the ruling and the procedure.** So the stopping rule is THREE conditions: qodo clean AND a codex round clean AND your own read of the diff agrees. "qodo clean" means it REPORTED and every finding is fixed or rejected with reasoning on the PR — not that a fresh pass came back empty; it was observed not re-reviewing after a fix push, and the draft→ready toggle is how you force one. It was DORMANT 2026-07-25 → 2026-07-30 and again 2026-08-19 → 2026-09-01 (credits exhausted); during those windows the rule was two conditions. **No plan doc.** Own worktree if another session may be active (Rule 4). |
 | **Plan-gated change** | Touches **money, authorization, production data, or scoring** — see the trigger list below | Rule 3: `PLAN-*.md` + adversarial review log + sweep pass, THEN implement. |
 | **Prod-data mutation** | Any code or action that writes/migrates/backfills/deletes production Firestore data outside a user's own normal flow (backfills, sweeps, role migrations, `fix*`/`recalculate*` ops) | Rule 1: kill-switch + dry-run-default, review dry-run output before enabling. Prod data is itself a Rule-3 trigger, so new code here takes the plan gate too. |
 | **Deploy** | Anything reaching prod: functions, firestore rules/indexes, www frontend | Rule 2 deploy ritual. Frontend additionally requires Kevin (Section 6). |
@@ -402,7 +402,7 @@ intention.
 ## 4. The plan -> review-log -> sweep workflow as practiced
 
 Worked example: `PLAN-SUPERADMIN-CONTROL.md` + `PLAN-SUPERADMIN-CONTROL-REVIEW-LOG.md`
-+ `PLAN-SUPERADMIN-CONTROL-SWEEPS.md` (all at repo root; read them before
++ `PLAN-SUPERADMIN-CONTROL-SWEEPS.md` (all in `docs/archive/` now that they shipped; live plans sit in `docs/plans/` — read them before
 writing your first plan). The actual step sequence extracted from that cycle:
 
 1. **Evidence gathering.** A live prod walkthrough + parallel code reviews
@@ -476,7 +476,7 @@ to main/master; token is contents:read only):
 |---|---|---|
 | `build-and-test` | `npm ci` (root + functions), `npm run build:static` (tsc -b + vite build + prerender), functions `npm run typecheck` (via the npm script — it mirrors `shared/` into `functions/src/shared/` first; bare tsc fails), root `npm test`, functions `npm test`. Node 20. | Intended as the REQUIRED check |
 | `nginx-validate` | `nginx -t` on `nginx.conf` in a docker nginx:alpine — gates the Coolify container config | Yes (job fails on bad conf) |
-| `lint` | `npm run lint` with `continue-on-error: true` | NO — advisory only, ~540-finding backlog |
+| `lint` | `npm run lint` (0 errors / 1871 warnings baseline, warnings do not fail it) | YES — required ruleset context since 2026-09-03 |
 
 `security-scan.yml` (same triggers): `npm audit --audit-level=high` + a Python
 dependency scanner (`skills/skill-security-scanner/scripts/scanner.py`).
@@ -485,22 +485,29 @@ The clobber-guard invariant tests (Section 3) run inside `build-and-test` as
 ordinary vitest tests — they are the anti-clobber automation.
 
 **Enforced by husky:** exactly one hook. `.husky/pre-commit` runs
-`python scripts/scan_secrets.py` (secret scanner). There is NO pre-push hook.
+`python scripts/scan_secrets.py` (secret scanner, blocking — husky runs the hook
+under `sh -e`, so a non-zero exit aborts the commit) and then prints an ADVISORY
+warning when more than 10 paths are staged (echo only, never exits; counts every
+staged path, deletions and type changes included — `tests/pre-commit-file-count.test.ts`
+pins that). There is NO pre-push hook.
+
+**Required status checks — VERIFIED 2026-09-03 by reading the ruleset, not the
+docs.** Ruleset `11714546` ("Required Checks", main-scoped, enforcement active)
+requires SIX contexts: `build-and-test`, `emulator-tests`, `nginx-validate`,
+`lint`, `secrets-scan`, `security-audit`. `e2e-playwright` runs but is NOT
+required. The ruleset also enforces strict up-to-date-with-main and required
+review-thread resolution, and its review rule is unsatisfiable by the sole
+author, so every merge is Kevin's `--admin` bypass — see HANDOFF's
+2026-09-01 deadlock note. Re-verify with the command in the provenance table;
+if `bypass_actors` ever comes back empty, every PR is deadlocked again.
 
 **NOT enforced by any automation in this repo** (know these; they are process,
 not machinery):
-- **Branch protection / required-check status**: a GitHub settings fact,
-  NOT verifiable from the repo. UNVERIFIED whether `build-and-test` is
-  actually marked required or whether direct pushes to `main` are blocked.
-  Verify at github.com repo Settings -> Branches. Treat "CI is required" as a
-  convention you must honor even if settings would let you bypass it.
 - **No deploy workflow exists.** CI never deploys anything. Functions/rules
   deploys are manual CLI (Rule 2); www frontend is manual Coolify (Section 6).
   Corollary: green CI on main says NOTHING about what is running in prod.
   Deploy state must be verified, never assumed ("Functions are known stale"
   was a real finding).
-- **Lint is non-blocking** (`continue-on-error: true`). A PR can merge with
-  new lint errors.
 - **Nothing enforces the plan/review-log/sweep gate** (Rule 3) or worktree
   isolation (Rule 4) — those are discipline.
 - **Nothing prevents committing to someone else's active branch.**
@@ -560,7 +567,8 @@ Facts here drift. Re-verify before relying (all from repo root
 |---|---|
 | CI jobs / what's blocking | `Get-Content .github/workflows/ci.yml` (look for `continue-on-error`) |
 | Husky hooks | `Get-ChildItem .husky; Get-Content .husky/pre-commit` |
-| Branch protection (UNVERIFIABLE from repo) | GitHub -> Settings -> Branches, or `gh api repos/{owner}/{repo}/branches/main/protection` |
+| Required checks (ruleset, not branch protection) | `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.rules[] \| select(.type=="required_status_checks") \| .parameters.required_status_checks[].context'` — expect the six contexts above |
+| Ruleset bypass entry (empty = every PR deadlocked) | `gh api repos/kstruck/MMPoolsV3/rulesets/11714546 --jq '.bypass_actors'` — expect `[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]` |
 | Kill-switch pattern still canonical | `Get-Content functions/src/autoClosePools.ts -TotalCount 50` |
 | Live kill-switch values (`autoClose.enabled/dryRun`) | Firestore console doc `system/config` (or an admin script) — not in the repo |
 | sim- rules state | `Select-String -Path firestore.rules -Pattern 'sim-'` |
@@ -571,6 +579,7 @@ Facts here drift. Re-verify before relying (all from repo root
 | Active worktrees/branches | `git worktree list; git branch -a --sort=-committerdate | Select-Object -First 15` |
 | Plan status ledger | "Implementation status" section at top of the newest `PLAN-*.md` |
 
-UNVERIFIED items in this skill (labeled inline): branch-protection settings;
-whether `build-and-test` is a GitHub-required check. Everything else was
-verified against the repo, git history, or the owner interview of 2026-07-06.
+UNVERIFIED items in this skill: none as of 2026-09-03 — the required-check list
+and bypass entry were read from ruleset `11714546` via `gh api` that day (they
+were UNVERIFIED from 2026-07-06 until then). Everything else was verified
+against the repo, git history, or the owner interview of 2026-07-06.

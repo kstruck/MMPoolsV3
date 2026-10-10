@@ -62,6 +62,7 @@ import type { GameState, User, Winner, PoolTheme, PlayerDetails, PropSeed, PropC
 import type { PoolQuoteInput, PoolQuote, AddonSelection } from "@shared/schemas/quote";
 import { FROZEN_SPREADS_COLLECTION, applyFrozenSpreads, type FrozenSpread } from "@shared/frozenSpread";
 import type { PublicProfile } from "@shared/profile";
+import type { PoolSettlement, SettlementPreview } from "@shared/settlement";
 
 /**
  * A `publicProfiles/{uid}` document as READ (not as written). Every field of the
@@ -1549,7 +1550,17 @@ export const dbService = {
         });
     },
 
-    subscribeToWinners: (poolId: string, callback: (winners: Winner[]) => void) => {
+    /**
+     * `onError` is OPTIONAL and callers that omit it keep the previous
+     * behaviour exactly: a subscription failure logs and delivers `[]`.
+     *
+     * It exists because `[]` is not honestly distinguishable from "this pool
+     * has no winners", and a caller that draws a conclusion from emptiness —
+     * the participant dashboard says "No winnings yet" — would state that as
+     * fact after a permission or network failure. A caller that wants to tell
+     * those apart now can. (qodo #20 on PR #670.)
+     */
+    subscribeToWinners: (poolId: string, callback: (winners: Winner[]) => void, onError?: (error: unknown) => void) => {
         const q = query(collection(db, "pools", poolId, "winners"));
         return onSnapshot(q, (snapshot) => {
             const winners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as Winner);
@@ -1575,7 +1586,7 @@ export const dbService = {
             callback(sorted);
         }, (error) => {
             logger.error("Error subscribing to winners:", error);
-            callback([]);
+            if (onError) onError(error); else callback([]);
         });
     },
 
@@ -1977,6 +1988,25 @@ export const dbService = {
             });
             throw error;
         }
+    },
+
+    // PLAN-SPLIT-POT-SETTLEMENT: end a Survivor pool because the remaining
+    // players agreed to split the pot. Owner/manager only, enforced server-side;
+    // `entryIds` must be exactly the ALIVE entries the panel showed.
+    settlePool: async (input: { poolId: string; entryIds: string[]; note?: string; notifyMembers: boolean; expectedPot: number | null; expectedPrizePerEntry: number | null }): Promise<{ settlement: PoolSettlement; emailed: number; emailFailed: number; adminAuditFailed: boolean; followUpInProgress: boolean }> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; settlement: PoolSettlement; emailed: number; emailFailed?: number; adminAuditFailed?: boolean; followUpInProgress?: boolean }>(functions, 'settlePool');
+        const res = await fn(withCorrelationId({ ...input, outcome: 'SPLIT' }));
+        return { settlement: res.data.settlement, emailed: res.data.emailed, emailFailed: res.data.emailFailed ?? 0, adminAuditFailed: res.data.adminAuditFailed === true, followUpInProgress: res.data.followUpInProgress === true };
+    },
+
+    // Read-only: who is still alive and what the settlement would record —
+    // computed server-side by the finalizer's own functions (codex code-review
+    // r1 P1: the standings projection cannot tell an unscored ALIVE entry from a
+    // roster-only member). The panel sends back exactly these ids.
+    previewSettlement: async (poolId: string): Promise<SettlementPreview> => {
+        const fn = httpsCallable<Record<string, unknown>, { success: boolean; preview: SettlementPreview }>(functions, 'settlePool');
+        const res = await fn(withCorrelationId({ poolId, outcome: 'SPLIT', preview: true }));
+        return res.data.preview;
     },
 
     /** Commissioner nudge: email specific members (or all entries when targetUids is omitted) a picks/payment reminder. */

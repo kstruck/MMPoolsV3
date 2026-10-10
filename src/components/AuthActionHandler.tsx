@@ -130,7 +130,7 @@ export const AuthActionHandler: React.FC<AuthActionHandlerProps> = ({
         <div className="min-h-screen bg-page flex flex-col font-body transition-colors duration-200">
             <Header
                 user={user}
-                onOpenAuth={() => onOpenAuth('login')}
+                onOpenAuth={onOpenAuth}
                 onLogout={onLogout}
                 onCreatePool={onCreatePool}
             />

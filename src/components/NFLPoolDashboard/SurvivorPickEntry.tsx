@@ -25,6 +25,7 @@ import {
   effectiveTieCountsAs,
   UNLIMITED_TEAM_USES,
 } from '@shared/survivorReuse';
+import { poolIsOver } from '../../utils/poolIsOver';
 
 interface SurvivorPickEntryProps {
   pool: Pool;
@@ -191,8 +192,12 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     return false;
   }, [activePickGame, isWeekLocked]);
 
+  // PLAN-SPLIT-POT-SETTLEMENT §2.4: a settled, cancelled or finalized pool
+  // offers no pick and no rebuy (the server refuses both with POOL_OVER).
+  const over = poolIsOver(pool);
+
   // Check if eligible for rebuy
-  const canRebuy = useMemo(() => {
+  const rebuyEligible = useMemo(() => {
     if (!entry) return false;
     if (entry.status !== 'ELIMINATED') return false;
     // The SERVER's comparison, not a client default: `?? 4` here hid the
@@ -201,9 +206,10 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
     if (rebuyDeadlinePassed(week, { rebuyDeadlineWeek })) return false;
     return (entry.rebuysUsed ?? 0) < maxRebuys;
   }, [entry, week, rebuyDeadlineWeek, maxRebuys]);
+  const canRebuy = !over && rebuyEligible;
 
   const handleTeamSelect = (teamAbbreviation: string, game: NFLGame) => {
-    if (isGameLocked(game) || (entry && entry.status === 'ELIMINATED')) return;
+    if (over || isGameLocked(game) || (entry && entry.status === 'ELIMINATED')) return;
     if (blockedTeams.has(teamAbbreviation)) return;
 
     setSelectedTeam(teamAbbreviation);
@@ -394,7 +400,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
         <div role="status" className="bg-gold-400/10 border border-gold-500/40 text-gold-700 dark:text-gold-400 p-4 rounded-lg text-xs font-body font-bold num flex gap-2 items-center">
           <CheckCircle2 size={18} aria-hidden="true" />
           Your {nflWeekLabel(poolSeasonType(pool), week)} pick is saved: {savedPick}.
-          {isSelectionLocked ? ' Picks are locked for this week.' : ' You can change it until lock.'}
+          {over ? ' This pool is over.' : isSelectionLocked ? ' Picks are locked for this week.' : ' You can change it until lock.'}
         </div>
       )}
 
@@ -446,7 +452,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
             return (
               <div
                 key={game.id}
-                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-all duration-150 ${pickOutcomeCardClass(outcome)}`}
+                className={`bg-card border rounded-xl p-4 shadow-card space-y-2 transition-ui duration-150 ${pickOutcomeCardClass(outcome)}`}
               >
                 {/* Text half of the card highlight — see PickemPickEntry. */}
                 {outcome && (
@@ -465,7 +471,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     selected={selectedTeam === awayAbbrev}
                     saved={savedPick === awayAbbrev}
                     outcome={savedPick === awayAbbrev ? outcome : null}
-                    disabled={locked || blockedTeams.has(awayAbbrev) || isEliminated}
+                    disabled={over || locked || blockedTeams.has(awayAbbrev) || isEliminated}
                     badge={usedBadgeLabel(awayAbbrev)}
                     title={pickHighlightLabel(selectedTeam === awayAbbrev, savedPick === awayAbbrev) || undefined}
                     onSelect={() => handleTeamSelect(awayAbbrev, game)}
@@ -505,7 +511,7 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
                     selected={selectedTeam === homeAbbrev}
                     saved={savedPick === homeAbbrev}
                     outcome={savedPick === homeAbbrev ? outcome : null}
-                    disabled={locked || blockedTeams.has(homeAbbrev) || isEliminated}
+                    disabled={over || locked || blockedTeams.has(homeAbbrev) || isEliminated}
                     badge={usedBadgeLabel(homeAbbrev)}
                     title={pickHighlightLabel(selectedTeam === homeAbbrev, savedPick === homeAbbrev) || undefined}
                     onSelect={() => handleTeamSelect(homeAbbrev, game)}
@@ -528,7 +534,8 @@ export const SurvivorPickEntry: React.FC<SurvivorPickEntryProps> = ({
           saveLabel={savedPick ? 'Change Pick' : 'Lock In Pick'}
           savedLabel={savedPick ? `Pick saved: ${savedPick}` : 'No pick yet'}
           blockedReason={
-            entry?.status === 'ELIMINATED' ? 'Eliminated — picks are closed'
+            over ? 'This pool is over — picks are closed'
+              : entry?.status === 'ELIMINATED' ? 'Eliminated — picks are closed'
               : isSelectionLocked ? 'Picks are locked for this week'
                 : !selectedTeam ? 'Tap a team to pick'
                   : null

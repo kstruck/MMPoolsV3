@@ -75,6 +75,22 @@ export const backfillPublishedWeeksSchema = z.strictObject({
 });
 
 /**
+ * backfillConfidenceLockMode - SUPER_ADMIN prod batch migration
+ * (PLAN-CONFIDENCE-PER-GAME-LOCK D1). Stamps `settings.lockRuleVersion: 2` and
+ * `lockMode: 'WEEKLY'` on every legacy confidence Pick'em pool so the stored
+ * lock mode becomes the truth. Same shape as backfillPublishedWeeks: dryRun
+ * defaults TRUE at the schema layer, capped page, null-as-first-page cursor.
+ */
+export const backfillConfidenceLockModeSchema = z.strictObject({
+    dryRun: z.boolean().optional().default(true),
+    limit: z.number().int().positive().max(200).optional(),
+    startAfter: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().min(1).max(1500).optional(),
+    ),
+});
+
+/**
  * reconcilePaymentTruth - SUPER_ADMIN prod one-off (PLAN-PAYMENT-TRUTH P2, Q5).
  * Converges the two payment stores on NFL season pools that diverged before P1:
  * entry-PAID/member-UNPAID promotes the member (+ missing ledger row);

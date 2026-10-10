@@ -56,6 +56,41 @@ describe('getPoolLifecycleState', () => {
   it('defaults a freshly-created NFL pool (status OPEN, no terminal transition yet) to open', () => {
     expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'OPEN' })).toBe('open');
   });
+
+  // maybeFinalizeNFLPool (functions/src/nflFinalize.ts:411) stamps `finalizedAt`
+  // and writes NO status, so a finished season pool keeps OPEN or LOCKED for
+  // good. Codex r1 on #677 found the reader returning 'open' for such a pool.
+  it('treats a scorer-finalized NFL pool (finalizedAt set, status untouched) as final', () => {
+    const stamp = { toMillis: () => 1_700_000_000_000 };
+    expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'OPEN', finalizedAt: stamp })).toBe('final');
+    expect(getPoolLifecycleState({ type: 'NFL_PICKEM', status: 'LOCKED', isLocked: true, finalizedAt: stamp })).toBe('final');
+    expect(getPoolLifecycleState({ type: 'NFL_MARGIN', status: 'LIVE', finalizedAt: 1_700_000_000_000 })).toBe('final');
+  });
+
+  it('ignores an absent or null finalizedAt (never finalized)', () => {
+    expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'OPEN', finalizedAt: null })).toBe('open');
+    expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'OPEN', finalizedAt: undefined })).toBe('open');
+    expect(getPoolLifecycleState({ type: 'NFL_PICKEM', status: 'LOCKED', finalizedAt: null })).toBe('locked');
+  });
+
+  // backfillPools (functions/src/backfill.ts:137) can stamp status FINAL, and the
+  // manager archive path stores lowercase `archived`. Both are settled states;
+  // compared case-insensitively like the server's isRetiredPool.
+  it('treats status FINAL and archived (any case) as final', () => {
+    expect(getPoolLifecycleState({ type: 'NFL_PICKEM', status: 'FINAL' })).toBe('final');
+    expect(getPoolLifecycleState({ type: 'NFL_MARGIN', status: 'archived' })).toBe('final');
+    expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'ARCHIVED' })).toBe('final');
+    expect(getPoolLifecycleState({ type: 'BRACKET', status: 'canceled' })).toBe('final');
+  });
+
+  it('keeps admin-close distinct from a natural final, even once finalizedAt is stamped', () => {
+    expect(getPoolLifecycleState({ type: 'NFL_SURVIVOR', status: 'OPEN', closedVia: 'ADMIN_CLOSE', finalizedAt: 1 })).toBe('closed');
+  });
+
+  it('does not let the terminal rule swallow the SQUARES live/locked reads', () => {
+    expect(getPoolLifecycleState({ type: 'SQUARES', status: 'OPEN', scores: { gameStatus: 'in' } })).toBe('live');
+    expect(getPoolLifecycleState({ type: 'SQUARES', status: 'LOCKED', isLocked: true })).toBe('locked');
+  });
 });
 
 describe('getPoolEntrySummary', () => {

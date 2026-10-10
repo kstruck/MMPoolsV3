@@ -71,6 +71,67 @@ h1, h2, h3, h4, .display {
   color: #fff;
 }
 
+/* ============================================
+   MOTION
+   ============================================ */
+@layer components {
+  /* tailwindcss-animate ships with `ease` — too weak for entrances. Every
+     animate-in/out gets a strong ease-out unless a utility overrides it. */
+  .animate-in,
+  .animate-out {
+    animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/* Reduced motion: gentler, not zero. Keep fades (they aid comprehension),
+   drop movement/scale, and stop the infinite attention-getters. Spinners and
+   skeleton pulses stay — they ARE the loading state. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-out {
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-scale: 1 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-exit-scale: 1 !important;
+    animation-duration: 0.15s !important;
+    animation-delay: 0s !important;
+  }
+  .animate-bounce,
+  .animate-bounce-3,
+  .animate-ping,
+  .animate-live-pulse,
+  .animate-spin-slow,
+  .animate-ticker,
+  .animate-ticker-slow,
+  .ticker-inner {
+    animation: none !important;
+  }
+  /* Movement snaps; colour/opacity/shadow fades stay (they aid comprehension).
+     Hover transforms are already gated by the `fine:` variant, but press
+     feedback (`active:scale-95`) and knob slides are not, so `transition-ui`
+     drops `transform` from its property list here rather than being zeroed
+     outright — codex round 5 on the animation-review PR. */
+  .transition-transform,
+  .transition-width {
+    transition-duration: 0.01ms !important;
+  }
+  /* The collapser keeps its fade and snaps its height (qodo on #667). */
+  .transition-collapse {
+    transition-property: opacity !important;
+  }
+  /* `after:transition-ui` compiles to `.after\:transition-ui::after`, which the
+     bare class selector above does not match (codex round 6 — the Switch knob). */
+  .transition-ui,
+  .after\:transition-ui::after,
+  .before\:transition-ui::before {
+    transition-property:
+      color, background-color, border-color, text-decoration-color,
+      fill, stroke, opacity, box-shadow, filter, backdrop-filter !important;
+  }
+}
+
 /* Custom Scrollbar */
 .grid-scroll::-webkit-scrollbar {
   height: 8px;

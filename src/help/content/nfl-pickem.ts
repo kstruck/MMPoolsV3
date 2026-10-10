@@ -43,7 +43,7 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
     long: [
       'Per game is the default. Each pick stays open until its own game\u2019s deadline, so you can still change a Sunday pick after the Thursday night game has started.',
       'Weekly closes every pick in the week on the first game\u2019s deadline. Choose it when you want everyone playing the same slate with the same information.',
-      'Confidence points force weekly whatever this says, because a confidence sheet spends each weight across the week\u2019s games exactly once. A pool with confidence points on plays weekly however this is set.',
+      'With confidence points on, per game locks each game\u2019s pick AND its weight at that game\u2019s deadline. A weight on a game that has started cannot be moved, and a game you never picked before it locked forfeits the highest weight left \u2014 miss one game in a 16-game week and the 16 is gone.',
       'A deadline falls a set number of minutes before the kickoff it counts from \u2014 five by default, and the lock buffer is where that number is set. Your pool home counts down to the next deadline either way.',
     ].join('\n\n'),
     poolTypes: PICKEM,
@@ -71,7 +71,7 @@ export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
       // locks the week at `earliestKickoff - lockBufferMinutes`, default five,
       // so naming kickoff hands the reader a five-minute window the sheet has
       // already closed.
-      'Turning it on also locks the whole week at one deadline, shortly before the week’s first game, whatever lock mode says.',
+      'When it locks follows lock mode. Per game, each game’s pick and weight close at that game’s deadline, a weight on a started game can never be moved, and a game you never picked forfeits the highest weight left. Weekly, every weight is set before the week’s first game.',
     ].join('\n\n'),
     poolTypes: PICKEM,
     audience: EVERYONE,

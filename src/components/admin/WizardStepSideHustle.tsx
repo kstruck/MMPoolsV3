@@ -40,7 +40,7 @@ export const WizardStepSideHustle: React.FC<WizardStepSideHustleProps> = ({ game
     const payoutTotal = sideHustle.payouts?.reduce((a, b) => a + b, 0) || 0;
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right duration-200">
             <div className="bg-surface border border-line rounded-xl p-6">
                 <div className="flex items-center justify-between mb-4">
                     <div>

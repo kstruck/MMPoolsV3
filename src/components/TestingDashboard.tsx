@@ -92,7 +92,7 @@ export const TestingDashboard: React.FC = () => {
                         <button
                             key={type}
                             onClick={() => setActiveTab(type as PoolType)}
-                            className="p-4 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-lg text-left transition-all duration-150 group"
+                            className="p-4 bg-surface hover:bg-card border border-line hover:border-gold-500/40 rounded-lg text-left transition-ui duration-150 group"
                         >
                             <div className="flex justify-between items-center mb-2">
                                 <span className="font-display font-bold uppercase text-[color:var(--text)]">{type}</span>
@@ -148,9 +148,9 @@ export const TestingDashboard: React.FC = () => {
                     <button
                         onClick={handleRunTest}
                         disabled={isRunning || !aiPrompt.trim()}
-                        className={`px-6 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ${isRunning
+                        className={`px-6 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ${isRunning
                             ? 'bg-surface border border-line text-faint cursor-not-allowed'
-                            : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta hover:-translate-y-px'
+                            : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta fine:hover:-translate-y-px'
                             }`}
                     >
                         {isRunning ? (
@@ -327,7 +327,7 @@ export const TestingDashboard: React.FC = () => {
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab as any)}
-                        className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm whitespace-nowrap transition-all duration-150 ${activeTab === tab
+                        className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm whitespace-nowrap transition-ui duration-150 ${activeTab === tab
                             ? 'bg-brandred-600 text-white shadow-red-cta'
                             : 'bg-card text-muted hover:bg-surface hover:text-[color:var(--text)] border border-line'
                             }`}

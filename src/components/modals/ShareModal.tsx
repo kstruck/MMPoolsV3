@@ -91,7 +91,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, shareUr
                         className="flex flex-col items-center gap-2 group"
                         title="Share to Instagram / Other Apps"
                     >
-                        <div className="w-12 h-12 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 rounded-full flex items-center justify-center border border-line group-hover:scale-110 transition-transform">
+                        <div className="w-12 h-12 bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 rounded-full flex items-center justify-center border border-line fine:group-hover:scale-110 transition-transform">
                             <Instagram size={20} className="text-white" />
                         </div>
                         <span className="text-xs font-body text-muted">Instagram</span>

@@ -359,7 +359,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
           <button
             onClick={fetchGames}
             disabled={isLoading}
-            className="w-full bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-2.5 rounded-md flex items-center justify-center gap-2 transition-all duration-150 hover:-translate-y-px"
+            className="w-full bg-navy-800 hover:bg-navy-700 disabled:opacity-50 text-white font-display font-bold uppercase tracking-[0.05em] py-2.5 rounded-md flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px"
           >
             <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
             Fetch Games
@@ -479,7 +479,7 @@ export const SuperAdminNFLSpreads: React.FC = () => {
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-gold-foil hover:brightness-105 disabled:opacity-50 text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-8 py-3 rounded-md flex items-center gap-2 shadow-[0_6px_16px_rgba(140,109,51,0.28)] hover:-translate-y-px transition-all duration-150"
+              className="bg-gold-foil hover:brightness-105 disabled:opacity-50 text-navy-900 font-display font-bold uppercase tracking-[0.05em] px-8 py-3 rounded-md flex items-center gap-2 shadow-[0_6px_16px_rgba(140,109,51,0.28)] fine:hover:-translate-y-px transition-ui duration-150"
             >
               {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
               Save Working Lines

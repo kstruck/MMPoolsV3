@@ -71,7 +71,7 @@ Fully featured tournament suite designed to maximize excitement during Selection
 > **first** square and the pool was unplayable by anyone but its commissioner.
 > Shipping that to buyers was worse than not shipping it. The fix list, and the
 > decision already taken (`0` means unlimited — fix the callable, not the wizard),
-> is in [`SQUARES-BACKLOG.md`](SQUARES-BACKLOG.md). Reopening is two constants and
+> is in [`SQUARES-BACKLOG.md`](docs/backlog/SQUARES-BACKLOG.md). Reopening is two constants and
 > a deploy.
 
 A high-fidelity implementation of the classic football squares grid.

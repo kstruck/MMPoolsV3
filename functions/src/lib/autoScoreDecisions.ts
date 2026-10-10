@@ -10,7 +10,7 @@ import { createHash } from 'crypto';
 import {
   effectiveLockSettings,
   effectiveGameLockAt,
-  isGameLocked as isGameLockedAt,
+  isGameLockedForGame,
   weekLockDecision,
   usesWeeklyHardLock,
 } from './effectiveLock';
@@ -120,7 +120,7 @@ export function nextWithheldLockAt(
   let earliest: number | null = null;
   for (const g of games) {
     if (!isTerminalGame(g)) continue;
-    if (isGameLockedAt(now, g.startTime, week, lockSettings)) continue;
+    if (isGameLockedForGame(now, g, week, lockSettings)) continue;
     const lockAt = effectiveGameLockAt(g.startTime, week, lockSettings);
     if (earliest === null || lockAt < earliest) earliest = lockAt;
   }
@@ -179,7 +179,7 @@ export function computeWeekFingerprint(
       g.scores?.home ?? '',
       g.scores?.away ?? '',
       g.spread?.value ?? '',
-      isGameLockedAt(now, g.startTime, week, lockSettings) ? '1' : '0',
+      isGameLockedForGame(now, g, week, lockSettings) ? '1' : '0',
     ].join(':'))
     .sort();
 

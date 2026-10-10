@@ -205,7 +205,7 @@ export const NFLBrandingSettings: React.FC<NFLBrandingSettingsProps> = ({ pool }
                     type="button"
                     onClick={save}
                     disabled={saving}
-                    className="bg-brandred-600 hover:bg-brandred-500 text-white px-6 py-2.5 rounded-md font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-brandred-600 hover:bg-brandred-500 text-white px-6 py-2.5 rounded-md font-display font-bold uppercase text-[11px] tracking-[0.08em] transition-ui disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {saving ? 'Saving…' : 'Save branding'}
                 </button>

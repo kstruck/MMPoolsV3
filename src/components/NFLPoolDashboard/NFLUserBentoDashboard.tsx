@@ -6,7 +6,7 @@ import { BanterFeed } from './BanterFeed';
 import { PinnedMessageBand } from './PinnedMessageBand';
 import { dbService } from '../../services/dbService';
 import { gamesForPoolWeek, poolSeasonType, isWeekComplete, isWeekLockedNow } from '../../utils/nflPending';
-import { nflLockMode, weekLockOverrideFor, gameLockAt } from '@shared/nflLockMode';
+import { nflLockMode, weekLockOverrideFor, isGameLockedFor } from '@shared/nflLockMode';
 import { now as serverNow } from '../../utils/serverClock';
 import { pickCtaFor } from '../../utils/pickCta';
 import { picksBlockedReason } from '../../utils/picksAvailability';
@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { Badge, Button, RankChip, YouPill } from '../ui';
 import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../../config/season';
+import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
 
 interface NFLUserBentoDashboardProps {
   pool: Pool;
@@ -341,7 +342,12 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
     return dbService.subscribeToWinProb(focusGame.id, setFocusWinProb);
   }, [focusGame?.id]);
 
-  const focusPoolC = focusGame ? poolConsensus[focusGame.id] : null;
+  // The commissioner's Pick Distribution setting governs the POOL split here too
+  // (codex r3 on PR-C). The site-wide line is a different aggregate and is not
+  // covered (PLAN-SPLIT-POT-SETTLEMENT D10).
+  const { mode: poolSplitMode, visibleIds: poolSplitVisible } = useDistributionVisibility(_pool, selectedWeek, weeklyGames);
+  const poolSplitHidden = !!focusGame && !poolSplitVisible.has(focusGame.id);
+  const focusPoolC = focusGame && !poolSplitHidden ? poolConsensus[focusGame.id] : null;
   const focusSiteC = focusGame ? siteConsensus[focusGame.id] : null;
 
   // Are THIS week's picks in? Pick'em is a sheet, so "in" means every game on
@@ -371,7 +377,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // "Picks Locked" during an extension the server still accepts.
   const weekLockOverrideMs = weekLockOverrideFor(castPool, selectedWeek);
   const bufferMinutes = effectiveBufferMinutesForWeek(castPool, selectedWeek, weeklyGames.map(g => g.startTime));
-  const weekLocked = isWeekLockedNow(weeklyGames, bufferMinutes, lockMode, weekLockOverrideMs);
+  const weekLocked = isWeekLockedNow(weeklyGames, bufferMinutes, lockMode, weekLockOverrideMs, castPool, selectedWeek);
 
   // The SAME per-game closure rule the checklist and the status service use.
   // Without it this CTA says "Make Picks" to a member whose only unanswered game
@@ -383,9 +389,12 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
   // server clock, so a memo would freeze it across a game's lock.
   const weekPicksComplete = (() => {
     if (!myEntry || weeklyGames.length === 0) return false;
-    const isGameClosed = (g: { startTime: number }) => lockMode === 'WEEKLY'
+    // Per game through the ONE pool-aware reader (PLAN-CONFIDENCE-PER-GAME-LOCK
+    // §3.2a): buffer, extension, the confidence kickoff ceiling and game status
+    // all come from the pool and game docs, exactly as the pick sheet's do.
+    const isGameClosed = (g: { startTime: number; status?: string | null }) => lockMode === 'WEEKLY'
       ? weekLocked
-      : serverNow() >= gameLockAt(g.startTime, bufferMinutes, weekLockOverrideMs);
+      : isGameLockedFor(castPool, selectedWeek, g, weeklyGames, serverNow());
     return isWeekComplete(_pool.type, myEntry, weeklyGames, selectedWeek, isGameClosed);
   })();
   const hasAnyPickThisWeek = !!myEntry && (
@@ -632,7 +641,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         
         {/* CARD A: LIVE WEEKLY PICK'EM — full width so the week slate is readable */}
         <div
-          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -702,7 +711,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   {/* Logo Team 1 (Away) */}
                   <div className="flex flex-col items-center gap-1 select-none z-10">
                     {!awayLogoErr ? (
-                      <div className="w-20 h-20 flex items-center justify-center bg-card rounded-lg p-2 border border-line shadow-card hover:scale-105 transition-transform duration-150">
+                      <div className="w-20 h-20 flex items-center justify-center bg-card rounded-lg p-2 border border-line shadow-card fine:hover:scale-105 transition-transform duration-150">
                         <img 
                           src={getTeamLogoUrl(focusGame.awayTeam.abbreviation, focusGame.awayTeam.name)} 
                           alt={focusGame.awayTeam.name} 
@@ -739,7 +748,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   {/* Logo Team 2 (Home) */}
                   <div className="flex flex-col items-center gap-1 select-none z-10">
                     {!homeLogoErr ? (
-                      <div className="w-20 h-20 flex items-center justify-center bg-card rounded-lg p-2 border border-line shadow-card hover:scale-105 transition-transform duration-150">
+                      <div className="w-20 h-20 flex items-center justify-center bg-card rounded-lg p-2 border border-line shadow-card fine:hover:scale-105 transition-transform duration-150">
                         <img 
                           src={getTeamLogoUrl(focusGame.homeTeam.abbreviation, focusGame.homeTeam.name)} 
                           alt={focusGame.homeTeam.name} 
@@ -772,12 +781,16 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                       Empty state until the aggregation jobs have run; never fabricated. */}
                   <div className="bg-page border border-line p-3.5 rounded-xl flex flex-col justify-between">
                     <span className="text-[9px] font-display font-bold text-muted uppercase tracking-[0.08em] block mb-2">Consensus</span>
-                    {(focusPoolC?.total || focusSiteC?.total || focusWinProb) ? (
+                    {/* A hidden pool split still renders the rows (qodo #2 on #716):
+                        the empty-state copy would claim nobody has picked. Showing
+                        "Hidden" regardless of the raw total leaks nothing. */}
+                    {(poolSplitHidden || focusPoolC?.total || focusSiteC?.total || focusWinProb) ? (
                       <div className="space-y-2 text-[11px] font-display font-bold uppercase tracking-[0.04em] num">
                         <div className="flex justify-between items-center">
                           <span className="text-muted">Pool</span>
                           <span className="text-[color:var(--text)]">
-                            {focusPoolC?.total ? `${focusPoolC.awayAbbr} ${focusPoolC.awayPct}% · ${focusPoolC.homeAbbr} ${focusPoolC.homePct}%` : '—'}
+                            {poolSplitHidden ? <span className="text-faint" title={poolSplitMode === 'OFF' ? 'The commissioner has hidden the pool split' : 'The commissioner shows this once picks lock'}>Hidden</span>
+                              : focusPoolC?.total ? `${focusPoolC.awayAbbr} ${focusPoolC.awayPct}% · ${focusPoolC.homeAbbr} ${focusPoolC.homePct}%` : '—'}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -873,7 +886,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         {/* CARD B: SURVIVOR LEAGUE (Top Right) — survivor pools only */}
         {_pool.type === 'NFL_SURVIVOR' && (
         <div
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -897,7 +910,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                 displayedMembers.map((member, i) => (
                   <div 
                     key={i} 
-                    className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
+                    className={`flex justify-between items-center p-3 rounded-lg border transition-ui duration-150 ${
                       member.highlight
                         ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
                         : 'bg-page border-line'
@@ -1003,7 +1016,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         {/* CARD C: MARGIN POOL STATS (Bottom Left) — margin pools only */}
         {_pool.type === 'NFL_MARGIN' && (
         <div
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -1108,7 +1121,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD D: POOL STANDINGS (Bottom Right) — this pool's leaderboard */}
         <div
-          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between"
+          className="bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
         >
           <div>
             <div className="flex justify-between items-center mb-6">
@@ -1131,7 +1144,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
                   return (
                     <div
                       key={i}
-                      className={`flex justify-between items-center p-3 rounded-lg border transition-all duration-150 ${
+                      className={`flex justify-between items-center p-3 rounded-lg border transition-ui duration-150 ${
                         row.highlight
                           ? 'bg-brandred-600/[0.07] border-brandred-600/30 shadow-card'
                           : 'bg-page border-line'
@@ -1189,7 +1202,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             columns is what stops it leaving a new hole one row down. */}
         {isPoolMember && (
           <div
-            className={`${_pool.type === 'NFL_PICKEM' ? '' : 'md:col-span-2'} bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 flex flex-col justify-between`}
+            className={`${_pool.type === 'NFL_PICKEM' ? '' : 'md:col-span-2'} bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between`}
           >
             <div>
               <div className="flex justify-between items-center mb-6">
@@ -1216,7 +1229,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
 
         {/* CARD E: MY PERFORMANCE RADAR & PICK ANALYTICS (Bottom Spanning Bento Box) */}
         <div 
-          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-all duration-150 grid grid-cols-1 md:grid-cols-2 gap-8"
+          className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 grid grid-cols-1 md:grid-cols-2 gap-8"
         >
           {/* Radar Chart section */}
           <div className="flex flex-col justify-between">
@@ -1304,7 +1317,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         </div>
 
       {/* 3. Floating Bottom Timeline Block */}
-      <div className="md:col-span-2 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition-all duration-150">
+      <div className="md:col-span-2 bg-card border border-line rounded-xl p-5 shadow-card relative overflow-hidden transition-ui duration-150">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-6 overflow-x-auto select-none py-2 px-4 whitespace-nowrap">
           
           {/* Timeline Node 1 */}

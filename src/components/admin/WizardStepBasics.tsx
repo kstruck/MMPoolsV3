@@ -18,7 +18,7 @@ export const WizardStepBasics: React.FC<WizardStepBasicsProps> = ({
     const [slugError, setSlugError] = useState<string | null>(null);
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-right duration-300">
+        <div className="space-y-6 animate-in slide-in-from-right duration-200">
             <div className="bg-surface border border-line rounded-xl p-6">
                 <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2">Basic Information</h3>
                 <p className="text-muted text-sm mb-6">Let's verify the core details of your pool.</p>

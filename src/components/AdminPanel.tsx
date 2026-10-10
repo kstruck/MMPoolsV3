@@ -622,7 +622,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 ))}
               </div>
               <div className="h-2 bg-line rounded-full overflow-hidden">
-                <div className="h-full bg-gold-foil transition-all duration-500 ease-out" style={{ width: `${(wizardStep / TOTAL_STEPS) * 100}%` }}></div>
+                <div className="h-full w-full origin-left bg-gold-foil transition-transform duration-300 ease-out" style={{ transform: `scaleX(${wizardStep / TOTAL_STEPS})` }}></div>
               </div>
             </div>
 
@@ -716,9 +716,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* GAME STATUS TAB */}
         {activeTab === 'game' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-all duration-150 hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
-            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
+          <div className="space-y-6 animate-in fade-in">
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
+            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
 
             {/* RANDOMIZER SECTION */}
             {gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' && gameState.ruleVariations.quarterlyRollover && (
@@ -778,8 +778,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <button
                         onClick={handleRandomizeWinner}
                         disabled={!randomizerAvailable || isRandomizing}
-                        className={`w-full py-6 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xl transition-all duration-150 flex flex-col items-center gap-2 ${randomizerAvailable
-                          ? 'bg-gold-foil text-navy-900 hover:brightness-105 hover:-translate-y-px shadow-[0_6px_16px_rgba(140,109,51,0.28)]'
+                        className={`w-full py-6 rounded-xl font-display font-bold uppercase tracking-[0.05em] text-xl transition-ui duration-150 flex flex-col items-center gap-2 ${randomizerAvailable
+                          ? 'bg-gold-foil text-navy-900 hover:brightness-105 fine:hover:-translate-y-px shadow-[0_6px_16px_rgba(140,109,51,0.28)]'
                           : 'bg-card text-faint border border-line cursor-not-allowed'
                           }`}
                       >
@@ -812,7 +812,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* PAYOUTS TAB */}
         {activeTab === 'payouts' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <div className="bg-card p-6 rounded-xl border border-line shadow-card">
               <h3 className="text-xl font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-2 flex items-center gap-2">
                 <DollarSign size={20} className="text-gold-500" /> Winner Payout Tracking
@@ -900,7 +900,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         {winners.map((win) => (
                           <div
                             key={win.period}
-                            className={`p-4 rounded-lg border flex items-center justify-between transition-all ${win.isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-surface border-line'}`}
+                            className={`p-4 rounded-lg border flex items-center justify-between transition-ui ${win.isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-surface border-line'}`}
                           >
                             <div className="flex items-center gap-4">
                               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-sm ${win.isPaid ? 'bg-[#E4F5EC] text-[#0F7B4A]' : 'bg-card text-muted border border-line'}`}>
@@ -928,7 +928,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 onClick={async () => {
                                   await dbService.markSquarePaid(gameState.id, [win.squareId], !win.isPaid);
                                 }}
-                                className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-all duration-150 ${win.isPaid
+                                className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 ${win.isPaid
                                   ? 'bg-[#0F7B4A] text-white'
                                   : 'bg-navy-800 hover:bg-navy-700 text-white'}`}
                               >
@@ -948,7 +948,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* COMMUNICATIONS TAB (ANNOUNCEMENTS) */}
         {activeTab === 'communications' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <div className="bg-card border border-line rounded-xl p-6">
               {currentUser ? (
                 <AnnouncementManager pool={gameState} currentUser={currentUser} />
@@ -960,7 +960,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {activeTab === 'props' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <WizardStepSideHustle
               gameState={gameState}
               updateConfig={updateConfig}
@@ -969,7 +969,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {activeTab === 'grading' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <div className="bg-card border border-line rounded-xl p-6">
               <PropGradingDashboard gameState={gameState} />
             </div>
@@ -978,9 +978,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* SCORING TAB */}
         {activeTab === 'scoring' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-8 animate-in fade-in">
             {/* MANUAL OVERRIDE TOGGLE */}
-            <div className={`p-6 rounded-xl border transition-all ${gameState.manualScoreOverride ? 'bg-gold-500/10 border-gold-500/50' : 'bg-card border-line'}`}>
+            <div className={`p-6 rounded-xl border transition-ui ${gameState.manualScoreOverride ? 'bg-gold-500/10 border-gold-500/50' : 'bg-card border-line'}`}>
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className={`font-display font-bold uppercase tracking-[0.02em] text-lg ${gameState.manualScoreOverride ? 'text-gold-600 dark:text-gold-400' : 'text-[color:var(--text)]'}`}>Manual Score Override</h3>
@@ -1001,20 +1001,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-display font-bold uppercase tracking-[0.05em] ${fetchStatus.type === 'success' ? 'text-[#0F7B4A] bg-[#0F7B4A]/10' : fetchStatus.type === 'error' ? 'text-brandred-600 bg-brandred-600/10' : 'text-muted'}`}>{fetchStatus.msg}</span>)}
               </div>
               <p className="text-muted font-body text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p>
-              <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta transition-all duration-150 hover:-translate-y-px"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
-              <button onClick={handleFixSync} disabled={isFixing} className="border border-brandred-600/40 bg-brandred-600/5 hover:bg-brandred-600/10 disabled:opacity-50 disabled:cursor-wait text-brandred-600 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-all duration-150 ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
+              <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
+              <button onClick={handleFixSync} disabled={isFixing} className="border border-brandred-600/40 bg-brandred-600/5 hover:bg-brandred-600/10 disabled:opacity-50 disabled:cursor-wait text-brandred-600 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
             </div>
             <div className="bg-card p-6 rounded-xl border border-line"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
               const isActive = !!gameState.scores[period];
               const label = period === 'q1' ? '1st Quarter' : period === 'half' ? 'Halftime' : period === 'q3' ? '3rd Quarter' : 'Final Score';
-              return (<div key={period} className={`p-5 rounded-xl border transition-all ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><Switch checked={isActive} onChange={() => togglePeriodActive(period)} label={`Enable ${label} scoring`} tone="gold" /></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
+              return (<div key={period} className={`p-5 rounded-xl border transition-ui ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><Switch checked={isActive} onChange={() => togglePeriodActive(period)} label={`Enable ${label} scoring`} tone="gold" /></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
             })}</div></div>
           </div>
         )}
 
         {/* REMINDERS TAB */}
         {activeTab === 'reminders' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <WizardStepReminders
               gameState={gameState}
               updateConfig={updateConfig}
@@ -1024,7 +1024,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* PLAYERS TAB */}
         {activeTab === 'players' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <StatTile label="Total Players" value={getPlayers().length} />
@@ -1357,7 +1357,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* STATISTICS TAB */}
         {activeTab === 'stats' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-gold-500/10 p-3 rounded-xl border border-gold-500/30">
                 <TrendingUp size={24} className="text-gold-600 dark:text-gold-400" />
@@ -1381,7 +1381,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {randomizingNumber}
               </span>
             </div>
-            <p className="text-gold-400 mt-8 font-display font-bold uppercase animate-bounce tracking-widest">GOOD LUCK...</p>
+            <p className="text-gold-400 mt-8 font-display font-bold uppercase animate-bounce-3 tracking-widest">GOOD LUCK...</p>
           </OverlayRoot>
         )
       }

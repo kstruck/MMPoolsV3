@@ -225,7 +225,10 @@ describe('T9 — the allowlist rows it closed are closed', () => {
     // preset. If a 0 or 1 preset were ever added this sentence goes false.
     expect(Math.min(...LOCK_BUFFER_PRESETS)).toBe(5);
 
-    // "Confidence points force weekly whatever this says."
+    // "With confidence points on, per game locks each game's pick AND its
+    // weight" — true of a STAMPED pool (PLAN-CONFIDENCE-PER-GAME-LOCK); the
+    // legacy, unstamped reading still forces weekly until the backfill runs.
+    expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: true, lockRuleVersion: 2 })).toBe('PER_GAME');
     expect(nflLockMode('NFL_PICKEM', { lockMode: 'PER_GAME', confidenceMode: true })).toBe('WEEKLY');
     // "Per game is the default."
     expect(nflLockMode('NFL_PICKEM', {})).toBe('PER_GAME');

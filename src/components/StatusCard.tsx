@@ -45,7 +45,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
             <div className="p-6 flex-1 flex flex-col justify-center">
 
                 {statusTab === 'overview' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
+                    <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-200">
                         <div>
                             <h3 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-xs mb-1">Status:</h3>
                             {(() => {
@@ -94,7 +94,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                 )}
 
                 {statusTab === 'rules' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200">
                         {/* Countdown Timer */}
                         <div className="bg-surface border border-line rounded-lg p-3 text-center">
                             <PoolTimer
@@ -181,7 +181,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                 )}
 
                 {statusTab === 'payment' && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 w-full">
+                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-200 w-full">
                         {(gameState.paymentHandles?.venmo || gameState.paymentHandles?.zelle) ? (
                             <div>
                                 <h3 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-xs mb-2">Payment Options:</h3>

@@ -460,7 +460,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                 <div className="flex flex-wrap p-0.5 bg-page border border-line rounded-xl">
                     <button
                         onClick={() => setSubTab('tiers')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'tiers' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -468,7 +468,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setSubTab('features')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'features' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -476,7 +476,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setSubTab('coupons')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'coupons' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -484,7 +484,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setSubTab('packages')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'packages' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -492,7 +492,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setSubTab('referrals')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'referrals' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -500,7 +500,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setSubTab('pools')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'pools' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -508,7 +508,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setSubTab('monetization')}
-                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-all flex items-center gap-1.5 ${
+                        className={`px-3 py-1.5 text-xs font-display font-bold uppercase tracking-[0.05em] rounded-lg transition-ui flex items-center gap-1.5 ${
                             subTab === 'monetization' ? 'bg-navy-800 text-white' : 'text-muted hover:text-[color:var(--text)]'
                         }`}
                     >
@@ -519,14 +519,14 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
             {/* TAB: MONETIZATION — accounting, coupon-abuse alerts, templates (PLAN Phase 6) */}
             {subTab === 'monetization' && (
-                <div className="animate-in fade-in duration-300">
+                <div className="animate-in fade-in">
                     <MonetizationDashboard />
                 </div>
             )}
 
             {/* TAB 1: TIERS & BASE PRICING */}
             {subTab === 'tiers' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Global Trial Parameters */}
                         <div className="p-5 rounded-2xl bg-surface border border-line space-y-4">
@@ -587,7 +587,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                             }
                                         });
                                     }}
-                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-all"
+                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-ui"
                                 >
                                     <Plus size={10} /> Add Tier
                                 </button>
@@ -666,7 +666,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                             }
                                         });
                                     }}
-                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-all"
+                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-ui"
                                 >
                                     <Plus size={10} /> Add Tier
                                 </button>
@@ -745,7 +745,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                             }
                                         });
                                     }}
-                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-all"
+                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-ui"
                                 >
                                     <Plus size={10} /> Add Tier
                                 </button>
@@ -824,7 +824,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                             }
                                         });
                                     }}
-                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-all"
+                                    className="px-2 py-1 rounded bg-gold-500/10 hover:bg-gold-500/25 border border-gold-500/25 text-gold-700 dark:text-gold-400 font-display font-bold text-[10px] uppercase tracking-[0.08em] flex items-center gap-1 transition-ui"
                                 >
                                     <Plus size={10} /> Add Tier
                                 </button>
@@ -890,7 +890,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
             {/* TAB 2: FEATURE MATRIX MANAGER */}
             {subTab === 'features' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     <div className="p-5 rounded-2xl bg-surface border border-line space-y-4">
                         <h3 className="text-sm font-display font-bold uppercase tracking-[0.08em] flex items-center gap-1.5 text-gold-500">
                             <Settings size={16} className="text-gold-500" /> Feature Premium/Add-on Allocation Control
@@ -963,7 +963,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
             {/* TAB 3: COUPON CODE CREATOR */}
             {subTab === 'coupons' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         {/* Left: Create Form */}
                         <form onSubmit={handleCreateCoupon} className="lg:col-span-4 bg-surface p-6 border border-line rounded-2xl space-y-4">
@@ -1052,7 +1052,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                                     prev.includes(pt) ? prev.filter(t => t !== pt) : [...prev, pt]
                                                 );
                                             }}
-                                            className={`px-2 py-0.5 rounded-full text-[9px] font-display font-bold uppercase tracking-[0.05em] border transition-all ${
+                                            className={`px-2 py-0.5 rounded-full text-[9px] font-display font-bold uppercase tracking-[0.05em] border transition-ui ${
                                                 newCouponAllowedTypes.includes(pt)
                                                     ? 'bg-gold-500/10 border-gold-500/25 text-gold-700 dark:text-gold-400'
                                                     : 'bg-page border-line text-faint hover:text-[color:var(--text)]'
@@ -1110,7 +1110,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                                         <td className="p-3">
                                                             <button
                                                                 onClick={() => handleToggleCouponActive(coupon)}
-                                                                className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] uppercase tracking-[0.05em] border transition-all ${
+                                                                className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] uppercase tracking-[0.05em] border transition-ui ${
                                                                     coupon.isActive
                                                                         ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
                                                                         : 'bg-[#FBEEDD] border border-[#F2D6B0] text-[#B4530A]'
@@ -1184,7 +1184,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
             {/* TAB 3.5: BUNDLES & PACKAGES CONFIG */}
             {subTab === 'packages' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         {/* Left: Bundle Creator Form */}
                         <div className="lg:col-span-5 bg-surface p-6 border border-line rounded-2xl space-y-4">
@@ -1360,7 +1360,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
                                                 <td className="p-3 text-center">
                                                     <button
                                                         onClick={() => handleToggleBundleActive(b.id)}
-                                                        className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] uppercase tracking-[0.05em] border transition-all ${
+                                                        className={`px-2 py-0.5 rounded-full font-display font-bold text-[9px] uppercase tracking-[0.05em] border transition-ui ${
                                                             b.isActive
                                                                 ? 'bg-[#E4F5EC] border border-[#BEE7D0] text-[#0F7B4A]'
                                                                 : 'bg-[#FBEEDD] border border-[#F2D6B0] text-[#B4530A]'
@@ -1396,7 +1396,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
             {/* TAB 4: REFERRAL POLICY EDITOR */}
             {subTab === 'referrals' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         
                         {/* Left: Referral Policy configurations */}
@@ -1555,7 +1555,7 @@ export const SuperAdminBillingPanel: React.FC = () => {
 
             {/* TAB 5: POOL BILLING OVERRIDES */}
             {subTab === 'pools' && (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6 animate-in fade-in">
                     <div className="flex items-center gap-3 bg-page border border-line rounded-xl px-4 py-2.5">
                         <Search size={18} className="text-faint" />
                         <input
