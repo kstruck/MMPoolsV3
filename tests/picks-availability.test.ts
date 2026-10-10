@@ -220,3 +220,62 @@ describe('the three surfaces actually render it', () => {
     expect(src).toContain("if (!picksBlocked && (e.key === 'Enter' || e.key === ' '))");
   });
 });
+
+/**
+ * A FINISHED POOL OFFERS NO PICKS ON POOL HOME (Kevin, 2026-10-10).
+ *
+ * Under the "this pool is over" banner the member dashboard still showed the
+ * week's matchup card with a "Picks Locked" button and a pulsing picks
+ * deadline, and a second picks CTA at the foot of the page. Both are gated on
+ * the same `poolIsOver` the manager dashboard and the pick sheet already use.
+ */
+describe('Pool Home on a finished pool offers no picks', () => {
+  const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLUserBentoDashboard.tsx'), 'utf8');
+  const GATE = '{!poolOver && (';
+
+  it('derives the gate from the shared client rule, on the pool it renders', () => {
+    expect(src).toContain("import { poolIsOver } from '../../utils/poolIsOver';");
+    expect(src).toContain('const poolOver = poolIsOver(_pool);');
+  });
+
+  it('the week matchup card (Card A) is wholly inside the gate', () => {
+    const cardA = src.indexOf("{/* CARD A: LIVE WEEKLY PICK'EM");
+    const cardB = src.indexOf('{/* CARD B: SURVIVOR LEAGUE');
+    expect(cardA).toBeGreaterThan(-1);
+    expect(cardB).toBeGreaterThan(cardA);
+    const block = src.slice(cardA, cardB);
+
+    // The gate opens right after the card's comment, before its first element…
+    const gate = block.indexOf(GATE);
+    const firstElement = block.indexOf('<div');
+    expect(gate).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(firstElement);
+    // …and the block ends by closing it, so nothing of the card sits outside.
+    expect(block.trimEnd().endsWith(')}')).toBe(true);
+    // Everything that prompted for a pick is in there.
+    expect(block).toContain("'Weekly Survivor Match'");
+    expect(block).toContain('{picksCta.label}');
+    expect(block).toContain('Picks Deadline');
+  });
+
+  it('every picks CTA on the page sits behind the gate — none is left outside', () => {
+    const ctas = [...src.matchAll(/\{picksCta\.label\}/g)].map((m) => m.index!);
+    expect(ctas).toHaveLength(2);
+    const gates = [...src.matchAll(/\{!poolOver && \(/g)].map((m) => m.index!);
+    expect(gates).toHaveLength(2);
+    // Each CTA follows its own gate, with no other gate in between.
+    expect(gates[0]).toBeLessThan(ctas[0]);
+    expect(ctas[0]).toBeLessThan(gates[1]);
+    expect(gates[1]).toBeLessThan(ctas[1]);
+  });
+
+  it('the standings and the score ticker are NOT gated — a finished pool still shows its result', () => {
+    const cardD = src.indexOf('{/* CARD D: POOL STANDINGS');
+    const lastGateBeforeD = src.lastIndexOf(GATE, cardD);
+    const cardB = src.indexOf('{/* CARD B: SURVIVOR LEAGUE');
+    expect(cardD).toBeGreaterThan(cardB);
+    // The only gate before the standings card is Card A's, and it closed before Card B.
+    expect(lastGateBeforeD).toBeLessThan(cardB);
+    expect(src).toContain('<NFLGameTicker games={weeklyGames} onSelectGame={selectGame} />');
+  });
+});

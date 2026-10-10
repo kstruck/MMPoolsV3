@@ -39,6 +39,7 @@ import {
 import { Badge, Button, RankChip, YouPill } from '../ui';
 import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../../config/season';
 import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
+import { poolIsOver } from '../../utils/poolIsOver';
 
 interface NFLUserBentoDashboardProps {
   pool: Pool;
@@ -415,6 +416,8 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
    * Margin and straight-up pick'em are untouched.
    */
   const picksBlocked = picksBlockedReason(castPool, weeklyGames);
+  /** Cancelled, closed by any route, settled or finalized — the pool takes no more picks. */
+  const poolOver = poolIsOver(_pool);
   /**
    * On a multi-entry pool the CTA must say WHICH entry it will open, because
    * "Make Picks" over a card showing entry #2's sheet is ambiguous exactly when
@@ -639,7 +642,13 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
         standings people were trying to reach. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         
-        {/* CARD A: LIVE WEEKLY PICK'EM — full width so the week slate is readable */}
+        {/* CARD A: LIVE WEEKLY PICK'EM — full width so the week slate is readable.
+            HIDDEN ONCE THE POOL IS OVER (Kevin, 2026-10-10): under the "this
+            pool is over" banner it still showed the week's matchup, a "Picks
+            Locked" button and a pulsing picks deadline — three prompts about a
+            week this pool will never play. The score ticker above and the
+            standings below stay. */}
+        {!poolOver && (
         <div
           className="md:col-span-2 bg-card border border-line rounded-xl p-6 shadow-card relative overflow-hidden transition-ui duration-150 flex flex-col justify-between"
         >
@@ -882,6 +891,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </span>
           </div>
         </div>
+        )}
 
         {/* CARD B: SURVIVOR LEAGUE (Top Right) — survivor pools only */}
         {_pool.type === 'NFL_SURVIVOR' && (
@@ -1358,7 +1368,9 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
             </span>
           </div>
 
-          {/* Action Call to join */}
+          {/* Action Call to join. Gone once the pool is over, with Card A: it
+              is the same picks CTA, and a finished pool has no pick to make. */}
+          {!poolOver && (
           <div className="sm:ml-auto w-full sm:w-auto">
             <Button
               variant="primary"
@@ -1371,6 +1383,7 @@ export const NFLUserBentoDashboard: React.FC<NFLUserBentoDashboardProps> = ({
               {picksCta.label}
             </Button>
           </div>
+          )}
         </div>
       </div>
 
