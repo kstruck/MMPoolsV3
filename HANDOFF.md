@@ -1,30 +1,64 @@
 # HANDOFF — Session entry point
 
-> ## 🟡 2026-10-08 — **SURVIVOR SPLIT-POT SETTLEMENT (PLAN-SPLIT-POT-SETTLEMENT Part A). PR OPEN, NOT MERGED, NOT DEPLOYED.**
+> ## 🟢 2026-10-10 — **PLAN-SPLIT-POT-SETTLEMENT IS SHIPPED — ALL THREE PARTS, PLUS FIVE FOLLOW-UP PRs. EVERYTHING BELOW IS MERGED.**
 >
-> Branch `claude/survivor-pool-features-plan-c4213f`. Plan, review log (3 codex
-> rounds) and sweeps are in `docs/plans/PLAN-SPLIT-POT-SETTLEMENT*.md`; Kevin
-> approved §6 as recommended. Parts B (Current Picks W-L / Max columns) and C
-> (Pick Distribution visibility setting) are NOT started — separate PRs.
+> `origin/main` is at #724. Plan, review log and sweeps:
+> `docs/plans/PLAN-SPLIT-POT-SETTLEMENT*.md`.
 >
-> **What it adds.** `settlePool` callable + "End the Pool — Split the Pot" panel
-> (Manager tab → Settings, Survivor, owner only); a settled-pool banner; a
-> `POOL_OVER` refusal on every NFL play path (pick, proxy pick, rebuy, join),
-> which none of them had; and a **rules authorization fix**: an NFL manager
-> could move their own pool OPEN→FINAL with one client write, which opened every
-> member's un-revealed entry to every participant. NFL `status` / `closedVia` /
-> `closedAt` / `isFinal` are now callable-only for managers, and `finalizedAt`,
-> `firstFinalizedAt`, `finalizedVia`, `settlement` are server-owned.
+> | PR | What |
+> |---|---|
+> | #715 | Part A — Survivor split-pot settlement (`settlePool`) + the NFL lifecycle rules authorization fix |
+> | #716 | Part C — commissioner setting for Pick Distribution visibility |
+> | #717 | Cleared the critical `proxy-addr` + `busboy` / `grpc-js` / `basic-ftp` advisories; dated audit allow-list (`scripts/auditGate.mjs`, `.github/audit-allowlist.json`) |
+> | #720 | Settlement email is once-only (`sendEmail` `idempotencyKey`) |
+> | #721 | Part B — W-L and Max columns on the Pick'em Current Picks grid |
+> | #722 | qodo's post-merge findings on #717 / #720 / #721 |
+> | #723 | A finished pool offers no pick reminders (server `POOL_OVER` guard on `sendManualReminder`); "Pool Over" card on the commissioner Overview; banner spacing |
+> | #724 | "Pool Over" card wording — promises results only when `finalizedAt` is set; cancelled-pool message |
 >
-> **Deploy (after merge):** step zero `git -C D:\march-melee-pools pull --ff-only origin main`,
-> `npm --prefix functions ci`, then functions BEFORE rules:
-> `npx firebase deploy --only functions`, then `npx firebase deploy --only firestore:rules`,
-> then the frontend in Coolify. Verify: `npx firebase functions:list | Select-String "settlePool"`.
+> **Deploy state.** Kevin reported functions and the frontend deployed after
+> #724 (chat, 2026-10-10). Measured the same day: `npx firebase functions:list`
+> lists `settlePool` and `sendManualReminder`, so #715's callable is live. That
+> listing cannot show WHICH build of a function is running, so the #723 server
+> guard rests on Kevin's report plus the disabled button he saw on prod.
 >
-> **Then settle pool `EJSGHCqc8Q8uv8godJKF` from the UI.** Its `entryCount` is 11
-> with 8 entry docs and 10 members (read-only, 2026-10-08), so the panel will
-> price the pot at $25 × 11 = $275. Kevin confirms that figure on the panel
-> before clicking (D6); if it is wrong, stop — `entryCount` is server-owned.
+> **Seen on prod by Kevin, 2026-10-10.** Pool `EJSGHCqc8Q8uv8godJKF` is settled
+> ("Brittany Wall won the pool after week 4, $275"). Commissioner → Overview
+> shows the "Pool Over" card and no Nudge Email buttons; Members & Payments
+> "Remind all unpicked" is disabled; the settled banner spacing is right. Kevin
+> also reported the settlement-email check complete. No session has read the
+> prod `mail` collection — the auto-mode classifier refused the read.
+>
+> **Open.**
+> 1. **The audit allow-list expires 2026-11-09**, and after that date
+>    `security-audit` fails on every PR. Entries: `braces` (GHSA-vfj7-8cjw-p6xm,
+>    root) and `node-forge` (GHSA-86w9-cpqp-85rv, `functions/`). Re-measured
+>    2026-10-10: `npm view braces version` is 3.0.3 and `npm view node-forge
+>    version` is 1.4.0, so there is still nothing to upgrade to. Near the date:
+>    if a patched release exists, upgrade and delete the entry; if not, renew —
+>    the gate rejects a date more than 45 days out, so renewing early buys
+>    little.
+> 2. **Four reminder checks in `functions/src/reminders.ts` have not been read
+>    for the finished-pool rule**: `checkPaymentReminders`, `checkLockReminders`,
+>    `checkPlayoffReminders`, `checkBracketReminders`. Only
+>    `checkNFLNonPickerReminders` (skips via `poolIsOver`) and
+>    `sendManualReminder` (#723) are known to honour it.
+> 3. **Pool Home on a finished pool still shows the week's matchup card and a
+>    "Picks Locked" button** under the "pool is over" banner. Kevin ruled
+>    2026-10-10: hide the card when the pool is over.
+>
+> **Known limits.** The Members & Payments roster reminder buttons
+> (`NFLManagerView.tsx`) have no render test — the server guard and the
+> typecheck cover them. The mail extension's behaviour on a deleted-and-recreated
+> `mail` doc (the `delivery.state: 'ERROR'` retry path in `sendEmail`) is
+> reasoned, not measured. Rebuy dues are excluded from the recorded pot
+> (pre-existing); the settlement records `rebuyDuesExcluded`.
+>
+> **Deploy from `D:\march-melee-pools` ONLY.** On 2026-10-09 a deploy ran from a
+> worktree prompt (`...\worktrees\pick-distribution-visibility`), reported
+> `Deploy complete!`, and shipped a branch without #720. Check the prompt and
+> `git -C D:\march-melee-pools log --oneline -1` first. `npm --prefix functions
+> ci` is an install, not a deploy.
 
 > ## 🟡 2026-09-11 — **NAME SYNC FOLLOW-UP (#690's three deferred qodo findings): PLAYOFF ENTRY MAPS + PROP CARDS NOW FOLLOW THE PROFILE NAME; ONE AUTH-CREATE TRIGGER. PR OPEN, NOT MERGED, NOT DEPLOYED. DEPLOY WILL PROMPT TO DELETE `createParticipantProfile`.**
 >
