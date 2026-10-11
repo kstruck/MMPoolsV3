@@ -69,6 +69,18 @@ empty result means the report is absent, which would let the mandatory gate be
 called clean with no review at all. `.claude/skills/mmp-qodo-cycle/SKILL.md` has
 the full watcher; prefer it over running these by hand.
 
+🛑 **ARM THE WATCHER IN THE TURN YOU OPEN THE PR, AND GIVE KEVIN NO MERGE
+COMMAND UNTIL QODO'S VERDICT IS READ (promoted from auto-memory 2026-10-10).**
+qodo posts 1–17 minutes after a PR opens, so "nothing on the three surfaces
+yet" means it has not reported — it never means clean. A PR whose gates and
+codex round are green is still not mergeable until the watcher has returned a
+report and every finding in it has a written verdict. This was already a memory
+rule and it was broken anyway: #664 merged ahead of its report, and on
+2026-10-09 four PRs in one session did (#717, #720, #721, #723) — nine findings
+then had to be absorbed after merge, in #722 and #724, on code that was already
+on `main`. If the watcher times out, say so and hand Kevin the choice; do not
+hand him a merge command with the gate unread.
+
 **Absorb or reject each finding with written evidence.** A rejection is a
 legitimate outcome and needs reasoning **on the PR**, not silence. qodo marks
 absorbed findings `✓ Resolved`, and that mark is the confirmation — not your own
@@ -346,7 +358,8 @@ The cause is structural, not a one-off: **the root `tsconfig` does not include
 Cloud Functions code, so any PR touching `functions/src/**` needs the two
 functions-scoped commands explicitly. CI runs them; the local list did not.
 
-**The lint baseline is 1881 warnings / 0 errors — MEASURE it, do not trust it.**
+**The lint baseline is 1855 warnings / 0 errors (measured on `origin/main` at
+#724, 2026-10-10; it read 1881 here until then) — MEASURE it, do not trust it.**
 Commit your work, `git checkout --detach origin/main`, re-run `npm run lint`,
 compare, come back.
 
