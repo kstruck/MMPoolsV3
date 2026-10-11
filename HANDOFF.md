@@ -1,8 +1,8 @@
 # HANDOFF — Session entry point
 
-> ## 🟢 2026-10-10 — **PLAN-SPLIT-POT-SETTLEMENT IS SHIPPED — ALL THREE PARTS, PLUS FIVE FOLLOW-UP PRs. EVERYTHING BELOW IS MERGED.**
+> ## 🟢 2026-10-10 — **PLAN-SPLIT-POT-SETTLEMENT IS SHIPPED — ALL THREE PARTS, PLUS THE FOLLOW-UP PRs THROUGH #727. EVERYTHING BELOW IS MERGED.**
 >
-> `origin/main` is at #724. Plan, review log and sweeps:
+> `origin/main` is at #727. Plan, review log and sweeps:
 > `docs/plans/PLAN-SPLIT-POT-SETTLEMENT*.md`.
 >
 > | PR | What |
@@ -15,19 +15,37 @@
 > | #722 | qodo's post-merge findings on #717 / #720 / #721 |
 > | #723 | A finished pool offers no pick reminders (server `POOL_OVER` guard on `sendManualReminder`); "Pool Over" card on the commissioner Overview; banner spacing |
 > | #724 | "Pool Over" card wording — promises results only when `finalizedAt` is set; cancelled-pool message |
+> | #725 | Docs — the qodo watcher rule in `CLAUDE.md` §2b, lint baseline 1855, this box |
+> | #726 | `runReminders`: a finished playoff or bracket pool gets no "it locks soon" notice. Dispatch is one pure function, `reminderChecksFor` |
+> | #727 | Pool Home on a finished pool hides the week matchup card and both picks CTAs (`NFLUserBentoDashboard.tsx`) |
 >
 > **Deploy state.** Kevin reported functions and the frontend deployed after
-> #724 (chat, 2026-10-10). Measured the same day: `npx firebase functions:list`
-> lists `settlePool` and `sendManualReminder`, so #715's callable is live. That
-> listing cannot show WHICH build of a function is running, so the #723 server
-> guard rests on Kevin's report plus the disabled button he saw on prod.
+> #724, then `runReminders` deployed for #726 and the frontend rebuilt in
+> Coolify for #727 (chat, 2026-10-10). Measured the same day:
+> `npx firebase functions:list` lists `settlePool`, `sendManualReminder` and
+> `runReminders`; that listing cannot show WHICH build of a function is
+> running, so the #723 and #726 server changes rest on Kevin's report. The
+> frontend is measured: the prod bundle name changed across the #727 rebuild
+> (`index-DHcywpQo.js` before, `index-Dcqd9W64.js` after) and the page shows
+> the change.
 >
 > **Seen on prod by Kevin, 2026-10-10.** Pool `EJSGHCqc8Q8uv8godJKF` is settled
 > ("Brittany Wall won the pool after week 4, $275"). Commissioner → Overview
 > shows the "Pool Over" card and no Nudge Email buttons; Members & Payments
-> "Remind all unpicked" is disabled; the settled banner spacing is right. Kevin
-> also reported the settlement-email check complete. No session has read the
-> prod `mail` collection — the auto-mode classifier refused the read.
+> "Remind all unpicked" is disabled; the settled banner spacing is right. After
+> #727, Pool Home on that pool shows the banner, no matchup card and no picks
+> button, with the survivor card, standings and feed still there (screenshot).
+> Kevin also reported the settlement-email check complete. No session has read
+> the prod `mail` collection — the auto-mode classifier refused the read. Not
+> reported either way: that a LIVE pool still shows the matchup card after
+> #727, and that a finished bracket or playoff pool actually stays quiet.
+>
+> ⚠️ **Three PRs handed over together do not merge together.** #727 was
+> refused because its branch fell behind `main` the moment #725 and #726
+> merged, and the Coolify rebuild that followed shipped a bundle without it.
+> When several PRs are ready at once, re-check `gh pr view <N> --json state`
+> for each one after the merges, before any deploy step; fix a refused one
+> with `gh pr update-branch <N>` and wait for CI again.
 >
 > **Open.**
 > 1. **The audit allow-list expires 2026-11-09**, and after that date
@@ -38,14 +56,15 @@
 >    if a patched release exists, upgrade and delete the entry; if not, renew —
 >    the gate rejects a date more than 45 days out, so renewing early buys
 >    little.
-> 2. **Four reminder checks in `functions/src/reminders.ts` have not been read
->    for the finished-pool rule**: `checkPaymentReminders`, `checkLockReminders`,
->    `checkPlayoffReminders`, `checkBracketReminders`. Only
->    `checkNFLNonPickerReminders` (skips via `poolIsOver`) and
->    `sendManualReminder` (#723) are known to honour it.
-> 3. **Pool Home on a finished pool still shows the week's matchup card and a
->    "Picks Locked" button** under the "pool is over" banner. Kevin ruled
->    2026-10-10: hide the card when the pool is over.
+> 2. **DECISION NEEDED: squares reminders on a finished pool.** #726 gated the
+>    playoff and bracket checks and deliberately left the two squares checks
+>    alone. `checkLockReminders` also AUTO-LOCKS the grid and draws its digits;
+>    `checkPaymentReminders` also AUTO-RELEASES unpaid squares. Withholding
+>    either on a finished pool changes what is written to a production pool,
+>    so it takes a `PLAN-*.md` (qodo #1 on #726). Asked of Kevin in chat
+>    2026-10-10, not answered. Recommendation: leave both unchanged —
+>    `SQUARES_CREATION_OPEN` is false, so few pools are affected. If Kevin
+>    wants them stopped, write the plan first.
 >
 > **Known limits.** The Members & Payments roster reminder buttons
 > (`NFLManagerView.tsx`) have no render test — the server guard and the
