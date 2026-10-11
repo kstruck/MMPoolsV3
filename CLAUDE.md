@@ -87,6 +87,18 @@ empty result means the report is absent, which would let the mandatory gate be
 called clean with no review at all. `.claude/skills/mmp-qodo-cycle/SKILL.md` has
 the full watcher; prefer it over running these by hand.
 
+🛑 **ARM THE WATCHER IN THE TURN YOU OPEN THE PR, AND GIVE KEVIN NO MERGE
+COMMAND UNTIL QODO'S VERDICT IS READ (promoted from auto-memory 2026-10-10).**
+qodo posts 1–17 minutes after a PR opens, so "nothing on the three surfaces
+yet" means it has not reported — it never means clean. A PR whose gates and
+codex round are green is still not mergeable until the watcher has returned a
+report and every finding in it has a written verdict. This was already a memory
+rule and it was broken anyway: #664 merged ahead of its report, and on
+2026-10-09 four PRs in one session did (#717, #720, #721, #723) — nine findings
+then had to be absorbed after merge, in #722 and #724, on code that was already
+on `main`. If the watcher times out, say so and hand Kevin the choice; do not
+hand him a merge command with the gate unread.
+
 **Absorb or reject each finding with written evidence.** A rejection is a
 legitimate outcome and needs reasoning **on the PR**, not silence. qodo marks
 absorbed findings `✓ Resolved`, and that mark is the confirmation — not your own
@@ -387,7 +399,8 @@ deploy. That is fixed in `.github/workflows/ci.yml` (`Build functions (deploy
 config)`).
 
 **The lint baseline is 1855 warnings / 0 errors, and it is MACHINE-ENFORCED as
-of 2026-09-19.** Run `npm run lint:ratchet` — `eslint . --max-warnings 1855` —
+of 2026-09-19.** (Independently re-measured on `origin/main` at #724,
+2026-10-10, by #725: still 1855.) Run `npm run lint:ratchet` — `eslint . --max-warnings 1855` —
 which is also what CI's `lint` job runs. Bare `npm run lint` is `eslint .`: it
 exits 0 at 1855 warnings and exits 0 at 2400, so it only ever gated *errors*.
 
