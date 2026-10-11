@@ -46,6 +46,16 @@ jobs:
         run: npm run typecheck
         working-directory: functions
 
+      # REQUIRED by CLAUDE.md §2e and previously absent here. `typecheck` runs
+      # tsconfig.test.json (noEmit); this runs tsconfig.json, which is the config
+      # firebase.json's predeploy uses. The type coverage is the same — test.json
+      # is a documented strict superset — so what this adds is the EMIT: a
+      # rootDir violation or a failed write surfaces on a PR instead of at
+      # `firebase deploy`, which is where #612's class of failure surfaced.
+      - name: Build functions (deploy config)
+        run: npm run build
+        working-directory: functions
+
       # REQUIRED: full test suite (scoring engines, billing/checkout, onboarding).
       - name: Test
         run: npm test
@@ -128,7 +138,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run lint
+      # RATCHET, not a plain lint run. `npm run lint` is `eslint .`, which exits 0
+      # at 1855 warnings and exits 0 at 2400 — so it gated errors and nothing
+      # else, and the warning floor was defended by a MANUAL procedure in
+      # CLAUDE.md §2e (commit, detach to origin/main, re-run, compare, come
+      # back). Nobody ran it: the baseline written there was 1881 while the
+      # measured count on 37ac1aa was 1855, 26 low and drifting unobserved.
+      # `lint:ratchet` pins --max-warnings, so the floor only moves when someone
+      # edits package.json on purpose and says why in the PR.
+      - run: npm run lint:ratchet
 
   # ---------------------------------------------------------------------------
   # NON-BLOCKING (Kevin, decision D4, 2026-08-24). The Playwright e2e suite —
