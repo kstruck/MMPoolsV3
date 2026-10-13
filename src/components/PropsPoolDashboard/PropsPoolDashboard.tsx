@@ -28,6 +28,7 @@ const PROPS_TABS = ['cards', 'leaderboard', 'stats', 'admin', 'grading', 'ai'] a
 export type PropsTab = (typeof PROPS_TABS)[number];
 import { getUserMessage } from '../../utils/errorMessages';
 import { Badge, Button, Tag } from '../ui';
+import { resolveLogoUrl } from '../../utils/logoUrl';
 
 interface PropsPoolDashboardProps {
     pool: PropsPool;
@@ -99,7 +100,7 @@ export const PropsPoolDashboard: React.FC<PropsPoolDashboardProps> = ({ pool, us
                         <div className="flex items-center gap-3">
                             {pool.branding?.logoUrl ? (
                                 <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-line p-1 shadow-card">
-                                    <img src={pool.branding.logoUrl} alt={pool.name} className="max-w-full max-h-full object-contain" />
+                                    <img src={resolveLogoUrl(pool.branding.logoUrl)} alt={pool.name} className="max-w-full max-h-full object-contain" />
                                 </div>
                             ) : (
                                 <div className="w-10 h-10 bg-gold-foil text-navy-900 rounded-lg flex items-center justify-center shadow-card">
