@@ -2,6 +2,7 @@ import * as functions from "firebase-functions/v1";
 import * as admin from 'firebase-admin';
 import { Announcement, GameState } from './types';
 import { renderEmailHtml, BASE_URL } from './emailStyles';
+import { buildAnnouncementBody } from './announcements.helpers';
 import { getSquareEmails } from './squarePrivate';
 import { sendEmail } from './reminders';
 
@@ -48,17 +49,9 @@ export const onAnnouncementCreated = functions.runWith({ maxInstances: 10 }).fir
 
         if (recipientList.length === 0) return;
 
-        // Build announcement body content
-        const bodyContent = `
-            <p style="font-size: 14px; color: #64748b; margin-bottom: 5px;">From: <strong>${pool.name}</strong></p>
-            <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 16px; border-radius: 4px; margin: 20px 0;">
-                <div style="color: #334155; font-size: 16px; line-height: 1.6; white-space: pre-wrap;">${announcement.message}</div>
-            </div>
-        `;
-
         const emailHtml = renderEmailHtml(
-            announcement.subject,
-            bodyContent,
+            announcement.subject, // escaped inside renderEmailHtml
+            buildAnnouncementBody(pool.name, announcement.message),
             `${BASE_URL}/pool/${pool.id}`,
             'View Pool'
         );

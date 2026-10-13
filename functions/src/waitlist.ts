@@ -3,7 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 
 import { sendEmail } from "./reminders";
-import { renderEmailHtml, BASE_URL } from "./emailStyles";
+import { renderEmailHtml, escapeHtml, BASE_URL } from "./emailStyles";
 import { validated } from "./lib/validated";
 import { joinWaitlistSchema } from "./schemas/reminderWaitlist";
 
@@ -53,8 +53,8 @@ export const joinWaitlist = validated(
         // Send Confirmation Email
         const subject = `You're on the Waitlist: ${poolName}`;
         const body = `
-            <p>Hi ${name},</p>
-            <p>You have successfully joined the waitlist for <strong>${poolName}</strong>.</p>
+            <p>Hi ${escapeHtml(name)},</p>
+            <p>You have successfully joined the waitlist for <strong>${escapeHtml(poolName)}</strong>.</p>
             <p>If a square becomes available, we will notify you immediately via email.</p>
         `;
         const html = renderEmailHtml("Waitlist Confirmed", body, `${BASE_URL}/pool/${poolId}`, "View Pool");
