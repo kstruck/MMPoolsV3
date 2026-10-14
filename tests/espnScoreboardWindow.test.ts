@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
-  monthKeysForWindow, scoreboardMonthUrls, fetchScoreboardWindow,
+  monthKeysForWindow, scoreboardMonthUrls, fetchScoreboardWindow, windowAround,
 } from '../src/services/espnScoreboardWindow';
 
 /**
@@ -17,6 +19,127 @@ const ok = (events: unknown[]) => ({ ok: true, status: 200, json: async () => ({
 const fail = (status: number) => ({ ok: false, status, json: async () => ({}) });
 
 const ev = (id: string, date: string) => ({ id, date });
+
+describe('windowAround — the window is a function of the clock it is GIVEN', () => {
+  it('spans ±7 days by default', () => {
+    const { start, end } = windowAround(Date.parse('2026-09-23T12:00:00Z'));
+    // Compared as a span rather than as fixed strings: the day arithmetic is
+    // local, so pinning ISO text would make this test pass or fail by timezone.
+    expect(Math.round((end.getTime() - start.getTime()) / 86_400_000)).toBe(14);
+    expect(start.getTime()).toBeLessThan(Date.parse('2026-09-23T12:00:00Z'));
+    expect(end.getTime()).toBeGreaterThan(Date.parse('2026-09-23T12:00:00Z'));
+  });
+
+  it('READS NO CLOCK OF ITS OWN — a wrong device clock cannot move it', () => {
+    // The defect this closes: the page centred its window on `new Date()`, so a
+    // device a day out fetched the wrong week and presented it as current.
+    const fixed = Date.parse('2026-09-23T12:00:00Z');
+    const a = windowAround(fixed);
+    const realNow = Date.now;
+    try {
+      Date.now = () => Date.parse('2027-01-01T00:00:00Z');
+      const b = windowAround(fixed);
+      expect(b.start.getTime()).toBe(a.start.getTime());
+      expect(b.end.getTime()).toBe(a.end.getTime());
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('honours a custom span', () => {
+    const { start, end } = windowAround(Date.parse('2026-09-23T12:00:00Z'), 1);
+    expect(Math.round((end.getTime() - start.getTime()) / 86_400_000)).toBe(2);
+  });
+});
+
+describe('the Scoreboard page takes its window from the server clock', () => {
+  // A source guard, not a render test: mounting this page pulls in Header,
+  // Footer and src/firebase.ts, and the thing worth pinning is one import plus
+  // one call site. Same shape as the other source-walking guards in tests/.
+  const src = fs.readFileSync(
+    path.join(process.cwd(), 'src/components/Scoreboard.tsx'), 'utf8');
+
+  it('imports now() and the sync from utils/serverClock', () => {
+    expect(src).toMatch(/import\s*\{[^}]*\bnow as serverNow\b[^}]*\}\s*from\s*'\.\.\/utils\/serverClock'/);
+    expect(src).toMatch(/import\s*\{[^}]*\bsyncServerClock\b[^}]*\}\s*from\s*'\.\.\/utils\/serverClock'/);
+  });
+
+  it('builds the fetch window from serverNow(), never from a bare new Date()', () => {
+    expect(src).toMatch(/windowAround\(\s*serverNow\(\)\s*\)/);
+    // `new Date(game.date)` and `new Date(nowMs)` are fine and still present;
+    // what must not come back is the no-argument form seeding the window.
+    expect(src).not.toMatch(/const\s+today\s*=\s*new Date\(\)/);
+  });
+
+  // ⚠️ ANCHORED ON THE `await`, NOT ON THE ASSIGNMENT. These two guards used to
+  // record the position of `clockWaitRef.current ??= Promise.race([`, which is
+  // where the promise is CREATED — so moving the actual `await` below
+  // `windowAround(serverNow())`, or out of the football branch, reintroduced the
+  // wrong-clock and delayed-basketball bugs with both tests still green. A guard
+  // that pins the wrong statement is not a guard. (qodo #2 on #702, round 2.)
+  const awaitIdx = src.indexOf('await clockWaitRef.current;');
+  const windowIdx = src.indexOf('windowAround(serverNow())');
+  const basketballIdx = src.indexOf('mens-college-basketball/scoreboard');
+
+  it('AWAITS the sync before reading the clock — now() alone returns device time', () => {
+    // The hole codex found: `now()` starts the sync and returns immediately, so
+    // the first fetch (the only one, when auto-refresh is off) would still be
+    // built on the uncorrected clock.
+    expect(awaitIdx).toBeGreaterThan(-1);
+    expect(windowIdx).toBeGreaterThan(-1);
+    expect(src).toContain('syncServerClock()');
+    expect(awaitIdx).toBeLessThan(windowIdx);
+  });
+
+  it('does NOT make the basketball tab wait on the clock', () => {
+    // That feed sends no `dates=` and uses no window, so waiting on the sync
+    // would delay live basketball scores for nothing. (codex r2.) The AWAIT —
+    // the thing that actually costs time — must sit after the basketball
+    // request, i.e. inside the football branch.
+    expect(basketballIdx).toBeGreaterThan(-1);
+    expect(awaitIdx).toBeGreaterThan(basketballIdx);
+  });
+
+  it('gates every state write on the request still being current', () => {
+    // qodo #1 on #702: two fetches can be in flight across a tab switch, and
+    // both used to write `games` — so a slow football response painted football
+    // games under the basketball tab.
+    expect(src).toMatch(/const requestId = \+\+requestIdRef\.current;/);
+    expect(src).toMatch(/const isCurrent = \(\) => requestIdRef\.current === requestId;/);
+    // The writes that would otherwise land from a superseded fetch.
+    expect(src).toMatch(/if \(!isCurrent\(\)\) return;\s*\n\s*setGames\(fetchedGames\);/);
+    expect(src).toMatch(/if \(isCurrent\(\)\) setLoading\(false\);/);
+    expect(src).toMatch(/monthsFailed > 0 && isCurrent\(\)/);
+    // ⚠️ THE CATCH BLOCK TOO. It was missing here, so deleting the guard in the
+    // error path left this test green while a stale rejection could still
+    // overwrite the current tab's error — and an error banner is the one piece of
+    // state a viewer is guaranteed to read. (qodo #3 on #702, round 2.)
+    expect(src).toMatch(/catch \(err: unknown\) \{\s*\n\s*if \(!isCurrent\(\)\) return;\s*\n\s*setError\(/);
+  });
+
+  it('SHARES one bounded clock wait — not a boolean flag', () => {
+    // Two findings meet here. qodo #3 on #702: racing the same pending promise
+    // against a fresh timer each refresh re-paid the delay forever while already
+    // using the device-time fallback. codex r4: a boolean set BEFORE the await
+    // lets a replacement fetch (a tab switch during the initial sync) skip the
+    // wait, use device time, and supersede the only request that would have used
+    // the corrected clock. Sharing the promise satisfies both.
+    expect(src).toMatch(/clockWaitRef\.current \?\?= Promise\.race\(\[/);
+    expect(src).toMatch(/await clockWaitRef\.current;/);
+    // The flag shape either finding would reintroduce.
+    expect(src).not.toMatch(/clockWaitPaidRef/);
+  });
+
+  it('BOUNDS that wait, so scores never hang on the callable', () => {
+    // The callable carries Firebase's ~70s default timeout; a public scoreboard
+    // must not sit behind it.
+    expect(src).toMatch(/const SERVER_CLOCK_SYNC_BUDGET_MS = \d+;/);
+    const budget = Number(/const SERVER_CLOCK_SYNC_BUDGET_MS = (\d+);/.exec(src)?.[1]);
+    expect(budget).toBeGreaterThan(0);
+    expect(budget).toBeLessThanOrEqual(5000);
+    expect(src).toMatch(/setTimeout\(resolve, SERVER_CLOCK_SYNC_BUDGET_MS\)/);
+  });
+});
 
 describe('monthKeysForWindow', () => {
   it('returns one key when the window sits inside a month', () => {

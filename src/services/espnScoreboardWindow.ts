@@ -26,6 +26,28 @@
  * to something like the current week. A bigger number quietly returns LESS.
  */
 
+/**
+ * The ±`days` window around an instant, as the page means it.
+ *
+ * Takes the instant as a NUMBER rather than reading the clock itself, which is
+ * the whole point: the caller passes `now()` from `utils/serverClock`, the
+ * server-corrected clock every lock and countdown in this app already uses. A
+ * device clock that is wrong by a day silently shifts this window, and the page
+ * then presents another week's games as the current ones with no way for the
+ * viewer to tell. (qodo #1 on PR #701.)
+ *
+ * Day arithmetic is LOCAL, matching what it replaced and what the viewer means
+ * by "the last week" — only the month keys derived from it are UTC, because
+ * that is what ESPN's `dates=` parameter is.
+ */
+export function windowAround(nowMs: number, days = 7): { start: Date; end: Date } {
+  const start = new Date(nowMs);
+  start.setDate(start.getDate() - days);
+  const end = new Date(nowMs);
+  end.setDate(end.getDate() + days);
+  return { start, end };
+}
+
 /** ESPN's `dates=` month form, e.g. `202609`. */
 export function monthKeysForWindow(start: Date, end: Date): string[] {
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];

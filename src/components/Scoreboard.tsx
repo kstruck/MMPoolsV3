@@ -1,11 +1,19 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Trophy, PlayCircle, Calendar, Radio, Clock, Shield, GraduationCap, Volleyball } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { getTeamLogo } from '../constants';
 import type { User } from '../types';
 import { HelpRoutePublisher } from '../help/publish';
-import { fetchScoreboardWindow } from '../services/espnScoreboardWindow';
+import { fetchScoreboardWindow, windowAround } from '../services/espnScoreboardWindow';
+import { now as serverNow, syncServerClock } from '../utils/serverClock';
+
+/**
+ * How long the first scoreboard fetch will wait for the server clock before
+ * giving up and using the best time it has. See the call site for why it is
+ * bounded at all.
+ */
+const SERVER_CLOCK_SYNC_BUDGET_MS = 2000;
 
 interface Game {
     id: string;
@@ -67,23 +75,49 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const [autoRefresh, setAutoRefresh] = useState(true);
 
+    /**
+     * Which fetch owns the view. Every state write below is gated on it.
+     *
+     * Without this, a tab switch starts a second fetch while the first is still
+     * in flight, and BOTH write `games` on completion — so a slow football
+     * response lands after the basketball one and paints football games under
+     * the basketball tab. The football branch's clock wait widened that window,
+     * which is how it was found. (qodo #1 on PR #702.)
+     */
+    const requestIdRef = useRef(0);
+    /**
+     * The ONE bounded clock wait for this mount. Every football fetch awaits
+     * this same promise.
+     *
+     * A boolean "already paid" flag is the obvious version and it is wrong two
+     * ways. Set AFTER the await, every concurrent fetch queues its own timer and
+     * the budget is paid per refresh forever while the callable hangs (qodo #3).
+     * Set BEFORE it, a replacement fetch — a tab switch during the initial sync —
+     * skips the wait entirely, uses device time, and supersedes the one request
+     * that would have used the corrected clock, which defeats the whole point of
+     * this PR for exactly the viewer it is for (codex r4).
+     *
+     * Sharing the promise is both at once: one timer, and every fetch waits on
+     * the same deadline. Once it settles, awaiting it again costs a microtask.
+     */
+    const clockWaitRef = useRef<Promise<void> | null>(null);
+
     const fetchScores = useCallback(async () => {
+        const requestId = ++requestIdRef.current;
+        /** True while this fetch is still the newest one. */
+        const isCurrent = () => requestIdRef.current === requestId;
         try {
             setLoading(true);
             setError(null);
-
-            // Calculate date range: Past 7 days to Next 7 days
-            const today = new Date();
-            const past = new Date(today);
-            past.setDate(today.getDate() - 7);
-            const future = new Date(today);
-            future.setDate(today.getDate() + 7);
 
             let fetchedGames: Game[] = [];
 
             if (activeTab === 'basketball') {
                 // College Basketball (Mens) - NCAA Tournament (groups=100).
-                // No `dates=`, so the range outage below does not reach it.
+                // No `dates=`, so the range outage below does not reach it — and
+                // no date window, so it deliberately does NOT wait on the server
+                // clock below. Making it wait would delay live basketball scores
+                // by up to the sync budget for no benefit. (codex r2.)
                 const response = await fetch(
                     `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?limit=500&groups=100`,
                 );
@@ -91,6 +125,34 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 const data: { events: Game[] } = await response.json();
                 fetchedGames = data.events || [];
             } else {
+                // Date range: past 7 days to next 7 days, off the SERVER-corrected
+                // clock. `new Date()` here meant a viewer whose device clock is
+                // wrong by a day fetched — and was shown — a window centred on the
+                // wrong date, with nothing on screen admitting it. Every lock and
+                // countdown in this app already reads `now()`; this page was the
+                // exception.
+                //
+                // ⚠️ AWAITED, because `now()` alone does NOT fix this on first
+                // paint. It KICKS OFF the sync and returns device time
+                // immediately, so the first fetch — the only one that happens at
+                // all when auto-refresh is off — would still be built on the wrong
+                // clock. (codex r1.) `syncServerClock` is idempotent and swallows
+                // its own failure, so this is one round trip per session at most.
+                //
+                // BOUNDED, because scores must not wait on it. The callable
+                // carries the Firebase default timeout of about seventy seconds,
+                // and blocking a public scoreboard that long on a flaky network is
+                // a worse outcome than a window built on a clock that is usually
+                // right. Past the budget we proceed with the best time we have and
+                // any later refresh picks up the corrected offset.
+                // ONE shared bounded wait per mount — see `clockWaitRef`.
+                clockWaitRef.current ??= Promise.race([
+                    syncServerClock(),
+                    new Promise<void>(resolve => setTimeout(resolve, SERVER_CLOCK_SYNC_BUDGET_MS)),
+                ]);
+                await clockWaitRef.current;
+                const { start: past, end: future } = windowAround(serverNow());
+
                 // ⚠️ NOT `dates=<start>-<end>`. ESPN began answering every date
                 // RANGE with HTTP 400 on 2026-09-15, which is what made this page
                 // show "Failed to fetch scores" on every refresh. The window is
@@ -103,7 +165,7 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 fetchedGames = events;
                 // Partial failure is stated rather than silently shown as a short
                 // list — the games we did get are still worth rendering.
-                if (monthsFailed > 0) setError('Some scores could not be loaded. Showing what we have.');
+                if (monthsFailed > 0 && isCurrent()) setError('Some scores could not be loaded. Showing what we have.');
             }
 
             // For basketball, always include LIVE games + any game featuring an AP Top 25 team
@@ -119,12 +181,18 @@ export const Scoreboard: React.FC<ScoreboardProps> = ({
                 });
             }
 
+            // A superseded fetch writes NOTHING — not games, not the timestamp,
+            // not the error, not `loading`. Painting football results under the
+            // basketball tab is the failure; a stale "Updated:" stamp or a
+            // spinner cleared by the wrong request are the same class.
+            if (!isCurrent()) return;
             setGames(fetchedGames);
             setLastUpdated(new Date());
         } catch (err: unknown) {
+            if (!isCurrent()) return;
             setError(err instanceof Error ? err.message : 'Failed to load scores');
         } finally {
-            setLoading(false);
+            if (isCurrent()) setLoading(false);
         }
     }, [activeTab]);
 
