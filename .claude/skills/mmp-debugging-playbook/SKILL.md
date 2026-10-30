@@ -5,7 +5,7 @@ description: >
   white screen, "Missing or insufficient permissions" / permission-denied error,
   callable HttpsError, TS2307 build failure, App Check rejection, wrong scores or
   standings, pools closing/locking unexpectedly, wizard buttons doing nothing,
-  Stripe checkout oddities, ESPN import producing wrong seeds/regions, "my deployed
+  Stripe checkout oddities, ESPN import producing wrong seeds/regions, an [MMP OPS] scheduled-job-failing email, ESPN returning 400, a Sentry error, "my deployed
   fix isn't visible", or "my merged change disappeared". Contains a symptom→cause→
   experiment→fix table for this project's real historical failure modes, a decision
   tree for client-bug vs rules-bug vs function-bug, how to read function logs, how
@@ -94,6 +94,64 @@ the rules-protected doc role), then force a token refresh
 | S18 | Playoff pool write fails as entries grow | T8 1MB doc bomb: playoff entries live as a `Record<string,PlayoffEntry>` map ON the pool doc; ~500 entries bricks the pool. Flagged in three audits, migration NEVER BUILT — still open as of 2026-07-06 | Check the pool doc size in Firestore console | Open debt; designed fix is a `pools/{id}/playoff_entries/{uid}` subcollection. Do not attempt casually — live-data migration risk; go through mmp-change-control |
 | S19 | Prod DB polluted with pools named `AI Test - ...` or slug `sim-*` | Admin Test Suite runs against REAL prod Firestore via the real `createPool` callable and never cleans up (cleanup code exists but is wired only to the orphaned `TestingDashboard.tsx`); TournamentSimulator creates `sim-` slug pools client-side | Names come from `src/utils/testing/simulators/squaresSimulator.ts:49` | Manual deletion for now; Phase-2 simulator server API (audited callables + rules:93 removal) is the planned fix. See mmp-superadmin-surface |
 | S20 | Function deployed but scheduled job runs at an odd local hour / off-season date logic breaks | Schedules without `timeZone` run in UTC (`enforceBillingStatus` 03:00, `autoClosePools` 08:00). Tournament default `lockAt` hardcodes `-04:00` — safe ONLY Mar 15–early Nov per its own comment (`functions/src/espnBracket.ts:328-338`) | Check the schedule string and timeZone in the function's options | The respective function file; never reuse the `-04:00` pattern outside the safe window |
+
+## 2b. Scheduled jobs and outside APIs failing in production
+
+Added 2026-10-30 from the Sept 2026 incidents (ESPN date ranges, post-launch
+deploy, AI Commissioner, iOS Sentry noise). Start here when an
+`[MMP OPS] Scheduled job failing — <job>` email arrives or Sentry shows a new
+production error.
+
+### Triage order for an ops alert
+
+1. Grep the alert text to find the code that emits it, e.g.
+   `git grep -n "returned no games" functions/src` (the "N slate(s) returned no
+   games" error is built by the NFL deep sweep and asserted in
+   `functions/src/__tests__/nflDeepSweep.test.ts`).
+2. Read the job's own log, with enough lines to reach the failing run:
+   `npx firebase functions:log --only <job> --lines 2000 --project gridiron-gamble-uzuqo`.
+   Search it for `status 4`, `status 5`, `timeout`, `memory`.
+3. If the job calls ESPN (or any outside API), reproduce the exact URL with
+   `curl.exe -s -o NUL -w "%{http_code}" "<url>"` before reading more code. A
+   provider change shows up as a status code, not as a bug in our diff.
+4. Decide: provider changed (fix our request), our code broke (normal fix), or
+   the job is behaving as designed (see "Normal, not a bug" below).
+
+### Symptom rows
+
+| # | What you observe | Cause | Discriminating experiment | Fix |
+|---|---|---|---|---|
+| S21 | NFL score sync or deep sweep reports slates with no games; log shows `ESPN Scoreboard API returned HTTP status 400` | Since 2026-09-15 ~21:55Z ESPN returns **400 for every `scoreboard?dates=YYYYMMDD-YYYYMMDD` range**. Single day (`dates=YYYYMMDD`), month (`dates=YYYYMM`) and `week=N&season=&seasontype=` still return 200 | `curl` the range URL and the single-day URL for the same dates; 400 vs 200 confirms | Server: `resolveScoreboardUrls` in `functions/src/nflSchedule.ts` tries ordered candidates with a week-URL fallback (PR #695; test `functions/src/__tests__/nflScoreboardUrlFallback.test.ts`); bracket sync fetches per day via `functions/src/lib/espnScoreboardSpan.ts` (PR #696). **Never add a new `dates=A-B` URL** |
+| S22 | `/scoreboard` page says "Failed to fetch scores" although the server jobs are healthy | The browser has its **own** ESPN URL builder, separate from the server's; fixing one does not fix the other | Network tab: the failing request is a date-range URL | `src/services/espnScoreboardWindow.ts` fetches by month (PR #701). Keep `limit` at or below 500: `limit=900` silently returns 25 events |
+| S23 | A bracket or sweep job times out or runs out of memory after switching to per-day fetches | More requests per run | Job log shows timeout or memory exceeded | Per-request deadline (10 s, body included), an explicit job `timeoutSeconds`, and `memory: "512MiB"` (`functions/src/espnBracket.ts`) |
+| S24 | Deploy fails with "Unable to set the invoker for the IAM policy" on a scheduled function | The code update succeeded; only the Cloud Run `roles/run.invoker` binding failed, so the scheduler may get 403 | Cloud audit log shows `UpdateFunction` succeeded | Re-run `npx firebase deploy --only functions:<job> --project gridiron-gamble-uzuqo`; if it repeats, check the invoker role in Cloud Run. See mmp-deploy-and-operate |
+| S25 | Every AI Commissioner call fails in prod; 403 `API_KEY_HTTP_REFERRER_BLOCKED` | The Gemini key had an HTTP-referrer restriction, and Cloud Functions send no `Referer` | Function log shows the 403 reason | Use a server key without a referrer restriction (restrict by API instead). `functions/src/lib/aiProviderError.ts` (`providerFailureReason`) now names the reason in the error |
+| S26 | Sentry: `IndexedDbTransactionError` ("Database deleted by request of the user"), mostly iOS Safari | Safari evicts IndexedDB; Firestore's persistent cache throws, then falls back to memory. Users are not affected | Browser/OS breakdown in Sentry is iOS Safari | Ignored at `src/sentry.ts` (`ignoreErrors`). Not a bug; do not chase it |
+
+### Normal, not a bug
+
+- Empty log lines from score jobs on a day with no games.
+- Standings blank for a few minutes after a change: `nflAutoScoreJob` runs
+  about every 5 minutes. Wait one cycle before reporting.
+- A "successful" `nflAutoScoreJob` run that skips some Survivor pools with a
+  "queued rescore … needs the reset-and-replay path" line: those pools are
+  skipped on purpose until rescored.
+
+### Proving the fix is live
+
+- `npx firebase functions:list` has **no date column**, so it does not prove a
+  new deploy. Prove it with the deploy checkout's `git rev-parse HEAD` equal to
+  the merge commit, plus a function log line from after the deploy time, or a
+  changed setting such as memory showing in `functions:list`.
+- Deploy from an up-to-date checkout: `git pull --ff-only`, then
+  `npm --prefix functions ci`, then deploy (S3).
+- Run the built code read-only against the provider to prove the fallback
+  (`node -e` requiring `functions/lib/nflSchedule.js`).
+- Frontend fixes need Kevin's Coolify redeploy, and open tabs keep the old
+  bundle; compare the served `index-*.js` hash (S4).
+- Before saying "the fix does not exist", search all history and PRs:
+  `git log --all -S <symbol>`. Searching only `main` and local worktrees has
+  produced a wrong answer before.
 
 ## 3. Reading function logs
 
@@ -235,6 +293,7 @@ Emulator-mode gotchas (verified in `src/firebase.ts` and e2e specs):
 - Process for landing the fix once diagnosed (plan/review/sweep gates, the 4 discipline rules) → **mmp-change-control**.
 - Test commands and evidence bar for proving the fix → **mmp-validation-and-qa**.
 - Admin UI contract / where an admin capability should live → **mmp-superadmin-surface**.
+- A member or commissioner support request (missing member, entry not in My Entries, wrong name, greyed-out delete) → **mmp-pool-admin**.
 - NFL 2026 readiness work (S17 is a symptom row; the campaign is elsewhere) → **mmp-nfl-season-campaign**.
 
 ## 7. Provenance and maintenance
@@ -254,5 +313,8 @@ Re-verify a fact class before relying on it if the anchor command below disagree
 | Emulator opt-in mechanics | `Select-String -Path src/firebase.ts -Pattern "VITE_USE_FIREBASE_EMULATOR"` |
 | Client/server seed-resolution drift (S9) still open | `Select-String -Path src/utils/bracketScoring.ts -Pattern "extractSeedFromTeamId"` |
 | Anti-clobber guard test exists | `Test-Path tests/admin-surface-invariants.test.ts` |
+| ESPN range fallback still present (S21) | `Select-String -Path functions/src/nflSchedule.ts -Pattern "resolveScoreboardUrls"` |
+| Browser scoreboard fetches by month (S22) | `Test-Path src/services/espnScoreboardWindow.ts` |
+| Sentry IndexedDB noise ignored (S26) | `Select-String -Path src/sentry.ts -Pattern "IndexedDbTransactionError"` |
 | Deployed function list vs code | `npx firebase functions:list --project gridiron-gamble-uzuqo` |
 | Prod-console facts (autoClose live, Coolify manual deploy) | NOT verifiable from the repo — confirm with Kevin or the Firebase/Coolify consoles; treat the 2026-07-06 statements here as the last known state. **"App Check enforced" is no longer among them** — it is superseded (2026-07-30) and the code is checkable: `Get-ChildItem functions\src -Recurse -Filter *.ts \| Select-String -Pattern 'appCheck: .enforce.'` returns nothing |
