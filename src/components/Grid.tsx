@@ -10,6 +10,8 @@ import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
+import { countHeldSquares, duesBuckets, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
+import { claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
 
 interface GridProps {
    gameState: GameState;
@@ -57,13 +59,39 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
    // --- Guest Key Init ---
    useEffect(() => {
-      let key = localStorage.getItem('mmp_guest_key');
-      if (!key) {
-         key = crypto.randomUUID();
-         localStorage.setItem('mmp_guest_key', key);
-      }
-      setGuestKey(key);
+      // A NEW key under a NEW storage name (PLAN-SQUARES-REOPEN A3). The old
+      // `mmp_guest_key` was written onto every square of the world-readable
+      // pool document, so every one of those keys has been published. The
+      // server gives a guest identity only to a key carrying the prefix.
+      setGuestKey(getOrCreateGuestKey());
    }, []);
+
+   // The hash the server stores for this browser's key ON THIS POOL — how the
+   // page recognises a guest's own squares. Computed here because the pool
+   // document carries only the hash, never the key.
+   const [guestKeyHash, setGuestKeyHash] = useState<string | null>(null);
+   useEffect(() => {
+      let live = true;
+      void hashGuestKey(gameState.id, guestKey).then((h) => { if (live) setGuestKeyHash(h); });
+      return () => { live = false; };
+   }, [gameState.id, guestKey]);
+
+   // A guest who has since signed in takes their guest squares into the
+   // account — on this browser, where the device key lives. Without this a
+   // player who reserved first and signed up second never saw those squares on
+   // their dashboard and could not use "I've paid". Once per pool, account and
+   // session — but "once" is recorded only when it SUCCEEDS, so a timeout is
+   // retried the next time the grid changes (at most three times a page load).
+   const signedInUid = currentUser?.id;
+   const hasUnclaimedGuestSquare = gameState.squares.some(s => s.owner && s.guestKeyHash && !s.reservedByUid);
+   const failedClaims = React.useRef(0);
+   useEffect(() => {
+      if (!signedInUid || !gameState.id || !hasUnclaimedGuestSquare || failedClaims.current >= 3) return;
+      const key = readGuestKey();
+      if (!key) return;
+      void claimGuestSquaresOnce(gameState.id, signedInUid, () => dbService.claimMySquares(gameState.id, key, { quiet: true }))
+         .then((outcome) => { if (outcome === 'failed') failedClaims.current += 1; });
+   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare, gameState.squares]);
 
    // --- Player Identity State ---
    const [playerInfo, setPlayerInfo] = useState<{
@@ -153,38 +181,36 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const isMultiSet = gameState.numberSets === 4; // We show the layout regardless, if missing numbers we show '?'
 
    // --- Limit Calculation ---
-   const maxPerPlayer = Number(gameState.maxSquaresPerPlayer) || 100;
+   // `null` = no limit. ONE reader for the cap (`shared/squaresClaim.ts`), the
+   // same one the server enforces with — this line used to read `|| 100`.
+   const maxPerPlayer = effectiveSquareCap(gameState.maxSquaresPerPlayer);
+   // WHO this player is to the server: their account, and this browser's device
+   // hash. The same identity for "mine", for the limit, and for "I've paid" —
+   // they used to be decided three different ways.
+   const myUid = currentUser?.id ?? null;
+   const identity = React.useMemo(() => ({ uid: myUid, guestKeyHash }), [myUid, guestKeyHash]);
 
-   // Calculate how many squares the CURRENT user (if identified) already owns in the DB
+   // How many squares count against this player's limit — the server's own count.
    const squaresAlreadyOwned = React.useMemo(() => {
       if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s =>
-         s.owner && s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase()
-      ).length;
-   }, [gameState.squares, playerInfo.name]);
+      return countHeldSquares(gameState.squares, identity, playerInfo.name);
+   }, [gameState.squares, playerInfo.name, identity]);
 
-   const unpaidSquaresCount = React.useMemo(() => {
-      if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s =>
-         s.owner &&
-         s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() &&
-         !s.isPaid &&
-         !s.paymentConfirmedAt
-      ).length;
-   }, [gameState.squares, playerInfo.name]);
-
-   const pendingConfirmationCount = React.useMemo(() => {
-      if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s =>
-         s.owner &&
-         s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() &&
-         !s.isPaid &&
-         s.paymentConfirmedAt
-      ).length;
-   }, [gameState.squares, playerInfo.name]);
+   // This player's unpaid squares, split by who can move them on. "I've sent
+   // payment" covers `confirmable` only — the squares stamped with their
+   // account — because that is all the server accepts, and it refuses the whole
+   // request if one square in it is not theirs that way.
+   const dues = React.useMemo(
+      () => (playerInfo.name
+         ? duesBuckets(gameState.squares, identity, playerInfo.name)
+         : { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[] }),
+      [gameState.squares, playerInfo.name, identity],
+   );
+   const unpaidSquaresCount = dues.confirmable.length + dues.hostOnly.length;
+   const pendingConfirmationCount = dues.pending.length;
 
    const currentTotal = squaresAlreadyOwned + selectedSquares.length;
-   const remainingAllowance = maxPerPlayer - currentTotal;
+   const remainingAllowance = maxPerPlayer === null ? Infinity : maxPerPlayer - currentTotal;
    const isLimitReached = remainingAllowance <= 0;
 
    const handleSquareClick = (id: number) => {
@@ -323,10 +349,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const handleConfirmPayment = async () => {
       if (!onConfirmPayment || !playerInfo.name) return;
 
-      // Identify squares owned by this user
-      const ownedSquareIds = gameState.squares
-         .filter(s => s.owner && s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() && !s.isPaid && !s.paymentConfirmedAt)
-         .map(s => s.id);
+      // The squares the server will accept from this player — see `duesBuckets`.
+      const ownedSquareIds = dues.confirmable;
 
       if (ownedSquareIds.length === 0) {
          setPaymentConfirmMsg({ type: 'error', text: "No unpaid squares found to confirm." });
@@ -646,6 +670,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               Total due: <span className="num text-gold-600 font-bold">${unpaidSquaresCount * gameState.costPerSquare}</span>
                            </p>
                         )}
+                        {dues.hostOnly.length > 0 && (
+                           <p className="text-muted" data-testid="dues-host-only">
+                              {currentUser
+                                 ? <><span className="font-bold text-[color:var(--text)] num">{dues.hostOnly.length}</span> of those {dues.hostOnly.length !== 1 ? 'were' : 'was'} entered for you by the organizer. Pay the organizer directly — they mark {dues.hostOnly.length !== 1 ? 'those' : 'that one'} paid.</>
+                                 : <>Sign in to tell the organizer you have paid. Squares you reserved on this browser move to your account when you do.</>}
+                           </p>
+                        )}
                         {pendingConfirmationCount > 0 && (
                            <p className="text-muted italic flex items-center gap-1.5">
                               <Check size={14} className="text-gold-500" />
@@ -660,7 +691,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      </div>
                   </div>
 
-                  {unpaidSquaresCount > 0 && (
+                  {dues.confirmable.length > 0 && (
                      <button
                         onClick={handleConfirmPayment}
                         disabled={isConfirmingPayment}
@@ -1239,7 +1270,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                           const isMySquare = currentUser && (
                                              square.reservedByUid === currentUser.id ||
                                              square.paidByUid === currentUser.id ||
-                                             (square.owner && currentUser.name && square.owner.toLowerCase() === currentUser.name.toLowerCase())
+                                             (square.owner && currentUser.name && normalizePlayerName(square.owner) === normalizePlayerName(currentUser.name))
                                           );
 
                                           if (isMySquare) {
@@ -1430,13 +1461,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  <span className={`font-display font-bold text-xl leading-none num ${isLimitReached ? 'text-brandred-500' : 'text-white'}`}>
                                     {currentTotal}
                                  </span>
-                                 <span className="text-sm font-normal text-[#9FB0CC] mb-0.5 num">/ {maxPerPlayer}</span>
+                                 <span className="text-sm font-normal text-[#9FB0CC] mb-0.5 num">{maxPerPlayer === null ? 'no limit' : `/ ${maxPerPlayer}`}</span>
                               </div>
                               {/* Mini Progress Bar */}
                               <div className="w-full h-1 bg-navy-700 rounded-full mt-1 overflow-hidden">
                                  <div
                                     className={`h-full w-full origin-left rounded-full transition-transform duration-300 ease-out ${isLimitReached ? 'bg-brandred-500' : 'bg-gold-500'}`}
-                                    style={{ transform: `scaleX(${Math.min(1, currentTotal / maxPerPlayer)})` }}
+                                    style={{ transform: `scaleX(${maxPerPlayer === null ? 0 : Math.min(1, currentTotal / maxPerPlayer)})` }}
                                  ></div>
                               </div>
                            </div>

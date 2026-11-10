@@ -12,11 +12,17 @@ export const POOLS_OPEN = true;
  * post-launch and do not allow any Squares pools from being purchased or setup
  * for now. Add a COMING SOON to those."*
  *
- * The reason, verified: `CreateSquaresPool.tsx` defaults `maxSquaresPerPlayer`
- * to `0` and labels it "(0 = no limit)", but `functions/src/squares.ts:93`
- * refuses a claim whenever `mySquares >= pool.maxSquaresPerPlayer` — so at 0 a
- * non-owner is refused their FIRST square and the pool is unplayable by anyone
- * except the commissioner. Selling that is worse than not selling it.
+ * The reason it was closed: `CreateSquaresPool.tsx` defaults
+ * `maxSquaresPerPlayer` to `0` and labels it "(0 = no limit)", but the callable
+ * refused a claim whenever `mySquares >= pool.maxSquaresPerPlayer` — so at 0 a
+ * non-owner was refused their FIRST square and the pool was unplayable by
+ * anyone except the commissioner. Selling that was worse than not selling it.
+ *
+ * 🟡 THAT DEFECT IS FIXED (PLAN-SQUARES-REOPEN PR-A) AND THIS STAYS `false`.
+ * Reopening waits for the rest of `docs/plans/PLAN-SQUARES-REOPEN.md` — winner
+ * amounts, lock integrity and a wizard that links the pool to its game — and
+ * PR-D of that plan is the commit that flips this and
+ * `HARD_CLOSED_POOL_TYPES`. Do not flip it on its own.
  *
  * THIS SWITCH DOES NOT EXEMPT SUPER ADMINS, deliberately. "Do not allow any"
  * is unconditional, and a bypass is exactly how a broken pool gets created by
@@ -25,7 +31,8 @@ export const POOLS_OPEN = true;
  * and one Coolify rebuild.
  *
  * EXISTING squares pools are untouched — they still open, score and pay out.
- * This closes CREATION only. The fix list lives in `SQUARES-BACKLOG.md`.
+ * This closes CREATION only. The fix list lives in
+ * `docs/backlog/SQUARES-BACKLOG.md` and `docs/plans/PLAN-SQUARES-REOPEN.md`.
  */
 export const SQUARES_CREATION_OPEN = false;
 

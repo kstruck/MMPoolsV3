@@ -261,9 +261,14 @@ export interface Square {
   // in the restricted /pools/{poolId}/squarePrivate/{squareId} subcollection (audit H1).
   isPaid?: boolean;
   pickedAsName?: string;
+  /** LEGACY: the raw guest device key. No longer written; nothing honours it. */
   guestDeviceKey?: string | null;
+  /** Hash of the guest's device key (server-computed). Never the key itself. */
+  guestKeyHash?: string | null;
   guestClaimId?: string | null;
   reservedAt?: number | null;
+  /** When the square was claimed. NOT `reservedAt` — see `planClaim` in shared/squaresClaim.ts. */
+  claimedAt?: number | null;
   paidAt?: number | null;
   reservedByUid?: string | null;
   paidByUid?: string | null;

@@ -28,17 +28,18 @@ import type { HelpTopic } from '../src/help/types';
  *     `help-ui-coverage.test.ts` pins the Pick'em ones. Flip a wizard default
  *     and the copy fails here rather than going quietly stale.
  *
- *  3. **The `maxSquaresPerPlayer` copy contradicts the wizard's own label on
- *     purpose, and only while the code says so.** The label reads
- *     "(0 = no limit)"; `functions/src/squares.ts` refuses a claim whenever
- *     `mySquares >= pool.maxSquaresPerPlayer` with no zero guard, so on a grid
- *     stored at the wizard's own default of 0 a player is refused their FIRST
- *     square. The copy follows the code. The pin below fails the day the
- *     defect is fixed, which is the day the copy has to be rewritten.
+ *  3. **The `maxSquaresPerPlayer` copy and the wizard's label say the same
+ *     thing, and the code makes both true.** Until 2026-11 they contradicted
+ *     each other on purpose: the label read "(0 = no limit)" and the callable
+ *     refused every first claim at 0. `effectiveSquareCap` is the one reader
+ *     now; the pin below runs it, and the planner the callable uses, rather
+ *     than grepping for a comparison.
  *
  * Each check is paired with a planted counter-example, so a guard that stopped
  * discriminating fails here rather than going quietly green.
  */
+
+import { effectiveSquareCap, planClaim } from '../shared/squaresClaim';
 
 const root = resolve(__dirname, '..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -333,42 +334,63 @@ describe('T13 — copy that names a default matches the code', () => {
 });
 
 /**
- * THE DRIFT PIN.
+ * THE PIN, INVERTED (PLAN-SQUARES-REOPEN A1).
  *
- * `CreateSquaresPool.tsx` labels the field "Max squares per player (0 = no
- * limit)". Nothing implements that. `functions/src/squares.ts` refuses a claim
- * whenever `mySquares >= pool.maxSquaresPerPlayer` and the claimer is not the
- * pool owner — at 0 that is every claim, on the player's first square — and
- * the three client readers each substitute a different number for 0
- * (`Grid.tsx` 100, `PoolRoute.tsx` 10 for the pre-check and "∞" for the
- * display). So the label is wrong on four counts and the copy follows the code.
+ * This block used to assert that the defect was still there — the callable
+ * compared `mySquares >= pool.maxSquaresPerPlayer` with no zero guard, so a
+ * pool on the wizard's default refused every first claim — and it was written
+ * to fail the day that was fixed. It is fixed. What it holds now is the other
+ * direction: the copy says 0 is no limit, so 0 has to BE no limit in the
+ * function the callable runs.
  *
- * This test exists so the copy cannot outlive the defect. Fix the callable and
- * it fails, which is the signal to rewrite the sentence.
+ * It RUNS that function. The old version grepped the source for a comparison,
+ * which proved the text of a line and nothing about what a claim does.
  */
-describe('T13 — the "0 is not no limit" claim is true of the shipped code', () => {
+describe('T13 — "0 means no limit" is true of the shipped code', () => {
   const SQUARES_FN = read('functions/src/squares.ts');
-
-  it('the claim check has no zero guard', () => {
-    expect(SQUARES_FN).toMatch(/mySquares >= pool\.maxSquaresPerPlayer/);
-    // The three shapes a fix would take. Any of them means 0 now means "no
-    // limit" and this copy has to change.
-    expect(SQUARES_FN).not.toMatch(/pool\.maxSquaresPerPlayer\s*>\s*0/);
-    expect(SQUARES_FN).not.toMatch(/pool\.maxSquaresPerPlayer\s*\|\|/);
-    expect(SQUARES_FN).not.toMatch(/pool\.maxSquaresPerPlayer\s*\?\?/);
+  const grid = Array.from({ length: 100 }, (_, i) => ({ id: i, owner: null as string | null }));
+  const claim = (max: unknown, squareIds: number[]) => planClaim({
+    squares: grid,
+    squareIds,
+    identity: { uid: null, guestKeyHash: null },
+    displayName: 'Alice',
+    maxSquaresPerPlayer: max,
+    exemptFromCap: false,
+    now: 1,
   });
 
-  it('and the copy says so instead of repeating the label', () => {
+  it('a non-owner takes their first square on a pool stored at 0', () => {
+    expect(effectiveSquareCap(0)).toBeNull();
+    expect(claim(0, [5]).ok).toBe(true);
+    // And the whole grid, which is what "no limit" means.
+    expect(claim(0, grid.map((s) => s.id)).ok).toBe(true);
+  });
+
+  it('absent, negative and unreadable limits are no limit too — none may refuse a player', () => {
+    for (const raw of [undefined, null, -1, 'abc', NaN]) {
+      expect(effectiveSquareCap(raw), String(raw)).toBeNull();
+      expect(claim(raw, [1, 2, 3]).ok, String(raw)).toBe(true);
+    }
+  });
+
+  it('a real limit is still a limit (counter-example: the guard must discriminate)', () => {
+    expect(effectiveSquareCap(2)).toBe(2);
+    expect(claim(2, [1, 2]).ok).toBe(true);
+    const over = claim(2, [1, 2, 3]);
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.refusal.code).toBe('LIMIT');
+  });
+
+  it('the callable decides through that planner, not a comparison of its own', () => {
+    expect(SQUARES_FN).toContain('planClaim(');
+    expect(SQUARES_FN).toContain('maxSquaresPerPlayer: pool.maxSquaresPerPlayer');
+    expect(SQUARES_FN).not.toMatch(/mySquares >= pool\.maxSquaresPerPlayer/);
+  });
+
+  it('and the copy says what the label says', () => {
     const copy = copyOf('maxSquaresPerPlayer');
-    expect(copy).toContain('0 is not a way of saying no limit');
-    expect(copy).toContain('refused their very first square');
-    // The label's exact phrasing must NOT be echoed back at the reader.
-    expect(copy).not.toMatch(/0\s*=\s*no limit/);
-  });
-
-  it('the label really does still say it — the contradiction is deliberate', () => {
-    // If somebody fixes the LABEL instead of the callable, this fails and the
-    // copy's framing has to be reconsidered rather than left half-true.
+    expect(copy).toContain('0 means no limit');
+    expect(copy).not.toContain('0 is not a way of saying no limit');
     expect(SQUARES_WIZARD).toContain('Max squares per player (0 = no limit)');
   });
 });

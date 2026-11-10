@@ -1,4 +1,4 @@
-import { HttpsError } from "firebase-functions/v2/https";
+import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 import { GameState } from "./types";
@@ -11,27 +11,60 @@ import { assertNotBannedLive } from "./lib/systemGuards";
 import { validated } from "./lib/validated";
 import { hasConfirmedRole } from "./lib/confirmedRole";
 import { updatePlayerSchema, releaseSquaresSchema } from "./schemas/squares";
-import { reserveSquareSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
+import { reserveSquareSchema, reserveSquaresSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
+import { planClaim, claimRefusalMessage, type ClaimRefusal } from "./shared/squaresClaim";
+import { guestKeyHashOrNull } from "./lib/guestKey";
 
 
-export const reserveSquare = validated(
-    // PUBLIC (guest flow): strict shape is the primary gate. customerDetails
-    // is a STRIPPING object so arbitrary client keys can no longer reach the
-    // squarePrivate PII doc.
-    { schema: reserveSquareSchema, label: "reserveSquare", auth: "public", appCheck: "monitor" },
-    async (input, request) => {
+/** What a claim needs, whichever callable it arrived through. */
+interface ReserveArgs {
+    poolId: string;
+    squareIds: number[];
+    customerDetails?: {
+        name?: string; email?: string; phone?: string;
+        address?: string; notes?: string; referral?: string;
+    } | null;
+    guestDeviceKey?: string | null;
+    pickedAsName?: string | null;
+    onBehalf?: boolean | null;
+}
+
+function refusalToHttpsError(refusal: ClaimRefusal): HttpsError {
+    const message = claimRefusalMessage(refusal);
+    switch (refusal.code) {
+        case 'NOT_FOUND': return new HttpsError("not-found", message);
+        case 'TAKEN': return new HttpsError("already-exists", message);
+        case 'LIMIT': return new HttpsError("resource-exhausted", message);
+        default: return new HttpsError("invalid-argument", message);
+    }
+}
+
+/**
+ * Reserve a selection of squares for the caller, ALL OR NOTHING, in one
+ * transaction. Both callables below end here, so the single-square path and
+ * the whole-selection path cannot drift apart.
+ *
+ * The DECISION — taken or not, over the limit or not, already the caller's or
+ * not — is `planClaim` in `shared/squaresClaim.ts`, the same function the pool
+ * page uses to preview a claim. This function supplies it with WHO is asking,
+ * which only the server can know.
+ */
+async function reserveSquaresForCaller(
+    args: ReserveArgs,
+    request: CallableRequest<unknown>,
+): Promise<{ reserved: number[]; alreadyHeld: number[] }> {
     const db = admin.firestore();
 
     // Banned users can't reserve (guests/anonymous are unaffected — no account).
     if (request.auth) await assertNotBannedLive(request.auth.uid);
 
-    const { poolId, squareId, customerDetails, guestDeviceKey, pickedAsName } = input;
+    const { poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName, onBehalf: askedOnBehalf } = args;
 
-    // 1. Determine user identity - allow unauthenticated users with customerDetails
+    // 1. Who is this? A signed-in player is their ACCOUNT. A guest is the device
+    //    key their browser holds — stored only as a hash (lib/guestKey.ts).
     const isAuthenticated = !!request.auth;
     const userId = request.auth?.uid || "anonymous";
 
-    // Get user info from auth token OR from customerDetails for anonymous users
     let userName: string;
     let userEmail: string;
 
@@ -50,6 +83,18 @@ export const reserveSquare = validated(
         userEmail = customerDetails.email || "Unknown";
     }
 
+    // The name that goes on the squares is the one the player TYPED. The limit
+    // and the "already mine" check used to compare against `userName` instead —
+    // the token name for a signed-in player — so they counted a name the square
+    // never carried.
+    const displayName = (pickedAsName || userName || "").trim();
+
+    // Resolved inside the transaction, once the pool's owner is known.
+    const callerIdentity = {
+        uid: isAuthenticated ? userId : null,
+        guestKeyHash: guestKeyHashOrNull(poolId, guestDeviceKey),
+    };
+
     const poolRef = db.collection("pools").doc(poolId);
 
     // 2. Transaction to prevent race conditions
@@ -66,79 +111,80 @@ export const reserveSquare = validated(
             throw new HttpsError("failed-precondition", billingCheck.reason || "Pool is locked due to billing.");
         }
 
-        // Check if Pool is open explicitly?
-        // Usually squares can be bought unless isLocked, BUT admin might reserve even if locked (Manual).
-        // Let's enforce: If locked, ONLY owner can edit.
+        if (!Array.isArray(pool.squares)) {
+            throw new HttpsError("failed-precondition", "This pool has no squares grid.");
+        }
+
+        // Once the grid is locked only the owner may still place a name on it.
         if (pool.isLocked && pool.ownerId !== userId) {
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
 
-        const squares = [...pool.squares];
-        const targetSquare = squares.find((s) => s.id === squareId);
+        // THE ORGANIZER ENTERING A SQUARE FOR SOMEONE ELSE. The owner is exempt
+        // from the limit precisely so they can type in the players who paid in
+        // person. Stamping the owner's account on those squares put them on the
+        // OWNER's dashboard, let only the owner press "I've paid" for them, and
+        // counted them as the owner's (qodo, PR #758). Such a square carries
+        // the name and no identity — the same as a hand-entered square always
+        // has.
+        //
+        // THE PAGE SAYS WHICH, AND THE SERVER FOLLOWS. `onBehalf` is what the
+        // pool page decided with `isEnteringForSomeoneElse` and showed the
+        // organizer beside the name field. The server used to work it out for
+        // itself by comparing names, and was wrong three different ways — see
+        // that function. It is honoured for the pool's OWNER only: anybody else
+        // who sent it would be shedding their own identity, which is how the
+        // per-player limit is counted.
+        const isOwner = isAuthenticated && pool.ownerId === userId;
+        const onBehalf = isOwner && askedOnBehalf === true;
+        const identity = onBehalf ? { uid: null, guestKeyHash: null } : callerIdentity;
 
-        if (!targetSquare) {
-            throw new HttpsError("not-found", "Square not found.");
-        }
-
-        // Check availability
-        if (targetSquare.owner) {
-            // Idempotency: If I already own it, success.
-            if (targetSquare.owner === userName) { // Note: owner stored as Name string currently, safer to check ID if we had it on square
-                return;
-            }
-            throw new HttpsError("already-exists", "Square already taken.");
-        }
-
-        // Check Limits
-        const mySquares = squares.filter(s => s.owner === userName).length;
-        if (mySquares >= pool.maxSquaresPerPlayer && pool.ownerId !== userId) {
-            throw new HttpsError("resource-exhausted", `Max ${pool.maxSquaresPerPlayer} squares per player.`);
-        }
-
-        // Reserve — only NON-SENSITIVE display data goes on the public square.
-        const updatedSquares = squares.map((s) => {
-            if (s.id === squareId) {
-                return {
-                    ...s,
-                    owner: pickedAsName || userName, // Storing Name for display.
-                    // Ideally we store ownerUid: userId too, but schema currently uses 'owner' string.
-                    // We will stick to schema for now to avoid breaking UI.
-                    isPaid: false,
-                    guestDeviceKey: guestDeviceKey || null,
-                    pickedAsName: pickedAsName || userName,
-                };
-            }
-            return s;
+        const plan = planClaim({
+            squares: pool.squares,
+            squareIds,
+            identity,
+            displayName,
+            maxSquaresPerPlayer: pool.maxSquaresPerPlayer,
+            exemptFromCap: isOwner,
+            now: Date.now(),
         });
+        if (!plan.ok) throw refusalToHttpsError(plan.refusal);
+
+        // Every square asked for is already the caller's: nothing to write.
+        if (plan.reserved.length === 0) {
+            return { reserved: [] as number[], alreadyHeld: plan.alreadyHeld, isGridFull: false, poolName: pool.name, contactEmail: pool.contactEmail, notifyAdminFull: false };
+        }
 
         transaction.update(poolRef, {
-            squares: updatedSquares,
+            squares: plan.squares,
             participantIds: userId !== "anonymous" ? FieldValue.arrayUnion(userId) : FieldValue.arrayUnion("guest"),
             updatedAt: Timestamp.now()
         });
 
-        // PII (email/phone/etc) is written to the restricted subcollection, NOT the pool doc.
-        const privateRef = poolRef.collection(SQUARE_PRIVATE).doc(String(squareId));
-        transaction.set(privateRef, buildSquarePrivate(squareId, { email: userEmail, ...customerDetails }));
-
-        // --- AUDIT LOGGING ---
         const role = pool.ownerId === userId ? 'ADMIN' : (isAuthenticated ? 'USER' : 'GUEST');
-        await writeAuditEvent({
-            poolId,
-            type: 'SQUARE_RESERVED',
-            message: `Square #${squareId} reserved by ${userName}`,
-            severity: 'INFO',
-            actor: { uid: userId, role, label: userName },
-            payload: { squareId, ownerName: userName, email: userEmail }
-        }, transaction);
+        for (const squareId of plan.reserved) {
+            // PII (email/phone/etc) is written to the restricted subcollection, NOT the pool doc.
+            const privateRef = poolRef.collection(SQUARE_PRIVATE).doc(String(squareId));
+            // On-behalf: the contact details are the PLAYER's, as typed — never the
+            // commissioner's own email by default, or the player's payment
+            // reminders would go to the commissioner.
+            transaction.set(privateRef, buildSquarePrivate(squareId, { email: onBehalf ? "Unknown" : userEmail, ...customerDetails }));
 
-        const isGridFull = updatedSquares.every(s => s.owner !== null);
-        console.log(`[reserveSquare] Grid Full Check - Pool: ${poolId}, IsFull: ${isGridFull}, Notify: ${pool.notifyAdminFull}, Email: ${pool.contactEmail}`);
-        return { isGridFull, poolName: pool.name, contactEmail: pool.contactEmail, notifyAdminFull: pool.notifyAdminFull };
+            await writeAuditEvent({
+                poolId,
+                type: 'SQUARE_RESERVED',
+                message: `Square #${squareId} reserved by ${displayName}`,
+                severity: 'INFO',
+                actor: { uid: userId, role, label: displayName },
+                payload: { squareId, ownerName: displayName, email: onBehalf ? (customerDetails?.email || "Unknown") : userEmail, ...(onBehalf ? { enteredByOwner: true } : {}) }
+            }, transaction);
+        }
+
+        const isGridFull = plan.squares.every(s => s.owner !== null);
+        return { reserved: plan.reserved, alreadyHeld: plan.alreadyHeld, isGridFull, poolName: pool.name, contactEmail: pool.contactEmail, notifyAdminFull: pool.notifyAdminFull };
     });
 
-    if (result && result.isGridFull && result.notifyAdminFull && result.contactEmail) {
-        console.log(`[reserveSquare] Sending Grid Full email to ${result.contactEmail}`);
+    if (result.isGridFull && result.notifyAdminFull && result.contactEmail) {
         const subject = `Grid Full: ${result.poolName}`;
         const html = renderEmailHtml(
             "Your Grid is Full!",
@@ -150,11 +196,41 @@ export const reserveSquare = validated(
         sendEmail(db, result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));
     }
 
-    // NOTE: Confirmation emails are sent by the frontend (PoolRoute.tsx) AFTER the batch reservation
-    // completes. This allows for a summary email with all squares instead of one email per square,
-    // and respects the pool's emailConfirmation setting. Do NOT send emails here.
+    // NOTE: Confirmation emails are sent by the frontend (PoolRoute.tsx) AFTER the
+    // reservation completes, as one summary for the whole selection, and respect
+    // the pool's emailConfirmation setting. Do NOT send emails here.
 
-    return { success: true };
+    return { reserved: result.reserved, alreadyHeld: result.alreadyHeld };
+}
+
+/**
+ * reserveSquare — ONE square. Kept for bundles built before `reserveSquares`
+ * existed; a browser tab open across the deploy still calls this.
+ */
+export const reserveSquare = validated(
+    // PUBLIC (guest flow): strict shape is the primary gate. customerDetails
+    // is a STRIPPING object so arbitrary client keys can no longer reach the
+    // squarePrivate PII doc.
+    { schema: reserveSquareSchema, label: "reserveSquare", auth: "public", appCheck: "monitor" },
+    async (input, request) => {
+        const { squareId, ...rest } = input;
+        await reserveSquaresForCaller({ ...rest, squareIds: [squareId] }, request);
+        return { success: true };
+    },
+);
+
+/**
+ * reserveSquares — a whole selection, all or nothing.
+ *
+ * The pool page used to call `reserveSquare` once per square, in parallel. A
+ * refusal part-way through left the earlier squares reserved and told the
+ * player the claim had failed.
+ */
+export const reserveSquares = validated(
+    { schema: reserveSquaresSchema, label: "reserveSquares", auth: "public", appCheck: "monitor" },
+    async (input, request) => {
+        const result = await reserveSquaresForCaller(input, request);
+        return { success: true, reserved: result.reserved, alreadyHeld: result.alreadyHeld };
     },
 );
 
@@ -337,10 +413,13 @@ export const releaseSquares = validated(
                     owner: null,
                     isPaid: false,
                     guestDeviceKey: null,
+                    guestKeyHash: null,
                     guestClaimId: null,
                     reservedAt: null,
                     reservedByUid: null,
                     pickedAsName: null,
+                    paymentConfirmedAt: null,
+                    paymentConfirmedByUid: null,
                 }
                 : s,
         );

@@ -120,37 +120,95 @@ describe('repair jobs do not promote square ownership to membership', () => {
     });
 });
 
-// codex r2 [P1]: claimByCode is the SUPPORTED, vetted cross-device flow, and it
-// set reservedByUid without ever writing participantIds. The repair jobs used to
-// recover those users from square ownership; now that they do not, the vetted
-// path must record membership itself or a legitimate claimant silently loses
-// their roster place, their dues and their reminders.
-// codex r3 [P1]: claimByCode is NOT a vetted path. `createClaimCode` is
-// auth:"public" and accepts a caller-supplied guestDeviceKey, which is readable
-// from the world-readable pool document — so a stranger can mint a code for
-// someone else's unclaimed guest square and redeem it. A previous revision of
-// this change wrote participantIds here and would have restored the very
-// escalation the repair-job narrowing removes.
-describe('claimByCode does NOT confer membership', () => {
+// HISTORY, because this block has now said three different things.
+//
+// codex r2 [P1]: claimByCode set reservedByUid without writing participantIds,
+//   so a legitimate claimant lost their roster place. A revision added the write.
+// codex r3 [P1]: that was wrong. `createClaimCode` is auth:"public" and took a
+//   caller-supplied guestDeviceKey that was readable off the world-readable pool
+//   document, so a stranger could mint a code for somebody else's square and
+//   redeem it into MEMBERSHIP. The write was removed and this block pinned its
+//   absence.
+// 2026-11 (PLAN-SQUARES-REOPEN A3): the cause is closed. The pool document
+//   carries only a HASH of the key, and every claim path hashes the key the
+//   caller presents and compares hashes — so presenting the key is now proof of
+//   being the device that reserved, which is exactly what r2 wanted to honour.
+//   Membership follows a claim again.
+//
+// What is pinned here is therefore the thing that makes that safe: NO claim path
+// may compare, read or store a RAW key. If one does, r3's escalation is back,
+// and this time with a participantIds write behind it.
+//
+// The attack itself is exercised against the real callables in
+// functions/src/__tests__/emulator/squaresClaim.emulator.test.ts ("ATTACK: …").
+describe('claim paths prove ownership by hash, and only then confer membership', () => {
     const src = readFileSync(
         resolve(__dirname, '..', 'functions/src/participant.ts'), 'utf8',
     );
-    const start = src.indexOf('export const claimByCode');
-    const body = start >= 0 ? src.slice(start) : '';
+    // Code only: the comments in this file NAME the raw fields while explaining
+    // why they are gone, and a substring check would fail on the explanation.
+    const codeOnly = (text: string) => text
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split(/\r?\n/)
+        .filter((l) => !l.trim().startsWith('//'))
+        .join('\n');
+    const slice = (from: string, to: string) => {
+        const a = src.indexOf(from);
+        const b = src.indexOf(to, a + 1);
+        return a >= 0 && b > a ? src.slice(a, b) : '';
+    };
+    const mint = slice('export const createClaimCode', 'function claimGuestSquares');
+    const matcher = slice('function claimGuestSquares', 'export const claimMySquares');
+    const mine = slice('export const claimMySquares', 'export const claimByCode');
+    const byCode = slice('export const claimByCode', 'export const syncParticipantIndices');
 
-    it('locates the callable', () => {
-        expect(start).toBeGreaterThan(-1);
+    it('locates all four pieces (a rename must not pass silently)', () => {
+        for (const [name, body] of Object.entries({ mint, matcher, mine, byCode })) {
+            expect(body.length, name).toBeGreaterThan(0);
+        }
     });
 
-    it('never writes participantIds', () => {
-        expect(body).not.toMatch(/participantIds:\s*FieldValue\.arrayUnion/);
+    it('the square matcher compares HASHES and never a raw key', () => {
+        const code = codeOnly(matcher);
+        expect(code).toMatch(/s\.guestKeyHash !== guestKeyHash/);
+        expect(code).not.toMatch(/guestDeviceKey\s*===/);
+        expect(code).not.toMatch(/guestClaimId\s*===/);
     });
 
-    it('records WHY, so it is not "fixed" back in', () => {
-        // A bare absence reads as an oversight. The next person to notice that
-        // code-claim users lack membership must find the reason here.
-        expect(body).toMatch(/createClaimCode/);
-        expect(body).toMatch(/SECURITY-CLAIM-SQUARES\.md/);
+    it('a released square is never matched (the owner check comes first)', () => {
+        expect(codeOnly(matcher)).toMatch(/!s\.owner/);
+    });
+
+    it('both claim callables go through that matcher, with a server-computed hash', () => {
+        expect(codeOnly(mine)).toMatch(/guestKeyHashOrNull\(poolId, guestDeviceKey\)/);
+        expect(codeOnly(mine)).toContain('claimGuestSquares(');
+        expect(codeOnly(byCode)).toContain('claimGuestSquares(');
+        // The code's target is the hash stored on the claim — never the legacy
+        // raw `guestClaimId`.
+        expect(codeOnly(byCode)).toMatch(/claim\.guestKeyHash/);
+        expect(codeOnly(byCode)).not.toMatch(/claim\.guestClaimId/);
+    });
+
+    it('a claim code is minted from a key the server honours, and stores only its hash', () => {
+        const code = codeOnly(mint);
+        expect(code).toMatch(/guestKeyHashOrNull\(poolId, guestDeviceKey\)/);
+        expect(code).not.toMatch(/guestClaimId\s*:/);
+        expect(code).not.toMatch(/guestDeviceKey\s*:/);
+    });
+
+    it('membership is written only inside the "something was claimed" branch', () => {
+        for (const body of [mine, byCode]) {
+            const code = codeOnly(body);
+            const guard = code.indexOf('outcome.claimed.length > 0');
+            const write = code.indexOf('participantIds: FieldValue.arrayUnion(uid)');
+            expect(guard).toBeGreaterThan(-1);
+            expect(write).toBeGreaterThan(guard);
+        }
+    });
+
+    it('records WHY, so the raw-key comparison is not "simplified" back in', () => {
+        expect(src).toMatch(/SECURITY-CLAIM-SQUARES\.md/);
+        expect(mint).toMatch(/hash/i);
     });
 });
 
