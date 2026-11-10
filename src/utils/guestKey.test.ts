@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GUEST_KEY_PREFIX, isCurrentGuestKey, planClaim } from '@shared/squaresClaim';
-import { GUEST_KEY_STORAGE, claimGuestSquaresOnce, claimIdentityFor, getOrCreateGuestKey, hashGuestKey, readGuestKey } from './guestKey';
+import { GUEST_KEY_STORAGE, claimCodeFailureText, claimGuestSquaresOnce, claimIdentityFor, getOrCreateGuestKey, hashGuestKey, readGuestKey } from './guestKey';
 
 /**
  * The guest device key (PLAN-SQUARES-REOPEN A3).
@@ -171,6 +171,98 @@ describe('claimIdentityFor — the page previews with the identity the server co
 
     // What the page used to preview with: the account alone. It said yes.
     expect(ask({ uid: 'gina-uid', guestKeyHash: null }).ok).toBe(true);
+  });
+});
+
+describe('claimGuestSquaresOnce — refused over the limit is not "done"', () => {
+  const store = () => {
+    const data = new Map<string, string>();
+    return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, data };
+  };
+  const over = () => Promise.resolve({ success: true, overLimit: true });
+  const moved = () => Promise.resolve({ success: true, overLimit: false });
+
+  it('reports it, and does not ask the same question again', async () => {
+    const s = store();
+    const claim = vi.fn(over);
+    expect(await claimGuestSquaresOnce('ol-1', 'u', claim, s, '3:3:2')).toBe('over-limit');
+    expect(await claimGuestSquaresOnce('ol-1', 'u', claim, s, '3:3:2')).toBe('already-done');
+    expect(claim).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again once the player has given up a square', async () => {
+    const s = store();
+    expect(await claimGuestSquaresOnce('ol-2', 'u', over, s, '3:3:2')).toBe('over-limit');
+    const retry = vi.fn(moved);
+    expect(await claimGuestSquaresOnce('ol-2', 'u', retry, s, '3:1:2')).toBe('claimed');
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again once the organizer has raised the limit', async () => {
+    const s = store();
+    expect(await claimGuestSquaresOnce('ol-3', 'u', over, s, '3:3:2')).toBe('over-limit');
+    expect(await claimGuestSquaresOnce('ol-3', 'u', moved, s, '10:3:2')).toBe('claimed');
+  });
+
+  it('and once it HAS moved them, it is done whatever changes after', async () => {
+    const s = store();
+    await claimGuestSquaresOnce('ol-4', 'u', over, s, '3:3:2');
+    await claimGuestSquaresOnce('ol-4', 'u', moved, s, '10:3:2');
+    const again = vi.fn(moved);
+    expect(await claimGuestSquaresOnce('ol-4', 'u', again, s, '10:5:0')).toBe('already-done');
+    expect(again).not.toHaveBeenCalled();
+  });
+
+  it('still over the limit after the change is remembered against the NEW state', async () => {
+    const s = store();
+    await claimGuestSquaresOnce('ol-5', 'u', over, s, '3:3:2');
+    expect(await claimGuestSquaresOnce('ol-5', 'u', over, s, '3:2:2')).toBe('over-limit');
+    const claim = vi.fn(over);
+    expect(await claimGuestSquaresOnce('ol-5', 'u', claim, s, '3:2:2')).toBe('already-done');
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it('a browser that blocks storage remembers the refusal for the page all the same', async () => {
+    const claim = vi.fn(over);
+    expect(await claimGuestSquaresOnce('ol-6', 'u', claim, null, '3:3:2')).toBe('over-limit');
+    expect(await claimGuestSquaresOnce('ol-6', 'u', claim, null, '3:3:2')).toBe('already-done');
+    expect(claim).toHaveBeenCalledTimes(1);
+    expect(await claimGuestSquaresOnce('ol-6', 'u', moved, null, '3:1:2')).toBe('claimed');
+  });
+
+  it('a refusal is not a failure — it does not count toward giving up', async () => {
+    expect(await claimGuestSquaresOnce('ol-7', 'u', over, store(), 'k')).not.toBe('failed');
+  });
+});
+
+describe('claimCodeFailureText — the player is told what the server said', () => {
+  const refused = (code: string, message: string) => Object.assign(new Error(message), { code });
+
+  it('a code that has been used: the server\'s own words, which say to get a new one', () => {
+    const text = claimCodeFailureText(refused('functions/failed-precondition',
+      'This claim code has already been used. Generate a new one on the device that reserved the squares.'));
+    expect(text).toMatch(/already been used/);
+    expect(text).toMatch(/Generate a new one/);
+  });
+
+  it('expired, over the limit and too many tries are passed on too', () => {
+    expect(claimCodeFailureText(refused('functions/failed-precondition', 'This claim code has expired.'))).toBe('This claim code has expired.');
+    expect(claimCodeFailureText(refused('failed-precondition', 'This pool allows 3 squares per player.'))).toBe('This pool allows 3 squares per player.');
+    expect(claimCodeFailureText(refused('functions/resource-exhausted', 'Too many attempts. Try again later.'))).toBe('Too many attempts. Try again later.');
+  });
+
+  it('a code nobody issued gets a plain sentence, not the server\'s "Invalid claim code"', () => {
+    expect(claimCodeFailureText(refused('functions/not-found', 'Invalid claim code'))).toMatch(/not recognised/);
+  });
+
+  it('anything else — an internal error, a dropped connection — is not shown raw', () => {
+    for (const e of [refused('functions/internal', 'INTERNAL'), refused('functions/unavailable', 'deadline'), new Error('boom'), null, undefined, 'x', {}]) {
+      expect(claimCodeFailureText(e)).toBe('The squares could not be moved. Try again in a moment.');
+    }
+  });
+
+  it('a refusal with no words falls back rather than showing nothing', () => {
+    expect(claimCodeFailureText(refused('functions/failed-precondition', '   '))).toBe('The squares could not be moved. Try again in a moment.');
   });
 });
 

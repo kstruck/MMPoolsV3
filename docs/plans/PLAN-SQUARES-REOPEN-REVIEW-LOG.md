@@ -22,6 +22,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q4 | qodo | #758 @ `d8978a82`, #759 @ `10d65cce` | 4 | 4 | 0 |
 | Q5 | qodo | #758 @ `77418e03`, #760 @ `3619b6cb` | 7 | 5 | 2 |
 | Q6 | qodo | #761 @ `04996b6b` | 13 | 8 | 3, and 2 that are Kevin's |
+| Q7 | qodo | #758 @ `0ac1bdb6`, #759 @ `085a0d07`, #760 @ `e4a06808`, #761 @ `c7af924f` | 8 | 7 | 1 kept as built, for Kevin to confirm |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -670,4 +671,44 @@ this rollout has.
 **Tests and mutants this round.** #758: 7 emulator, 4 client; 7 mutants.
 #759: 3 unit, 2 emulator; 4 mutants. #760: 5 unit, 5 on the rendered hook,
 2 call-site; 9 mutants. All 20 mutants red on the first run.
+
+## Round Q7 — qodo's re-reviews after round Q6 (2026-11-10T23:27Z)
+
+All four PRs re-reviewed at their new heads; all three surfaces read on each.
+**#761 raised nothing new** — what it still lists is findings 1 and 2 (Kevin's)
+and the two rejected in round Q6. Eight new findings on the other three, every
+one in code that round Q5 or Q6 changed — the code written last, to close
+somebody else's finding, is the code most likely to be wrong.
+
+| PR | Finding | Verdict |
+|---|---|---|
+| #758 | The backup gate names the wrong status | **Accepted.** I wrote `state: SUCCESSFUL` from memory; the export's output has no such field. The step now uses the check `PLAN-BACKUPS-PHASE3.md` already uses — list the files — and says the first line only means the export started |
+| #759 | Guest squares stop moving after a limit refusal | **Accepted.** See below |
+| #759 | "Pay the organizer" text for a player's own squares | **Accepted.** `duesBuckets` now says which host-only squares are still under this browser's key (`guestHeld`), and the note tells that player why they did not move |
+| #759 | The grid highlights a namesake's squares as yours | **Accepted.** The highlight used a bare name match; it now uses `isOwnSquare`, the one rule |
+| #759 | The claim-code comment says six characters | **Accepted.** It is eight |
+| #760 | Guests cannot renew a spent transfer code | **Accepted.** See below |
+| #760 | The pause switch has no entry in the client settings defaults | **Accepted** (in #759). I declined this in round Q6; it costs one inert line and the rule it cites is the repo's own |
+| #760 | The prize pot skips the floor | **Kept as built — recorded as decision D19, for Kevin to confirm.** qodo accepts the reason and asks that the departure be recorded and confirmed rather than live in a code comment. It is right about that |
+
+**The two that were consequences of round Q6's "a claim code is used once"
+and round Q5's "a merge respects the limit".**
+
+- *A refusal over the limit was filed as a finished claim.* The page tries
+  the guest-to-account merge once per session. The server's "moved nothing,
+  you would be over the limit" came back as a success, so the page never
+  asked again — not when the player gave up a square, not when the organizer
+  raised the limit. The callable now returns `overLimit`, and the page
+  remembers a refusal together with what it depended on (the limit, the
+  account's count, this browser's count): the same question is not asked
+  twice, a changed one is.
+- *A spent code stayed on the old device's screen with no way to get
+  another*, and the new device answered every refusal with "Invalid code or
+  failed to merge." There is a "Get a new code" link under the code now, and
+  the new device shows the server's own words for the cases a player can act
+  on — used, expired, over the limit, too many tries.
+
+**Tests and mutants.** 7 + 5 client tests (over-limit retry, failure text),
+2 unit (`guestHeld`), 2 emulator (82 in the file). 13 mutants, all red on the
+first run.
 
