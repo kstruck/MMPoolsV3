@@ -1,6 +1,7 @@
 import { useFormContext } from 'react-hook-form';
 import { CheckboxField, NumberField, SelectField, TextField } from '../fields';
 import { PERIODS, PERIOD_SHORT_LABEL, periodBase, squaresPot, type PayoutPool } from '@shared/squaresPayouts';
+import { formatPrize } from '../../../utils/payouts';
 
 /**
  * The squares wizard's payouts step (PLAN-SQUARES-REOPEN C2).
@@ -16,7 +17,7 @@ import { PERIODS, PERIOD_SHORT_LABEL, periodBase, squaresPot, type PayoutPool } 
  */
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-const money = (n: number): string => `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const money = formatPrize;
 
 export function StepSquaresPayouts() {
   const { watch } = useFormContext();
@@ -91,7 +92,8 @@ export function StepSquaresPayouts() {
                 <li key={p}>
                   <span className="text-slate-400">{PERIOD_SHORT_LABEL[p]}</span>{' '}
                   <span className="font-semibold">{money(prize)}</span>
-                  {reverse && prize > 0 && <span className="text-xs text-slate-400"> ({money(prize / 2)} each)</span>}
+                  {/* On its own line: four columns are too narrow for "$180 ($90 each)" to sit on one. */}
+                  {reverse && prize > 0 && <span className="block text-xs text-slate-400">{money(prize / 2)} each</span>}
                 </li>
               );
             })}

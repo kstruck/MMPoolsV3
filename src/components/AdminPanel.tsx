@@ -5,7 +5,7 @@ import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry, PlayerDetails, Winner } from '../types';
 import { isPlayerOwner, ROLLOVER, usesCurrentWinnerRules, type PayoutPool } from '@shared/squaresPayouts';
 import { describeWinnerDrift, finalScoresOf, planWinnerWrites, type StoredWinner } from '@shared/squaresWinnerPlan';
-import { payoutTotals } from '../utils/payouts';
+import { formatPrize, payoutTotals } from '../utils/payouts';
 import type { ScheduleGame, ScheduleLeague } from '../services/espnSchedule';
 import { squaresGameLink } from '@shared/squaresDefaults';
 
@@ -14,7 +14,6 @@ import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
 import Lock from 'lucide-react/dist/esm/icons/lock';
 import Unlock from 'lucide-react/dist/esm/icons/unlock';
 import Trash2 from 'lucide-react/dist/esm/icons/trash-2';
-import Shuffle from 'lucide-react/dist/esm/icons/shuffle';
 import ArrowLeft from 'lucide-react/dist/esm/icons/arrow-left';
 import Share2 from 'lucide-react/dist/esm/icons/share-2';
 import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
@@ -189,11 +188,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const [lockBusy, setLockBusy] = useState(false);
+  // Does this grid lock itself? Only when the kickoff lock is on and has a time.
+  const gridLocksItself = gameState.reminders?.lock?.enabled === true && !!gameState.reminders?.lock?.lockAt;
+
   const toggleLock = async () => {
     if (lockBusy) return;
     setLockBusy(true);
     try {
       if (!gameState.isLocked) {
+        // ASK FIRST. Locking stops sales and publishes the numbers to every
+        // player; it was one un-confirmed click, on a button that sat directly
+        // above another one ("Generate Numbers") that did exactly the same
+        // thing under a name that did not say so.
+        const open = gameState.squares.filter((s) => !s.owner).length;
+        const ok = await toast.confirm({
+          title: 'Lock the grid now?',
+          message: (open > 0
+            ? `${open} ${open === 1 ? 'square is' : 'squares are'} still open and will not be sold. `
+            : 'Every square is sold. ')
+            + (gameState.axisNumbers ? 'The numbers already drawn are kept.' : 'Locking draws the numbers and shows them to every player.')
+            + (gridLocksItself ? ' This grid would lock itself at kickoff anyway.' : ''),
+          confirmLabel: 'Lock grid',
+        });
+        if (!ok) return;
         // Locking always goes through the server. It draws the numbers if the
         // grid has none and KEEPS them if it has — numbers are drawn once.
         await generateNumbers();
@@ -700,8 +717,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* GAME STATUS TAB */}
         {activeTab === 'game' && (
           <div className="space-y-6 animate-in fade-in">
-            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} disabled={lockBusy} className={`w-full py-4 rounded-lg disabled:opacity-60 disabled:cursor-wait font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
-            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={toggleLock} disabled={gameState.isLocked || !!gameState.axisNumbers || lockBusy} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150"><Shuffle size={16} />Generate Numbers</button><p className="text-xs font-body text-muted mt-3">{gameState.axisNumbers ? 'The numbers are drawn once and kept. To draw new ones, reopen the grid before kickoff and lock it again.' : 'Drawn at random by the server when the grid locks.'}</p></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted" data-testid="game-status-help">{gameState.isLocked
+                ? 'The grid is locked: no more squares can be claimed.'
+                : gridLocksItself
+                  ? 'This grid locks itself at kickoff and draws its numbers then. Lock it sooner here if you want to.'
+                  : 'No game is linked, so this grid does not lock itself. Lock it here before the game starts — locking draws the numbers.'}</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} disabled={lockBusy} className={`w-full py-4 rounded-lg disabled:opacity-60 disabled:cursor-wait font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock Grid & Draw Numbers</>}</button></div>
+            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><p className="text-sm font-body text-muted">{gameState.axisNumbers ? 'The numbers are drawn once and kept. To draw new ones, reopen the grid before kickoff and lock it again.' : 'Not drawn yet. They are drawn at random when the grid locks, and not before — nobody should be able to pick a square knowing its numbers.'}</p></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
 
             {/* RANDOMIZER SECTION */}
             {gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' && gameState.ruleVariations.quarterlyRollover && (
@@ -807,7 +828,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 };
                 // Won, handed over, and still to hand over — see `payoutTotals`.
                 const totals = payoutTotals(winnerRecords);
-                const money = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                const money = formatPrize;
 
                 return (
                   <>
@@ -868,7 +889,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                     onClick={async () => {
                                       if (payingId) return;
                                       // Un-marking is deliberate, never the side effect of a second click.
-                                      if (win.isPaid && !window.confirm(`Mark the ${money(win.amount || 0)} prize for ${win.owner} as NOT paid?`)) return;
+                                      if (win.isPaid) {
+                                        const ok = await toast.confirm({
+                                          title: 'Mark this prize as not paid?',
+                                          message: `${win.owner}'s ${money(win.amount || 0)} prize is marked paid. Only undo that if the money was not handed over.`,
+                                          confirmLabel: 'Mark not paid',
+                                          danger: true,
+                                        });
+                                        if (!ok) return;
+                                      }
                                       setPayingId(win.id!);
                                       try {
                                         // SAYS WHICH STATE IT WANTS. The server sets it rather than
@@ -1027,7 +1056,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <StatTile label="Total Players" value={getPlayers().length} />
               <StatTile label="Squares Sold" value={<>{gameState.squares.filter(s => s.owner).length} <span className="text-sm font-normal text-muted">/ 100</span></>} />
               <StatTile
-                label="Revenue Collected"
+                label="Dues Collected"
                 accent="gold"
                 value={<>
                   ${getPlayers().reduce((acc, p) => acc + p.totalPaid, 0).toLocaleString()}

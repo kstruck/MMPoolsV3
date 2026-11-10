@@ -33,6 +33,12 @@ export interface PeriodCard {
     rolloverAdded: number;
     isLocked: boolean;
     /**
+     * The WHOLE prize for the period — both halves when a reverse winner shares
+     * it, and anything rolled into it. `amount` is one winner's share; a list
+     * headed "1st Quarter (25%)" has to show the 25%, not half of it.
+     */
+    prize: number;
+    /**
      * A finished quarter on a pool played under the OLD rules for which no
      * winner was ever recorded. The name is the owner of the square the score
      * lands on and the amount is that quarter's plain share — not a record, and
@@ -197,10 +203,19 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
             bonusAmount = 0;
         }
 
+        // The whole prize for the period. On a pool with records that are not
+        // today's math (old rules, or an unrecorded quarter) it is what those
+        // records and that card say, not the engine's figure.
+        const recordedTotal = official
+            ? [official, officialReverse].reduce((sum, w) => sum + (w && isPlayerOwner(w.owner) && typeof w.amount === 'number' ? w.amount : 0), 0)
+            : null;
+        const prize = result && currentRules ? result.prize : (recordedTotal !== null && recordedTotal > 0 ? recordedTotal : amount);
+
         return {
             period,
             label: PERIOD_LABELS[period] || period,
             amount,
+            prize,
             home: shown.home,
             away: shown.away,
             qPointsHome,
@@ -217,6 +232,39 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
         };
     });
 };
+
+/** `$12`, `$12.50`, `$1,250` — whole dollars bare, anything else to the cent. Never `$12.5`. */
+export function formatPrize(n: number | null | undefined): string {
+    const v = typeof n === 'number' && Number.isFinite(n) ? n : 0;
+    return '$' + v.toLocaleString(undefined, Number.isInteger(v) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const PERIOD_RECORD_ORDER = ['final_rollover', 'final', 'final_reverse', 'q3', 'q3_reverse', 'half', 'half_reverse', 'q1', 'q1_reverse'];
+
+/**
+ * Who the "In the money" banner names: the most recent winner who is A PLAYER.
+ *
+ * It used to take the last record in the list. The list comes back in
+ * document-id order, so with reverse winners on that was `q1_reverse` — and
+ * when that square was unsold, the banner read "IN THE MONEY: ROLLOVER".
+ *
+ * Latest quarter first; within a quarter the winning square before its reverse.
+ * A winner with a prize comes before one whose prize is $0. Scoring-event
+ * winners (Every Score Pays) count only when no quarter has a player winner,
+ * most recent event first.
+ */
+export function latestPlayerWinner(winners: ReadonlyArray<Winner>): string | null {
+    for (const id of PERIOD_RECORD_ORDER) {
+        const w = winners.find((x) => x.id === id);
+        if (w && isPlayerOwner(w.owner) && (w.amount ?? 0) > 0) return w.owner;
+    }
+    for (const id of PERIOD_RECORD_ORDER) {
+        const w = winners.find((x) => x.id === id);
+        if (w && isPlayerOwner(w.owner)) return w.owner;
+    }
+    const events = winners.filter((w) => typeof w.id === 'string' && w.id.startsWith('event_') && isPlayerOwner(w.owner));
+    return events.length > 0 ? events[events.length - 1].owner : null;
+}
 
 /**
  * The three totals on the commissioner's Payouts tab, from the winner records.

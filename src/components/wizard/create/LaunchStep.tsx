@@ -555,7 +555,8 @@ export function LaunchStep(props: LaunchStepProps) {
             </div>
             {fee !== undefined && fee > 0 && (
               <p className="pt-1 text-xs text-slate-500">
-                Entry fee ({money(fee)}/player) is collected peer-to-peer and is not part of this total.
+                {/* What the fee is charged FOR: a square, a card, or a seat in the pool. */}
+                Entry fee ({money(fee)}/{poolType === 'SQUARES' ? 'square' : poolType === 'PROPS' ? 'card' : 'player'}) is collected peer-to-peer and is not part of this total.
               </p>
             )}
             <p className="pt-1 text-xs font-semibold">

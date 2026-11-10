@@ -1320,7 +1320,22 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                     return (
                                        <div
                                           key={`sq-${squareIndex}`}
+                                          data-testid={`square-${squareIndex}`}
+                                          // A square is a control: reachable by keyboard and
+                                          // named for a screen reader. It was a bare div that
+                                          // only a mouse could pick.
+                                          role="button"
+                                          tabIndex={!gameState.isLocked && !square.owner ? 0 : -1}
+                                          aria-disabled={gameState.isLocked || !!square.owner}
+                                          aria-pressed={selectedSquares.includes(squareIndex)}
+                                          aria-label={square.owner ? `Square ${squareIndex + 1}, taken by ${square.owner}` : `Square ${squareIndex + 1}, open`}
                                           onClick={() => handleSquareClick(squareIndex)}
+                                          onKeyDown={(e) => {
+                                             if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                handleSquareClick(squareIndex);
+                                             }
+                                          }}
                                           className={`
                         relative flex flex-col items-center justify-center aspect-square rounded-md sm:rounded-lg
                         ${bgClass} ${borderClass} ${textClass} ${effectClass} ${zIndex}

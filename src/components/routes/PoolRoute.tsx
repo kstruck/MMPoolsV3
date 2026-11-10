@@ -23,7 +23,7 @@ import { dbService } from '../../services/dbService';
 import { calculateScenarioWinners, getLastDigit } from '../../services/gameLogic';
 import { shareTrackingService } from '../../services/shareTrackingService';
 import { getTeamLogo } from '../../constants';
-import { calculateQuarterlyPayouts } from '../../utils/payouts';
+import { calculateQuarterlyPayouts, formatPrize, latestPlayerWinner } from '../../utils/payouts';
 import { isSuperAdmin, isPoolManager, isNFLPoolCommissioner } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
@@ -432,6 +432,18 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // prize pool on its own, so with a charity share it could read a dollar
     // short of what the four prizes below it add up to.
     const pot = squaresPot(squaresPool as unknown as PayoutPool);
+    // WHEN THE GRID LOCKS ITSELF — shown only when it really will: the lock has
+    // to be switched on and carry a time. A player deciding whether to come back
+    // later needs to know, and it was nowhere on the Overview. `lockAt` is epoch
+    // ms on a pool the wizard created; older pools stored other shapes.
+    const gridLocksAt = (() => {
+        const lock = squaresPool.reminders?.lock as { enabled?: boolean; lockAt?: unknown } | undefined;
+        if (!lock?.enabled || !lock.lockAt) return null;
+        const raw = lock.lockAt as { toMillis?: () => number } | number | string;
+        const ms = typeof raw === 'number' ? raw : typeof raw === 'object' && typeof raw.toMillis === 'function' ? raw.toMillis() : new Date(raw as string).getTime();
+        if (!Number.isFinite(ms) || ms <= 0) return null;
+        return new Date(ms).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    })();
 
     // Helper Functions
 
@@ -520,7 +532,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const homePredictions = calculateScenarioWinners(squaresPool, 'home');
     const awayPredictions = calculateScenarioWinners(squaresPool, 'away');
     const squaresRemaining = 100 - (squaresPool.squares?.filter(s => s.owner).length || 0);
-    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
+    const latestWinner = latestPlayerWinner(winners);
 
     return withHelp(
         <div
@@ -595,7 +607,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 {statusTab === 'overview' && (
                                     <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-200">
                                         <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Status:</h3>
-                                            {!squaresPool.isLocked ? <div className="flex items-center gap-2"><Badge status="open" /><p className="text-faint text-[10px] font-body">Grid is available to choose squares</p></div>
+                                            {!squaresPool.isLocked ? <div><div className="flex items-center gap-2"><Badge status="open" /><p className="text-faint text-[10px] font-body">Grid is available to choose squares</p></div>{gridLocksAt && <p className="text-[color:var(--text)] text-xs font-body mt-1.5" data-testid="grid-locks-at">Grid locks <span className="font-bold num">{gridLocksAt}</span></p>}</div>
                                                 : squaresPool.scores?.gameStatus === 'post' ? <div className="flex items-center gap-2"><Badge status="locked">Locked - Final</Badge><p className="text-faint text-[10px] font-body">Game has completed</p></div>
                                                     : squaresPool.scores?.gameStatus === 'in' ? <div className="flex items-center gap-2"><Badge status="live">Locked - Live</Badge><p className="text-faint text-[10px] font-body">Game has started</p></div>
                                                         : <div className="flex items-center gap-2"><Badge status="locked"><Lock size={12} /> Locked - Pending</Badge><p className="text-faint text-[10px] font-body">Waiting for kickoff</p></div>
@@ -690,7 +702,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 <div className="relative z-10">
                                     <div className="flex items-center gap-2 mb-2"><div className="bg-gold-500/20 p-1.5 rounded-lg"><Heart size={18} className="text-gold-600" /></div><h3 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em]">Proudly Supporting</h3></div>
                                     <h2 className="text-2xl font-display font-bold uppercase text-gold-600 mb-1 leading-tight">{squaresPool.charity.name}</h2>
-                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num" data-testid="charity-amount">${pot.charity.toLocaleString()}</span>
+                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num" data-testid="charity-amount">{formatPrize(pot.charity)}</span>
                                 </div>
                             </div>
                         )}
@@ -699,14 +711,14 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         <div className="bg-card rounded-xl border border-line shadow-card flex flex-col overflow-hidden h-full">
                             <div className="flex border-b border-line bg-page px-6 py-4"><h3 className="text-sm font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">Payout Structure</h3></div>
                             <div className="p-6 flex-1 flex flex-col justify-center">
-                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num" data-testid="total-pot">${pot.gross.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
-                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num" data-testid="net-prize-pool">${pot.net.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num" data-testid="total-pot">{formatPrize(pot.gross)}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num" data-testid="net-prize-pool">{formatPrize(pot.net)}</span></div>
                                 <div className="space-y-1 mt-2">
                                     {quarterlyPayouts.map((card) => {
                                         return (
                                             <div key={card.period} className="flex justify-between items-center text-sm border-b border-line/50 pb-2 last:border-0">
                                                 <span className="text-muted font-bold font-body">{card.label} <span className="text-faint font-normal num">({(squaresPool as GameState).payouts[card.period as keyof typeof squaresPool.payouts]}%)</span></span>
-                                                <div className="flex flex-col items-end"><span className="text-[color:var(--text)] font-bold num">${(card.amount || 0).toLocaleString()}</span></div>
+                                                <div className="flex flex-col items-end"><span className="text-[color:var(--text)] font-bold num">{formatPrize(card.prize)}</span></div>
                                             </div>
                                         );
                                     })}
@@ -847,17 +859,17 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                         <span className="text-[10px] font-display uppercase tracking-[0.08em] text-faint mr-1">and (reverse)</span>{card.reverseWinnerName}
                                     </div>
                                 )}
-                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">${card.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">{formatPrize(card.amount)}</div>
                                 {card.reverseWinnerName && <div className="text-[10px] text-faint font-body">each</div>}
                                 {card.isUnrecorded && (
                                     <div className="text-[10px] font-body text-muted" data-testid="card-unrecorded">No winner was recorded for this quarter. Shown from the score.</div>
                                 )}
                                 {card.rolloverAdded > 0 && !card.isRollover && (
-                                    <div className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400 num">Includes ${card.rolloverAdded.toLocaleString(undefined, { maximumFractionDigits: 2 })} rolled over</div>
+                                    <div className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400 num">Includes {formatPrize(card.rolloverAdded)} rolled over</div>
                                 )}
                                 {card.bonusWinnerName && !!card.bonusAmount && (
                                     <div className="mt-2 text-xs font-body text-muted">
-                                        Unclaimed prize <span className="font-bold num text-gold-700 dark:text-gold-400">${card.bonusAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span> → <span className="font-bold text-[color:var(--text)]">{card.bonusWinnerName}</span>
+                                        Unclaimed prize <span className="font-bold num text-gold-700 dark:text-gold-400">{formatPrize(card.bonusAmount)}</span> → <span className="font-bold text-[color:var(--text)]">{card.bonusWinnerName}</span>
                                     </div>
                                 )}
                             </div>
