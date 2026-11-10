@@ -12,6 +12,7 @@ import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
 import { countHeldSquares, duesBuckets, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
 import { claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
+import { useAccountPrefill } from '../hooks/useAccountPrefill';
 
 interface GridProps {
    gameState: GameState;
@@ -297,20 +298,21 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const squaresRemaining = 100 - gameState.squares.filter(s => s.owner).length;
    const isGridFull = squaresRemaining === 0;
 
-   // Auto-fill name from Current User
-   useEffect(() => {
-      if (currentUser) {
-         setPlayerInfo(prev => ({
-            ...prev,
-            name: currentUser.name || prev.name,
-            details: {
-               ...prev.details,
-               email: currentUser.email || prev.details.email
-            }
-         }));
-         setIsIdentitySet(true);
-      }
-   }, [currentUser]);
+   // Auto-fill from the signed-in account — when the ACCOUNT changes, not every
+   // time the app hands down a fresh copy of it. See `useAccountPrefill` for
+   // what the difference cost: an organizer typing somebody else's name had
+   // their own name put back before they pressed Reserve.
+   useAccountPrefill(currentUser, ({ name, email }) => {
+      setPlayerInfo(prev => ({
+         ...prev,
+         name: name || prev.name,
+         details: {
+            ...prev.details,
+            email: email || prev.details.email
+         }
+      }));
+      setIsIdentitySet(true);
+   });
 
    const handleInitiateCheckout = () => {
       if (selectedSquares.length === 0) return;
