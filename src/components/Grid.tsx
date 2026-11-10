@@ -10,8 +10,8 @@ import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
-import { countHeldSquares, duesBuckets, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
-import { claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
+import { countHeldSquares, duesBuckets, effectiveSquareCap, isOwnSquare } from '@shared/squaresClaim';
+import { claimCodeFailureText, claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
 
 interface GridProps {
    gameState: GameState;
@@ -82,16 +82,25 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    // their dashboard and could not use "I've paid". Once per pool, account and
    // session — but "once" is recorded only when it SUCCEEDS, so a timeout is
    // retried the next time the grid changes (at most three times a page load).
+   // A merge the server refused because it would pass the pool's limit is not
+   // "done" either: it is asked again when the limit, the account's count or
+   // this browser's count changes (`retryKey`), and not otherwise.
    const signedInUid = currentUser?.id;
    const hasUnclaimedGuestSquare = gameState.squares.some(s => s.owner && s.guestKeyHash && !s.reservedByUid);
    const failedClaims = React.useRef(0);
+   const poolCap = gameState.maxSquaresPerPlayer;
    useEffect(() => {
       if (!signedInUid || !gameState.id || !hasUnclaimedGuestSquare || failedClaims.current >= 3) return;
       const key = readGuestKey();
       if (!key) return;
-      void claimGuestSquaresOnce(gameState.id, signedInUid, () => dbService.claimMySquares(gameState.id, key, { quiet: true }))
+      const onAccount = gameState.squares.filter(s => s.owner && s.reservedByUid === signedInUid).length;
+      const onThisBrowser = guestKeyHash
+         ? gameState.squares.filter(s => s.owner && !s.reservedByUid && s.guestKeyHash === guestKeyHash).length
+         : 0;
+      const retryKey = `${effectiveSquareCap(poolCap) ?? 'none'}:${onAccount}:${onThisBrowser}`;
+      void claimGuestSquaresOnce(gameState.id, signedInUid, () => dbService.claimMySquares(gameState.id, key, { quiet: true }), undefined, retryKey)
          .then((outcome) => { if (outcome === 'failed') failedClaims.current += 1; });
-   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare, gameState.squares]);
+   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare, gameState.squares, guestKeyHash, poolCap]);
 
    // --- Player Identity State ---
    const [playerInfo, setPlayerInfo] = useState<{
@@ -203,7 +212,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const dues = React.useMemo(
       () => (playerInfo.name
          ? duesBuckets(gameState.squares, identity, playerInfo.name)
-         : { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[] }),
+         : { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[], guestHeld: [] as number[] }),
       [gameState.squares, playerInfo.name, identity],
    );
    const unpaidSquaresCount = dues.confirmable.length + dues.hostOnly.length;
@@ -434,7 +443,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          // Ideally reload or refetch?
       } catch (e) {
          logger.error(e);
-         setClaimMsg({ type: 'error', text: 'Invalid code or failed to merge.' });
+         // The server's own words where it gave them: used, expired, over the limit.
+         setClaimMsg({ type: 'error', text: claimCodeFailureText(e) });
       } finally {
          setIsClaimingCode(false);
       }
@@ -606,11 +616,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                        <Save size={14} /> Generate Transfer Code
                                     </button>
                                  ) : (
-                                    <div className="text-xs bg-gold-500/10 text-gold-600 px-3 py-2 rounded border border-gold-500/30 text-center">
-                                       Code: <span className="font-mono font-bold text-lg select-all ml-1">{generatedCode}</span>
-                                    </div>
+                                    <>
+                                       <div className="text-xs bg-gold-500/10 text-gold-600 px-3 py-2 rounded border border-gold-500/30 text-center">
+                                          Code: <span className="font-mono font-bold text-lg select-all ml-1" data-testid="transfer-code">{generatedCode}</span>
+                                       </div>
+                                       {/* A code works ONCE. Squares reserved here after it was used need a new one. */}
+                                       <button onClick={handleGenerateCode} data-testid="transfer-code-new" className="mt-1.5 w-full text-[10px] text-muted hover:text-[color:var(--text)] underline underline-offset-2 transition-colors duration-150">
+                                          Get a new code
+                                       </button>
+                                    </>
                                  )}
-                                 <p className="text-[10px] text-faint mt-1 leading-tight">Use this if you have squares here and want to move them to a new phone/laptop.</p>
+                                 <p className="text-[10px] text-faint mt-1 leading-tight">Use this if you have squares here and want to move them to a new phone/laptop. A code works once, and for a day.</p>
                               </div>
 
                               <div className="w-px bg-[color:var(--line)] hidden md:block"></div>
@@ -673,7 +689,12 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         {dues.hostOnly.length > 0 && (
                            <p className="text-muted" data-testid="dues-host-only">
                               {currentUser
-                                 ? <><span className="font-bold text-[color:var(--text)] num">{dues.hostOnly.length}</span> of those {dues.hostOnly.length !== 1 ? 'were' : 'was'} entered for you by the organizer. Pay the organizer directly — they mark {dues.hostOnly.length !== 1 ? 'those' : 'that one'} paid.</>
+                                 ? <>
+                                    {/* Two different reasons a square is not on the account, and they are not the same advice. */}
+                                    {dues.hostOnly.length - dues.guestHeld.length > 0 && <><span className="font-bold text-[color:var(--text)] num">{dues.hostOnly.length - dues.guestHeld.length}</span> of those {dues.hostOnly.length - dues.guestHeld.length !== 1 ? 'were' : 'was'} entered for you by the organizer. </>}
+                                    {dues.guestHeld.length > 0 && <span data-testid="dues-guest-held"><span className="font-bold text-[color:var(--text)] num">{dues.guestHeld.length}</span> you reserved on this browser before signing in {dues.guestHeld.length !== 1 ? 'are' : 'is'} still held by this browser, not your account{maxPerPlayer !== null ? <> — moving {dues.guestHeld.length !== 1 ? 'them' : 'it'} over would pass this pool's limit of <span className="num">{maxPerPlayer}</span> per player</> : null}. </span>}
+                                    Pay the organizer directly — they mark {dues.hostOnly.length !== 1 ? 'those' : 'that one'} paid.
+                                 </>
                                  : <>Sign in to tell the organizer you have paid. Squares you reserved on this browser move to your account when you do.</>}
                            </p>
                         )}
@@ -1267,10 +1288,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                     } else if (isOwned) {
                                        if (square.isPaid) {
                                           // PAID
+                                          // "Mine" by the ONE rule (`isOwnSquare`): my account, this
+                                          // browser's key, or — only on a square with no identity at
+                                          // all — my name. A bare name match lit up another account's
+                                          // squares for anyone who shared the name (qodo, PR #759).
                                           const isMySquare = currentUser && (
-                                             square.reservedByUid === currentUser.id ||
-                                             square.paidByUid === currentUser.id ||
-                                             (square.owner && currentUser.name && normalizePlayerName(square.owner) === normalizePlayerName(currentUser.name))
+                                             isOwnSquare(square, identity, currentUser.name ?? '') ||
+                                             square.paidByUid === currentUser.id
                                           );
 
                                           if (isMySquare) {

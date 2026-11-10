@@ -525,7 +525,7 @@ describe('qodo #12 — a square the organizer enters for someone else is that pl
  */
 describe('qodo r5 — a guest-to-account merge respects the per-player limit', () => {
   const gina = authed('gina-uid', 'Gina');
-  const mine = (auth: unknown, deviceKey: string) => claimMine({ data: { poolId: POOL, guestDeviceKey: deviceKey }, auth } as never) as Promise<{ claimed: number[]; warnings: string[] }>;
+  const mine = (auth: unknown, deviceKey: string) => claimMine({ data: { poolId: POOL, guestDeviceKey: deviceKey }, auth } as never) as Promise<{ claimed: number[]; warnings: string[]; overLimit: boolean; success: boolean }>;
   const codeFor = async (deviceKey: string) =>
     ((await mintCode({ data: { poolId: POOL, guestDeviceKey: deviceKey } } as never)) as { claimCode: string }).claimCode;
   const heldBy = async (uid: string) => (await pool()).squares.filter((s) => s.reservedByUid === uid).map((s) => s.id);
@@ -542,11 +542,16 @@ describe('qodo r5 — a guest-to-account merge respects the per-player limit', (
   it('ATTACK: two devices each at the limit cannot be merged into one account', async () => {
     await guestReserve([1, 2, 3], 'Gina', key('phone'));
     await guestReserve([4, 5, 6], 'Gina Two', key('laptop'));
-    expect((await mine(gina, key('phone'))).claimed).toEqual([1, 2, 3]);
+    const first = await mine(gina, key('phone'));
+    expect(first.claimed).toEqual([1, 2, 3]);
+    expect(first.overLimit).toBe(false);
 
     const second = await mine(gina, key('laptop'));
     expect(second.claimed).toEqual([]);
     expect(second.warnings.join(' ')).toMatch(/allows 3 squares per player/);
+    // It worked and moved nothing — and SAYS so, so the page asks again later.
+    expect(second.success).toBe(true);
+    expect(second.overLimit).toBe(true);
     // Nothing moved, and nothing was lost: still reserved, still the laptop's.
     expect(await heldBy('gina-uid')).toEqual([1, 2, 3]);
     for (const id of [4, 5, 6]) {
@@ -555,6 +560,26 @@ describe('qodo r5 — a guest-to-account merge respects the per-player limit', (
       expect(s.reservedByUid ?? null).toBeNull();
       expect(s.guestKeyHash).toMatch(/^[0-9a-f]{64}$/);
     }
+  });
+
+  it('a merge refused over the limit goes through once the player has room', async () => {
+    await guestReserve([1, 2, 3], 'Gina', key('phone'));
+    await guestReserve([4], 'Gina Two', key('laptop'));
+    await mine(gina, key('phone'));
+    expect((await mine(gina, key('laptop'))).overLimit).toBe(true);
+
+    // The organizer raises the limit; the same call now moves the square.
+    await db.collection('pools').doc(POOL).update({ maxSquaresPerPlayer: 4 });
+    const again = await mine(gina, key('laptop'));
+    expect(again.overLimit).toBe(false);
+    expect(again.claimed).toEqual([4]);
+    expect(await heldBy('gina-uid')).toEqual([1, 2, 3, 4]);
+  });
+
+  it('nothing to move is not "over the limit"', async () => {
+    const res = await mine(gina, key('never-used'));
+    expect(res.claimed).toEqual([]);
+    expect(res.overLimit).toBe(false);
   });
 
   it('it is all or nothing — a merge that would cross the limit moves none of it', async () => {

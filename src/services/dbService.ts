@@ -1282,16 +1282,18 @@ export const dbService = {
      * `quiet` is for the pool page's speculative call on load: most visitors
      * hold no guest squares, so a failure there is not something to tell them.
      */
-    claimMySquares: async (poolId: string, guestDeviceKey: string, opts?: { quiet?: boolean }): Promise<{ success: boolean; claimed: number[]; warnings: string[] }> => {
+    claimMySquares: async (poolId: string, guestDeviceKey: string, opts?: { quiet?: boolean }): Promise<{ success: boolean; claimed: number[]; warnings: string[]; overLimit: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'claimMySquares');
             const result = await fn(withCorrelationId({ poolId, guestDeviceKey }));
-            const data = (result.data ?? {}) as { success?: boolean; claimed?: number[]; warnings?: string[] };
-            return { success: data.success !== false, claimed: data.claimed ?? [], warnings: data.warnings ?? [] };
+            const data = (result.data ?? {}) as { success?: boolean; claimed?: number[]; warnings?: string[]; overLimit?: boolean };
+            // `overLimit`: the call worked and moved NOTHING, because the squares
+            // would have put the account past the pool's limit.
+            return { success: data.success !== false, claimed: data.claimed ?? [], warnings: data.warnings ?? [], overLimit: data.overLimit === true };
         } catch (error) {
             if (opts?.quiet) {
                 logger.warn('[claimMySquares] speculative claim failed', error);
-                return { success: false, claimed: [], warnings: [] };
+                return { success: false, claimed: [], warnings: [], overLimit: false };
             }
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
