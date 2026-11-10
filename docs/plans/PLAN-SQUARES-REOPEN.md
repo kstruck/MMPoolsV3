@@ -231,6 +231,16 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   *Recommendation: leave it — hand-entering every score of a game is not
   something a commissioner will do; revisit only if a game ever is not on the
   feed.*
+- **K10 — check that squares has pricing tiers before the first paid pool.**
+  Found by the browser walk-through (review log, round W1). The launch step
+  prices a pool from `settings/billing_config`. At ten players or fewer a pool
+  is free and no tier is read; above ten, a format with no tiers cannot be
+  priced and the commissioner sees "Unable to price this pool format" and
+  cannot launch. Whether production has tiers under `pricing.squares` could not
+  be read from here. **Not a code change** — it is a setting. *Recommendation:
+  before the reopen, open Super-Admin → Monetization, confirm the Squares
+  pricing tiers are filled in, and price one squares pool at 40 players on the
+  launch step. If the tiers are empty, fill them in there; nothing deploys.*
 - **K4 — `firestore.rules`: `isLocked`, `scores`, `payouts` and `randomWinner`
   are commissioner-writable.** PR-B makes the server paths correct and audited,
   but a commissioner using an old browser bundle (or the console) can still

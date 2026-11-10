@@ -18,6 +18,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q2 | qodo | PR-B @ `57290e7d` | 11 | 9 | 2 |
 | Q3 | qodo (re-review) | PR-A @ `6095d92d` | 5 | 5 | 0 |
 | Q3 | qodo (re-review) | PR-B @ `652fe64c` | 9 | 8 | 1 |
+| W1 | browser walk-through | A + B + C + the reopen flip, on emulators | 9 | 9 | 0 |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -354,3 +355,53 @@ winners can be marked paid twice" (reachable only through Q2's fix #9). That is
 the pattern CLAUDE.md §2c describes for codex: round one finds defects in the
 code, later rounds find defects in the fixes. It is the argument for the codex
 round that is still owed, not against it.
+
+## Round W1 — a browser walk-through of the whole thing (2026-11-10)
+
+Not a reviewer: a run. With A, B and C merged and the reopen flag flipped
+locally, the real app was driven in Chromium against the auth, functions and
+Firestore emulators — register, create a pool through the wizard (the schedule
+call answered by a fixture), claim as the organizer, as the organizer for
+someone else, and as a guest in a second browser, lock, score a quarter by
+hand, record the winner, mark it paid, switch the quarter off again.
+
+It created a complete pool, opened both of its pages, and paid the right
+square the right amount. It also found nine things, one of them serious, that
+two rounds of review and every test had missed. Each is fixed; the first is the
+one worth reading.
+
+1. **(High) A square the organizer entered for somebody else still carried the
+   organizer's account.** The fix for Q1 finding 12 compared the typed name with
+   "the organizer's name" — which, for an account whose sign-in token carries no
+   name (every email-and-password account, until its token is next refreshed),
+   fell back to the name that was TYPED. The typed name always equalled itself,
+   so nothing was ever "for someone else". **Every emulator test for that fix
+   passed a token with a name in it, and so tested a sign-in the app does not
+   produce.** Fixed in PR-A: the organizer's names are the token's, if it has
+   one, and the one on their profile. Five emulator tests with a nameless
+   token; six mutants, all red.
+2. **(Medium) "In the money: ROLLOVER".** The pool page's banner named the last
+   record in the list, which is in document-id order — `q1_reverse`, an unsold
+   square. Fixed in PR-C (`latestPlayerWinner`).
+3. **(Low) Prizes read "$12.5".** Fixed in PR-C (`formatPrize`).
+4. **(Low) The payout list showed one winner's half as the quarter's prize**
+   once a quarter with reverse winners had been played. Fixed in PR-C
+   (`PeriodCard.prize`).
+5. **(Medium) "Generate Numbers" locked the grid** — it was the lock button
+   under another name, and neither asked first. One button now, named for what
+   it does, and it asks. PR-C.
+6. **(Low) The launch step said "$10/player"** for a price that is per square.
+   PR-C.
+7. **(Low) The record-winners list named "Rollover" as if it were a person.**
+   PR-B.
+8. **(Medium) Squares could only be picked with a mouse** — a bare element with
+   a click handler, no name, not reachable by keyboard. PR-C.
+9. **(Needs Kevin) A pool above ten players cannot be priced if squares has no
+   pricing tiers.** A setting, not code — plan K10.
+
+**What it says about the tests.** Finding 1 is the pattern from §2c again — a
+defect in a fix — with a sharper edge: the tests for that fix were green
+because they supplied the one input the defect needed to be absent. The new
+tests use the token the app actually sends. The walk-through is being kept as
+a permanent end-to-end test in PR-D for the same reason.
+

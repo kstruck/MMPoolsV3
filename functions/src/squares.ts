@@ -126,8 +126,30 @@ async function reserveSquaresForCaller(
         // for them, and counted them as the owner's (qodo, PR #758). A square
         // the owner enters under a name that is not their own carries the name
         // and no identity — the same as a hand-entered square always has.
+        //
+        // "THEIR OWN NAME" IS READ FROM THE ACCOUNT, NOT FROM THE REQUEST. This
+        // compared the typed name with `userName` — which, for an account whose
+        // sign-in token carries no name (every email-and-password account, until
+        // its token is next refreshed), falls back to the name that was TYPED.
+        // So the typed name always equalled itself, nothing was ever "for
+        // someone else", and the owner's account went on every square they
+        // entered. The emulator tests passed a token name and never saw it; a
+        // browser walk-through did. The owner's names are the token's, if it has
+        // one, and the one on their profile.
         const isOwner = isAuthenticated && pool.ownerId === userId;
-        const onBehalf = isOwner && normalizePlayerName(displayName) !== normalizePlayerName(userName);
+        let onBehalf = false;
+        if (isOwner) {
+            const ownNames = new Set<string>();
+            const tokenName = normalizePlayerName(request.auth?.token.name);
+            if (tokenName) ownNames.add(tokenName);
+            const profile = await transaction.get(db.collection("users").doc(userId));
+            const profileName = normalizePlayerName(profile.data()?.name);
+            if (profileName) ownNames.add(profileName);
+            // With no name on the account at all there is nothing to compare
+            // against, and the squares stay the owner's — the claim keeps an
+            // identity rather than losing one on a guess.
+            onBehalf = ownNames.size > 0 && !ownNames.has(normalizePlayerName(displayName));
+        }
         const identity = onBehalf ? { uid: null, guestKeyHash: null } : callerIdentity;
 
         const plan = planClaim({
