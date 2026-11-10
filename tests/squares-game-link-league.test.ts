@@ -31,3 +31,29 @@ describe('the game pickers link game.league', () => {
     expect(matchup).not.toContain('onLinkGame(game, search.league)');
   });
 });
+
+/**
+ * BOTH PICKERS ASK THE HOOK WHETHER A GAME HAS STARTED (qodo, PR #761).
+ *
+ * The hook answers from the server-corrected clock (tested on the rendered
+ * hook). Each picker used to import `hasStarted` from the schedule service and
+ * call it bare, which reads the device's clock. As above: this holds the call
+ * sites to using the hook's, which a test of the hook cannot see.
+ */
+describe('the game pickers judge kickoff by the hook\'s clock', () => {
+  const importsBare = /import\s*\{[^}]*\bhasStarted\b[^}]*\}\s*from\s*'[^']*services\/espnSchedule'/;
+
+  it('the create wizard', () => {
+    const step = read('src/components/wizard/create/StepSquaresGame.tsx');
+    expect(step).not.toMatch(importsBare);
+    expect(step).toMatch(/find: findGames, clear, hasStarted \} =\s*useScheduleSearch\(/);
+    expect(step).toContain('const started = hasStarted(g);');
+  });
+
+  it('the manage page', () => {
+    const matchup = read('src/components/admin/WizardStepMatchup.tsx');
+    expect(matchup).not.toMatch(importsBare);
+    expect(matchup).toContain('const started = search.hasStarted(game);');
+  });
+});
+

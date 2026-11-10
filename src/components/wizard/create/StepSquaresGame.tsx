@@ -1,7 +1,7 @@
 import { useFormContext } from 'react-hook-form';
 import { NumberField, SelectField, TextField } from '../fields';
 import { HelpTip } from '../../ui/HelpTip';
-import { hasStarted, type ScheduleGame, type ScheduleLeague } from '../../../services/espnSchedule';
+import type { ScheduleGame, ScheduleLeague } from '../../../services/espnSchedule';
 import { useScheduleSearch } from '../../../hooks/useScheduleSearch';
 
 /**
@@ -32,7 +32,7 @@ export function StepSquaresGame() {
   const homeTeam = (watch('homeTeam') as string | undefined) || '';
   const awayTeam = (watch('awayTeam') as string | undefined) || '';
 
-  const { league, setLeague, date, setDate, games, loading, error, find: findGames, clear } =
+  const { league, setLeague, date, setDate, games, loading, error, find: findGames, clear, hasStarted } =
     useScheduleSearch((watch('league') as ScheduleLeague | undefined) || 'nfl');
 
   const set = (name: string, value: unknown) => setValue(name, value, { shouldDirty: true, shouldValidate: true });
@@ -77,7 +77,7 @@ export function StepSquaresGame() {
             <p className="text-sm font-bold text-white">{awayTeam} at {homeTeam}</p>
             {typeof gameTime === 'number' && <p className="text-sm text-slate-300">{kickoffText(gameTime)}</p>}
             <p className="mt-2 text-xs text-emerald-400">
-              Linked. Scores come in on their own, and the grid locks itself at kickoff.
+              Linked. Scores come in on their own, and the grid locks itself just before kickoff.
             </p>
             <button type="button" onClick={unlink} className="mt-3 rounded-md border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800">
               Choose a different game
@@ -112,7 +112,8 @@ export function StepSquaresGame() {
               <ul className="mt-3 space-y-1" data-testid="squares-game-list">
                 {games.map((g) => {
                   // A game that has kicked off cannot take a new pool: nobody
-                  // could claim a square on it. The server refuses it too.
+                  // could claim a square on it. The server refuses it too —
+                  // so it is the server's clock that is asked (the hook's).
                   const started = hasStarted(g);
                   return (
                     <li key={g.id}>

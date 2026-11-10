@@ -116,13 +116,23 @@ const lastDigit = (n: number) => Math.abs(Math.trunc(num(n))) % 10;
  *
  * Charity is floored to a whole dollar, as `statsTrigger.ts` and the pool page
  * always have — the three must report the same donation.
+ *
+ * THE PRIZE POT IS NOT FLOORED (qodo, PR #761, asked for `floor(gross -
+ * charity)`). A fee may carry cents — the create contract allows it — and the
+ * prizes are paid to the cent, so a floored pot would strand up to 99 cents
+ * that players paid in and nobody is paid out. `statsTrigger.ts` does floor
+ * its own figure: that is a site-wide display total, not what winners are
+ * paid. What the finding did turn up: `gross` and `net` were the only amounts
+ * in this module that skipped `toCents`, so 100 squares at $1.10 read
+ * 110.00000000000001. They go through it now, and `gross = charity + net`
+ * holds exactly.
  */
 export function squaresPot(pool: PayoutPool): { sold: number; gross: number; charity: number; net: number } {
   const sold = (pool.squares ?? []).filter((s) => !!s && !!s.owner).length;
-  const gross = sold * num(pool.costPerSquare);
+  const gross = toCents(sold * num(pool.costPerSquare));
   const pct = pool.charity?.enabled ? Math.min(100, Math.max(0, num(pool.charity.percentage))) : 0;
   const charity = Math.floor(gross * (pct / 100));
-  return { sold, gross, charity, net: gross - charity };
+  return { sold, gross, charity, net: toCents(gross - charity) };
 }
 
 /** `equal_split`, or `hybrid` — which is also what an unset strategy has always been played as. */

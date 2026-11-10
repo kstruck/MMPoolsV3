@@ -298,3 +298,47 @@ export function squaresCreateDefaults(input: {
   }
   return out;
 }
+
+/**
+ * HOW FAR AHEAD OF ITS LOCK TIME A SQUARES GRID IS LOCKED.
+ *
+ * The lock job (`autoLockPools`) runs once a minute and locks a grid as soon as
+ * its lock time is within this lead — so a grid locks somewhere between this
+ * long before its lock time and one minute less. Why it is 90 seconds and not
+ * the 30 it was is in `functions/src/autoLock.ts` (plan K7).
+ *
+ * It lives here, not in the job, because THE PAGE HAS TO TELL PLAYERS THE SAME
+ * THING THE JOB DOES. The pool page showed the stored lock time — kickoff — as
+ * "Grid locks", and the grid locked up to a minute and a half before it: a
+ * player who came back two minutes early could find it shut (qodo, PR #761).
+ * The job and the page read this one number; change it and both move.
+ */
+export const SQUARES_LOCK_LEAD_MS = 90_000;
+
+/** Epoch ms from the shapes a stored lock time has had: a number, a Firestore Timestamp, a date string. */
+function lockTimeMs(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  let ms: number;
+  if (typeof raw === 'number') ms = raw;
+  else if (typeof raw === 'object' && typeof (raw as { toMillis?: unknown }).toMillis === 'function') ms = (raw as { toMillis: () => number }).toMillis();
+  else if (raw instanceof Date) ms = raw.getTime();
+  else if (typeof raw === 'string') ms = new Date(raw).getTime();
+  else return null;
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+
+/**
+ * WHEN PICKS CLOSE on a grid that locks itself — the moment to show a player.
+ *
+ * The stored lock time less the lead: the EARLIEST the job can lock the grid.
+ * It may stay open up to a minute longer, never less, so a deadline shown from
+ * this is one the grid always keeps. `null` when the grid will not lock itself
+ * (the lock is off, or has no usable time) — then there is no deadline to show.
+ */
+export function squaresPicksCloseMs(pool: unknown): number | null {
+  const lock = asObject(asObject(asObject(pool).reminders).lock);
+  if (lock.enabled !== true) return null;
+  const at = lockTimeMs(lock.lockAt);
+  return at === null ? null : at - SQUARES_LOCK_LEAD_MS;
+}
+

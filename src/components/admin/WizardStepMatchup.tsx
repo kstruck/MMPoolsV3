@@ -3,7 +3,7 @@ import { Calendar, RefreshCw, Shield } from 'lucide-react';
 import type { GameState } from '../../types';
 import { DebouncedInput } from './DebouncedInputs';
 import { getTeamLogo } from '../../constants';
-import { hasStarted, type ScheduleGame, type ScheduleLeague } from '../../services/espnSchedule';
+import type { ScheduleGame, ScheduleLeague } from '../../services/espnSchedule';
 import { useScheduleSearch } from '../../hooks/useScheduleSearch';
 
 interface WizardStepMatchupProps {
@@ -46,7 +46,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState,
                         <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2">The Matchup</h3>
                         <p className="text-muted text-sm">
                             {gameState.gameId
-                                ? 'Linked to a game: scores come in on their own and the grid locks itself at kickoff.'
+                                ? 'Linked to a game: scores come in on their own and the grid locks itself just before kickoff.'
                                 : 'No game linked. Find it on the schedule and the pool is scored and locked for you.'}
                         </p>
                     </div>
@@ -81,7 +81,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState,
                             {(search.games ?? []).map((game) => {
                                 // A game that has kicked off cannot be linked: the grid
                                 // would lock at once, on whatever numbers it has.
-                                const started = hasStarted(game);
+                                const started = search.hasStarted(game);
                                 return (
                                     <button
                                         type="button"
