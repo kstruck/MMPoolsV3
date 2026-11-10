@@ -40,7 +40,8 @@ export function StepSquaresGame() {
   const pick = (g: ScheduleGame) => {
     set('gameId', g.id);
     set('gameTime', g.kickoff);
-    set('league', league);
+    // The league the game was FOUND in — not the dropdown, which may have moved.
+    set('league', g.league);
     set('homeTeam', g.homeTeam);
     set('awayTeam', g.awayTeam);
     set('homeTeamLogo', g.homeLogo || undefined);

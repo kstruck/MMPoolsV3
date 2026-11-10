@@ -11,7 +11,10 @@ export const squaresCreateInputSchema = contactFieldsSchema.extend({
   maxSquaresPerPlayer: z.number().int().min(0).optional(),
   homeTeam: z.string().optional(),
   awayTeam: z.string().optional(),
-  gameId: z.string().nullish(), // nullable + optional: a squares pool with no game assigned yet sends null
+  // nullable + optional: a squares pool with no game assigned yet sends null
+  // (or ''). A linked game's id is the score feed's event id — digits. It is
+  // put into the feed's URL every minute, so nothing else is accepted.
+  gameId: z.string().regex(/^\d{0,15}$/, 'Not a game from the schedule.').nullish(),
   gameTime: z.number().optional(),
   seasonType: z.enum(['1', '2', '3']).optional(),
   week: z.number().int().optional(),

@@ -7,7 +7,7 @@ import { isPlayerOwner, ROLLOVER, usesCurrentWinnerRules, type PayoutPool } from
 import { describeWinnerDrift, finalScoresOf, planWinnerWrites, type StoredWinner } from '@shared/squaresWinnerPlan';
 import { formatPrize, payoutTotals } from '../utils/payouts';
 import { retryWhile, isScoresNotSavedYet } from '../utils/retryWhile';
-import type { ScheduleGame, ScheduleLeague } from '../services/espnSchedule';
+import type { ScheduleGame } from '../services/espnSchedule';
 import { squaresGameLink } from '@shared/squaresDefaults';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
@@ -418,8 +418,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
    * no reminder settings switched on payment-reminder emails to every player.
    * The pool keeps its name unless it never had one.
    */
-  const linkGame = (game: ScheduleGame, league: ScheduleLeague) => {
-    const patch = squaresGameLink(game, league, { reminders: gameState.reminders, scores: gameState.scores });
+  const linkGame = (game: ScheduleGame) => {
+    // The league the game was found in travels with it (see useScheduleSearch).
+    const patch = squaresGameLink(game, game.league, { reminders: gameState.reminders, scores: gameState.scores });
     if (!patch) {
       toast.error('That game could not be linked. Pick it from the schedule again.');
       return;

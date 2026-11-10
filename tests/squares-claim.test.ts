@@ -13,6 +13,7 @@ import {
   squareCapSentence,
   type ClaimSquare,
   isOwnSquare,
+  isEnteringForSomeoneElse,
 } from '../shared/squaresClaim';
 
 /**
@@ -347,3 +348,52 @@ describe('duesBuckets — which unpaid squares a player can say they have paid f
     expect(out.confirmable).toEqual([1]);
   });
 });
+
+/**
+ * "FOR SOMEONE ELSE" — the one rule the page shows and the request carries.
+ * The server follows `onBehalf` for the pool's owner and does not compare
+ * names of its own; `squaresClaim.emulator.test.ts` holds it to that.
+ */
+describe('isEnteringForSomeoneElse', () => {
+  const owner = (typedName: string | null | undefined, accountName: string | null | undefined) =>
+    isEnteringForSomeoneElse({ isOwner: true, typedName, accountName });
+
+  it('the organizer typing another name is entering for that person', () => {
+    expect(owner('Uncle Ray', 'Olivia Owner')).toBe(true);
+  });
+
+  it('the organizer typing their own name is not — however it is spaced or cased', () => {
+    for (const typed of ['Olivia Owner', 'olivia owner', '  OLIVIA   owner  ']) {
+      expect(owner(typed, 'Olivia Owner'), typed).toBe(false);
+    }
+  });
+
+  it('nobody but the organizer ever enters for someone else', () => {
+    expect(isEnteringForSomeoneElse({ isOwner: false, typedName: 'For My Wife', accountName: 'Bob' })).toBe(false);
+  });
+
+  it('an account with no name has nothing to compare against — the squares stay the organizer\'s', () => {
+    for (const none of [undefined, null, '', '   ']) {
+      expect(owner('Whoever', none)).toBe(false);
+    }
+  });
+
+  it('nothing typed yet is not "for someone else"', () => {
+    for (const none of [undefined, null, '', '   ']) {
+      expect(owner(none, 'Olivia Owner')).toBe(false);
+    }
+  });
+});
+
+describe('the pool page sends the rule it shows', () => {
+  it('the claim request carries isEnteringForSomeoneElse, evaluated on the name being claimed under', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const route = readFileSync(resolve(__dirname, '..', 'src/components/routes/PoolRoute.tsx'), 'utf8');
+    expect(route).toContain('isEnteringForSomeoneElse({ isOwner, typedName: normalizedName, accountName: user?.name })');
+    const service = readFileSync(resolve(__dirname, '..', 'src/services/dbService.ts'), 'utf8');
+    // Sent only when true: an absent flag is "these are mine".
+    expect(service).toContain('...(onBehalf ? { onBehalf: true } : {})');
+  });
+});
+

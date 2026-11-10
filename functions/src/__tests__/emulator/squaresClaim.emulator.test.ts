@@ -357,17 +357,23 @@ describe('A3 — only the device that reserved can claim', () => {
   });
 });
 
-describe('qodo #12 — a square the commissioner enters for someone else is that player\'s, not the commissioner\'s', () => {
+describe('qodo #12 — a square the organizer enters for someone else is that player\'s, not the organizer\'s', () => {
   const owner = authed(OWNER, 'Olivia Owner');
-  const ownerReserve = (ids: number[], name: string, email?: string) => reserveMany({
-    data: { poolId: POOL, squareIds: ids, customerDetails: { name, ...(email ? { email } : {}) }, pickedAsName: name },
-    auth: owner,
+  /** The organizer entering squares for somebody else: the page sends `onBehalf`. */
+  const enterFor = (ids: number[], name: string, email?: string, auth: unknown = owner) => reserveMany({
+    data: { poolId: POOL, squareIds: ids, customerDetails: { name, ...(email ? { email } : {}) }, pickedAsName: name, onBehalf: true },
+    auth,
+  } as never);
+  /** The organizer taking squares of their own: no flag. */
+  const ownerReserve = (ids: number[], name: string, auth: unknown = owner) => reserveMany({
+    data: { poolId: POOL, squareIds: ids, customerDetails: { name }, pickedAsName: name },
+    auth,
   } as never);
   const privateOf = async (id: number) =>
     (await db.collection('pools').doc(POOL).collection('squarePrivate').doc(String(id)).get()).data() as Record<string, unknown>;
 
-  it('carries the name and NO account — it is not on the commissioner\'s dashboard', async () => {
-    await ownerReserve([20, 21], 'Cash Carl');
+  it('carries the name and NO account — it is not on the organizer\'s dashboard', async () => {
+    await enterFor([20, 21], 'Cash Carl');
     for (const id of [20, 21]) {
       const s = await square(id);
       expect(s.owner).toBe('Cash Carl');
@@ -376,92 +382,235 @@ describe('qodo #12 — a square the commissioner enters for someone else is that
     }
   });
 
-  it('the commissioner cannot press "I have paid" on it as if it were theirs', async () => {
-    await ownerReserve([20], 'Cash Carl');
+  it('the organizer cannot press "I have paid" on it as if it were theirs', async () => {
+    await enterFor([20], 'Cash Carl');
     await expect(confirm({ data: { poolId: POOL, squareIds: [20] }, auth: owner } as never)).rejects.toThrow();
   });
 
-  it('its contact details are the player\'s as typed — never the commissioner\'s own email by default', async () => {
-    await ownerReserve([20], 'Cash Carl');
+  it('its contact details are the player\'s as typed — never the organizer\'s own email by default', async () => {
+    await enterFor([20], 'Cash Carl');
     expect((await privateOf(20)).email).not.toBe(`${OWNER}@example.com`);
-    await ownerReserve([21], 'Emailed Emma', 'emma@example.com');
+    await enterFor([21], 'Emailed Emma', 'emma@example.com');
     expect((await privateOf(21)).email).toBe('emma@example.com');
   });
 
-  it('the commissioner\'s OWN squares, under their own name, still belong to their account', async () => {
+  it('the organizer\'s OWN squares still belong to their account', async () => {
     await ownerReserve([30], 'olivia  owner');
     expect((await square(30)).reservedByUid).toBe(OWNER);
     await expect(confirm({ data: { poolId: POOL, squareIds: [30] }, auth: owner } as never)).resolves.toMatchObject({ success: true });
   });
 
   /**
-   * THE REAL SHAPE OF A SIGN-IN. Every test above hands the callable a token
-   * with a `name` in it. An email-and-password account's token has NONE until
-   * it is next refreshed, and the callable then fell back to the name that was
-   * TYPED as "the owner's name" — so the typed name always matched itself,
-   * nothing was ever "for someone else", and the owner's account went on every
-   * square they entered. A browser walk-through found it; these pin it.
+   * THE SERVER DOES NOT GUESS (qodo, round 5).
+   *
+   * It used to decide "for someone else" by comparing the typed name with
+   * names it could find for the account, and got it wrong three ways: a token
+   * with no name; a token name and a profile name that differ; a profile name
+   * that is only the email prefix. The page now decides — with the one rule in
+   * `isEnteringForSomeoneElse`, shown beside the name field — and sends
+   * `onBehalf`. These hold the server to following it and nothing else.
    */
-  describe('with a sign-in token that carries no name (how the app really signs in)', () => {
-    const namelessOwner = { uid: OWNER, token: { email: `${OWNER}@example.com` } };
-    const reserveAs = (ids: number[], name: string) => reserveMany({
-      data: { poolId: POOL, squareIds: ids, customerDetails: { name }, pickedAsName: name },
-      auth: namelessOwner,
-    } as never);
+  describe('the server follows what the page said, whatever the names are', () => {
+    // How the app really signs in: an email-and-password token has no name.
+    const nameless = { uid: OWNER, token: { email: `${OWNER}@example.com` } };
     const profile = (data: Record<string, unknown>) => db.collection('users').doc(OWNER).set({ role: 'COMMISSIONER', email: `${OWNER}@example.com`, ...data });
 
-    it('THE BUG: a square typed for someone else carries the name and NO account', async () => {
+    it('entered for someone else, with a token that carries no name: the name and NO account', async () => {
       await profile({ name: 'Olivia Owner' });
-      await reserveAs([22, 23], 'Uncle Ray');
+      await enterFor([22, 23], 'Uncle Ray', undefined, nameless);
       for (const id of [22, 23]) {
         const s = await square(id);
         expect(s.owner).toBe('Uncle Ray');
         expect(s.reservedByUid, `square ${id}`).toBeNull();
       }
-      // ...so the organizer cannot press "I have paid" on it as if it were theirs.
-      await expect(confirm({ data: { poolId: POOL, squareIds: [22] }, auth: namelessOwner } as never)).rejects.toThrow();
+      await expect(confirm({ data: { poolId: POOL, squareIds: [22] }, auth: nameless } as never)).rejects.toThrow();
     });
 
-    it('the owner\'s own name — from their PROFILE — still puts the square on their account', async () => {
-      await profile({ name: 'Olivia Owner' });
-      await reserveAs([31], '  olivia   OWNER ');
+    it('NOT flagged: the square is the organizer\'s, even under a name the server has never seen', async () => {
+      // The profile name is only the email prefix — an interrupted registration
+      // leaves it that way. The organizer types their real name. The page did
+      // not say "for someone else", so it is not.
+      await profile({ name: 'owner-1' });
+      await ownerReserve([31], 'Olivia Owner', nameless);
       expect((await square(31)).reservedByUid).toBe(OWNER);
+      expect((await square(31)).owner).toBe('Olivia Owner');
     });
 
-    it('a name on the token and a different one on the profile are both the owner\'s', async () => {
-      await profile({ name: 'Olivia O.' });
-      const both = { uid: OWNER, token: { name: 'Olivia Owner', email: `${OWNER}@example.com` } };
-      const as = (id: number, name: string) => reserveMany({ data: { poolId: POOL, squareIds: [id], customerDetails: { name }, pickedAsName: name }, auth: both } as never);
-      await as(32, 'Olivia Owner');
-      await as(33, 'olivia o.');
-      await as(34, 'Somebody Else');
-      expect((await square(32)).reservedByUid).toBe(OWNER);
-      expect((await square(33)).reservedByUid).toBe(OWNER);
-      expect((await square(34)).reservedByUid).toBeNull();
-    });
-
-    it('an account with no name anywhere keeps its squares — nothing is guessed to be "for someone else"', async () => {
+    it('NOT flagged, with no name anywhere on the account: still the organizer\'s', async () => {
       await profile({});
-      await reserveAs([35], 'Whoever');
+      await ownerReserve([35], 'Whoever', nameless);
       expect((await square(35)).reservedByUid).toBe(OWNER);
     });
 
-    it('a PLAYER with a nameless token still holds a square by account, whatever they type', async () => {
-      await db.collection('users').doc('bob-uid').set({ role: 'MEMBER', name: 'Bob', email: 'bob@example.com' });
+    it('flagged, under the organizer\'s OWN name: the page said so, so it carries no account', async () => {
+      // The page never sends this — its rule needs the names to differ — but
+      // the server does not second-guess it by comparing names either.
+      await enterFor([36], 'Olivia Owner');
+      expect((await square(36)).reservedByUid).toBeNull();
+    });
+
+    it.each([[false], [null], [undefined]])('onBehalf %s is not "for someone else"', async (flag) => {
       await reserveMany({
-        data: { poolId: POOL, squareIds: [41], customerDetails: { name: 'For My Wife' }, pickedAsName: 'For My Wife' },
-        auth: { uid: 'bob-uid', token: { email: 'bob@example.com' } },
+        data: { poolId: POOL, squareIds: [37], customerDetails: { name: 'Uncle Ray' }, pickedAsName: 'Uncle Ray', ...(flag === undefined ? {} : { onBehalf: flag }) },
+        auth: owner,
       } as never);
-      expect((await square(41)).reservedByUid).toBe('bob-uid');
+      expect((await square(37)).reservedByUid).toBe(OWNER);
+    });
+
+    it('onBehalf must be a boolean — "true" and 1 are refused as input, not read as yes', async () => {
+      for (const junk of ['true', 1, {}]) {
+        await expect(reserveMany({
+          data: { poolId: POOL, squareIds: [38], customerDetails: { name: 'Uncle Ray' }, pickedAsName: 'Uncle Ray', onBehalf: junk },
+          auth: owner,
+        } as never)).rejects.toThrow();
+      }
+      expect((await square(38)).owner).toBeNull();
+    });
+
+    it('the single-square callable follows the same flag', async () => {
+      await reserveOne({ data: { poolId: POOL, squareId: 39, customerDetails: { name: 'Uncle Ray' }, pickedAsName: 'Uncle Ray', onBehalf: true }, auth: owner } as never);
+      expect((await square(39)).owner).toBe('Uncle Ray');
+      expect((await square(39)).reservedByUid).toBeNull();
+    });
+  });
+
+  /**
+   * ONLY THE OWNER. The per-player limit is counted by identity. A player who
+   * could send `onBehalf` and shed theirs would be counted by name alone — and
+   * a new name each time would never reach the limit.
+   */
+  describe('ATTACK: a player cannot shed their identity by sending onBehalf', () => {
+    const bob = authed('bob-uid', 'Bob');
+    const bobFor = (ids: number[], name: string) => reserveMany({
+      data: { poolId: POOL, squareIds: ids, customerDetails: { name }, pickedAsName: name, onBehalf: true },
+      auth: bob,
+    } as never);
+
+    it('the square is still held by their account', async () => {
+      await bobFor([40], 'For My Wife');
+      expect((await square(40)).reservedByUid).toBe('bob-uid');
+    });
+
+    it('and the limit still counts them, under any number of names', async () => {
+      await seedPool({ maxSquaresPerPlayer: 2 });
+      await bobFor([40], 'Name One');
+      await bobFor([41], 'Name Two');
+      await expect(bobFor([42], 'Name Three')).rejects.toThrow(/already hold the most squares one player may have/i);
+      expect((await square(42)).owner).toBeNull();
+    });
+
+    it('a guest sending it gains nothing either — the square still carries their device', async () => {
+      await reserveMany({
+        data: { poolId: POOL, squareIds: [43], customerDetails: { name: 'Gina' }, guestDeviceKey: key('gina'), pickedAsName: 'Gina', onBehalf: true },
+      } as never);
+      expect((await square(43)).guestKeyHash).toMatch(/^[0-9a-f]{64}$/);
     });
   });
 
   it('a PLAYER typing a different name still holds the square by account — only the owner enters for others', async () => {
     await reserveMany({
-      data: { poolId: POOL, squareIds: [40], customerDetails: { name: 'For My Wife' }, pickedAsName: 'For My Wife' },
+      data: { poolId: POOL, squareIds: [44], customerDetails: { name: 'For My Wife' }, pickedAsName: 'For My Wife' },
       auth: authed('bob-uid', 'Bob'),
     } as never);
-    expect((await square(40)).reservedByUid).toBe('bob-uid');
+    expect((await square(44)).reservedByUid).toBe('bob-uid');
+  });
+});
+
+/**
+ * THE PER-PLAYER LIMIT, ON THE WAY INTO AN ACCOUNT (qodo, PR #760).
+ *
+ * Reserving past the limit is refused. Moving guest squares onto an account
+ * was not counted at all: fill the limit on one device, fill it again on
+ * another, sign in, and one account held twice the limit.
+ */
+describe('qodo r5 — a guest-to-account merge respects the per-player limit', () => {
+  const gina = authed('gina-uid', 'Gina');
+  const mine = (auth: unknown, deviceKey: string) => claimMine({ data: { poolId: POOL, guestDeviceKey: deviceKey }, auth } as never) as Promise<{ claimed: number[]; warnings: string[] }>;
+  const codeFor = async (deviceKey: string) =>
+    ((await mintCode({ data: { poolId: POOL, guestDeviceKey: deviceKey } } as never)) as { claimCode: string }).claimCode;
+  const heldBy = async (uid: string) => (await pool()).squares.filter((s) => s.reservedByUid === uid).map((s) => s.id);
+
+  beforeEach(() => seedPool({ maxSquaresPerPlayer: 3 }));
+
+  it('a merge that stays within the limit moves the squares', async () => {
+    await guestReserve([1, 2, 3], 'Gina', key('phone'));
+    const res = await mine(gina, key('phone'));
+    expect(res.claimed).toEqual([1, 2, 3]);
+    expect(await heldBy('gina-uid')).toEqual([1, 2, 3]);
+  });
+
+  it('ATTACK: two devices each at the limit cannot be merged into one account', async () => {
+    await guestReserve([1, 2, 3], 'Gina', key('phone'));
+    await guestReserve([4, 5, 6], 'Gina Two', key('laptop'));
+    expect((await mine(gina, key('phone'))).claimed).toEqual([1, 2, 3]);
+
+    const second = await mine(gina, key('laptop'));
+    expect(second.claimed).toEqual([]);
+    expect(second.warnings.join(' ')).toMatch(/allows 3 squares per player/);
+    // Nothing moved, and nothing was lost: still reserved, still the laptop's.
+    expect(await heldBy('gina-uid')).toEqual([1, 2, 3]);
+    for (const id of [4, 5, 6]) {
+      const s = await square(id);
+      expect(s.owner).toBe('Gina Two');
+      expect(s.reservedByUid ?? null).toBeNull();
+      expect(s.guestKeyHash).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it('it is all or nothing — a merge that would cross the limit moves none of it', async () => {
+    await reserveMany({ data: { poolId: POOL, squareIds: [10, 11], customerDetails: { name: 'Gina' }, pickedAsName: 'Gina' }, auth: gina } as never);
+    await guestReserve([4, 5], 'Gina On Laptop', key('laptop'));
+    expect((await mine(gina, key('laptop'))).claimed).toEqual([]);
+    expect(await heldBy('gina-uid')).toEqual([10, 11]);
+  });
+
+  it('exactly at the limit is allowed', async () => {
+    await reserveMany({ data: { poolId: POOL, squareIds: [10, 11], customerDetails: { name: 'Gina' }, pickedAsName: 'Gina' }, auth: gina } as never);
+    await guestReserve([4], 'Gina On Laptop', key('laptop'));
+    expect((await mine(gina, key('laptop'))).claimed).toEqual([4]);
+    expect(await heldBy('gina-uid')).toEqual([4, 10, 11]);
+  });
+
+  it('a claim CODE over the limit is refused in words — and the code is not used up', async () => {
+    await guestReserve([1, 2, 3], 'Gina', key('phone'));
+    await guestReserve([4, 5, 6], 'Gina Two', key('laptop'));
+    await mine(gina, key('phone'));
+    const code = await codeFor(key('laptop'));
+
+    await expect(claimCode({ data: { claimCode: code }, auth: gina } as never)).rejects.toThrow(/allows 3 squares per player/);
+    expect(await heldBy('gina-uid')).toEqual([1, 2, 3]);
+    const stored = (await db.collection('poolClaims').doc(code).get()).data() as Record<string, unknown>;
+    expect(stored.uses ?? 0).toBe(0);
+
+    // The same code still works for an account with room.
+    const res = (await claimCode({ data: { claimCode: code }, auth: authed('other-uid', 'Other') } as never)) as { claimed: number[] };
+    expect(res.claimed).toEqual([4, 5, 6]);
+  });
+
+  it('no limit on the pool means no limit on the merge', async () => {
+    await seedPool({ maxSquaresPerPlayer: 0 });
+    await guestReserve([1, 2, 3, 4], 'Gina', key('phone'));
+    await guestReserve([5, 6, 7, 8], 'Gina Two', key('laptop'));
+    await mine(gina, key('phone'));
+    expect((await mine(gina, key('laptop'))).claimed).toEqual([5, 6, 7, 8]);
+  });
+
+  it('the pool\'s OWNER is not limited here, as they are not anywhere', async () => {
+    const owner = authed(OWNER, 'Olivia Owner');
+    await guestReserve([1, 2, 3], 'Olivia', key('phone'));
+    await guestReserve([4, 5, 6], 'Olivia Two', key('laptop'));
+    await mine(owner, key('phone'));
+    expect((await mine(owner, key('laptop'))).claimed).toEqual([4, 5, 6]);
+  });
+
+  it('squares the organizer entered for others do not count against anyone\'s account', async () => {
+    // They carry a name and no account, so they are not "held by" gina.
+    await reserveMany({
+      data: { poolId: POOL, squareIds: [20, 21, 22], customerDetails: { name: 'Gina' }, pickedAsName: 'Gina', onBehalf: true },
+      auth: authed(OWNER, 'Olivia Owner'),
+    } as never);
+    await guestReserve([1, 2, 3], 'Gina G', key('phone'));
+    expect((await mine(gina, key('phone'))).claimed).toEqual([1, 2, 3]);
   });
 });
 

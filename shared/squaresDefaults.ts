@@ -211,7 +211,8 @@ export function squaresGameLink(
 ): Record<string, unknown> | null {
   const id = typeof game.id === 'string' ? game.id.trim() : '';
   const kickoff = finite(game.kickoff);
-  if (!id || kickoff === null || kickoff <= 0) return null;
+  // The id is the score feed's event id — digits (see the create schema).
+  if (!/^\d{1,15}$/.test(id) || kickoff === null || kickoff <= 0) return null;
 
   const reminders = asObject(existing.reminders);
   const lock = asObject(reminders.lock);

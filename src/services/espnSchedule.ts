@@ -14,6 +14,13 @@ export type ScheduleLeague = 'nfl' | 'college';
 export interface ScheduleGame {
   /** ESPN event id — what `gameId` on the pool is. */
   id: string;
+  /**
+   * The league whose schedule this game was FOUND in. A game id means nothing
+   * without it — the score feed is asked for `(league, id)` — so it travels
+   * with the game, and a picker links `game.league`, never whatever its league
+   * dropdown happens to show by the time the game is clicked.
+   */
+  league: ScheduleLeague;
   /** Kickoff, epoch ms. */
   kickoff: number;
   homeTeam: string;
@@ -61,7 +68,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
  * unreadable date is LEFT OUT rather than shown half-filled — a game the
  * commissioner can pick must carry everything a link needs.
  */
-export function mapScoreboard(payload: unknown): ScheduleGame[] {
+export function mapScoreboard(payload: unknown, league: ScheduleLeague): ScheduleGame[] {
   const events = Array.isArray(obj(payload).events) ? (obj(payload).events as unknown[]) : [];
   const games: ScheduleGame[] = [];
 
@@ -81,6 +88,7 @@ export function mapScoreboard(payload: unknown): ScheduleGame[] {
     const week = Number(obj(event.week).number);
     games.push({
       id,
+      league,
       kickoff,
       homeTeam,
       awayTeam,
@@ -108,5 +116,5 @@ export async function fetchGamesOn(league: ScheduleLeague, isoDate: string): Pro
   if (!url) throw new Error('Pick a date first.');
   const response = await fetch(url);
   if (!response.ok) throw new Error('The schedule could not be loaded. Try again in a moment.');
-  return mapScoreboard(await response.json());
+  return mapScoreboard(await response.json(), league);
 }

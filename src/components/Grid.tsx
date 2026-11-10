@@ -10,7 +10,7 @@ import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
-import { countHeldSquares, duesBuckets, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
+import { countHeldSquares, duesBuckets, effectiveSquareCap, isEnteringForSomeoneElse, normalizePlayerName } from '@shared/squaresClaim';
 import { claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
 import { useAccountPrefill } from '../hooks/useAccountPrefill';
 
@@ -191,16 +191,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const myUid = currentUser?.id ?? null;
    const identity = React.useMemo(() => ({ uid: myUid, guestKeyHash }), [myUid, guestKeyHash]);
 
-   // THE ORGANIZER TYPING SOMEBODY ELSE'S NAME. The server enters those squares
-   // for that person — name only, no account — and it decides by exactly this
-   // comparison (`reserveSquaresForCaller` in functions/src/squares.ts). The
-   // form says so, because a commissioner whose account reads "Kevin Struck"
-   // and who types "Kev" would otherwise not know their own squares had been
-   // entered as somebody else's.
-   const enteringForSomeoneElse = !!currentUser
-      && currentUser.id === gameState.ownerId
-      && playerInfo.name.trim() !== ''
-      && normalizePlayerName(playerInfo.name) !== normalizePlayerName(currentUser.name);
+   // THE ORGANIZER TYPING SOMEBODY ELSE'S NAME. Those squares are entered for
+   // that person — name only, no account. This is the ONE rule that decides it
+   // (`isEnteringForSomeoneElse`): the pool page sends its answer with the
+   // claim and the server follows it, so what this note says is what happens.
+   // An organizer whose account reads "Olivia Owner" and who types "Liv" would
+   // otherwise not know their own squares had been entered as somebody else's.
+   const enteringForSomeoneElse = isEnteringForSomeoneElse({
+      isOwner: !!currentUser && currentUser.id === gameState.ownerId,
+      typedName: playerInfo.name,
+      accountName: currentUser?.name,
+   });
 
    // How many squares count against this player's limit — the server's own count.
    const squaresAlreadyOwned = React.useMemo(() => {

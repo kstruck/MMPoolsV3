@@ -33,6 +33,9 @@ export const reserveSquareSchema = z.strictObject({
     customerDetails: nullish(customerDetails),
     guestDeviceKey: nullish(z.string().max(200)),
     pickedAsName: nullish(z.string().max(200)),
+    // The organizer entering squares for somebody else (see
+    // `isEnteringForSomeoneElse`). Honoured for the pool's owner only.
+    onBehalf: nullish(z.boolean()),
 });
 
 /**
@@ -53,6 +56,9 @@ export const reserveSquaresSchema = z.strictObject({
     customerDetails: nullish(customerDetails),
     guestDeviceKey: nullish(z.string().max(200)),
     pickedAsName: nullish(z.string().max(200)),
+    // The organizer entering squares for somebody else (see
+    // `isEnteringForSomeoneElse`). Honoured for the pool's owner only.
+    onBehalf: nullish(z.boolean()),
 });
 
 /** markSquaresPaid — { poolId, squareIds (<=100: full 10x10 board), isPaid }. */
