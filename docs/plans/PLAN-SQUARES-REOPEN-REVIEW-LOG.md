@@ -21,6 +21,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | W1 | browser walk-through | A + B + C + the reopen flip, on emulators | 9 | 9 | 0 |
 | Q4 | qodo | #758 @ `d8978a82`, #759 @ `10d65cce` | 4 | 4 | 0 |
 | Q5 | qodo | #758 @ `77418e03`, #760 @ `3619b6cb` | 7 | 5 | 2 |
+| Q6 | qodo | #761 @ `04996b6b` | 13 | 8 | 3, and 2 that are Kevin's |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -581,4 +582,92 @@ branch's `autoLock.ts` still says 30 — the change is in #760. A reader of
 this PR alone could have taken the race as closed. K7 and the paragraph above
 now say which PR and which commit, and that the race is open until #760
 merges.
+
+## Round Q6 — qodo's first review of #761, the reopen (2026-11-10T22:57Z)
+
+All three surfaces read. 13 findings on `04996b6b`: 7 bugs, 6 skill
+insights. Each was traced in the code before anything was changed. The fixes
+are on the branch where the code lives (#758, #759, #760) and merged up.
+
+| # | Finding | Verdict | Where |
+|---|---|---|---|
+| 1 | Pool managers can alter live prize data (`firestore.rules`) | **Real, known, Kevin's** — plan K1 and K4. See below | — |
+| 2 | The fallback lock can redraw winning digits (`reminders.ts`) | **Real, known, Kevin's** — plan K7. See below | — |
+| 3 | Payout figures jitter as values change | **Accepted** | #760 |
+| 4 | The wizard's kickoff check trusts the device clock | **Accepted** | #760 |
+| 5 | The prize pot can keep fractional cents | **Rejected as asked; what it turned up is fixed** | #759 |
+| 6 | The pause switch sits outside the settings types | **Accepted** (types only) | #759 |
+| 7 | Players are locked out before the time they were shown | **Accepted** | #760 |
+| 8 | A simulated game can miss winner records | **Rejected** — not what the code does; pinned | #759 |
+| 9 | Signed-in guests see a false cap preview | **Accepted** | #758 |
+| 10 | The release can go ahead without a full backup | **Accepted** | #758 (plan) |
+| 11 | A used claim code can take later guest squares | **Accepted** | #758 |
+| 12 | Wizard headings miss the display font | **Rejected** | — |
+| 13 | The auto-lock job has no runtime kill switch | **Rejected** | — |
+
+**1 and 2 — the two marked High, and both in files this work may not
+change.** Neither is new: they are K1/K4 and K7, and both were already on
+Kevin's list. What the finding adds is the framing — *reopening* is what
+makes them matter — and that is right. So the hand-off now says it plainly:
+**#761 is not to be merged until Kevin has decided K7, and has seen K1/K4.**
+
+- *Finding 2 (K7).* `runReminders` locks any squares grid whose time has
+  passed and is still open, with a biased shuffle. `reminders.ts` sends the
+  reminders for every NFL pool that is running now. Mitigated, not closed:
+  the dedicated job locks 90 seconds ahead, so in normal operation the other
+  finds the grid locked. If the dedicated job is down at that minute, it does
+  not.
+- *Finding 1 (K1/K4).* A commissioner can write `scores`, `isLocked`,
+  `payouts` and (four-set pools) `quarterlyNumbers` straight from the client.
+  The commissioner is the trusted party in a squares pool — they hold the
+  money and may type the scores by hand — so this gives a dishonest one
+  nothing they could not already do off the site; what it costs is that the
+  audited server paths can be gone around. Closing it is a rules change plus
+  callables for the legitimate edits.
+
+**5 — the prize pot.** The finding asked for `net = floor(gross − charity)`,
+citing the stats trigger. That figure is a site-wide display total; what
+winners are paid is to the cent, and a fee may carry cents. Flooring would
+strand up to 99 cents the players paid in. What the finding did turn up:
+`gross` and `net` were the only amounts in the module that skipped `toCents`,
+so 100 squares at $1.10 read `110.00000000000001`. Fixed; a mutant that
+floors the pot, as asked, turns three tests red.
+
+**7 — the 90-second lead was mine (round Q5), and this is its cost.** The
+page showed the stored lock time, kickoff, as "Grid locks", and the grid
+locked up to a minute and a half before it. The lead is now one number in
+`shared/squaresDefaults.ts`, read by the job to lock and by the page to show
+the earliest moment that can happen. A deadline shown from it is one the
+grid always keeps. If K7 is approved and the lead goes back to 30 seconds,
+the page follows without being touched.
+
+**8 — rejected.** The finding reads the winners gate as looking only at the
+stored pool, so a simulation that had to draw the numbers would skip the
+winners for that update. `processGameUpdate` builds the pool it reads as
+`{ ...doc.data(), ...overrides }`, so the drawn numbers are there. Two
+emulator tests drive the real callable on a grid with no numbers: the
+first-quarter winner is recorded in the same update, on the numbers just
+drawn. They passed before any code changed.
+
+**11 — a claim code is spent the first time it moves a square.** It counted
+its uses and never looked at the count. The check is read inside the
+transaction that moves the squares, so two redemptions of one code cannot
+both pass. A redemption refused over the limit, or one that found nothing to
+move, does not spend it.
+
+**12 — rejected.** `src/index.css` gives every `h1`–`h4` the display font
+and uppercase; the two headings are `h3`. qodo's own note: the same finding
+on the same heading was rejected in #471.
+
+**13 — rejected.** It asks for the lock job to no-op unless a config flag
+turns it on. That job locks bracket pools as well as squares grids; a switch
+that defaults to off would stop every one of them until somebody armed it,
+and an unreadable config would leave grids open at kickoff — the worst
+failure a squares pool has. qodo's own note: "consistently rejected (#654,
+#687, #691)". The creation flag and the winner-record pause are the stops
+this rollout has.
+
+**Tests and mutants this round.** #758: 7 emulator, 4 client; 7 mutants.
+#759: 3 unit, 2 emulator; 4 mutants. #760: 5 unit, 5 on the rendered hook,
+2 call-site; 9 mutants. All 20 mutants red on the first run.
 
