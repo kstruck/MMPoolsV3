@@ -92,37 +92,76 @@ export async function claimIdentityFor(
  * The "done" mark is written only AFTER the claim succeeds. It used to be
  * written before the call, and the call swallows its own failures, so one
  * timeout meant no further attempt until the browser was closed (qodo, PR #758).
+ *
+ * AND "REFUSED OVER THE LIMIT" IS NOT "DONE" (qodo, PR #759). The server moves
+ * nothing when the squares would put the account past the pool's limit, and
+ * says so (`overLimit`). That was filed as a finished claim, so a player who
+ * then gave up a square, or whose organizer raised the limit, kept their guest
+ * squares outside their account until they closed the browser. It is now
+ * remembered WITH what the answer depended on (`retryKey` — the limit, and how
+ * many squares the account and this browser hold): the same question is not
+ * asked twice, a changed one is.
  */
 const claimsInFlight = new Set<string>();
+/** The same memory as the session flag, for a browser that blocks storage. */
+const refusedOverLimit = new Map<string, string>();
+const CLAIMED = '1';
+const overLimitMark = (retryKey: string) => `over:${retryKey}`;
 
 export async function claimGuestSquaresOnce(
   poolId: string,
   uid: string,
-  claim: () => Promise<{ success: boolean }>,
+  claim: () => Promise<{ success: boolean; overLimit?: boolean }>,
   storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeSessionStorage(),
-): Promise<'claimed' | 'already-done' | 'in-flight' | 'failed'> {
+  /** What an over-the-limit answer depends on. A refusal is retried only when this changes. */
+  retryKey = '',
+): Promise<'claimed' | 'already-done' | 'in-flight' | 'failed' | 'over-limit'> {
   const flag = `mmp_guest_claim:${poolId}:${uid}`;
+  let remembered: string | null | undefined;
   try {
-    if (storage?.getItem(flag)) return 'already-done';
+    remembered = storage?.getItem(flag);
   } catch {
-    // Storage blocked: fall through and rely on the in-flight guard alone.
+    // Storage blocked: fall through and rely on the in-memory guards alone.
   }
+  remembered = remembered || refusedOverLimit.get(flag);
+  if (remembered === CLAIMED || remembered === overLimitMark(retryKey)) return 'already-done';
   if (claimsInFlight.has(flag)) return 'in-flight';
   claimsInFlight.add(flag);
   try {
     const result = await claim();
     if (!result.success) return 'failed';
+    const mark = result.overLimit ? overLimitMark(retryKey) : CLAIMED;
+    if (result.overLimit) refusedOverLimit.set(flag, mark);
+    else refusedOverLimit.delete(flag);
     try {
-      storage?.setItem(flag, '1');
+      storage?.setItem(flag, mark);
     } catch {
       // Not remembered; the server call is idempotent, so a repeat is harmless.
     }
-    return 'claimed';
+    return result.overLimit ? 'over-limit' : 'claimed';
   } catch {
     return 'failed';
   } finally {
     claimsInFlight.delete(flag);
   }
+}
+
+/**
+ * What to tell a player whose transfer code was refused.
+ *
+ * The server refuses in words for the cases a player can act on — the code
+ * has been used, it has expired, the squares would pass the pool's limit, too
+ * many tries — and the page replaced every one of them with "Invalid code or
+ * failed to merge." Since a code is spent the first time it works, that hid
+ * the one thing the player needed to know: get a new code (qodo, PR #760).
+ */
+export function claimCodeFailureText(error: unknown): string {
+  const e = (error ?? {}) as { code?: unknown; message?: unknown };
+  const code = typeof e.code === 'string' ? e.code.replace(/^functions\//, '') : '';
+  const message = typeof e.message === 'string' ? e.message.trim() : '';
+  if ((code === 'failed-precondition' || code === 'resource-exhausted') && message) return message;
+  if (code === 'not-found') return 'That code was not recognised. Check it against the other device and try again.';
+  return 'The squares could not be moved. Try again in a moment.';
 }
 
 function safeSessionStorage(): Storage | null {

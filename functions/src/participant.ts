@@ -276,10 +276,13 @@ export const claimMySquares = validated(
                 participantIds: FieldValue.arrayUnion(uid),
             });
         }
-        return { claimed: outcome.claimed, warnings: outcome.warnings };
+        return { claimed: outcome.claimed, warnings: outcome.warnings, overLimit: outcome.overLimit !== null };
     });
 
-    return { success: true, claimed: result.claimed, warnings: result.warnings };
+    // `overLimit` says the squares are still where they were. The page must not
+    // file that under "done": it asks again when the player's count or the
+    // pool's limit changes (qodo, PR #759).
+    return { success: true, claimed: result.claimed, warnings: result.warnings, overLimit: result.overLimit };
 });
 
 /**
@@ -539,7 +542,8 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
 
 
 /**
- * Six characters from an alphabet with no look-alikes (no I/O/0/1).
+ * `CLAIM_CODE_LENGTH` (8) characters from an alphabet with no look-alikes
+ * (no I/O/0/1) — see that constant for why it is not the 6 it used to be.
  *
  * `randomInt`, not `Math.random`: the code is what proves a claim, so it is
  * drawn from the system CSPRNG.
