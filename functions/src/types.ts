@@ -50,6 +50,13 @@ export interface Winner {
     isPaid?: boolean;
     paidAt?: number; // Timestamp
     paidByUid?: string; // Who marked it paid
+    // Set on `final_rollover` by drawSquaresFinalPrize — the one-time random draw.
+    drawnAt?: unknown;
+    drawnByUid?: string;
+    drawnFrom?: number; // how many sold squares the draw chose from
+    drawnOwner?: string; // what the draw chose, apart from the computed `owner`
+    drawnSquareId?: number;
+    paidAmount?: number | null; // what the prize was when it was marked paid
 }
 
 export interface Scores {
@@ -201,7 +208,7 @@ export interface GameState {
         scoreChangePayout: boolean; // Pay fixed amount on every score change
         scoreChangePayoutStrategy?: 'equal_split' | 'hybrid';
         scoreChangeHybridWeights?: { final: number; halftime: number; other: number };
-        scoreChangeHandleUnsold?: 'rollover_next' | 'house';
+        scoreChangeHandleUnsold?: 'rollover_next' | 'house' | 'split_winners';
         includeOTInScorePayouts?: boolean;
         combineTDandXP?: boolean;
     };

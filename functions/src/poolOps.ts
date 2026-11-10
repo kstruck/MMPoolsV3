@@ -779,7 +779,7 @@ export const toggleWinnerPaid = validated(
     // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
     // needs the pool doc's owner fields, unavailable at the role-gate stage).
     { schema: toggleWinnerPaidSchema, label: "toggleWinnerPaid", appCheck: "monitor" },
-    async ({ poolId, winnerId }, request) => {
+    async ({ poolId, winnerId, expectedOwner, expectedSquareId, paid }, request) => {
     // winnerId is the doc ID (e.g. 'q1', 'final')
     const db = admin.firestore();
     const uid = request.auth!.uid;
@@ -803,18 +803,50 @@ export const toggleWinnerPaid = validated(
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);
-    const winnerSnap = await winnerRef.get();
 
-    if (!winnerSnap.exists) throw new HttpsError('not-found', 'Winner not found');
+    // IN A TRANSACTION, AGAINST THE WINNER THE COMMISSIONER WAS LOOKING AT.
+    // The winner records now follow the scores: a corrected score can move a
+    // prize to a different square and clear "paid". This used to read the record
+    // and write it back in two steps, so a click meant for the OLD winner could
+    // land after that change and mark the NEW one paid (qodo, PR #759).
+    const { isNowPaid, amount, unchanged } = await db.runTransaction(async (t) => {
+        const winnerSnap = await t.get(winnerRef);
+        if (!winnerSnap.exists) throw new HttpsError('not-found', 'Winner not found');
+        const winnerData = winnerSnap.data() as Record<string, unknown>;
 
-    const winnerData = winnerSnap.data();
-    const isNowPaid = !winnerData?.isPaid;
+        const ownerMoved = expectedOwner !== undefined && winnerData.owner !== expectedOwner;
+        const squareMoved = expectedSquareId !== undefined && winnerData.squareId !== expectedSquareId;
+        if (ownerMoved || squareMoved) {
+            throw new HttpsError('failed-precondition', 'This prize has changed since the page loaded. Check the winner shown now and try again.');
+        }
 
-    await winnerRef.update({
-        isPaid: isNowPaid,
-        paidAt: isNowPaid ? FieldValue.serverTimestamp() : null,
-        paidByUid: isNowPaid ? uid : null
+        // SET, NOT FLIP, when the page says which it wants. "Mark paid" on a
+        // prize that is already paid is not a request to un-pay it: two clicks,
+        // two tabs or two managers used to cancel each other out, and the
+        // record then showed a handed-over prize as still owed (qodo, PR #759).
+        // A bundle from before this change sends no `paid` and still toggles.
+        const wasPaid = winnerData.isPaid === true;
+        const next = paid === undefined ? !wasPaid : paid;
+        const prize = typeof winnerData.amount === 'number' ? winnerData.amount : 0;
+        if (next === wasPaid) {
+            // Already so. Nothing is written — in particular `paidAt` and
+            // `paidAmount` keep saying when, and how much, the FIRST time.
+            return { isNowPaid: wasPaid, amount: prize, unchanged: true };
+        }
+        t.update(winnerRef, {
+            isPaid: next,
+            paidAt: next ? FieldValue.serverTimestamp() : null,
+            paidByUid: next ? uid : null,
+            // What the prize WAS when it was marked paid. The prize can change
+            // afterwards (a square sold late, a rule changed); "Paid Out" must
+            // total what was handed over, not what the prize has become.
+            paidAmount: next ? prize : null,
+        });
+        return { isNowPaid: next, amount: prize, unchanged: false };
     });
+
+    // Nothing changed, so there is nothing to put in the audit trail.
+    if (unchanged) return { success: true, isPaid: isNowPaid, winnerId, unchanged: true };
 
     // Audit
     await writeAuditEvent({
@@ -823,7 +855,7 @@ export const toggleWinnerPaid = validated(
         message: `Winner ${winnerId} marked as ${isNowPaid ? 'PAID' : 'UNPAID'} by ${uid}`,
         severity: 'INFO',
         actor: { uid, role: 'ADMIN', label: 'Host' },
-        payload: { winnerId, isPaid: isNowPaid }
+        payload: { winnerId, isPaid: isNowPaid, amount }
     });
 
     return { success: true, isPaid: isNowPaid, winnerId };

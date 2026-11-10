@@ -73,8 +73,16 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                         </div>
                     </button>
 
-                    {/* Card 2: Every Score Pays */}
+                    {/* Card 2: Every Score Pays.
+                        NEEDS A LINKED GAME. Each scoring event is recorded as the
+                        live feed reports it; a game scored by hand has no events,
+                        so a pool set up this way with no game linked would end
+                        with nobody paid (qodo, PR #759). It cannot be chosen
+                        until a game is linked — and can always be switched OFF. */}
                     <button
+                        disabled={!gameState.gameId && !gameState.ruleVariations.scoreChangePayout}
+                        title={!gameState.gameId ? 'Link this pool to a game first. Every Score Pays records each score from the live feed.' : undefined}
+                        data-testid="esp-option"
                         onClick={() => updateConfig({
                             payouts: { q1: 0, half: 0, q3: 0, final: 0 },
                             ruleVariations: {
@@ -90,7 +98,7 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                                 }
                             }
                         })}
-                        className={`relative p-6 rounded-2xl border-2 text-left transition-ui group ${gameState.ruleVariations.scoreChangePayout
+                        className={`relative p-6 rounded-2xl border-2 text-left transition-ui group disabled:opacity-60 disabled:cursor-not-allowed ${gameState.ruleVariations.scoreChangePayout
                             ? 'bg-navy-600/10 border-navy-600 ring-4 ring-navy-600/10'
                             : 'bg-card border-line hover:border-navy-600'
                             }`}
@@ -115,6 +123,11 @@ export const WizardStepPayouts: React.FC<WizardStepPayoutsProps> = ({
                             <Activity size={12} />
                             <span className="num">~15-20 Winners Total</span>
                         </div>
+                        {!gameState.gameId && (
+                            <p className="mt-3 text-xs font-body font-bold text-brandred-600">
+                                Needs a linked game. Each score is recorded from the live feed as it happens, so this cannot be run on a game you score by hand. Link a game on the Settings tab first.
+                            </p>
+                        )}
                     </button>
                 </div>
 
