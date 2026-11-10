@@ -199,7 +199,10 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 ### Needs Kevin (work continues without them)
 
 - **⛔ K7 IS THE ONE TO DECIDE FIRST** (it is listed in order below, but
-  round Q5 changed its weight — read it before the others).
+  round Q5 changed its weight — read it before the others). **#761, the
+  reopen, is not to be merged until K7 is decided and K1/K4 have been seen**
+  (review log, round Q6: qodo marked both High on the reopen itself, and
+  both are in files this work may not change).
 - **K1 — `firestore.rules`: `quarterlyNumbers` is client-writable.** In a
   "new numbers each quarter" pool the commissioner can write the upcoming
   quarter's numbers before the server draws them; `axisNumbers` is protected but
