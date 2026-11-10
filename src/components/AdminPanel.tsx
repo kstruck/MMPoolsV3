@@ -6,6 +6,7 @@ import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntr
 import { isPlayerOwner, ROLLOVER, usesCurrentWinnerRules, type PayoutPool } from '@shared/squaresPayouts';
 import { describeWinnerDrift, finalScoresOf, planWinnerWrites, type StoredWinner } from '@shared/squaresWinnerPlan';
 import { formatPrize, payoutTotals } from '../utils/payouts';
+import { retryWhile, isScoresNotSavedYet } from '../utils/retryWhile';
 import type { ScheduleGame, ScheduleLeague } from '../services/espnSchedule';
 import { squaresGameLink } from '@shared/squaresDefaults';
 
@@ -281,13 +282,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       // The scores on THIS page go with the request. A score is saved by one
       // request and recorded by this one; if this one got there first the
       // server would record the winner for the score before the edit. It
-      // refuses instead, and says to try again.
-      const result = await dbService.recomputeSquaresWinners(gameState.id, {
-        q1: finalPeriodScores.q1 ?? null,
-        half: finalPeriodScores.half ?? null,
-        q3: finalPeriodScores.q3 ?? null,
-        final: finalPeriodScores.final ?? null,
-      });
+      // refuses instead.
+      //
+      // That refusal is waited out here, briefly, rather than handed to the
+      // commissioner as an error for typing a score and pressing the button.
+      // Each try sends the SAME scores, so it can only succeed once what is
+      // stored is what this page shows. Anything else — a pause, a pool that
+      // is not theirs — is reported at once.
+      const result = await retryWhile(
+        () => dbService.recomputeSquaresWinners(gameState.id, {
+          q1: finalPeriodScores.q1 ?? null,
+          half: finalPeriodScores.half ?? null,
+          q3: finalPeriodScores.q3 ?? null,
+          final: finalPeriodScores.final ?? null,
+        }),
+        isScoresNotSavedYet,
+        { tries: 6, delayMs: 700 },
+      );
       setEventsNotRecorded(!!result.eventsNotRecorded);
       toast.success(result.changed > 0 ? 'Winners recorded.' : 'Winner records were already up to date.');
     } catch (e) {
