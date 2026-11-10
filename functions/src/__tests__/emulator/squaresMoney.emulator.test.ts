@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
-import { simulateGameUpdate, syncGameStatus } from '../../scoreUpdates';
+import { Transaction } from 'firebase-admin/firestore';
+import { fixPoolScores, simulateGameUpdate, syncGameStatus } from '../../scoreUpdates';
 import { lockPool } from '../../poolParams';
 import { toggleWinnerPaid } from '../../poolOps';
 import { drawSquaresFinalPrize, recomputeSquaresWinners, unlockSquaresPool } from '../../squaresAdmin';
@@ -1109,7 +1110,6 @@ describe('qodo r3 — the pause switch', () => {
     await pause(true);
     await seedPool(esp);
 
-    // The sync honours the switch; the simulator is the same code path with it set.
     await poolRef().update({ gameId: '401772900' });
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true, status: 200,
@@ -1152,5 +1152,349 @@ describe('qodo r3 — the pause switch', () => {
     await sync(Q1);
     await pause(true);
     await expect(togglePaid({ data: { poolId: POOL, winnerId: 'q1', paid: true }, auth: owner } as never)).resolves.toMatchObject({ isPaid: true });
+  });
+});
+
+describe('qodo r4 — the pause switch is read where the winners are written', () => {
+  const HELD = 'squaresWinnersHeld';
+  const GAME_ID = '401772900';
+  const espnSummary = {
+    header: {
+      competitions: [{
+        date: KICKOFF,
+        status: { type: { state: 'in' }, period: 2, displayClock: '10:00' },
+        competitors: [
+          { homeAway: 'home', score: '7', linescores: [{ value: 7 }], team: { abbreviation: 'DET' } },
+          { homeAway: 'away', score: '3', linescores: [{ value: 3 }], team: { abbreviation: 'GB' } },
+        ],
+      }],
+    },
+    scoringPlays: [],
+  };
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => espnSummary }));
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+  const runSync = () => (syncGameStatus as unknown as { run: (event: unknown) => Promise<unknown> }).run({ scheduleTime: new Date().toISOString() });
+  const pause = (paused: unknown) => db.collection('system').doc('config').set({ squaresWinners: { paused } }, { merge: true });
+  const fixSync = test.wrap(fixPoolScores);
+
+  /** A game that ended three days ago: the sync no longer looks at it. */
+  const LONG_OVER = '2026-01-04T18:00:00.000Z';
+  const finished = {
+    current: { home: 28, away: 24 }, q1: { home: 7, away: 3 }, half: { home: 14, away: 10 }, q3: { home: 21, away: 17 }, final: { home: 28, away: 24 },
+    gameStatus: 'post', startTime: LONG_OVER,
+  };
+
+  // ---- finding 1: every road to the writer passes the switch ----------------
+
+  it('paused: the SIMULATOR keeps the scores, writes no winner, and marks the pool', async () => {
+    await pause(true);
+    await seedPool();
+    await sync(Q1);
+    expect(((await pool()).scores as Doc).q1).toEqual({ home: 7, away: 3 });
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBe(true);
+  });
+
+  it('paused: "Fix Sync" keeps the scores, writes no winner, and marks the pool', async () => {
+    await pause(true);
+    await seedPool({ gameId: GAME_ID });
+    await fixSync({ data: { poolId: POOL }, auth: superAdmin } as never);
+    expect(((await pool()).scores as Doc).q1).toEqual({ home: 7, away: 3 });
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBe(true);
+  });
+
+  it('not paused: the simulator and "Fix Sync" record the winner, and leave no mark', async () => {
+    await seedPool();
+    await sync(Q1);
+    expect((await winners()).q1).toMatchObject({ owner: 'P37', amount: 200 });
+    expect((await pool())[HELD]).toBeUndefined();
+
+    await seedPool({ gameId: GAME_ID });
+    await poolRef().collection('winners').doc('q1').delete();
+    await fixSync({ data: { poolId: POOL }, auth: superAdmin } as never);
+    expect((await winners()).q1).toMatchObject({ owner: 'P37', amount: 200 });
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  // ---- finding 7: a pause that lands after the run has started --------------
+
+  it('a pause set AFTER the run started is seen by the pool the run had not written yet', async () => {
+    await seedPool({ gameId: GAME_ID });
+    // The feed is fetched before that pool's write is prepared. Set the switch then.
+    fetchMock.mockImplementation(async () => {
+      await pause(true);
+      return { ok: true, status: 200, json: async () => espnSummary };
+    });
+    await runSync();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(((await pool()).scores as Doc).q1).toEqual({ home: 7, away: 3 });
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBe(true);
+  });
+
+  // ---- finding 2: nothing is lost, however long the switch is set -----------
+
+  it('a game that finished and left the sync window while paused is recorded once the switch is cleared', async () => {
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await runSync();
+    // The sync itself never touched the game: it is far outside the window.
+    expect(fetchMock).not.toHaveBeenCalled();
+    const w = await winners();
+    expect(w.q1).toMatchObject({ owner: 'P37', amount: 200 });
+    expect(w.half).toMatchObject({ owner: 'P4', amount: 200 });
+    expect(w.q3).toMatchObject({ owner: 'P71', amount: 200 });
+    expect(w.final).toMatchObject({ owner: 'P48', amount: 400 });
+    expect((await pool())[HELD]).toBeUndefined();
+    expect((await audits()).some((a) => (a.actor as Doc)?.label === 'Winners held by the pause switch')).toBe(true);
+  });
+
+  it('still paused: the held game stays marked and unrecorded', async () => {
+    await pause(true);
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await runSync();
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBe(true);
+  });
+
+  it('a pause set after the catch-up has started is seen by the pool it had not written yet', async () => {
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    // The catch-up has looked at the switch and found it clear. It is set
+    // before the pool's own transaction reads it.
+    const realGet = Transaction.prototype.get;
+    let set = false;
+    vi.spyOn(Transaction.prototype, 'get').mockImplementation(async function (this: Transaction, ref: unknown) {
+      if (!set && (ref as { path?: string }).path === 'pools/' + POOL) {
+        set = true;
+        await pause(true);
+      }
+      return (realGet as (...a: unknown[]) => unknown).call(this, ref);
+    } as never);
+    await runSync();
+    expect(set).toBe(true);
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBe(true);
+  });
+
+  it('the whole story: paused through the end of the game, cleared days later, paid in full', async () => {
+    await pause(true);
+    await seedPool();
+    await sync(Q1);
+    await sync(HALF);
+    await sync(Q3);
+    await sync(FINAL);
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBe(true);
+    // Days pass; the game is far outside the window when the switch is cleared.
+    await poolRef().update({ 'scores.startTime': LONG_OVER, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await pause(false);
+    await runSync();
+    const w = await winners();
+    expect([w.q1.amount, w.half.amount, w.q3.amount, w.final.amount]).toEqual([200, 200, 200, 400]);
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('an Every-Score-Pays game held through its end has its event prizes paid by the catch-up', async () => {
+    const esp = { ruleVariations: { scoreChangePayout: true, scoreChangePayoutStrategy: 'equal_split', combineTDandXP: true } };
+    await pause(true);
+    await seedPool(esp);
+    await sync(feed({ period: 4, state: 'post', current: [3, 0], q1: [3, 0], half: [3, 0], q3: [3, 0], final: [3, 0], plays: [{ home: 3, away: 0 }] }));
+    // The event was noted when it happened, at $0. Its prize was held.
+    expect((await winners()).event_3_0).toMatchObject({ owner: 'P3', amount: 0 });
+    await poolRef().update({ 'scores.startTime': LONG_OVER, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await pause(false);
+    await runSync();
+    expect((await winners()).event_3_0).toMatchObject({ owner: 'P3', amount: 1000 });
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('a marked pool is found however many other pools there are', async () => {
+    // More unmarked pools than one catch-up pass takes, all filed ahead of the marked one.
+    const old = admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER));
+    const batch = db.batch();
+    for (let i = 0; i < 30; i++) {
+      batch.set(db.collection('pools').doc('a-filler-' + String(i).padStart(2, '0')), { type: 'SQUARES', scores: { gameStatus: 'post', startTime: LONG_OVER }, updatedAt: old });
+    }
+    await batch.commit();
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: old });
+    await runSync();
+    expect((await winners()).final).toMatchObject({ owner: 'P48', amount: 400 });
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('a pool whose mark came off after the catch-up found it is left alone', async () => {
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    const realGet = Transaction.prototype.get;
+    let cleared = false;
+    vi.spyOn(Transaction.prototype, 'get').mockImplementation(async function (this: Transaction, ref: unknown) {
+      if (!cleared && (ref as { path?: string }).path === 'pools/' + POOL) {
+        cleared = true;
+        await poolRef().update({ [HELD]: admin.firestore.FieldValue.delete() });
+      }
+      return (realGet as (...a: unknown[]) => unknown).call(this, ref);
+    } as never);
+    await runSync();
+    expect(cleared).toBe(true);
+    expect(await winners()).toEqual({});
+  });
+
+  it('still paused: the catch-up does not even open the held pools', async () => {
+    await pause(true);
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    const opened: string[] = [];
+    const realGet = Transaction.prototype.get;
+    vi.spyOn(Transaction.prototype, 'get').mockImplementation(function (this: Transaction, ref: unknown) {
+      opened.push(String((ref as { path?: string }).path));
+      return (realGet as (...a: unknown[]) => unknown).call(this, ref);
+    } as never);
+    await runSync();
+    expect(opened).toEqual([]);
+  });
+
+  it('the simulator records a marked pool once the switch is cleared, and takes the mark off', async () => {
+    await pause(true);
+    await seedPool();
+    await sync(Q1);
+    expect((await pool())[HELD]).toBe(true);
+    await pause(false);
+    await sync(HALF);
+    const w = await winners();
+    expect([w.q1.amount, w.half.amount]).toEqual([200, 200]);
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('a pool that is not marked is not touched by the catch-up', async () => {
+    await seedPool({ gameId: GAME_ID, scores: finished, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await runSync();
+    expect(await winners()).toEqual({});
+  });
+
+  it('a marked pool on the OLD rules has its mark taken off and its records left exactly as they were', async () => {
+    const old = admin.firestore.Timestamp.fromMillis(Date.UTC(2025, 0, 5));
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, createdAt: old, updatedAt: old });
+    await poolRef().collection('winners').doc('q1').set({ owner: 'Somebody Else', amount: 999, squareId: 0 });
+    await runSync();
+    expect(await winners()).toEqual({ q1: { owner: 'Somebody Else', amount: 999, squareId: 0 } });
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('a marked pool now scored BY HAND is left for the commissioner\'s button — the catch-up records nothing', async () => {
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, manualScoreOverride: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await runSync();
+    expect(await winners()).toEqual({});
+    expect((await pool())[HELD]).toBeUndefined();
+    // The button still records all of it.
+    await recompute({ data: { poolId: POOL }, auth: owner } as never);
+    expect(Object.keys(await winners()).sort()).toEqual(['final', 'half', 'q1', 'q3']);
+  });
+
+  it('one held pool failing does not stop the next one', async () => {
+    const other = db.collection('pools').doc('sq-money-2');
+    await seedPool({ gameId: GAME_ID, scores: finished, [HELD]: true, updatedAt: admin.firestore.Timestamp.fromMillis(Date.parse(LONG_OVER)) });
+    await other.set({ ...(await pool()), id: 'sq-money-2' });
+    const realGet = Transaction.prototype.get;
+    let failed = 0;
+    vi.spyOn(Transaction.prototype, 'get').mockImplementation(function (this: Transaction, ref: unknown) {
+      if ((ref as { path?: string }).path === 'pools/' + POOL + '/winners') {
+        failed++;
+        return Promise.reject(new Error('unavailable'));
+      }
+      return (realGet as (...a: unknown[]) => unknown).call(this, ref);
+    } as never);
+    await runSync();
+    expect(failed).toBeGreaterThan(0);
+    expect((await pool())[HELD]).toBe(true);
+    expect(await winners()).toEqual({});
+    const otherWinners = await other.collection('winners').get();
+    expect(otherWinners.docs.map((d) => d.id).sort()).toEqual(['final', 'half', 'q1', 'q3']);
+    expect((await other.get()).data()?.[HELD]).toBeUndefined();
+  });
+
+  it('the normal sync records a marked pool itself, and takes the mark off', async () => {
+    await pause(true);
+    await seedPool({ gameId: GAME_ID });
+    await runSync();
+    expect((await pool())[HELD]).toBe(true);
+    await pause(false);
+    await runSync();
+    expect((await winners()).q1).toMatchObject({ owner: 'P37', amount: 200 });
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('"Record winners" after the switch is cleared takes the mark off', async () => {
+    await pause(true);
+    await seedPool();
+    await sync(Q1);
+    expect((await pool())[HELD]).toBe(true);
+    await pause(false);
+    await recompute({ data: { poolId: POOL }, auth: owner } as never);
+    expect((await winners()).q1).toMatchObject({ owner: 'P37', amount: 200 });
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  it('the final-prize draw after the switch is cleared takes the mark off', async () => {
+    await pause(true);
+    await seedPool({ ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'random' } }, [48]);
+    await sync(FINAL);
+    expect((await pool())[HELD]).toBe(true);
+    await pause(false);
+    await draw({ data: { poolId: POOL }, auth: owner } as never);
+    expect((await winners()).final_rollover.drawnAt).toBeDefined();
+    expect((await pool())[HELD]).toBeUndefined();
+  });
+
+  // ---- finding 21: a switch nobody could read ------------------------------
+
+  describe('when the switch cannot be read', () => {
+    const breakConfig = () => {
+      const realGet = Transaction.prototype.get;
+      vi.spyOn(Transaction.prototype, 'get').mockImplementation(function (this: Transaction, ref: unknown) {
+        if ((ref as { path?: string }).path === 'system/config') return Promise.reject(new Error('unavailable'));
+        return (realGet as (...a: unknown[]) => unknown).call(this, ref);
+      } as never);
+    };
+
+    it('the sync writes NOTHING for that pool — and records it on the next pass', async () => {
+      await seedPool({ gameId: GAME_ID });
+      breakConfig();
+      await runSync();
+      expect(await winners()).toEqual({});
+      expect(((await pool()).scores as Doc).q1).toBeNull();
+      expect((await pool())[HELD]).toBeUndefined();
+
+      vi.restoreAllMocks();
+      await runSync();
+      expect((await winners()).q1).toMatchObject({ owner: 'P37', amount: 200 });
+    });
+
+    it('"Record winners" fails and writes nothing', async () => {
+      const manual = { current: { home: 7, away: 3 }, q1: { home: 7, away: 3 }, half: null, q3: null, final: null, gameStatus: 'in', startTime: KICKOFF };
+      await seedPool({ scores: manual });
+      breakConfig();
+      await expect(recompute({ data: { poolId: POOL }, auth: owner } as never)).rejects.toThrow();
+      expect(await winners()).toEqual({});
+    });
+
+    it('the simulator fails and writes nothing', async () => {
+      await seedPool();
+      breakConfig();
+      await expect(sync(Q1)).rejects.toThrow();
+      expect(await winners()).toEqual({});
+      expect(((await pool()).scores as Doc).q1).toBeNull();
+    });
+
+    it('scores BEFORE the first quarter ends are still kept — no winner is at stake, so the switch is not read', async () => {
+      await seedPool();
+      breakConfig();
+      await sync(feed({ period: 1, current: [7, 0] }));
+      expect(((await pool()).scores as Doc).current).toEqual({ home: 7, away: 0 });
+    });
   });
 });
