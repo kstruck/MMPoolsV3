@@ -8,6 +8,7 @@ import { withHeartbeat } from "./lib/heartbeat";
 import { autoLockVerdict } from "./lib/heartbeatVerdicts";
 import { isUsableAxis } from "./lib/squaresGame";
 import { randomInt } from "crypto";
+import { SQUARES_LOCK_LEAD_MS } from "./shared/squaresDefaults";
 
 const db = admin.firestore();
 
@@ -67,8 +68,11 @@ async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<n
  * This closes the race while this job is healthy. If it is down at that
  * minute the other job still decides the grid — which is why K7 is first on
  * the list for Kevin.
+ *
+ * The number itself is in `shared/squaresDefaults.ts`, because the pool page
+ * shows players when picks close and has to be working from the same one.
  */
-export const SQUARES_LOCK_LEAD_MS = 90_000;
+export { SQUARES_LOCK_LEAD_MS };
 const DEFAULT_LOCK_LEAD_MS = 30_000;
 export const squaresLockLeadMs = (pool: { type?: string }): number =>
     !pool.type || pool.type === 'SQUARES' ? SQUARES_LOCK_LEAD_MS : DEFAULT_LOCK_LEAD_MS;

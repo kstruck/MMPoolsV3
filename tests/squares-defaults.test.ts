@@ -9,6 +9,8 @@ import {
   squaresRules,
   validSquaresPayouts,
   withSquaresDefaults,
+  SQUARES_LOCK_LEAD_MS,
+  squaresPicksCloseMs,
 } from '../shared/squaresDefaults';
 import { computePeriodPayouts, periodBase, squaresPot } from '../shared/squaresPayouts';
 import { effectiveSquareCap } from '../shared/squaresClaim';
@@ -437,6 +439,50 @@ describe('squaresGameLink — a game id is the score feed\'s event id', () => {
     for (const id of ['', '   ', 'abc', '401772510/../x', '401772510?x=1', '401 772', '4017725104017725100']) {
       expect(squaresGameLink({ id, kickoff, homeTeam: 'A', awayTeam: 'B' } as never, 'nfl'), id).toBeNull();
     }
+  });
+});
+
+describe('squaresPicksCloseMs — the deadline a player is shown is one the grid keeps', () => {
+  const KICKOFF = Date.UTC(2026, 10, 26, 17, 30);
+  const locking = (lockAt: unknown, enabled: unknown = true) => ({ reminders: { lock: { enabled, lockAt } } });
+
+  it('is the lock time less the lead — the earliest the lock job can shut the grid', () => {
+    expect(SQUARES_LOCK_LEAD_MS).toBe(90_000);
+    expect(squaresPicksCloseMs(locking(KICKOFF))).toBe(KICKOFF - 90_000);
+  });
+
+  // The job locks a grid once `lockAt - now <= lead`. So "now >= close" is
+  // exactly "the job may lock it", and before that it cannot.
+  it('matches the lock job: a grid cannot be locked before it, and can be from it on', () => {
+    const close = squaresPicksCloseMs(locking(KICKOFF)) as number;
+    const jobWouldLock = (now: number) => KICKOFF - now <= SQUARES_LOCK_LEAD_MS;
+    expect(jobWouldLock(close - 1)).toBe(false);
+    expect(jobWouldLock(close)).toBe(true);
+    expect(jobWouldLock(KICKOFF)).toBe(true);
+  });
+
+  it('a pool the wizard links to a game closes that far ahead of ITS kickoff', () => {
+    const created = squaresCreateDefaults({ gameId: '401772510', gameTime: KICKOFF });
+    expect(squaresPicksCloseMs(created)).toBe(KICKOFF - SQUARES_LOCK_LEAD_MS);
+  });
+
+  it('reads every shape a stored lock time has had', () => {
+    expect(squaresPicksCloseMs(locking({ toMillis: () => KICKOFF }))).toBe(KICKOFF - 90_000);
+    expect(squaresPicksCloseMs(locking(new Date(KICKOFF)))).toBe(KICKOFF - 90_000);
+    expect(squaresPicksCloseMs(locking(new Date(KICKOFF).toISOString()))).toBe(KICKOFF - 90_000);
+  });
+
+  it('is null when the grid will not lock itself — there is no deadline to show', () => {
+    expect(squaresPicksCloseMs(locking(KICKOFF, false))).toBeNull();
+    expect(squaresPicksCloseMs(locking(KICKOFF, 'true'))).toBeNull();
+    expect(squaresPicksCloseMs(locking(undefined))).toBeNull();
+    expect(squaresPicksCloseMs(locking(null))).toBeNull();
+    expect(squaresPicksCloseMs(locking(''))).toBeNull();
+    expect(squaresPicksCloseMs(locking(0))).toBeNull();
+    expect(squaresPicksCloseMs(locking('not a date'))).toBeNull();
+    expect(squaresPicksCloseMs(locking({ nope: 1 }))).toBeNull();
+    expect(squaresPicksCloseMs({})).toBeNull();
+    expect(squaresPicksCloseMs(null)).toBeNull();
   });
 });
 

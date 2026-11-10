@@ -8,7 +8,14 @@ import { renderHook, act, cleanup } from '@testing-library/react';
 import type { ScheduleGame, ScheduleLeague } from '../services/espnSchedule';
 
 const fetchGamesOn = vi.fn<(league: ScheduleLeague, date: string) => Promise<ScheduleGame[]>>();
-vi.mock('../services/espnSchedule', () => ({ fetchGamesOn: (league: ScheduleLeague, date: string) => fetchGamesOn(league, date) }));
+// Only the network call is replaced; `hasStarted` is the real one.
+vi.mock('../services/espnSchedule', async (original) => ({
+  ...(await original<typeof import('../services/espnSchedule')>()),
+  fetchGamesOn: (league: ScheduleLeague, date: string) => fetchGamesOn(league, date),
+}));
+// The server-corrected clock, which would otherwise reach for Firebase.
+const serverNow = vi.fn<() => number>();
+vi.mock('../utils/serverClock', () => ({ now: () => serverNow() }));
 
 import { useScheduleSearch } from './useScheduleSearch';
 
@@ -135,3 +142,53 @@ describe('useScheduleSearch', () => {
     expect(result.current.games).toBeNull();
   });
 });
+
+describe('useScheduleSearch — "has it kicked off?" is asked of the server\'s clock', () => {
+  const KICKOFF = Date.UTC(2026, 10, 26, 18);
+  const pre = { state: 'pre' as const, kickoff: KICKOFF };
+
+  it('a device clock that runs FAST does not grey out a game that has not started', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(KICKOFF + 10 * 60_000);      // the device says ten minutes past
+      serverNow.mockReturnValue(KICKOFF - 60_000);   // the server says a minute to go
+      const { result } = renderHook(() => useScheduleSearch('nfl'));
+      expect(result.current.hasStarted(pre)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a device clock that runs SLOW does not offer a game that has', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(KICKOFF - 10 * 60_000);
+      serverNow.mockReturnValue(KICKOFF + 1);
+      const { result } = renderHook(() => useScheduleSearch('nfl'));
+      expect(result.current.hasStarted(pre)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the feed saying the game is under way is enough, whatever any clock says', () => {
+    serverNow.mockReturnValue(KICKOFF - 60 * 60_000);
+    const { result } = renderHook(() => useScheduleSearch('nfl'));
+    expect(result.current.hasStarted({ state: 'in', kickoff: KICKOFF })).toBe(true);
+  });
+
+  it('the clock is read each time it is asked, not once', () => {
+    serverNow.mockReturnValue(KICKOFF - 1);
+    const { result } = renderHook(() => useScheduleSearch('nfl'));
+    expect(result.current.hasStarted(pre)).toBe(false);
+    serverNow.mockReturnValue(KICKOFF);
+    expect(result.current.hasStarted(pre)).toBe(true);
+  });
+
+  it('a clock handed in is the one used', () => {
+    serverNow.mockReturnValue(0);
+    const { result } = renderHook(() => useScheduleSearch('nfl', () => KICKOFF + 5));
+    expect(result.current.hasStarted(pre)).toBe(true);
+  });
+});
+

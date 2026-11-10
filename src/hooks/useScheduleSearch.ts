@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import { fetchGamesOn, type ScheduleGame, type ScheduleLeague } from '../services/espnSchedule';
+import { fetchGamesOn, hasStarted as gameHasStarted, type ScheduleGame, type ScheduleLeague } from '../services/espnSchedule';
+import { now as serverNow } from '../utils/serverClock';
 
 /**
  * "Find the games on a day" — the state behind a game picker.
@@ -19,6 +20,13 @@ import { fetchGamesOn, type ScheduleGame, type ScheduleLeague } from '../service
  * find. So: changing either input clears the list, an answer to a question
  * that is no longer being asked is dropped, and every game carries the league
  * it was found in (`ScheduleGame.league`), which is the one a picker links.
+ *
+ * AND "HAS IT KICKED OFF?" IS ASKED OF THE SERVER'S CLOCK (qodo, PR #761). A
+ * picker greys out a game that has started, because the server refuses to
+ * link one. Both pickers asked the device's clock: fast, and a game that had
+ * not started could not be chosen; slow, and one that had could be, to be
+ * refused only at the last step. `hasStarted` here uses the corrected clock
+ * every other deadline on the site is shown from.
  */
 
 export const todayIso = (): string => {
@@ -40,9 +48,15 @@ export interface ScheduleSearch {
   find: () => Promise<void>;
   /** Forget the last result (after a game is picked). */
   clear: () => void;
+  /** Kicked off — by the feed's state, or by the SERVER's clock. Such a game cannot be linked. */
+  hasStarted: (game: Pick<ScheduleGame, 'state' | 'kickoff'>) => boolean;
 }
 
-export function useScheduleSearch(initialLeague: ScheduleLeague = 'nfl'): ScheduleSearch {
+export function useScheduleSearch(
+  initialLeague: ScheduleLeague = 'nfl',
+  /** The clock to judge kickoff by. The server-corrected one; a test passes its own. */
+  nowMs: () => number = serverNow,
+): ScheduleSearch {
   const [league, setLeagueState] = useState<ScheduleLeague>(initialLeague);
   const [date, setDateState] = useState(todayIso);
   const [games, setGames] = useState<ScheduleGame[] | null>(null);
@@ -80,5 +94,10 @@ export function useScheduleSearch(initialLeague: ScheduleLeague = 'nfl'): Schedu
     }
   }, [league, date]);
 
-  return { league, setLeague, date, setDate, games, loading, error, find, clear: forget };
+  const hasStarted = useCallback(
+    (game: Pick<ScheduleGame, 'state' | 'kickoff'>) => gameHasStarted(game, nowMs()),
+    [nowMs],
+  );
+
+  return { league, setLeague, date, setDate, games, loading, error, find, clear: forget, hasStarted };
 }

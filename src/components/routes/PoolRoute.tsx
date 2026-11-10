@@ -33,7 +33,7 @@ import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
 import { claimRefusalMessage, effectiveSquareCap, isEnteringForSomeoneElse, planClaim, squareCapSentence } from '@shared/squaresClaim';
 import { claimIdentityFor } from '../../utils/guestKey';
-import { withSquaresDefaults } from '@shared/squaresDefaults';
+import { squaresPicksCloseMs, withSquaresDefaults } from '@shared/squaresDefaults';
 import { squaresPot, type PayoutPool } from '@shared/squaresPayouts';
 
 interface PoolRouteProps {
@@ -432,18 +432,15 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     // prize pool on its own, so with a charity share it could read a dollar
     // short of what the four prizes below it add up to.
     const pot = squaresPot(squaresPool as unknown as PayoutPool);
-    // WHEN THE GRID LOCKS ITSELF — shown only when it really will: the lock has
-    // to be switched on and carry a time. A player deciding whether to come back
-    // later needs to know, and it was nowhere on the Overview. `lockAt` is epoch
-    // ms on a pool the wizard created; older pools stored other shapes.
-    const gridLocksAt = (() => {
-        const lock = squaresPool.reminders?.lock as { enabled?: boolean; lockAt?: unknown } | undefined;
-        if (!lock?.enabled || !lock.lockAt) return null;
-        const raw = lock.lockAt as { toMillis?: () => number } | number | string;
-        const ms = typeof raw === 'number' ? raw : typeof raw === 'object' && typeof raw.toMillis === 'function' ? raw.toMillis() : new Date(raw as string).getTime();
-        if (!Number.isFinite(ms) || ms <= 0) return null;
-        return new Date(ms).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    })();
+    // WHEN PICKS CLOSE — shown only when the grid really will lock itself. A
+    // player deciding whether to come back later needs to know, and it was
+    // nowhere on the Overview. This is NOT the stored lock time: the lock job
+    // shuts the grid a little ahead of it, and a deadline that the grid does
+    // not keep is worse than none (`squaresPicksCloseMs`).
+    const picksCloseMs = squaresPicksCloseMs(squaresPool);
+    const gridLocksAt = picksCloseMs === null
+        ? null
+        : new Date(picksCloseMs).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
     // Helper Functions
 

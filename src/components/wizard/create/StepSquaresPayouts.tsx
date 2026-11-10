@@ -81,7 +81,8 @@ export function StepSquaresPayouts() {
       {cost > 0 && balanced && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4" data-testid="squares-payout-example">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">If all 100 squares sell at {money(cost)}</p>
-          <p className="text-sm text-slate-200">
+          {/* `num`: these recalculate on every keystroke; fixed-width digits stop them jittering. */}
+          <p className="num text-sm text-slate-200">
             Pot {money(pot.gross)}
             {pot.charity > 0 && <> · charity {money(pot.charity)} · prizes {money(pot.net)}</>}
           </p>
@@ -91,9 +92,9 @@ export function StepSquaresPayouts() {
               return (
                 <li key={p}>
                   <span className="text-slate-400">{PERIOD_SHORT_LABEL[p]}</span>{' '}
-                  <span className="font-semibold">{money(prize)}</span>
+                  <span className="num font-semibold">{money(prize)}</span>
                   {/* On its own line: four columns are too narrow for "$180 ($90 each)" to sit on one. */}
-                  {reverse && prize > 0 && <span className="block text-xs text-slate-400">{money(prize / 2)} each</span>}
+                  {reverse && prize > 0 && <span className="num block text-xs text-slate-400">{money(prize / 2)} each</span>}
                 </li>
               );
             })}

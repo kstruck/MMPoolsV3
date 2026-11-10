@@ -208,7 +208,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             ? `${open} ${open === 1 ? 'square is' : 'squares are'} still open and will not be sold. `
             : 'Every square is sold. ')
             + (gameState.axisNumbers ? 'The numbers already drawn are kept.' : 'Locking draws the numbers and shows them to every player.')
-            + (gridLocksItself ? ' This grid would lock itself at kickoff anyway.' : ''),
+            + (gridLocksItself ? ' This grid would lock itself just before kickoff anyway.' : ''),
           confirmLabel: 'Lock grid',
         });
         if (!ok) return;
@@ -432,7 +432,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       for (let n = 2; !checkNameAvailable(name) && n < 50; n++) name = `${game.awayTeam} @ ${game.homeTeam} (${n})`;
     }
     updateConfig({ ...(patch as Partial<GameState>), ...(unnamed ? { name } : {}) });
-    toast.success(`Linked to ${game.awayTeam} at ${game.homeTeam}. The grid locks itself at kickoff.`);
+    toast.success(`Linked to ${game.awayTeam} at ${game.homeTeam}. The grid locks itself just before kickoff.`);
   };
 
   const handleFetchLiveScores = async () => {
@@ -732,7 +732,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted" data-testid="game-status-help">{gameState.isLocked
                 ? 'The grid is locked: no more squares can be claimed.'
                 : gridLocksItself
-                  ? 'This grid locks itself at kickoff and draws its numbers then. Lock it sooner here if you want to.'
+                  ? 'This grid locks itself just before kickoff and draws its numbers then. Lock it sooner here if you want to.'
                   : 'No game is linked, so this grid does not lock itself. Lock it here before the game starts — locking draws the numbers.'}</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} disabled={lockBusy} className={`w-full py-4 rounded-lg disabled:opacity-60 disabled:cursor-wait font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock Grid & Draw Numbers</>}</button></div>
             <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><p className="text-sm font-body text-muted">{gameState.axisNumbers ? 'The numbers are drawn once and kept. To draw new ones, reopen the grid before kickoff and lock it again.' : 'Not drawn yet. They are drawn at random when the grid locks, and not before — nobody should be able to pick a square knowing its numbers.'}</p></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
 
