@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { User } from '../../../types';
 import { dbService } from '../../../services/dbService';
 import { squaresCreateInputSchema } from '@shared/schemas';
-import { WizardShell, StepBasics, StepFeeAndPayment, StepBrandingThemed, LaunchStep } from '../index';
+import { WizardShell, StepBasics, StepFeeAndPayment, StepBranding, LaunchStep } from '../index';
 import type { WizardStepDef } from '../types';
 import { StepSquaresGame } from './StepSquaresGame';
 import { StepSquaresPayouts } from './StepSquaresPayouts';
@@ -58,7 +58,7 @@ export function CreateSquaresPool(props: { user: User; onComplete: (poolId: stri
     { id: 'grid', title: 'Matchup & grid', Component: StepSquaresGame },
     { id: 'fee', title: 'Fee & Payment', Component: () => <StepFeeAndPayment feeField="costPerSquare" feeLabel="Cost per square ($)" /> },
     { id: 'payouts', title: 'Payouts', fields: ['squaresPayouts'], Component: StepSquaresPayouts },
-    { id: 'branding', title: 'Branding', Component: StepBrandingThemed },
+    { id: 'branding', title: 'Branding', Component: StepBranding },
     {
       id: 'launch', title: 'Launch', ownsSubmit: true,
       Component: () => (
