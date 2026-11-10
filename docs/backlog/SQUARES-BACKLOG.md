@@ -11,7 +11,12 @@ or setup for now. Add a COMING SOON to those. Ensure that any fixes for the
 squares pools are listed somewhere for me to pick up later today or later this
 week. DO NOT FORGET THEM."*
 
-**This file is that list.** Nothing here is fixed. `tests/squares-creation-closed.test.ts`
+> **2026-11-10 — being worked: `docs/plans/PLAN-SQUARES-REOPEN.md`.** S1 and S4
+> are fixed by PR-A of that plan (the claim path); S2 is ticket C3; S3 is
+> decision K2, still Kevin's. Creation stays closed until that plan's PR-D.
+> The plan found more than this list did — read it rather than this file.
+
+**This file is that list.** As written on 2026-08-28, nothing here was fixed. `tests/squares-creation-closed.test.ts`
 holds the closure shut and goes RED the day S1 lands, which is the signal to
 reopen creation rather than leave a "Coming Soon" on a product that works again.
 

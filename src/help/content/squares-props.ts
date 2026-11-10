@@ -8,18 +8,14 @@
 //
 // TWO THINGS THIS FILE DELIBERATELY DOES NOT SAY.
 //
-//  1. It does not repeat the wizard label's claim that `0` on
-//     `maxSquaresPerPlayer` means "no limit". It does not.
-//     `functions/src/squares.ts:93` compares `mySquares >= pool.maxSquaresPerPlayer`
-//     with no zero guard, so on a grid stored at 0 the FIRST claim by anybody
-//     other than the pool owner is refused with "Max 0 squares per player." The
-//     three client readers each substitute a different number for 0
-//     (`Grid.tsx:156` → 100, `PoolRoute.tsx:439` → 10, `PoolRoute.tsx:908` →
-//     "∞"), so nothing agrees with the label either. The code wins; the copy
-//     tells the reader to set a real number, and
-//     `tests/help-content-squares-props.test.ts` pins the sentence to the
-//     comparison it rests on so that fixing the defect fails the test rather
-//     than leaving the copy stale.
+//  1. (CLOSED 2026-11, PLAN-SQUARES-REOPEN A1.) This file used to refuse to
+//     repeat the wizard label's "0 = no limit", because nothing implemented
+//     it: the callable compared `mySquares >= pool.maxSquaresPerPlayer` with no
+//     zero guard and three client readers each invented a different number.
+//     There is ONE reader now — `effectiveSquareCap` in
+//     `shared/squaresClaim.ts`, used by the callable and by every page — and 0
+//     is no limit in all of them. The copy says what the label says, and
+//     `tests/help-content-squares-props.test.ts` pins it to that function.
 //
 //  2. It says nothing about which team runs along the rows and which along the
 //     columns. The wizard label already says it (voice rule 2), and the two
@@ -89,23 +85,18 @@ export const SQUARES_PROPS_TOPICS: readonly HelpTopic[] = [
   {
     id: 'maxSquaresPerPlayer',
     title: 'Max squares per player',
-    // NOT "0 = no limit", which is what the field's own label says
-    // (`CreateSquaresPool.tsx:29`). See the note at the top of this file.
-    short: 'The most squares one person may claim. It starts at 0, and 0 is not a way of saying no limit — set a real number before you share the link.',
+    // `effectiveSquareCap` (`shared/squaresClaim.ts`): 0, absent and negative
+    // all mean no limit. `CreateSquaresPool.tsx` defaults the field to 0.
+    short: 'The most squares one person may claim. It starts at 0, which means no limit.',
     long: [
-      // `CreateSquaresPool.tsx:43` defaults it to 0 and
-      // `buildSquaresPayload.ts:26` sends `Number(v.maxSquaresPerPlayer ?? 0)`,
-      // so 0 is what a pool is created with. `functions/src/squares.ts:93`
-      // then refuses a claim whenever `mySquares >= pool.maxSquaresPerPlayer`
-      // and the claimer is not `pool.ownerId` — which at 0 is every claim, on
-      // the player's first square.
-      'It starts at 0. Nothing treats 0 as no limit: on a grid left at 0 a player is refused their very first square, and you are the only person who can still take one.',
+      'It starts at 0, and 0 means no limit: one player could take every square on the grid. Set a number if you want the grid spread across more people.',
       'On a hundred-square grid, 10 holds one player to a tenth of it and 100 lets one player take the lot. Pick the number that keeps the grid worth playing for the people you invited.',
-      // `PoolRoute.tsx:595` renders "Max N squares per player" on the pool
-      // page and `Grid.tsx:156` caps selection at the number. The callable
-      // checks the count at claim time only, so squares already held are never
-      // taken back.
-      'Players see the number on the pool page, and the grid stops them selecting past it. Lowering it later takes nothing off anyone who already holds more than that — it only stops the next claim.',
+      // `countHeldSquares`: same account, same guest device, or same name
+      // (trimmed, case-insensitive). `planClaim` exempts the pool owner.
+      'The limit follows the person, not the spelling. Squares held by the same account, on the same browser, or under the same name all count toward it. The pool owner is not limited, so you can enter squares for people who asked you to.',
+      // The callable checks the count at claim time only, so squares already
+      // held are never taken back.
+      'Players see the limit on the pool page, and the grid stops them selecting past it. Lowering it later takes nothing off anyone who already holds more than that — it only stops the next claim.',
     ].join('\n\n'),
     poolTypes: SQUARES,
     audience: EVERYONE,

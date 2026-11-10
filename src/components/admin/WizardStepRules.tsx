@@ -29,7 +29,7 @@ export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, upd
                         </div>
                     </div>
                     <div className="bg-card p-4 rounded-lg border border-line">
-                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-2">Max Squares / Player</label>
+                        <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-2">Max Squares / Player <span className="normal-case tracking-normal font-normal text-muted">(0 = no limit)</span></label>
                         <div className="flex items-center gap-3">
                             <div className="bg-navy-600/20 p-3 rounded-lg text-navy-600 dark:text-navy-500">
                                 <Shield size={24} />

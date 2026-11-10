@@ -1141,6 +1141,26 @@ export const dbService = {
         }
     },
 
+    /**
+     * Reserve a whole selection in ONE call, all or nothing. Replaces a
+     * `reserveSquare` per square: a refusal part-way through that left the
+     * earlier squares reserved while reporting the claim as failed.
+     */
+    reserveSquares: async (poolId: string, squareIds: number[], customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string): Promise<{ reserved: number[]; alreadyHeld: number[] }> => {
+        try {
+            const fn = httpsCallable(functions, 'reserveSquares');
+            const result = await fn(withCorrelationId({ poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName }));
+            const data = (result.data ?? {}) as { reserved?: number[]; alreadyHeld?: number[] };
+            return { reserved: data.reserved ?? [], alreadyHeld: data.alreadyHeld ?? [] };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'reserveSquares', poolId, squareIds }
+            });
+            throw error;
+        }
+    },
+
     // --- SQUARE PRIVATE (Player PII, audit H1) ---
     // Contact info lives in /pools/{poolId}/squarePrivate/{squareId}, readable
     // only by owner/manager/SuperAdmin. Returns a squareId -> details map.
@@ -1252,12 +1272,23 @@ export const dbService = {
         }
     },
 
-    claimMySquares: async (poolId: string, guestDeviceKey: string): Promise<{ success: boolean; warnings: string[] }> => {
+    /**
+     * Take this browser's guest squares into the signed-in account.
+     *
+     * `quiet` is for the pool page's speculative call on load: most visitors
+     * hold no guest squares, so a failure there is not something to tell them.
+     */
+    claimMySquares: async (poolId: string, guestDeviceKey: string, opts?: { quiet?: boolean }): Promise<{ success: boolean; claimed: number[]; warnings: string[] }> => {
         try {
             const fn = httpsCallable(functions, 'claimMySquares');
             const result = await fn(withCorrelationId({ poolId, guestDeviceKey }));
-            return result.data as { success: boolean; warnings: string[] };
+            const data = (result.data ?? {}) as { success?: boolean; claimed?: number[]; warnings?: string[] };
+            return { success: data.success !== false, claimed: data.claimed ?? [], warnings: data.warnings ?? [] };
         } catch (error) {
+            if (opts?.quiet) {
+                logger.warn('[claimMySquares] speculative claim failed', error);
+                return { success: false, claimed: [], warnings: [] };
+            }
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
                 context: { operation: 'claimMySquares', poolId }

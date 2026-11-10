@@ -10,6 +10,8 @@ import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
+import { countHeldSquares, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
+import { getOrCreateGuestKey, readGuestKey } from '../utils/guestKey';
 
 interface GridProps {
    gameState: GameState;
@@ -57,13 +59,33 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
    // --- Guest Key Init ---
    useEffect(() => {
-      let key = localStorage.getItem('mmp_guest_key');
-      if (!key) {
-         key = crypto.randomUUID();
-         localStorage.setItem('mmp_guest_key', key);
-      }
-      setGuestKey(key);
+      // A NEW key under a NEW storage name (PLAN-SQUARES-REOPEN A3). The old
+      // `mmp_guest_key` was written onto every square of the world-readable
+      // pool document, so every one of those keys has been published. The
+      // server gives a guest identity only to a key carrying the prefix.
+      setGuestKey(getOrCreateGuestKey());
    }, []);
+
+   // A guest who has since signed in takes their guest squares into the
+   // account — on this browser, where the device key lives. Without this a
+   // player who reserved first and signed up second never saw those squares on
+   // their dashboard and could not use "I've paid". Once per pool, account and
+   // session, and only when the grid still holds an unclaimed guest square.
+   const signedInUid = currentUser?.id;
+   const hasUnclaimedGuestSquare = gameState.squares.some(s => s.owner && s.guestKeyHash && !s.reservedByUid);
+   useEffect(() => {
+      if (!signedInUid || !gameState.id || !hasUnclaimedGuestSquare) return;
+      const key = readGuestKey();
+      if (!key) return;
+      const flag = `mmp_guest_claim:${gameState.id}:${signedInUid}`;
+      try {
+         if (sessionStorage.getItem(flag)) return;
+         sessionStorage.setItem(flag, '1');
+      } catch {
+         return;
+      }
+      void dbService.claimMySquares(gameState.id, key, { quiet: true });
+   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare]);
 
    // --- Player Identity State ---
    const [playerInfo, setPlayerInfo] = useState<{
@@ -153,38 +175,35 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const isMultiSet = gameState.numberSets === 4; // We show the layout regardless, if missing numbers we show '?'
 
    // --- Limit Calculation ---
-   const maxPerPlayer = Number(gameState.maxSquaresPerPlayer) || 100;
+   // `null` = no limit. ONE reader for the cap (`shared/squaresClaim.ts`), the
+   // same one the server enforces with — this line used to read `|| 100`.
+   const maxPerPlayer = effectiveSquareCap(gameState.maxSquaresPerPlayer);
+   const myName = normalizePlayerName(playerInfo.name);
+   const isMine = React.useCallback(
+      (s: { owner: string | null }) => !!s.owner && myName !== '' && normalizePlayerName(s.owner) === myName,
+      [myName],
+   );
 
-   // Calculate how many squares the CURRENT user (if identified) already owns in the DB
+   // How many squares count against this player's limit: held by their account
+   // or under their name — the server's own count, minus the device hash it
+   // alone can compute.
    const squaresAlreadyOwned = React.useMemo(() => {
       if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s =>
-         s.owner && s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase()
-      ).length;
-   }, [gameState.squares, playerInfo.name]);
+      return countHeldSquares(gameState.squares, { uid: currentUser?.id ?? null, guestKeyHash: null }, playerInfo.name);
+   }, [gameState.squares, playerInfo.name, currentUser?.id]);
 
    const unpaidSquaresCount = React.useMemo(() => {
       if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s =>
-         s.owner &&
-         s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() &&
-         !s.isPaid &&
-         !s.paymentConfirmedAt
-      ).length;
-   }, [gameState.squares, playerInfo.name]);
+      return gameState.squares.filter(s => isMine(s) && !s.isPaid && !s.paymentConfirmedAt).length;
+   }, [gameState.squares, playerInfo.name, isMine]);
 
    const pendingConfirmationCount = React.useMemo(() => {
       if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s =>
-         s.owner &&
-         s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() &&
-         !s.isPaid &&
-         s.paymentConfirmedAt
-      ).length;
-   }, [gameState.squares, playerInfo.name]);
+      return gameState.squares.filter(s => isMine(s) && !s.isPaid && s.paymentConfirmedAt).length;
+   }, [gameState.squares, playerInfo.name, isMine]);
 
    const currentTotal = squaresAlreadyOwned + selectedSquares.length;
-   const remainingAllowance = maxPerPlayer - currentTotal;
+   const remainingAllowance = maxPerPlayer === null ? Infinity : maxPerPlayer - currentTotal;
    const isLimitReached = remainingAllowance <= 0;
 
    const handleSquareClick = (id: number) => {
@@ -325,7 +344,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
       // Identify squares owned by this user
       const ownedSquareIds = gameState.squares
-         .filter(s => s.owner && s.owner.toLowerCase() === playerInfo.name.trim().toLowerCase() && !s.isPaid && !s.paymentConfirmedAt)
+         .filter(s => isMine(s) && !s.isPaid && !s.paymentConfirmedAt)
          .map(s => s.id);
 
       if (ownedSquareIds.length === 0) {
@@ -1239,7 +1258,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                           const isMySquare = currentUser && (
                                              square.reservedByUid === currentUser.id ||
                                              square.paidByUid === currentUser.id ||
-                                             (square.owner && currentUser.name && square.owner.toLowerCase() === currentUser.name.toLowerCase())
+                                             (square.owner && currentUser.name && normalizePlayerName(square.owner) === normalizePlayerName(currentUser.name))
                                           );
 
                                           if (isMySquare) {
@@ -1430,13 +1449,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  <span className={`font-display font-bold text-xl leading-none num ${isLimitReached ? 'text-brandred-500' : 'text-white'}`}>
                                     {currentTotal}
                                  </span>
-                                 <span className="text-sm font-normal text-[#9FB0CC] mb-0.5 num">/ {maxPerPlayer}</span>
+                                 <span className="text-sm font-normal text-[#9FB0CC] mb-0.5 num">{maxPerPlayer === null ? 'no limit' : `/ ${maxPerPlayer}`}</span>
                               </div>
                               {/* Mini Progress Bar */}
                               <div className="w-full h-1 bg-navy-700 rounded-full mt-1 overflow-hidden">
                                  <div
                                     className={`h-full w-full origin-left rounded-full transition-transform duration-300 ease-out ${isLimitReached ? 'bg-brandred-500' : 'bg-gold-500'}`}
-                                    style={{ transform: `scaleX(${Math.min(1, currentTotal / maxPerPlayer)})` }}
+                                    style={{ transform: `scaleX(${maxPerPlayer === null ? 0 : Math.min(1, currentTotal / maxPerPlayer)})` }}
                                  ></div>
                               </div>
                            </div>

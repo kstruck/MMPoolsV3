@@ -31,6 +31,7 @@ import { Button, Badge } from '../ui';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStatus } from '../../types';
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
+import { claimRefusalMessage, effectiveSquareCap, planClaim, squareCapSentence } from '@shared/squaresClaim';
 
 interface PoolRouteProps {
     user: User | null;
@@ -428,26 +429,34 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const handleClaimSquares = async (ids: number[], name: string, details: { email?: string, phone?: string }, guestKey?: string) => {
         if (!ids.length && !name) return { success: false, message: 'Invalid data' };
         if (!name.trim()) return { success: false, message: 'Name is required' };
-        // Validations
         const normalizedName = name.trim();
-        // Check for taking existing
-        if (ids.some(id => squaresPool.squares[id]?.owner && squaresPool.squares[id].owner !== normalizedName)) {
-            return { success: false, message: 'Square already taken.' };
-        }
-        // Max limit
-        const currentOwned = squaresPool.squares.filter((s) => s.owner === normalizedName).length;
-        const limit = Number(squaresPool.maxSquaresPerPlayer) || 10;
-        if (currentOwned + ids.length > limit && squaresPool.ownerId !== user?.id) return { success: false, message: `Limit exceeded. Max ${limit}.` };
+
+        // A PREVIEW of the server's decision, from the same function the
+        // callable runs (`planClaim`), so the page and the server cannot
+        // disagree about a limit again. It is a preview only: the server
+        // decides, and it alone knows the guest's device identity.
+        const preview = planClaim({
+            squares: squaresPool.squares,
+            squareIds: ids,
+            identity: { uid: user?.id ?? null, guestKeyHash: null },
+            displayName: normalizedName,
+            maxSquaresPerPlayer: squaresPool.maxSquaresPerPlayer,
+            exemptFromCap: !!user?.id && squaresPool.ownerId === user.id,
+            now: Date.now(),
+        });
+        if (!preview.ok) return { success: false, message: claimRefusalMessage(preview.refusal) };
 
         try {
-            const promises = ids.map(id => dbService.reserveSquare(
+            // ONE call for the whole selection, all or nothing. This used to be
+            // one callable per square in parallel, so a refusal part-way left
+            // the earlier squares reserved and reported the claim as failed.
+            await dbService.reserveSquares(
                 squaresPool.id,
-                id,
+                ids,
                 { ...details, name: normalizedName },
                 guestKey,
                 normalizedName
-            ));
-            await Promise.all(promises);
+            );
         } catch (error: unknown) {
             logger.error("Reserve failed", error);
             const msg = error instanceof Error ? error.message : "Reservation failed.";
@@ -592,7 +601,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                                 isLocked={squaresPool.isLocked || (squaresRemaining === 0 && !!squaresPool.axisNumbers)}
                                             />
                                         </div>
-                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm font-body">Max <span className="num">{squaresPool.maxSquaresPerPlayer || 'N/A'}</span> squares per player</p></div>
+                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm font-body">{squareCapSentence(squaresPool.maxSquaresPerPlayer)}</p></div>
                                         {/* Simplified Rule Buttons */}
                                         <div>
                                             <h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Active Rules:</h3>
@@ -905,7 +914,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 </div>
                                 <div className="bg-page p-3 rounded-lg border border-line text-center">
                                     <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Max Per Player</div>
-                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{squaresPool.maxSquaresPerPlayer || '∞'}</div>
+                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{effectiveSquareCap(squaresPool.maxSquaresPerPlayer) ?? 'No limit'}</div>
                                 </div>
                                 <div className="bg-page p-3 rounded-lg border border-line text-center">
                                     <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Number Sets</div>

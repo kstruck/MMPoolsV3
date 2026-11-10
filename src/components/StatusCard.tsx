@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { squareCapSentence } from '@shared/squaresClaim';
 import type { GameState } from '../types';
 import { PoolTimer } from './PoolTimer';
 import { Lock, Trophy, Zap, HelpCircle, ExternalLink, Check, Copy, Shuffle } from 'lucide-react';
@@ -104,7 +105,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                             />
                         </div>
 
-                        <div><h3 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-xs mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm num">{mode === 'props' ? `Max ${gameState.props?.maxCards || 1} cards per player` : `Max ${gameState.maxSquaresPerPlayer || 'N/A'} squares per player`}</p></div>
+                        <div><h3 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-xs mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm num">{mode === 'props' ? `Max ${gameState.props?.maxCards || 1} cards per player` : squareCapSentence(gameState.maxSquaresPerPlayer)}</p></div>
 
                         {mode === 'props' && (
                             <>

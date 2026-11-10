@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { SQUARES_CREATION_OPEN, POOLS_OPEN } from '../src/config/season';
 import { canAccessSquaresCreation, canAccessPoolCreation } from '../src/utils/auth';
 import type { User } from '../src/types';
+import { planClaim } from '../shared/squaresClaim';
 
 /**
  * SQUARES CREATION IS CLOSED (Kevin, 2026-08-28).
@@ -11,11 +12,10 @@ import type { User } from '../src/types';
  * *"Do not allow any Squares pools from being purchased or setup for now. Add a
  * COMING SOON to those."*
  *
- * The reason: `CreateSquaresPool.tsx` defaults `maxSquaresPerPlayer` to `0`
- * while `functions/src/squares.ts:93` refuses a claim whenever
- * `mySquares >= pool.maxSquaresPerPlayer`, so a pool left on its default is
- * unplayable by anyone except its commissioner. `SQUARES-BACKLOG.md` carries
- * the fix list; this suite pins the closure until that lands.
+ * It was closed because a pool left on the wizard's default refused every
+ * non-owner's first square. That defect is fixed (PLAN-SQUARES-REOPEN PR-A);
+ * the gate stays closed until PR-D of that plan, which is the reopen. This
+ * suite pins the closure until then, and the last block pins the fix.
  *
  * These assert BEHAVIOUR — who the gate admits — plus a source check on each
  * entry point, because an entry point that forgets to consult the gate is the
@@ -90,21 +90,39 @@ describe('every squares creation entry point consults that gate', () => {
 });
 
 /**
- * THE DEFECT THE CLOSURE EXISTS FOR, PINNED.
+ * THE DEFECT THAT CLOSED CREATION IS FIXED (PLAN-SQUARES-REOPEN A1) — AND
+ * CREATION IS STILL CLOSED, ON PURPOSE.
  *
- * If somebody fixes the callable, this goes red — which is the signal to reopen
- * creation rather than leave a "Coming Soon" on a product that works again.
+ * This block used to assert that `reserveSquare` still refused a first claim on
+ * a pool stored at 0, so that fixing the callable turned it red as "the signal
+ * to reopen". The callable is fixed. Creation stays closed until the rest of
+ * `docs/plans/PLAN-SQUARES-REOPEN.md` lands — scoring, lock integrity and the
+ * wizard — and PR-D of that plan is the reopen. So this now holds the fix in
+ * place: if the zero-guard regresses while the gate is open, that is the
+ * unplayable pool again.
  */
-describe('the claim-limit defect is still there, which is why creation is closed', () => {
-  it('the callable still refuses a first claim on a pool stored at 0', () => {
-    const fn = read('functions/src/squares.ts');
-    expect(fn).toContain('mySquares >= pool.maxSquaresPerPlayer');
-    expect(fn).not.toMatch(/pool\.maxSquaresPerPlayer\s*>\s*0/);
-    // The server's own comparison, applied to a non-owner's first square.
-    expect(0 >= 0).toBe(true);
+describe('the claim-limit defect is fixed; reopening waits for PLAN-SQUARES-REOPEN PR-D', () => {
+  it('a non-owner can take their first square on a pool stored at 0', () => {
+    const grid = Array.from({ length: 100 }, (_, i) => ({ id: i, owner: null as string | null }));
+    const plan = planClaim({
+      squares: grid,
+      squareIds: [0],
+      identity: { uid: null, guestKeyHash: null },
+      displayName: 'First Player',
+      maxSquaresPerPlayer: 0,
+      exemptFromCap: false,
+      now: 1,
+    });
+    expect(plan.ok).toBe(true);
   });
 
-  it('and the wizard still defaults to the value that triggers it', () => {
+  it('the callable routes through that planner', () => {
+    const fn = read('functions/src/squares.ts');
+    expect(fn).toContain('planClaim(');
+    expect(fn).not.toContain('mySquares >= pool.maxSquaresPerPlayer');
+  });
+
+  it('and the wizard still defaults to 0, which is now a playable default', () => {
     expect(read('src/components/wizard/create/CreateSquaresPool.tsx'))
       .toMatch(/maxSquaresPerPlayer:\s*0/);
   });

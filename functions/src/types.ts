@@ -13,9 +13,20 @@ export interface Square {
     // restricted /pools/{poolId}/squarePrivate/{squareId} subcollection (audit H1).
     isPaid?: boolean;
     reservedAt?: number | null;
+    /**
+     * LEGACY — the guest's raw device key. No longer written (PLAN-SQUARES-REOPEN
+     * A3): it sat on the world-readable pool document. Still present on squares
+     * reserved before 2026-11; nothing honours it.
+     */
     guestDeviceKey?: string | null;
+    /** `sha256(poolId:key)` of the guest's device key — see lib/guestKey.ts. */
+    guestKeyHash?: string | null;
     guestClaimId?: string | null;
+    /** The account that holds the square. Stamped at reserve for a signed-in player. */
     reservedByUid?: string | null;
+    pickedAsName?: string | null;
+    paymentConfirmedAt?: number | null;
+    paymentConfirmedByUid?: string | null;
 }
 
 export interface GameScore {

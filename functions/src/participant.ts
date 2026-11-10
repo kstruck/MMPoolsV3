@@ -7,16 +7,32 @@ import { validated } from "./lib/validated";
 import { createClaimCodeSchema, claimByCodeSchema } from "./schemas/participantOps";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { claimMySquaresSchema } from "./schemas/participantOps";
+import { randomInt } from "crypto";
+import { guestKeyHashOrNull } from "./lib/guestKey";
+import { assertNotBannedLive } from "./lib/systemGuards";
+import type { Square } from "./types";
 
-// Types derived from frontend (simplified for backend)
+/** A claim code: lets a guest move their squares to another device or an account. */
 interface ClaimCode {
     claimId: string;
     claimCode: string;
     createdAt: number;
-    guestClaimId: string;
+    /** After this the code is refused. Absent on codes minted before 2026-11. */
+    expiresAt?: number;
+    /** `sha256(poolId:key)` — the guest identity this code stands for. */
+    guestKeyHash?: string;
+    /**
+     * LEGACY: the guest's RAW device key, as codes stored it before 2026-11.
+     * Never read. A code that carries only this is refused — honouring a raw
+     * key is the hole SECURITY-CLAIM-SQUARES.md describes.
+     */
+    guestClaimId?: string;
     poolId?: string;
     uses: number;
 }
+
+/** A claim code is for moving squares NOW, not a standing credential. */
+const CLAIM_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 
 // 1. (removed 2026-09-11) `onUserCreated` / `createParticipantProfile` — this
 // file used to export a SECOND Auth-create trigger that wrote `users/{uid}` with
@@ -27,41 +43,42 @@ interface ClaimCode {
 // never overwrites); its schema carries `provider`, the one field the client
 // read from this one.
 
-// 2. createClaimCode: Generate a code for guest
+/**
+ * 2. createClaimCode — a guest turns "this browser" into a short code they can
+ * type on another device.
+ *
+ * PUBLIC by design: a guest has no account. What makes that safe is that the
+ * caller must present the DEVICE KEY ITSELF, and only its hash is ever stored
+ * or published (lib/guestKey.ts). Before 2026-11 the raw key sat on the
+ * world-readable pool document, so anybody could mint a code for somebody
+ * else's squares. A hash read off the pool document cannot be presented here.
+ */
 export const createClaimCode = validated(
-    // PUBLIC by design: guests (no auth) export their device identity as a
-    // short code. Strict shape is the whole gate here.
     { schema: createClaimCodeSchema, label: "createClaimCode", auth: "public", appCheck: "monitor" },
     async (input) => {
     const { poolId, guestDeviceKey } = input;
 
+    const guestKeyHash = guestKeyHashOrNull(poolId, guestDeviceKey);
+    if (!guestKeyHash) {
+        // A key minted before the prefix existed has been published on every
+        // pool it was used in. It identifies nobody.
+        throw new HttpsError(
+            'failed-precondition',
+            "This browser's claim key is out of date. Reload the page and try again.",
+        );
+    }
+
     const db = admin.firestore();
-    const claimCode = generateShortCode(); // Implement helper
+    const claimCode = generateShortCode();
     const claimId = db.collection("poolClaims").doc().id;
     const now = Date.now();
-
-    // Create the claim record
-    // We link the 'claimCode' to the 'guestDeviceKey'
-    // Actually, the requirement says "guestClaimId stable random".
-    // "Store guestClaimId... associates with poolId"
-
-    // Strategy:
-    // 1. Client has guestDeviceKey.
-    // 2. Client asks for a code to "export" this identity.
-    // 3. We store { claimCode: "1234", guestDeviceKey: "uuid-from-client", ... }
-    // Wait, the prompt says "guestClaimId stable ID". 
-    // If the client ALREADY has guestDeviceKey, we can just use that as the link?
-    // "creates /poolClaims/{claimId} ... Links to the guest identity ... guestClaimId"
-
-    // Let's stick effectively to: Mapping Code -> guestDeviceKey
 
     const claimDoc: ClaimCode = {
         claimId,
         claimCode,
         createdAt: now,
-        guestClaimId: guestDeviceKey, // Map directly for simplicity? Or generate a new stable ID?
-        // Prompt says "guestClaimId stable random".
-        // If we use guestDeviceKey, that IS the stable ID on the device.
+        expiresAt: now + CLAIM_CODE_TTL_MS,
+        guestKeyHash,
         poolId,
         uses: 0
     };
@@ -72,80 +89,98 @@ export const createClaimCode = validated(
     },
 );
 
-// 3. claimMySquares: Claim guest squares for logged-in user
+/**
+ * Move every square held under `guestKeyHash` to `uid`. Runs inside the
+ * caller's transaction; returns the ids moved and any it had to leave.
+ *
+ * A square is the guest's only while it still has an OWNER: a square that was
+ * released keeps nothing worth claiming, and the squares auto-release in
+ * `reminders.ts` clears the owner without clearing the hash.
+ */
+function claimGuestSquares(
+    squares: Square[],
+    guestKeyHash: string,
+    uid: string,
+): { squares: Square[]; claimed: number[]; warnings: string[] } {
+    const claimed: number[] = [];
+    const warnings: string[] = [];
+    const next = squares.map((s) => {
+        if (!s.owner || !s.guestKeyHash || s.guestKeyHash !== guestKeyHash) return s;
+        if (s.reservedByUid && s.reservedByUid !== uid) {
+            warnings.push(`Square ${s.id} is already owned by someone else.`);
+            return s;
+        }
+        claimed.push(s.id);
+        return {
+            ...s,
+            reservedByUid: uid,
+            // The square belongs to the account now; the device no longer does.
+            guestKeyHash: null,
+            guestDeviceKey: null,
+            guestClaimId: null,
+        };
+    });
+    return { squares: next, claimed, warnings };
+}
+
+/**
+ * 3. claimMySquares — a guest who signs in on the SAME browser takes their
+ * guest squares into their account.
+ *
+ * The caller presents the device key; the server hashes it and compares hashes.
+ * No key, or a key from before the prefix, matches nothing and is not an error:
+ * the pool page calls this speculatively for every signed-in visitor.
+ *
+ * A successful claim also makes the caller a member (`participantIds`). That
+ * write was deliberately absent while the key was public — presenting it proved
+ * nothing — and is correct now that only the key's holder can present it.
+ */
 export const claimMySquares = validated(
     { schema: claimMySquaresSchema, label: "claimMySquares", auth: "required", appCheck: "monitor" },
     async ({ poolId, guestDeviceKey }, request) => {
-    // claimIds removed for now until implemented
-
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'User must be logged in to claim squares');
     }
     const uid = request.auth.uid;
+    await assertNotBannedLive(uid);
+
+    const guestKeyHash = guestKeyHashOrNull(poolId, guestDeviceKey);
+    if (!guestKeyHash) return { success: true, claimed: [] as number[], warnings: [] as string[] };
+
     const db = admin.firestore();
     const poolRef = db.collection("pools").doc(poolId);
 
-    // Run transaction to be safe
     const result = await db.runTransaction(async (t) => {
         const poolDoc = await t.get(poolRef);
         if (!poolDoc.exists) throw new HttpsError('not-found', 'Pool not found');
 
-        const squares = poolDoc.data()?.squares || [];
-        let updated = false;
-        const warnings: string[] = [];
+        const squares = (poolDoc.data()?.squares || []) as Square[];
+        const outcome = claimGuestSquares(squares, guestKeyHash, uid);
 
-        const newSquares = squares.map((s: any) => {
-            // Check if this square belongs to the guest context
-            const isGuestKeyMatch = guestDeviceKey && s.guestDeviceKey === guestDeviceKey;
-
-            // Note: We don't overwrite if ALREADY owned by someone else (authoritative check)
-            if (isGuestKeyMatch) {
-                if (s.reservedByUid && s.reservedByUid !== uid) {
-                    // Conflict! Owned by someone else. 
-                    warnings.push(`Square ${s.id} is already owned by someone else.`);
-                    return s;
-                }
-
-                // Claim it!
-                updated = true;
-                return {
-                    ...s,
-                    reservedByUid: uid,
-                    // Clear guest keys to finalize ownership? Or keep for history?
-                    // Prompt says "clears guestDeviceKey... after claiming"
-                    guestDeviceKey: null,
-                    guestClaimId: null,
-                    // Update PII? "pickedAsName" likely stays what they typed.
-                };
-            }
-            return s;
-        });
-
-        if (updated) {
-            t.update(poolRef, { squares: newSquares });
-            // Also need to update participant indices?
-            // "syncParticipantIndicesOnSquareWrite trigger" will handle it?
-            // Prompt says "Updates participant indices...".
-            // If I rely on trigger, it's easier. "Avoid expensive recalcs" -> userSync func instructions.
-            // But prompt explicitly calls out "syncParticipantIndicesOnSquareWrite trigger" as separate item E.
-            // So I can leave it to the trigger.
+        if (outcome.claimed.length > 0) {
+            t.update(poolRef, {
+                squares: outcome.squares,
+                participantIds: FieldValue.arrayUnion(uid),
+            });
         }
-
-        return { success: true, warnings };
+        return { claimed: outcome.claimed, warnings: outcome.warnings };
     });
 
-    return { success: true, warnings: result.warnings };
+    return { success: true, claimed: result.claimed, warnings: result.warnings };
 });
 
-// 4. claimByCode: Merge squares from another device
+/**
+ * 4. claimByCode — a signed-in player types a code minted on another device
+ * and takes that device's guest squares into their account.
+ */
 export const claimByCode = validated(
     { schema: claimByCodeSchema, label: "claimByCode", appCheck: "monitor" },
     async (input, request) => {
     const { claimCode } = input;
     const db = admin.firestore();
     const uid = request.auth!.uid;
+    await assertNotBannedLive(uid);
 
-    // 1. Find claim doc
     const claimsSnap = await db.collection("poolClaims")
         .where("claimCode", "==", claimCode)
         .limit(1)
@@ -157,67 +192,42 @@ export const claimByCode = validated(
     const claimDoc = claimsSnap.docs[0];
     const claim = claimDoc.data() as ClaimCode;
 
-    // 2. Identify target scopes
-    // Scope: specific pool?
     const targetPoolId = claim.poolId;
-    const targetGuestKey = claim.guestClaimId; // This is the guestDeviceKey we want to claim
-
     if (!targetPoolId) throw new HttpsError('unimplemented', 'Global claims not supported yet');
 
-    // 3. Claim squares in that pool
+    // A code with no hash was minted from a raw key, before 2026-11. A code
+    // past its expiry is refused whatever it carries. Same answer for both: the
+    // guest generates a fresh one on the device that holds the squares.
+    const expired = typeof claim.expiresAt === 'number' && Date.now() > claim.expiresAt;
+    const targetHash = claim.guestKeyHash;
+    if (!targetHash || expired) {
+        throw new HttpsError('failed-precondition', 'This claim code has expired. Generate a new one on the device that reserved the squares.');
+    }
+
     const poolRef = db.collection("pools").doc(targetPoolId);
 
-    await db.runTransaction(async (t) => {
+    const claimed = await db.runTransaction(async (t) => {
         const poolDoc = await t.get(poolRef);
-        if (!poolDoc.exists) return; // Should weirdly fail gracefully?
+        if (!poolDoc.exists) throw new HttpsError('not-found', 'Pool not found');
 
-        const squares = poolDoc.data()?.squares || [];
-        let updated = false;
+        const squares = (poolDoc.data()?.squares || []) as Square[];
+        const outcome = claimGuestSquares(squares, targetHash, uid);
 
-        const newSquares = squares.map((s: any) => {
-            // Check if matches the code's linked guest identity
-            if (s.guestDeviceKey === targetGuestKey) {
-                if (s.reservedByUid && s.reservedByUid !== uid) {
-                    return s; // Conflict
-                }
-                updated = true;
-                return {
-                    ...s,
-                    reservedByUid: uid,
-                    guestDeviceKey: null, // Consumed
-                };
-            }
-            return s;
-        });
-
-        if (updated) {
-            // ⛔ Deliberately does NOT write participantIds.
-            //
-            // A previous revision of this change added it, on the reasoning that
-            // claimByCode is the "vetted" cross-device flow. It is not vetted at
-            // all: `createClaimCode` above is `auth: "public"` and accepts a
-            // caller-supplied `guestDeviceKey`, and that key is readable from the
-            // world-readable pool document. So a stranger can mint a code for
-            // someone else's unclaimed guest square and redeem it here — writing
-            // participantIds would have laundered that straight into membership,
-            // restoring the exact escalation this change removes from the repair
-            // jobs. (codex r3)
-            //
-            // The consequence is honest and unavoidable while `guestDeviceKey` is
-            // public: the system CANNOT distinguish a legitimate guest-square
-            // claimant from an attacker, because both present the same readable
-            // key. Neither becomes a roster member. The root fix is the hash
-            // migration in SECURITY-CLAIM-SQUARES.md.
-            t.update(poolRef, { squares: newSquares });
-            // Increment uses
+        if (outcome.claimed.length > 0) {
+            // Membership follows the squares — see claimMySquares.
+            t.update(poolRef, {
+                squares: outcome.squares,
+                participantIds: FieldValue.arrayUnion(uid),
+            });
             t.update(claimDoc.ref, {
                 uses: FieldValue.increment(1),
                 lastUsedAt: Date.now()
             });
         }
+        return outcome.claimed;
     });
 
-    return { success: true, poolId: targetPoolId };
+    return { success: true, poolId: targetPoolId, claimed };
     },
 );
 
@@ -304,14 +314,21 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
      * same resurrection this guard exists to stop.
      *
      * The guard also closes a laundering hop three other surfaces already refuse.
-     * `reserveSquare` never writes `reservedByUid` at all — it stores a display
-     * NAME — so the only writers are `claimMySquares` and `claimByCode` above,
-     * which prove ownership with a `guestDeviceKey` read straight off the
-     * world-readable pool document (SECURITY-CLAIM-SQUARES.md). Minting a
-     * membership index from that signal is what `backfillMemberRecords` refuses
-     * (its `applySquareUnits` gate), what `fixParticipantIds` refuses (its
-     * squares block was deleted), and what `shared/memberRecord.ts` review round
-     * 5 removed. This trigger was the last surface still doing it.
+     * Until 2026-11 the only writers of `reservedByUid` were `claimMySquares`
+     * and `claimByCode`, which proved ownership with a `guestDeviceKey` read
+     * straight off the world-readable pool document (SECURITY-CLAIM-SQUARES.md).
+     * Minting a membership index from that signal is what
+     * `backfillMemberRecords` refuses (its `applySquareUnits` gate), what
+     * `fixParticipantIds` refuses (its squares block was deleted), and what
+     * `shared/memberRecord.ts` review round 5 removed. This trigger was the last
+     * surface still doing it.
+     *
+     * Since PLAN-SQUARES-REOPEN A2/A3, `reserveSquare(s)` stamps `reservedByUid`
+     * from the caller's auth token and adds that uid to `participantIds` in the
+     * same transaction, and the claim paths compare key HASHES and add the
+     * claimant to `participantIds` too. So every uid this trigger sees on a
+     * square is listed by the time it runs — the guard is unchanged and still
+     * decides, it just no longer has anything legitimate to turn away.
      *
      * WRITE BUDGET: a squares grid is 100 cells, so `stats` holds at most 100
      * owners and this transaction issues at most 200 writes plus 1 read — inside
@@ -372,12 +389,17 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
 });
 
 
+/**
+ * Six characters from an alphabet with no look-alikes (no I/O/0/1).
+ *
+ * `randomInt`, not `Math.random`: the code is what proves a claim, so it is
+ * drawn from the system CSPRNG.
+ */
 function generateShortCode() {
-    // Simple 6-char alphanumeric
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let res = "";
     for (let i = 0; i < 6; i++) {
-        res += chars.charAt(Math.floor(Math.random() * chars.length));
+        res += chars.charAt(randomInt(chars.length));
     }
     return res;
 }
