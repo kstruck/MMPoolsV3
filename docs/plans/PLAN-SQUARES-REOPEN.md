@@ -180,6 +180,8 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 
 ### Needs Kevin (work continues without them)
 
+- **⛔ K7 IS THE ONE TO DECIDE FIRST** (it is listed in order below, but
+  round Q5 changed its weight — read it before the others).
 - **K1 — `firestore.rules`: `quarterlyNumbers` is client-writable.** In a
   "new numbers each quarter" pool the commissioner can write the upcoming
   quarter's numbers before the server draws them; `axisNumbers` is protected but
@@ -209,11 +211,27 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   `executeAutoLock` locks any squares pool whose `lockAt` has passed and draws
   the numbers with `sort(() => Math.random() - 0.5)` — which leaves digits near
   where they started, and which `autoLock.ts`'s own header calls unacceptable
-  for real-money numbers. `autoLockPools` fires 30 seconds earlier, so this copy
-  only acts when that job has missed a run — but then it decides the grid.
+  for real-money numbers.
+  **Why it matters more since PR-C (round Q5).** A pool linked to a game now
+  locks at kickoff by default, so every such pool is in this copy's reach.
+  And the earlier note here — "`autoLockPools` fires 30 seconds earlier, so
+  this copy only acts when that job has missed a run" — was wrong: a job that
+  runs every minute and locks grids due within 30 seconds reaches a given grid
+  anywhere from 30 seconds before its lock time to 30 seconds AFTER it, and a
+  `runReminders` pass in that second half would have drawn the numbers.
+  **What PR-C does about it, without touching this file:** `autoLockPools`
+  locks a squares grid from 90 seconds before its lock time, so it has always
+  run before the lock time arrives. That closes the race while the dedicated
+  job is healthy. It does not close it if that job is down or failing at that
+  minute — then this copy still decides the grid.
   **Not changed** — `reminders.ts` also sends the NFL reminders. *Recommendation:
-  approve deleting `executeAutoLock` from `reminders.ts` (and K6's fix) in one
-  small PR; `autoLockPools` is the dedicated job and PR-C fixes it.*
+  approve one small PR, before Thanksgiving, that makes `checkLockReminders`
+  skip the auto-lock for squares pools (three lines) and leaves the lock
+  REMINDER emails as they are; `autoLockPools` is the dedicated job. On
+  approval: a squares grid can only ever be locked by the job that draws with
+  `crypto.randomInt` and keeps numbers already drawn; if that job is down the
+  grid stays open until it is back or the organizer locks it by hand, which
+  the pool page already tells them how to do.*
 - **K8 — the roster summary's "guest dues" reads a value nothing writes** (sweep
   SW4). `lib/rosterSummary.ts:31` counts squares with `reservedByUid ===
   'guest'`; a guest's square has no `reservedByUid`. So dues owed on guest
@@ -234,6 +252,18 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   *Recommendation: leave it — hand-entering every score of a game is not
   something a commissioner will do; revisit only if a game ever is not on the
   feed.*
+- **K11 — a game link is taken on the commissioner's word.** Found by qodo
+  (review log, round Q5, finding 2). `createPool` stores the game id, league,
+  teams and kickoff the client sends, and linking from the manage page is a
+  client write. A commissioner who crafted a request could link a pool to one
+  game's scores under another game's teams and kickoff; they can already write
+  `scores` and `isLocked` directly (K4), so it gives them nothing new, and the
+  one way an honest commissioner could produce a mismatch (the picker keeping
+  another league's results) is fixed. **Not built**, because the proper fix
+  needs the rules change in K4. *Recommendation: when K4 is done, add one
+  `linkSquaresGame` callable that looks the game up in the score feed and
+  stores what the feed says; use it from the wizard and the manage page; and
+  make the link fields server-only in `firestore.rules`.*
 - **K10 — check that squares has pricing tiers before the first paid pool.**
   Found by the browser walk-through (review log, round W1). The launch step
   prices a pool from `settings/billing_config`. At ten players or fewer a pool

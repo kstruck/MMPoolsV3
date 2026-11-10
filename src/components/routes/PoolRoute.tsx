@@ -31,7 +31,7 @@ import { Button, Badge } from '../ui';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStatus } from '../../types';
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
-import { claimRefusalMessage, effectiveSquareCap, planClaim, squareCapSentence } from '@shared/squaresClaim';
+import { claimRefusalMessage, effectiveSquareCap, isEnteringForSomeoneElse, planClaim, squareCapSentence } from '@shared/squaresClaim';
 import { hashGuestKey } from '../../utils/guestKey';
 import { withSquaresDefaults } from '@shared/squaresDefaults';
 import { squaresPot, type PayoutPool } from '@shared/squaresPayouts';
@@ -479,7 +479,9 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 ids,
                 { ...details, name: normalizedName },
                 guestKey,
-                normalizedName
+                normalizedName,
+                // The same rule the grid shows beside the name field.
+                isEnteringForSomeoneElse({ isOwner, typedName: normalizedName, accountName: user?.name }),
             );
         } catch (error: unknown) {
             logger.error("Reserve failed", error);

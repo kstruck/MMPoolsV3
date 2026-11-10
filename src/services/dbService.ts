@@ -1200,10 +1200,14 @@ export const dbService = {
      * `reserveSquare` per square: a refusal part-way through that left the
      * earlier squares reserved while reporting the claim as failed.
      */
-    reserveSquares: async (poolId: string, squareIds: number[], customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string): Promise<{ reserved: number[]; alreadyHeld: number[] }> => {
+    reserveSquares: async (
+        poolId: string, squareIds: number[], customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string,
+        /** The organizer entering squares for somebody else — see `isEnteringForSomeoneElse`. */
+        onBehalf?: boolean,
+    ): Promise<{ reserved: number[]; alreadyHeld: number[] }> => {
         try {
             const fn = httpsCallable(functions, 'reserveSquares');
-            const result = await fn(withCorrelationId({ poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName }));
+            const result = await fn(withCorrelationId({ poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName, ...(onBehalf ? { onBehalf: true } : {}) }));
             const data = (result.data ?? {}) as { reserved?: number[]; alreadyHeld?: number[] };
             return { reserved: data.reserved ?? [], alreadyHeld: data.alreadyHeld ?? [] };
         } catch (error) {
