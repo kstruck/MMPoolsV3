@@ -2,7 +2,8 @@ import { OverlayRoot } from './ui/OverlayRoot';
 import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
-import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry, PlayerDetails } from '../types';
+import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry, PlayerDetails, Winner } from '../types';
+import { isPlayerOwner, ROLLOVER, usesCurrentWinnerRules } from '@shared/squaresPayouts';
 import type { ESPNGame, ESPNCompetitor, ESPNCompetition } from '../types/espn';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
@@ -30,6 +31,7 @@ import Hammer from 'lucide-react/dist/esm/icons/hammer';
 import Dices from 'lucide-react/dist/esm/icons/dices';
 import { HelpRoutePublisher } from '../help/publish';
 import { useUrlTab } from './help/useUrlTab';
+import { toEpochMillis } from '../utils/dashboardCharts';
 
 /**
  * The squares manager tabs, as one list. `useUrlTab` needs it to reject a stale
@@ -193,15 +195,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const [lockBusy, setLockBusy] = useState(false);
   const toggleLock = async () => {
-    if (!gameState.isLocked && !gameState.axisNumbers) {
-      // If unlocking or numbers not set, and we are starting: Use Server Function
-      await generateNumbers();
-    } else {
-      // Just toggle the lock state (Pause/Unpause)
-      updateConfig({ isLocked: !gameState.isLocked, lockGrid: !gameState.isLocked });
+    if (lockBusy) return;
+    setLockBusy(true);
+    try {
+      if (!gameState.isLocked) {
+        // Locking always goes through the server. It draws the numbers if the
+        // grid has none and KEEPS them if it has — numbers are drawn once.
+        await generateNumbers();
+      } else {
+        const ok = await toast.confirm({
+          title: 'Reopen the grid?',
+          message: gameState.axisNumbers
+            ? 'Reopening the grid for sales DISCARDS the numbers that were drawn — nobody should be able to pick a square knowing its numbers. New numbers are drawn when you lock again. The grid cannot be reopened once the game has started.'
+            : 'Players will be able to claim squares again. The grid cannot be reopened once the game has started.',
+          confirmLabel: 'Reopen grid',
+          danger: true,
+        });
+        if (!ok) return;
+        await dbService.unlockSquaresPool(gameState.id);
+      }
+    } catch (e) {
+      logger.error(e);
+      toast.error(e instanceof Error && e.message ? e.message : 'That did not work. Please try again.');
+    } finally {
+      setLockBusy(false);
     }
   };
+
+  // The recorded winners (pools/{id}/winners) — what a commissioner pays from.
+  const [winnerRecords, setWinnerRecords] = useState<Winner[]>([]);
+  useEffect(() => {
+    if (!gameState.id) return;
+    return dbService.subscribeToWinners(gameState.id, setWinnerRecords, () => setWinnerRecords([]));
+  }, [gameState.id]);
+
+  // Scores typed in by hand (or pulled with "Auto-Update Scores") are written by
+  // this page, not by the scheduled sync — so nothing recorded a winner for
+  // them. Ask the server to bring the winner records in line whenever a period
+  // score changes. It is idempotent: when nothing differs, nothing is written.
+  const periodScoresKey = JSON.stringify([gameState.scores?.q1 ?? null, gameState.scores?.half ?? null, gameState.scores?.q3 ?? null, gameState.scores?.final ?? null]);
+  const hasNumbers = !!gameState.axisNumbers;
+  // Never for a pool played under the old rules: its records are history.
+  const currentRules = usesCurrentWinnerRules(gameState);
+  useEffect(() => {
+    if (!gameState.id || !hasNumbers || !currentRules || periodScoresKey === '[null,null,null,null]') return;
+    const timer = setTimeout(() => {
+      dbService.recomputeSquaresWinners(gameState.id).catch((e) => logger.error('[AdminPanel] winner recompute failed', e));
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [gameState.id, hasNumbers, currentRules, periodScoresKey]);
 
   const handleThemeSelect = async (theme: PoolTheme) => {
     if (!theme.id) {
@@ -402,12 +446,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [isFixing, setIsFixing] = useState(false);
   const handleFixSync = async () => {
-    const ok = await toast.confirm({ title: 'Reset & Re-Sync Scores?', message: 'This will reset the score events and force a full re-sync from ESPN. Use this ONLY if scores are stuck or missing.', confirmLabel: 'Re-Sync', danger: true });
+    const ok = await toast.confirm({ title: 'Reset & Re-Sync Scores?', message: currentUser?.role === 'SUPER_ADMIN' ? 'This will reset the score events and force a full re-sync from ESPN. Use this ONLY if scores are stuck or missing.' : 'This re-checks every winner against the scores on this pool and corrects the winner records if they are out of step.', confirmLabel: 'Re-Sync', danger: true });
     if (!ok) return;
     setIsFixing(true);
     setFetchStatus({ type: 'neutral', msg: 'Repairing...' });
     try {
-      const result = await dbService.fixPoolScores(gameState.id);
+      // The full reset-and-replay is a SUPER_ADMIN repair. A commissioner gets
+      // the part of it that is theirs to run: re-check the winner records
+      // against the scores on the pool. (This button used to fail for every
+      // commissioner with "Repair Error".)
+      const result = currentUser?.role === 'SUPER_ADMIN'
+        ? await dbService.fixPoolScores(gameState.id)
+        : await dbService.recomputeSquaresWinners(gameState.id);
       if (result.success) {
         setFetchStatus({ type: 'success', msg: 'Repair Complete' });
         // Optional: reload to see changes
@@ -502,33 +552,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isRandomizing, setIsRandomizing] = useState(false);
   const [randomizingNumber, setRandomizingNumber] = useState<number | null>(null);
 
-  const handleRandomizeWinner = () => {
+  const handleRandomizeWinner = async () => {
+    // The DRAW is the server's: one draw, among sold squares, recorded and
+    // audited (drawSquaresFinalPrize). The spinning number here is decoration.
     setIsRandomizing(true);
-    let count = 0;
-    const interval = setInterval(() => {
-      setRandomizingNumber(Math.floor(Math.random() * 100));
-      count++;
-      if (count > 40) { // Approx 4-5 seconds
-        clearInterval(interval);
-        const winningSquareId = Math.floor(Math.random() * 100);
-        setRandomizingNumber(winningSquareId);
-        setTimeout(() => {
-          setIsRandomizing(false);
-          setRandomizingNumber(null);
-          const owner = gameState.squares[winningSquareId].owner || 'Unclaimed Square';
-
-          // Update Game State
-          updateConfig({
-            randomWinner: {
-              squareId: winningSquareId,
-              owner: owner,
-              amount: 0, // Calculated dynamically in gameLogic
-              timestamp: Date.now()
-            }
-          });
-        }, 2000);
-      }
-    }, 100);
+    const spin = setInterval(() => setRandomizingNumber(Math.floor(Math.random() * 100)), 100);
+    try {
+      const [result] = await Promise.all([
+        dbService.drawSquaresFinalPrize(gameState.id),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]);
+      clearInterval(spin);
+      setRandomizingNumber(result.squareId);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } catch (e) {
+      logger.error(e);
+      toast.error(e instanceof Error && e.message ? e.message : 'The draw could not be made. Please try again.');
+    } finally {
+      clearInterval(spin);
+      setIsRandomizing(false);
+      setRandomizingNumber(null);
+    }
   };
 
   const [cfbConference, setCfbConference] = useState('80'); // Default to All FBS
@@ -717,29 +761,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* GAME STATUS TAB */}
         {activeTab === 'game' && (
           <div className="space-y-6 animate-in fade-in">
-            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} className={`w-full py-4 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
-            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={generateNumbers} disabled={gameState.isLocked} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150"><Shuffle size={16} />{gameState.axisNumbers ? 'Regenerate' : 'Generate'} Numbers</button></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
+            <div className="bg-card p-6 rounded-xl border border-line shadow-card"><div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Game Status</h3><p className="text-sm font-body text-muted">Control the betting and number generation.</p></div>{gameState.isLocked ? <Badge status="locked" /> : <Badge status="open" />}</div><button onClick={toggleLock} disabled={lockBusy} className={`w-full py-4 rounded-lg disabled:opacity-60 disabled:cursor-wait font-display font-bold uppercase tracking-[0.05em] flex items-center justify-center gap-2 transition-ui duration-150 fine:hover:-translate-y-px text-lg ${gameState.isLocked ? 'bg-card hover:bg-surface text-[color:var(--text)] border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-red-cta'}`}>{gameState.isLocked ? <><Unlock size={20} /> Unlock Grid</> : <><Lock size={20} /> Lock & Start Game</>}</button></div>
+            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Grid Numbers</h3><div className="flex gap-4 items-center"><div className="flex-1"><button onClick={toggleLock} disabled={gameState.isLocked || !!gameState.axisNumbers || lockBusy} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg text-sm font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150"><Shuffle size={16} />Generate Numbers</button><p className="text-xs font-body text-muted mt-3">{gameState.axisNumbers ? 'The numbers are drawn once and kept. To draw new ones, reopen the grid before kickoff and lock it again.' : 'Drawn at random by the server when the grid locks.'}</p></div>{gameState.axisNumbers && (<div className="text-gold-500 bg-gold-500/10 p-4 rounded-full border border-gold-500/20"><Sparkles size={24} /></div>)}</div></div>
 
             {/* RANDOMIZER SECTION */}
             {gameState.ruleVariations.unclaimedFinalPrizeStrategy === 'random' && gameState.ruleVariations.quarterlyRollover && (
               (() => {
-                // Calculate conditions
-                const gameIsOver = gameState.scores.gameStatus === 'post';
-                const finalScore = gameState.scores.final;
-                let finalSquareIsEmpty = false;
+                // What the SERVER recorded decides this — not a second copy of the
+                // winner math here (the old one looked up the transposed square).
+                const gameIsOver = gameState.scores.gameStatus === 'post' || !!gameState.scores.final;
+                const prizeRecord = winnerRecords.find(w => w.id === 'final_rollover');
+                const finalSquareIsEmpty = !!prizeRecord && (prizeRecord.owner === ROLLOVER || !!prizeRecord.drawnAt);
 
-                if (finalScore && gameState.axisNumbers) {
-                  const homeDigit = finalScore.home % 10;
-                  const awayDigit = finalScore.away % 10;
-                  const colIdx = gameState.axisNumbers.away.indexOf(awayDigit);
-                  const rowIdx = gameState.axisNumbers.home.indexOf(homeDigit);
-                  if (colIdx !== -1 && rowIdx !== -1) {
-                    const squareId = rowIdx * 10 + colIdx;
-                    finalSquareIsEmpty = !gameState.squares[squareId]?.owner;
-                  }
-                }
-
-                const randomizerAvailable = gameIsOver && finalSquareIsEmpty;
+                const randomizerAvailable = gameIsOver && prizeRecord?.owner === ROLLOVER;
+                // The DRAWN winner, from the record. `gameState.randomWinner` is only a
+                // mirror, and one the commissioner's browser is able to overwrite.
+                const drawnMs = prizeRecord?.drawnAt ? toEpochMillis(prizeRecord.drawnAt) : null;
+                const drawn = prizeRecord?.drawnAt
+                  ? { squareId: prizeRecord.squareId, owner: prizeRecord.owner, amount: prizeRecord.amount, timestamp: drawnMs }
+                  : null;
 
                 return (
                   <div className="bg-card p-6 rounded-xl border border-line border-t-4 border-t-gold-500 shadow-card">
@@ -748,7 +788,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <h3 className="text-lg font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2"><Sparkles className="text-gold-500" /> Final Prize Randomizer</h3>
                         <p className="text-sm font-body text-muted">Randomly select a square for the unclaimed rollover pot.</p>
                       </div>
-                      {gameState.randomWinner ? (
+                      {drawn ? (
                         <Badge status="winner">Winner Selected</Badge>
                       ) : randomizerAvailable ? (
                         <div className="bg-gold-500/15 text-gold-700 dark:text-gold-400 border border-gold-500/30 px-3 py-1 rounded-full text-xs font-display font-bold uppercase tracking-[0.08em]">Ready to Roll</div>
@@ -758,7 +798,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
 
                     {/* Condition Checklist - show when not yet available */}
-                    {!randomizerAvailable && !gameState.randomWinner && (
+                    {!randomizerAvailable && !drawn && (
                       <div className="bg-surface border border-line rounded-lg p-4 mb-4">
                         <p className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] mb-3">This feature will unlock when:</p>
                         <ul className="space-y-2 text-sm font-body">
@@ -774,7 +814,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                     )}
 
-                    {!gameState.randomWinner ? (
+                    {!drawn ? (
                       <button
                         onClick={handleRandomizeWinner}
                         disabled={!randomizerAvailable || isRandomizing}
@@ -791,15 +831,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="bg-surface rounded-xl p-6 text-center border border-gold-500/40 relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gold-foil"></div>
                         <p className="text-muted text-xs font-display font-bold uppercase tracking-[0.08em] mb-2">The Lucky Square Is</p>
-                        <div className="text-6xl font-display font-bold text-[color:var(--text)] num mb-2">#{gameState.randomWinner.squareId}</div>
-                        <div className="text-xl text-gold-700 dark:text-gold-400 font-display font-bold uppercase mb-4">{gameState.randomWinner.owner}</div>
-                        <p className="text-xs text-faint num">Selected at {new Date(gameState.randomWinner.timestamp).toLocaleTimeString()}</p>
-                        <button
-                          onClick={() => updateConfig({ randomWinner: undefined })}
-                          className="mt-4 text-xs text-faint hover:text-brandred-600 underline"
-                        >
-                          Reset (Admin Only)
-                        </button>
+                        <div className="text-6xl font-display font-bold text-[color:var(--text)] num mb-2">#{drawn.squareId}</div>
+                        <div className="text-xl text-gold-700 dark:text-gold-400 font-display font-bold uppercase mb-4">{drawn.owner}</div>
+                        <p className="text-sm font-display font-bold text-gold-700 dark:text-gold-400 num mb-2">${(drawn.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        {drawn.timestamp && <p className="text-xs text-faint num">Drawn {new Date(drawn.timestamp).toLocaleString()}</p>}
+                        <p className="mt-4 text-xs text-faint">Drawn once, on the server, from the squares that were sold. It cannot be drawn again.</p>
                       </div>
                     )}
                   </div>
@@ -820,123 +856,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <p className="text-muted font-body text-sm mb-6">Track which winners have been paid out.</p>
 
               {(() => {
-                // Calculate all winners from gameState
-                const winners: { period: string; label: string; homeDigit: number; awayDigit: number; owner: string | null; squareId: number; amount: number; isPaid: boolean; paidAt?: number }[] = [];
-                const periods = ['q1', 'half', 'q3', 'final'] as const;
-                const periodLabels = { q1: 'Q1', half: 'Halftime', q3: 'Q3', final: 'Final' };
-
-                // Helper to get the correct axis numbers for a period (4-set mode support)
-                const getAxisForPeriod = (period: typeof periods[number]) => {
-                  if (gameState.numberSets === 4 && gameState.quarterlyNumbers) {
-                    const periodToQuarter = { q1: 'q1', half: 'q2', q3: 'q3', final: 'q4' } as const;
-                    const quarterKey = periodToQuarter[period];
-                    return gameState.quarterlyNumbers[quarterKey] || gameState.axisNumbers;
-                  }
-                  return gameState.axisNumbers;
+                // The RECORDED winners — the same records the pool page shows and
+                // the winner emails are sent from. This tab used to work the
+                // winners out again for itself, looked up the transposed square
+                // (so it named the wrong person unless both digits matched), and
+                // its "Mark Paid" button toggled whether that player had paid for
+                // their SQUARE rather than whether the prize had been paid out.
+                const paidOn = (w: Winner) => {
+                  const ms = toEpochMillis(w.paidAt);
+                  return ms ? new Date(ms).toLocaleDateString() : null;
                 };
-
-                // Check if we have any axis numbers (single set or quarterly)
-                const hasAxisNumbers = gameState.axisNumbers ||
-                  (gameState.numberSets === 4 && gameState.quarterlyNumbers &&
-                    (gameState.quarterlyNumbers.q1 || gameState.quarterlyNumbers.q2 ||
-                      gameState.quarterlyNumbers.q3 || gameState.quarterlyNumbers.q4));
-
-                if (hasAxisNumbers) {
-                  const totalPot = gameState.costPerSquare * gameState.squares.filter(s => s.owner).length;
-                  const charityDeduction = gameState.charity?.enabled ? (totalPot * (gameState.charity.percentage / 100)) : 0;
-                  const netPot = totalPot - charityDeduction;
-
-                  periods.forEach((period) => {
-                    const score = gameState.scores[period];
-                    if (score) {
-                      const currentAxis = getAxisForPeriod(period);
-                      if (!currentAxis) return; // Skip if no axis for this period
-
-                      const homeDigit = score.home % 10;
-                      const awayDigit = score.away % 10;
-                      const homeIdx = currentAxis.home.indexOf(homeDigit);
-                      const awayIdx = currentAxis.away.indexOf(awayDigit);
-                      const squareId = homeIdx * 10 + awayIdx;
-                      const square = gameState.squares[squareId];
-                      const payoutPct = gameState.payouts[period as keyof typeof gameState.payouts] || 0;
-                      const amount = netPot * (payoutPct / 100);
-
-                      winners.push({
-                        period,
-                        label: periodLabels[period],
-                        homeDigit,
-                        awayDigit,
-                        owner: square?.owner || null,
-                        squareId,
-                        amount,
-                        isPaid: square?.isPaid || false,
-                        paidAt: square?.paidAt ?? undefined
-                      });
-                    }
-                  });
-                }
-
-                const totalOwed = winners.reduce((acc, w) => acc + w.amount, 0);
-                const totalPaid = winners.filter(w => w.isPaid).reduce((acc, w) => acc + w.amount, 0);
+                const payable = winnerRecords.filter(w => isPlayerOwner(w.owner));
+                const totalOwed = payable.reduce((acc, w) => acc + (w.amount || 0), 0);
+                const totalPaid = payable.filter(w => w.isPaid).reduce((acc, w) => acc + (w.amount || 0), 0);
+                const money = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
                 return (
                   <>
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <StatTile label="Total Prize Pool" value={`$${totalOwed.toLocaleString()}`} accent="gold" />
-                      <StatTile label="Paid Out" value={`$${totalPaid.toLocaleString()}`} accent="gold" />
-                      <StatTile label="Pending" value={`$${(totalOwed - totalPaid).toLocaleString()}`} accent="gold" />
+                      <StatTile label="Won So Far" value={money(totalOwed)} accent="gold" />
+                      <StatTile label="Paid Out" value={money(totalPaid)} accent="gold" />
+                      <StatTile label="Pending" value={money(totalOwed - totalPaid)} accent="gold" />
                     </div>
 
                     {/* Winners Table */}
-                    {winners.length === 0 ? (
+                    {winnerRecords.length === 0 ? (
                       <div className="text-center py-12 text-muted">
                         <DollarSign size={40} className="mx-auto mb-4 opacity-50" />
                         <p className="font-display font-bold uppercase tracking-[0.05em]">No winners yet</p>
-                        <p className="text-sm font-body">Winners will appear here once quarterly scores are recorded.</p>
+                        <p className="text-sm font-body">Winners appear here as each quarter's score is recorded.</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {winners.map((win) => (
-                          <div
-                            key={win.period}
-                            className={`p-4 rounded-lg border flex items-center justify-between transition-ui ${win.isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-surface border-line'}`}
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-display font-bold text-sm ${win.isPaid ? 'bg-[#E4F5EC] text-[#0F7B4A]' : 'bg-card text-muted border border-line'}`}>
-                                {(win.owner || '??').substring(0, 2).toUpperCase()}
-                              </div>
-                              <div>
-                                <div className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex items-center gap-2">
-                                  {win.label}
-                                  <span className="text-xs text-muted num">({win.homeDigit}-{win.awayDigit})</span>
+                        {winnerRecords.map((win) => {
+                          const isPlayer = isPlayerOwner(win.owner);
+                          const noPlayerText = win.owner === ROLLOVER
+                            ? (win.amount > 0 ? 'Waiting on the random draw' : 'Unsold square — prize rolled over')
+                            : 'Unsold square — kept by the organizer';
+                          return (
+                            <div
+                              key={win.id ?? [win.period, win.squareId, win.isReverse ? 'r' : 'n'].join('-')}
+                              className={'p-4 rounded-lg border flex items-center justify-between gap-4 transition-ui ' + (win.isPaid ? 'bg-[#0F7B4A]/5 border-[#0F7B4A]/30' : 'bg-surface border-line')}
+                            >
+                              <div className="flex items-center gap-4 min-w-0">
+                                <div className={'w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-display font-bold text-sm ' + (win.isPaid ? 'bg-[#E4F5EC] text-[#0F7B4A]' : 'bg-card text-muted border border-line')}>
+                                  {isPlayer ? win.owner.substring(0, 2).toUpperCase() : '—'}
                                 </div>
-                                <div className="text-sm font-body text-muted">
-                                  {win.owner || <span className="text-brandred-600 italic">Unclaimed Square</span>}
-                                  <span className="text-faint ml-2 num">• Square #{win.squareId}</span>
+                                <div className="min-w-0">
+                                  <div className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] flex flex-wrap items-center gap-x-2">
+                                    {win.description || win.period}
+                                    <span className="text-xs text-muted num">(home {win.homeDigit} · away {win.awayDigit})</span>
+                                  </div>
+                                  <div className="text-sm font-body text-muted">
+                                    {isPlayer ? win.owner : <span className="text-brandred-600 italic">{noPlayerText}</span>}
+                                    <span className="text-faint ml-2 num">• Square #{win.squareId}</span>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <div className="font-display font-bold text-lg text-gold-700 dark:text-gold-400 num">${win.amount.toLocaleString()}</div>
-                                {win.isPaid && win.paidAt && (
-                                  <div className="text-[10px] text-faint num">Paid {new Date(win.paidAt).toLocaleDateString()}</div>
+                              <div className="flex items-center gap-4 shrink-0">
+                                <div className="text-right">
+                                  <div className="font-display font-bold text-lg text-gold-700 dark:text-gold-400 num">{money(win.amount || 0)}</div>
+                                  {win.isPaid && paidOn(win) && (
+                                    <div className="text-[10px] text-faint num">Paid {paidOn(win)}</div>
+                                  )}
+                                </div>
+                                {isPlayer && win.id && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await dbService.toggleWinnerPaid(gameState.id, win.id!);
+                                      } catch (e) {
+                                        logger.error(e);
+                                        toast.error('Could not update the payout. Please try again.');
+                                      }
+                                    }}
+                                    className={'px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 ' + (win.isPaid ? 'bg-[#0F7B4A] text-white' : 'bg-navy-800 hover:bg-navy-700 text-white')}
+                                  >
+                                    {win.isPaid ? <span className="flex items-center gap-1"><CheckCircle size={14} /> Paid</span> : 'Mark Paid'}
+                                  </button>
                                 )}
                               </div>
-                              <button
-                                onClick={async () => {
-                                  await dbService.markSquarePaid(gameState.id, [win.squareId], !win.isPaid);
-                                }}
-                                className={`px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 ${win.isPaid
-                                  ? 'bg-[#0F7B4A] text-white'
-                                  : 'bg-navy-800 hover:bg-navy-700 text-white'}`}
-                              >
-                                {win.isPaid ? <span className="flex items-center gap-1"><CheckCircle size={14} /> Paid</span> : 'Mark Paid'}
-                              </button>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </>
@@ -984,7 +987,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className={`font-display font-bold uppercase tracking-[0.02em] text-lg ${gameState.manualScoreOverride ? 'text-gold-600 dark:text-gold-400' : 'text-[color:var(--text)]'}`}>Manual Score Override</h3>
-                  <p className="text-sm font-body text-muted">Disable auto-updates and manually set scores in the database.</p>
+                  <p className="text-sm font-body text-muted">Turn off automatic score updates and enter the scores yourself below.</p>
                 </div>
                 <Switch
                   checked={!!gameState.manualScoreOverride}
@@ -1000,7 +1003,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="flex items-center gap-2"><Wifi className="text-gold-500" size={20} /><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)]">Live Updates</h3></div>
                 {fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-display font-bold uppercase tracking-[0.05em] ${fetchStatus.type === 'success' ? 'text-[#0F7B4A] bg-[#0F7B4A]/10' : fetchStatus.type === 'error' ? 'text-brandred-600 bg-brandred-600/10' : 'text-muted'}`}>{fetchStatus.msg}</span>)}
               </div>
-              <p className="text-muted font-body text-sm mb-6">{gameState.gameId ? `Linked to Game ID: ${gameState.gameId}. Updates will be precise.` : `Fuzzy matching active.`}</p>
+              <p className="text-muted font-body text-sm mb-6">{gameState.gameId ? `Linked to game ${gameState.gameId}. Scores update automatically about once a minute.` : `No game is linked, so scores do not update on their own. Enter them below, or link a game in Settings.`}</p>
               <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
               <button onClick={handleFixSync} disabled={isFixing} className="border border-brandred-600/40 bg-brandred-600/5 hover:bg-brandred-600/10 disabled:opacity-50 disabled:cursor-wait text-brandred-600 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
             </div>

@@ -1,0 +1,250 @@
+/**
+ * Squares winner documents follow the scores (PLAN-SQUARES-REOPEN B2, D12).
+ *
+ * `pools/{id}/winners/{docId}` is the record a commissioner pays from. It used
+ * to be written once, at the moment a period went final, by code that had its
+ * own copy of the payout rules — so it ignored charity, rollover and the
+ * reverse-winner edge, never healed a period that finalized before the grid had
+ * numbers, and never moved when a score was corrected.
+ *
+ * Now: every time scores are processed, the winner documents the rules call for
+ * are computed by `shared/squaresPayouts` and compared with what is stored. Only
+ * differences are written.
+ *
+ * `planWinnerWrites` is PURE so the whole decision table is unit-tested without
+ * an emulator; `applyWinnerPlan` is the thin part that touches Firestore.
+ */
+import * as admin from "firebase-admin";
+import {
+    computeEventPayouts,
+    computePeriodPayouts,
+    isPlayerOwner,
+    scoreEventStrategy,
+    toCents,
+    type EventClaimInput,
+    type PayoutPool,
+    type Period,
+    type PeriodScore,
+    type RecordedWinners,
+} from "../shared/squaresPayouts";
+import { writeAuditEvent, type AuditOptions } from "../audit";
+
+/** Every document id a period (as opposed to a scoring event) can produce. */
+export const PERIOD_WINNER_IDS: ReadonlySet<string> = new Set([
+    'q1', 'q1_reverse', 'half', 'half_reverse', 'q3', 'q3_reverse',
+    'final', 'final_reverse', 'final_rollover',
+]);
+
+export const isEventWinnerId = (id: string): boolean => id.startsWith('event_');
+
+/** `event_14_7` / `event_rev_14_7` → the score that event produced. */
+export function parseEventWinnerId(id: string): { home: number; away: number; isReverse: boolean } | null {
+    const m = /^event_(rev_)?(\d+)_(\d+)$/.exec(id);
+    if (!m) return null;
+    return { isReverse: !!m[1], home: Number(m[2]), away: Number(m[3]) };
+}
+
+export interface StoredWinner {
+    id: string;
+    data: Record<string, unknown>;
+}
+
+type AuditSpec = Pick<AuditOptions, 'type' | 'severity' | 'message' | 'payload'>;
+
+export type WinnerWrite =
+    | { kind: 'create'; id: string; doc: Record<string, unknown>; audit: AuditSpec }
+    | { kind: 'update'; id: string; fields: Record<string, unknown>; audit?: AuditSpec }
+    | { kind: 'delete'; id: string; audit: AuditSpec }
+    | { kind: 'audit'; audit: AuditSpec };
+
+/** The fields the payout math owns. Everything else on the doc is left alone. */
+const COMPUTED_FIELDS = ['period', 'squareId', 'owner', 'amount', 'homeDigit', 'awayDigit', 'isReverse', 'isRollover', 'description'] as const;
+
+const money = (n: unknown) => `$${toCents(Number(n) || 0).toFixed(2)}`;
+
+/**
+ * What must be written so the winner documents match the scores.
+ *
+ * `scores` holds the periods that are FINAL. `existing` is every document in
+ * the pool's `winners` subcollection, plus any event document this same
+ * transaction is about to create.
+ *
+ * Returns nothing for a grid with no numbers: no winner can be computed, and an
+ * empty result must not be read as "delete what is recorded".
+ */
+export function planWinnerWrites(
+    pool: PayoutPool,
+    scores: Partial<Record<Period, PeriodScore | null | undefined>>,
+    existing: ReadonlyArray<StoredWinner>,
+    opts: { gameFinal: boolean },
+): WinnerWrite[] {
+    const usable = (a: unknown): boolean => {
+        const x = a as { home?: unknown; away?: unknown } | null | undefined;
+        return !!x && Array.isArray(x.home) && Array.isArray(x.away) && x.home.length === 10 && x.away.length === 10;
+    };
+    const hasNumbers = usable(pool.axisNumbers)
+        || (pool.numberSets === 4 && Object.values(pool.quarterlyNumbers ?? {}).some(usable));
+    if (!hasNumbers) return [];
+
+    const writes: WinnerWrite[] = [];
+    const byId = new Map(existing.map((w) => [w.id, w]));
+
+    // ---- Periods ----
+    const recorded: Record<string, { squareId: number; owner: string | null; drawn?: boolean }> = {};
+    for (const w of existing) {
+        if (!PERIOD_WINNER_IDS.has(w.id)) continue;
+        recorded[w.id] = {
+            squareId: Number(w.data.squareId),
+            owner: typeof w.data.owner === 'string' ? w.data.owner : null,
+            drawn: !!w.data.drawnAt,
+        };
+    }
+
+    const claims = computePeriodPayouts(pool, scores, recorded as RecordedWinners).flatMap((r) => r.claims);
+    const wanted = new Set<string>();
+
+    for (const c of claims) {
+        wanted.add(c.docId);
+        const target: Record<string, unknown> = {
+            period: c.period,
+            squareId: c.squareId,
+            owner: c.owner,
+            amount: c.amount,
+            homeDigit: c.homeDigit,
+            awayDigit: c.awayDigit,
+            isReverse: c.isReverse,
+            isRollover: c.isRollover,
+            description: c.description,
+        };
+        const payload = { period: c.period, docId: c.docId, squareId: c.squareId, winner: c.owner, amount: c.amount, homeDigit: c.homeDigit, awayDigit: c.awayDigit, isReverse: c.isReverse };
+        const prior = byId.get(c.docId);
+
+        if (!prior) {
+            writes.push({
+                kind: 'create', id: c.docId, doc: target,
+                audit: { type: 'WINNER_COMPUTED', severity: 'INFO', message: `${c.description}: ${c.owner} (${money(c.amount)})`, payload },
+            });
+            continue;
+        }
+
+        const changed = COMPUTED_FIELDS.filter((k) => prior.data[k] !== target[k]);
+        if (changed.length === 0) continue;
+
+        const winnerChanged = prior.data.squareId !== c.squareId || prior.data.owner !== c.owner;
+        const wasPaid = prior.data.isPaid === true;
+        const fields: Record<string, unknown> = {};
+        for (const k of changed) fields[k] = target[k];
+
+        if (winnerChanged) {
+            // "Paid" was a statement about the PREVIOUS winner. It does not carry over.
+            if (wasPaid) { fields.isPaid = false; fields.paidAt = null; fields.paidByUid = null; }
+            writes.push({
+                kind: 'update', id: c.docId, fields,
+                audit: {
+                    type: 'WINNER_COMPUTED',
+                    severity: wasPaid ? 'CRITICAL' : 'WARNING',
+                    message: `${c.description} CHANGED: ${String(prior.data.owner)} → ${c.owner} (${money(c.amount)})`
+                        + (wasPaid ? ' — the previous winner had been marked PAID' : ''),
+                    payload: { ...payload, previousWinner: prior.data.owner, previousSquareId: prior.data.squareId, previousAmount: prior.data.amount, wasPaid },
+                },
+            });
+        } else if (changed.includes('amount')) {
+            writes.push({
+                kind: 'update', id: c.docId, fields,
+                audit: {
+                    type: 'WINNER_COMPUTED',
+                    severity: wasPaid ? 'WARNING' : 'INFO',
+                    message: `${c.description}: prize for ${c.owner} is now ${money(c.amount)} (was ${money(prior.data.amount)})`
+                        + (wasPaid ? ' — already marked PAID at the old amount' : ''),
+                    payload: { ...payload, previousAmount: prior.data.amount, wasPaid },
+                },
+            });
+        } else {
+            writes.push({ kind: 'update', id: c.docId, fields });
+        }
+    }
+
+    for (const w of existing) {
+        if (!PERIOD_WINNER_IDS.has(w.id) || wanted.has(w.id)) continue;
+        const wasPaid = w.data.isPaid === true;
+        writes.push({
+            kind: 'delete', id: w.id,
+            audit: {
+                type: 'WINNER_COMPUTED',
+                severity: wasPaid ? 'CRITICAL' : 'WARNING',
+                message: `Winner record ${w.id} (${String(w.data.owner)}, ${money(w.data.amount)}) no longer applies and was removed`
+                    + (wasPaid ? ' — it had been marked PAID' : ''),
+                payload: { docId: w.id, previousWinner: w.data.owner, previousAmount: w.data.amount, wasPaid },
+            },
+        });
+    }
+
+    // ---- Scoring events (Every Score Pays) ----
+    // Amounts are only knowable once the game is over and the events are counted.
+    if (opts.gameFinal && scoreEventStrategy(pool) !== null) {
+        const events: EventClaimInput[] = [];
+        for (const w of existing) {
+            const parsed = isEventWinnerId(w.id) ? parseEventWinnerId(w.id) : null;
+            if (!parsed) continue;
+            events.push({ docId: w.id, owner: typeof w.data.owner === 'string' ? w.data.owner : '', home: parsed.home, away: parsed.away, isReverse: parsed.isReverse });
+        }
+        if (events.length > 0) {
+            const { pot, amounts, unclaimed } = computeEventPayouts(pool, events);
+            let updated = 0;
+            for (const e of events) {
+                if (byId.get(e.docId)?.data.amount !== amounts[e.docId]) {
+                    writes.push({ kind: 'update', id: e.docId, fields: { amount: amounts[e.docId] } });
+                    updated++;
+                }
+            }
+            if (updated > 0) {
+                const paid = events.filter((e) => isPlayerOwner(e.owner)).length;
+                writes.push({
+                    kind: 'audit',
+                    audit: {
+                        type: 'WINNER_COMPUTED', severity: 'INFO',
+                        message: `Finalized scoring-event payouts: ${money(pot)} across ${events.length} event(s), ${paid} won by a player`,
+                        payload: { scoreChangePot: pot, eventCount: events.length, paidEvents: paid, unclaimed, updatedCount: updated },
+                    },
+                });
+            }
+        }
+    }
+
+    return writes;
+}
+
+/** Write a plan. Makes NO reads, so it is safe after other writes in a transaction. */
+export async function applyWinnerPlan(
+    transaction: admin.firestore.Transaction,
+    poolId: string,
+    writes: ReadonlyArray<WinnerWrite>,
+    actor: AuditOptions['actor'],
+): Promise<void> {
+    const winners = admin.firestore().collection('pools').doc(poolId).collection('winners');
+    for (const w of writes) {
+        if (w.kind === 'create') {
+            transaction.set(winners.doc(w.id), w.doc);
+        } else if (w.kind === 'delete') {
+            transaction.delete(winners.doc(w.id));
+        } else if (w.kind === 'update') {
+            // `set(merge)` not `update`: an event document created earlier in this
+            // same transaction does not exist yet as far as `update` is concerned.
+            transaction.set(winners.doc(w.id), w.fields, { merge: true });
+        }
+        if (w.audit) await writeAuditEvent({ poolId, actor, ...w.audit }, transaction);
+    }
+}
+
+/** The final-period scores on a pool document, as the payout math takes them. */
+export function finalScoresOf(scores: unknown): Partial<Record<Period, PeriodScore>> {
+    const out: Partial<Record<Period, PeriodScore>> = {};
+    const s = (scores ?? {}) as Record<string, unknown>;
+    for (const p of ['q1', 'half', 'q3', 'final'] as const) {
+        const v = s[p] as { home?: unknown; away?: unknown } | null | undefined;
+        if (v && Number.isFinite(Number(v.home)) && Number.isFinite(Number(v.away))) {
+            out[p] = { home: Number(v.home), away: Number(v.away) };
+        }
+    }
+    return out;
+}

@@ -1062,6 +1062,43 @@ export const dbService = {
         }
     },
 
+    /** Squares: bring the winner records in line with the scores on the pool. */
+    recomputeSquaresWinners: async (poolId: string): Promise<{ success: boolean; changed: number }> => {
+        const fn = httpsCallable(functions, 'recomputeSquaresWinners');
+        const result = await fn(withCorrelationId({ poolId }));
+        return result.data as { success: boolean; changed: number };
+    },
+
+    /** Squares: the one-time server-side random draw for an unclaimed final prize. */
+    drawSquaresFinalPrize: async (poolId: string): Promise<{ success: boolean; squareId: number; owner: string; amount: number }> => {
+        try {
+            const fn = httpsCallable(functions, 'drawSquaresFinalPrize');
+            const result = await fn(withCorrelationId({ poolId }));
+            return result.data as { success: boolean; squareId: number; owner: string; amount: number };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'drawSquaresFinalPrize', poolId }
+            });
+            throw error;
+        }
+    },
+
+    /** Squares: reopen the grid for sales before kickoff. Discards the drawn numbers. */
+    unlockSquaresPool: async (poolId: string): Promise<{ success: boolean; numbersDiscarded: boolean }> => {
+        try {
+            const fn = httpsCallable(functions, 'unlockSquaresPool');
+            const result = await fn(withCorrelationId({ poolId }));
+            return result.data as { success: boolean; numbersDiscarded: boolean };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'unlockSquaresPool', poolId }
+            });
+            throw error;
+        }
+    },
+
     syncAllUsers: async (): Promise<{ success: boolean; count: number }> => {
         try {
             const syncFn = httpsCallable(functions, 'syncAllUsers');

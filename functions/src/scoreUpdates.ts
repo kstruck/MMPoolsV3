@@ -13,6 +13,8 @@ import { isDeadSyncPool } from "./lib/scanBounds";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { hasConfirmedRole } from "./lib/confirmedRole";
 import { rethrowOrInternal } from "./lib/safeError";
+import { applyWinnerPlan, finalScoresOf, planWinnerWrites, type StoredWinner } from "./lib/squaresWinners";
+import { usesCurrentWinnerRules, type PayoutPool } from "./shared/squaresPayouts";
 
 // Helper to generate random digits
 const generateDigits = (): number[] => {
@@ -49,13 +51,6 @@ const getPeriodScore = (lines: any[], period: number): number => {
         if (indexed) val = indexed.value ?? indexed.displayValue;
     }
     return safeInt(val);
-};
-
-// Helper to safely parse payout
-const getSafePayout = (payouts: any, key: string): number => {
-    if (!payouts) return 0;
-    const val = payouts[key];
-    return typeof val === 'number' ? val : Number(val) || 0;
 };
 
 // Helper: Get last digit for squares logic
@@ -204,149 +199,6 @@ async function fetchESPNScores(gameId: string, league: string): Promise<any | nu
     }
 }
 
-// Helper to handle winner logging and computation (Shared between sync and fix)
-const processWinners = async (
-    transaction: admin.firestore.Transaction,
-    db: admin.firestore.Firestore,
-    poolId: string,
-    poolData: GameState,
-    periodKey: 'q1' | 'half' | 'q3' | 'final',
-    homeScore: number,
-    awayScore: number,
-    skipDedupe: boolean = false
-) => {
-    // Safety check for axis numbers
-    if (!poolData.axisNumbers || !poolData.axisNumbers.home || !poolData.axisNumbers.away) return;
-
-    // Dedupe check handled by writeAuditEvent keys
-
-    const hDigit = getLastDigit(homeScore);
-    const aDigit = getLastDigit(awayScore);
-
-    const soldSquares = poolData.squares ? poolData.squares.filter((s: any) => s.owner).length : 0;
-    const totalPot = soldSquares * (poolData.costPerSquare || 0);
-
-    // Process Payout Amount
-    // Skip ALL period winners for Equal Split (only score events pay)
-    if (poolData.ruleVariations?.scoreChangePayout && poolData.ruleVariations?.scoreChangePayoutStrategy === 'equal_split') {
-        console.log(`[ScoreSync] Skipping Period Winner for Equal Split Pool ${poolId}`);
-        return;
-    }
-
-    // For Hybrid: Skip Q1 and Q3 (only Halftime and Final get period payouts)
-    if (poolData.ruleVariations?.scoreChangePayout && poolData.ruleVariations?.scoreChangePayoutStrategy === 'hybrid') {
-        if (periodKey === 'q1' || periodKey === 'q3') {
-            console.log(`[ScoreSync] Skipping ${periodKey} Winner for Hybrid Pool ${poolId} (only half/final pay)`);
-            return;
-        }
-    }
-
-    let payoutPct = 0;
-
-    // Check Strategy
-    const strategy = poolData.ruleVariations?.scoreChangePayoutStrategy;
-    if (poolData.ruleVariations?.scoreChangePayout && strategy === 'hybrid') {
-        // Use Hybrid Weights with robust defaults
-        const weights = poolData.ruleVariations.scoreChangeHybridWeights;
-        if (periodKey === 'final') {
-            payoutPct = (weights?.final && weights.final > 0) ? weights.final : 40;
-        } else if (periodKey === 'half') {
-            payoutPct = (weights?.halftime && weights.halftime > 0) ? weights.halftime : 20;
-        } else {
-            payoutPct = 0; // Q1/Q3 are 0 in hybrid
-        }
-    } else if (!poolData.ruleVariations?.scoreChangePayout) {
-        // Standard (no ESP) - use standard quarterly payouts
-        payoutPct = getSafePayout(poolData.payouts, periodKey);
-    }
-
-    // FINAL ENFORCEMENT: For Hybrid pools, Halftime and Final MUST have payouts
-    if (poolData.ruleVariations?.scoreChangePayout &&
-        (poolData.ruleVariations?.scoreChangePayoutStrategy === 'hybrid' || !poolData.ruleVariations?.scoreChangePayoutStrategy)) {
-        if (periodKey === 'half' && payoutPct === 0) payoutPct = 20;
-        if (periodKey === 'final' && payoutPct === 0) payoutPct = 40;
-    }
-
-    let amount = (totalPot * payoutPct) / 100;
-    if (poolData.ruleVariations?.reverseWinners) amount /= 2;
-
-    const label = periodKey === 'q1' ? 'Q1' : periodKey === 'half' ? 'Halftime' : periodKey === 'q3' ? 'Q3' : 'Final';
-    const axis = poolData.axisNumbers;
-
-    if (axis) {
-        const row = axis.away.indexOf(aDigit);
-        const col = axis.home.indexOf(hDigit);
-
-        if (row !== -1 && col !== -1) {
-            const squareIndex = row * 10 + col;
-            const square = poolData.squares[squareIndex];
-            const winnerName = square?.owner || 'Unsold';
-
-            await writeAuditEvent({
-                poolId: poolId,
-                type: 'WINNER_COMPUTED',
-                message: `${label} Winner: ${winnerName} (Home ${hDigit}, Away ${aDigit})`,
-                severity: 'INFO',
-                actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                payload: { period: label, homeScore, awayScore, homeDigit: hDigit, awayDigit: aDigit, winner: winnerName, squareId: squareIndex, amount },
-                ...(skipDedupe ? {} : { dedupeKey: `WINNER:${poolId}:${periodKey}:${hDigit}:${aDigit}` })
-            }, transaction);
-
-            const winnerDoc: Winner = {
-                period: periodKey,
-                squareId: squareIndex,
-                owner: winnerName,
-                amount: amount,
-                homeDigit: hDigit,
-                awayDigit: aDigit,
-                isReverse: false,
-                description: `${label} Winner`
-            };
-            transaction.set(db.collection('pools').doc(poolId).collection('winners').doc(periodKey), winnerDoc);
-        }
-
-        if (poolData.ruleVariations?.reverseWinners) {
-            const rRow = axis.away.indexOf(hDigit);
-            const rCol = axis.home.indexOf(aDigit);
-            if (rRow !== -1 && rCol !== -1) {
-                const rSqIndex = rRow * 10 + rCol;
-                // Regular winner index (if valid)
-                const regularIndex = (row !== -1 && col !== -1) ? (row * 10 + col) : -999;
-
-                if (rSqIndex !== regularIndex) {
-                    const rSquare = poolData.squares[rSqIndex];
-                    const rWinnerName = rSquare?.owner || 'Unsold';
-                    await writeAuditEvent({
-                        poolId: poolId,
-                        type: 'WINNER_COMPUTED',
-                        message: `${label} Reverse Winner: ${rWinnerName}`,
-                        severity: 'INFO',
-                        actor: { uid: 'system', role: 'SYSTEM', label: 'Score Sync' },
-                        payload: { period: label, type: 'REVERSE', winner: rWinnerName, squareId: rSqIndex, amount: amount },
-                        ...(skipDedupe ? {} : { dedupeKey: `WINNER_REV:${poolId}:${periodKey}:${hDigit}:${aDigit}` })
-                    }, transaction);
-
-                    // Persist reverse winner to subcollection
-                    const reverseWinnerDoc: Winner = {
-                        period: periodKey,
-                        squareId: rSqIndex,
-                        owner: rWinnerName,
-                        amount: amount,
-                        homeDigit: aDigit,  // Swapped for reverse
-                        awayDigit: hDigit,  // Swapped for reverse
-                        isReverse: true,
-                        description: `${label} Reverse Winner`
-                    };
-                    transaction.set(
-                        db.collection('pools').doc(poolId).collection('winners').doc(`${periodKey}_reverse`),
-                        reverseWinnerDoc
-                    );
-                }
-            }
-        }
-    }
-};
-
 /**
  * Core logic to update a single pool based on new scores.
  */
@@ -395,14 +247,22 @@ const processGameUpdate = async (
     const isQ3Final = (period >= 4) || (state === "post");
     const isGameFinal = (state === "post");
 
-    // PRE-READ: For "Every Score Wins" pools going final, we need to read winners BEFORE any writes
-    // This prevents read-after-write transaction errors
-    let preReadEventWinners: admin.firestore.QueryDocumentSnapshot[] | null = null;
-    const newEventWinners: { ref: admin.firestore.DocumentReference, data: () => any }[] = [];
-    if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout) {
-        const winnersRef = db.collection('pools').doc(doc.id).collection('winners');
-        const winnersSnap = await transaction.get(winnersRef);
-        preReadEventWinners = winnersSnap.docs.filter(d => d.data().period === 'Event');
+    // PRE-READ the winner documents BEFORE any write (Firestore transactions
+    // refuse a read after a write). Winner records are reconciled against the
+    // scores at the end of this function — see lib/squaresWinners.ts.
+    //
+    // Skipped until the first quarter is over (nothing can have been won) and
+    // for a pool with no grid numbers (nothing can be computed), so a pool that
+    // has neither costs no extra read.
+    //
+    // Skipped ENTIRELY for a pool created before these rules began: its
+    // winner records are what was actually paid, and they are not recomputed.
+    // See SQUARES_RULES_SINCE_MS.
+    let storedWinners: StoredWinner[] | null = null;
+    const newEventWinners: StoredWinner[] = [];
+    if (isQ1Final && freshPool.axisNumbers && usesCurrentWinnerRules(freshPool as { createdAt?: unknown })) {
+        const winnersSnap = await transaction.get(db.collection('pools').doc(doc.id).collection('winners'));
+        storedWinners = winnersSnap.docs.map(d => ({ id: d.id, data: d.data() }));
     }
 
     // Prepare New Scores Object
@@ -682,6 +542,7 @@ const processGameUpdate = async (
         console.log(`[ScoreSync] Generated ${steps.length} steps for ${doc.id}. Existing dedupes: ${existingDedupes.size}`);
 
         // --- PROCESS SEQUENCE ---
+        const newScoreEvents: Record<string, unknown>[] = [];
         for (const step of steps) {
             const stepQText = state === 'pre' ? 'Pre' : period + (period === 1 ? 'st' : period === 2 ? 'nd' : period === 3 ? 'rd' : 'th');
             const scoreKey = `SCORE_STEP:${doc.id}:${step.home}:${step.away}`;
@@ -708,7 +569,10 @@ const processGameUpdate = async (
                     description: `${step.desc} (${state === 'pre' ? 'Pre' : 'Q' + period})`,
                     timestamp: Date.now()
                 };
-                transactionUpdates.scoreEvents = FieldValue.arrayUnion(newEvent);
+                // Collected and written once after the loop: assigning
+                // `arrayUnion(newEvent)` here kept only the LAST step, so a
+                // touchdown and its extra point in one sync lost the touchdown.
+                newScoreEvents.push(newEvent);
                 shouldUpdate = true;
             }
 
@@ -768,7 +632,7 @@ const processGameUpdate = async (
                                 winnerDoc,
                                 { merge: true }
                             );
-                            newEventWinners.push({ ref: winnerRef, data: () => winnerDoc });
+                            newEventWinners.push({ id: winnerRef.id, data: { ...winnerDoc } });
                         }
                     }
                     // ALWAYS write the winner doc even if audit was deduped
@@ -793,11 +657,20 @@ const processGameUpdate = async (
                             isReverse: false,
                             description: `${step.desc} (${step.home}-${step.away})`
                         };
-                        transaction.set(
-                            db.collection('pools').doc(doc.id).collection('winners').doc(`event_${step.home}_${step.away}`),
-                            winnerDoc,
-                            { merge: true }
-                        );
+                        // Only when the document is NOT already on record. Re-writing
+                        // one that is reset its amount to 0 — and at game-final the
+                        // amount pass then saw nothing to change, so a "Fix Sync" on a
+                        // finished pool left every scoring event paying $0. It also
+                        // re-decided the winner from the grid as it stands today.
+                        const eventId = `event_${step.home}_${step.away}`;
+                        if (!storedWinners?.some(w => w.id === eventId)) {
+                            transaction.set(
+                                db.collection('pools').doc(doc.id).collection('winners').doc(eventId),
+                                winnerDoc,
+                                { merge: true }
+                            );
+                            newEventWinners.push({ id: eventId, data: { ...winnerDoc } });
+                        }
                     }
                 }
 
@@ -867,7 +740,7 @@ const processGameUpdate = async (
                                     rWinnerDoc,
                                     { merge: true }
                                 );
-                                newEventWinners.push({ ref: rWinnerRef, data: () => rWinnerDoc });
+                                newEventWinners.push({ id: rWinnerRef.id, data: { ...rWinnerDoc } });
                             }
                         }
                     } else if (axis) {
@@ -892,16 +765,25 @@ const processGameUpdate = async (
                                     isReverse: true,
                                     description: `${step.desc} Reverse (${step.home}-${step.away})`
                                 };
-                                transaction.set(
-                                    db.collection('pools').doc(doc.id).collection('winners').doc(`event_rev_${step.home}_${step.away}`),
-                                    rWinnerDoc,
-                                    { merge: true }
-                                );
+                                // As above: never re-write a recorded event.
+                                const revId = `event_rev_${step.home}_${step.away}`;
+                                if (!storedWinners?.some(w => w.id === revId)) {
+                                    transaction.set(
+                                        db.collection('pools').doc(doc.id).collection('winners').doc(revId),
+                                        rWinnerDoc,
+                                        { merge: true }
+                                    );
+                                    newEventWinners.push({ id: revId, data: { ...rWinnerDoc } });
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+
+        if (newScoreEvents.length > 0) {
+            transactionUpdates.scoreEvents = FieldValue.arrayUnion(...newScoreEvents);
         }
     }
 
@@ -944,8 +826,8 @@ const processGameUpdate = async (
     const q3H = newScores.q3?.home; const q3A = newScores.q3?.away;
     const finalH = newScores.final?.home; const finalA = newScores.final?.away;
 
-    // Fix: Only process winners if we JUST finalized it (it wasn't in freshPool)
-    // This prevents re-running winner logic on every sync
+    // One audit line per period, the first time it is seen final. The winners
+    // themselves are reconciled below, on every pass.
 
     if (isQ1Final && q1H !== undefined && !freshPool.scores?.q1) {
         await writeAuditEvent({
@@ -953,7 +835,6 @@ const processGameUpdate = async (
             actor: actor, payload: { period: 1, score: { home: q1H, away: q1A } }
             // Dedupe skipped safe here because we guarded with !freshPool.scores.q1
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'q1', q1H, q1A, true);
     }
 
     if (isHalfFinal && halfH !== undefined && !freshPool.scores?.half) {
@@ -961,7 +842,6 @@ const processGameUpdate = async (
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Halftime Finalized: ${halfH}-${halfA}`, severity: 'INFO',
             actor: actor, payload: { period: 2, score: { home: halfH, away: halfA } }
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'half', halfH, halfA, true);
     }
 
     if (isQ3Final && q3H !== undefined && !freshPool.scores?.q3) {
@@ -969,7 +849,6 @@ const processGameUpdate = async (
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Q3 Finalized: ${q3H}-${q3A}`, severity: 'INFO',
             actor: actor, payload: { period: 3, score: { home: q3H, away: q3A } }
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'q3', q3H, q3A, true);
     }
 
     if (isGameFinal && finalH !== undefined && !freshPool.scores?.final) {
@@ -977,11 +856,25 @@ const processGameUpdate = async (
             poolId: doc.id, type: 'SCORE_FINALIZED', message: `Game Finalized: ${finalH}-${finalA}`, severity: 'INFO',
             actor: actor, payload: { period: 4, score: { home: finalH, away: finalA } }
         }, transaction);
-        await processWinners(transaction, db, doc.id, freshPool, 'final', finalH, finalA, true);
+    }
+
+    // WINNERS follow the scores. Computed from the pool as this transaction
+    // leaves it: the new scores, and (four-set pools) the numbers drawn above.
+    if (storedWinners) {
+        const poolAfter = {
+            ...freshPool,
+            ...(transactionUpdates.axisNumbers ? { axisNumbers: transactionUpdates.axisNumbers } : {}),
+            ...(transactionUpdates.quarterlyNumbers ? { quarterlyNumbers: transactionUpdates.quarterlyNumbers } : {}),
+        } as unknown as PayoutPool;
+        // In a four-set pool `axisNumbers` rotates to the CURRENT quarter's set;
+        // each period is judged on its own set, read from `quarterlyNumbers`.
+        const known = new Map<string, StoredWinner>();
+        for (const w of [...storedWinners, ...newEventWinners]) known.set(w.id, w);
+        const plan = planWinnerWrites(poolAfter, finalScoresOf(newScores), Array.from(known.values()), { gameFinal: isGameFinal });
+        await applyWinnerPlan(transaction, doc.id, plan, actor);
     }
 
     // FINAL WRITE: Update the pool doc itself
-    // Must be last if previous steps involve reads (like audit deduping)
     if (shouldUpdate) {
         transaction.update(doc.ref, {
             ...transactionUpdates,
@@ -989,84 +882,7 @@ const processGameUpdate = async (
         });
     }
 
-    // --- EVERY SCORE PAYS FINALIZATION ---
-    // If the game just went final, we need to calculate the actual $ amount for each event based on the total pot logic
-    if (isGameFinal && freshPool.ruleVariations?.scoreChangePayout && preReadEventWinners) {
-        const allWinners = [...preReadEventWinners, ...newEventWinners];
-        const uniqueWinnersMap = new Map();
-        for (const w of allWinners) {
-            uniqueWinnersMap.set(w.ref.path, w);
-        }
-        const uniqueWinners = Array.from(uniqueWinnersMap.values());
-        await finalizeEventPayouts(transaction, db, doc.id, freshPool, actor, uniqueWinners);
-    }
-
     return { updated: shouldUpdate };
-};
-
-// Helper to calculate and backfill amounts for all score events when game is over
-// IMPORTANT: eventWinners must be PRE-READ before any writes to avoid transaction errors
-async function finalizeEventPayouts(
-    transaction: admin.firestore.Transaction,
-    db: admin.firestore.Firestore,
-    poolId: string,
-    pool: GameState,
-    actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
-    eventWinners: (admin.firestore.QueryDocumentSnapshot | { ref: admin.firestore.DocumentReference, data: () => any })[]
-) {
-    // 1. Calculate Pot Logic
-    const soldSquares = pool.squares ? pool.squares.filter((s: any) => s.owner).length : 0;
-    const totalPot = soldSquares * (pool.costPerSquare || 0);
-
-    let scoreChangePot = 0;
-    const strategy = pool.ruleVariations?.scoreChangePayoutStrategy || 'equal_split';
-
-    if (strategy === 'equal_split') {
-        scoreChangePot = totalPot;
-    } else {
-        // Hybrid
-        const weights = pool.ruleVariations?.scoreChangeHybridWeights || { final: 40, halftime: 20, other: 40 };
-        const remainingPct = 100 - weights.final - weights.halftime;
-        scoreChangePot = (totalPot * remainingPct) / 100;
-    }
-
-    // NOTE: eventWinners is now pre-read (passed in) to avoid read-after-write errors
-
-    // 3. Calculate Amount Per Event
-    const eventCount = eventWinners.length;
-    const amountPerEvent = eventCount > 0 ? (scoreChangePot / eventCount) : 0;
-
-    console.log(`[FinalizePayouts] Pool ${poolId}: ${eventCount} events, $${totalPot} pot, $${amountPerEvent.toFixed(2)} per event`);
-
-    // 4. Update Winner Docs
-    let updatedCount = 0;
-
-    for (const winnerDoc of eventWinners) {
-        const currentData = winnerDoc.data();
-        // Only update if amount is different (to avoid unnecessary writes)
-        if (currentData.amount !== amountPerEvent) {
-            transaction.update(winnerDoc.ref, { amount: amountPerEvent });
-            updatedCount++;
-        }
-    }
-
-    // 5. Log Action
-    if (updatedCount > 0 || eventCount > 0) {
-        await writeAuditEvent({
-            poolId: poolId,
-            type: 'WINNER_COMPUTED',
-            message: `Finalized Event Payouts: $${amountPerEvent.toFixed(2)} per event (${eventCount} total events, ${updatedCount} updated)`,
-            severity: 'INFO',
-            actor: actor,
-            payload: {
-                totalPot,
-                scoreChangePot,
-                eventCount,
-                amountPerEvent,
-                updatedCount
-            }
-        }, transaction);
-    }
 };
 
 // Cheap heartbeat doc so the frontend can show standings freshness.
@@ -1136,6 +952,11 @@ export const syncGameStatus = onSchedule({
             const pool = doc.data() as GameState;
 
             if (!pool.gameId) continue;
+
+            // "Manual Score Override — disable auto-updates" is a switch on the
+            // squares admin page, and nothing read it: the next sync overwrote
+            // whatever the commissioner had typed.
+            if (pool.manualScoreOverride === true) continue;
 
             // PLAN-AUDIT-SCAN-BOUNDS 1.2: a terminal/admin-closed pool must not
             // resync scores, and a 'pre' pool whose start time passed >7 days

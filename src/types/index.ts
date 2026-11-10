@@ -636,6 +636,11 @@ export interface Winner {
    */
   paidAt?: number | FirestoreTimestampLike | null;
   paidByUid?: string; // Who marked it paid
+  /** Set on `final_rollover` once the server's one-time random draw has been made. */
+  drawnAt?: number | FirestoreTimestampLike | null;
+  drawnByUid?: string;
+  /** How many sold squares the draw chose from. */
+  drawnFrom?: number;
 }
 
 // --- AUDIT LOG ---

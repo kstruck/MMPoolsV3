@@ -821,7 +821,21 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             <div className="mt-auto flex flex-col items-center w-full">
                                 <span className="text-[10px] font-display font-bold text-faint uppercase tracking-[0.16em] mb-2">In The Money:</span>
                                 <div className="text-lg font-bold text-[color:var(--text)] mb-1 truncate w-full px-2 font-body" title={card.winnerName}>{card.winnerName}</div>
-                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">${card.amount}</div>
+                                {card.reverseWinnerName && (
+                                    <div className="text-sm font-bold text-navy-600 dark:text-gold-400 mb-1 truncate w-full px-2 font-body" title={card.reverseWinnerName}>
+                                        <span className="text-[10px] font-display uppercase tracking-[0.08em] text-faint mr-1">and (reverse)</span>{card.reverseWinnerName}
+                                    </div>
+                                )}
+                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">${card.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+                                {card.reverseWinnerName && <div className="text-[10px] text-faint font-body">each</div>}
+                                {card.rolloverAdded > 0 && !card.isRollover && (
+                                    <div className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400 num">Includes ${card.rolloverAdded.toLocaleString(undefined, { maximumFractionDigits: 2 })} rolled over</div>
+                                )}
+                                {card.bonusWinnerName && !!card.bonusAmount && (
+                                    <div className="mt-2 text-xs font-body text-muted">
+                                        Unclaimed prize <span className="font-bold num text-gold-700 dark:text-gold-400">${card.bonusAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span> → <span className="font-bold text-[color:var(--text)]">{card.bonusWinnerName}</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="mt-6">
