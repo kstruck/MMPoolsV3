@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { espnDateParam, fetchGamesOn, hasStarted, mapScoreboard, scheduleUrl } from './espnSchedule';
+import { espnDateParam, fetchGamesOn, hasStarted, mapScoreboard as mapScoreboardFor, scheduleUrl } from './espnSchedule';
 
 /**
  * The squares wizard's game picker reads ESPN's scoreboard by DATE. What is
@@ -7,6 +7,9 @@ import { espnDateParam, fetchGamesOn, hasStarted, mapScoreboard, scheduleUrl } f
  * kickoff a pool is linked with, and which team is home — the home digit is the
  * grid's COLUMN.
  */
+
+/** The NFL scoreboard, unless a test is about the league. */
+const mapScoreboard = (payload: unknown) => mapScoreboardFor(payload, 'nfl');
 
 const team = (id: string, name: string, abbr: string) => ({
   id, displayName: name, name: name.split(' ').pop(), abbreviation: abbr,
@@ -66,6 +69,7 @@ describe('mapScoreboard', () => {
     const [g] = mapScoreboard({ events: [event()] });
     expect(g).toEqual({
       id: '401772510',
+      league: 'nfl',
       kickoff: Date.UTC(2026, 10, 26, 18, 0),
       homeTeam: 'Detroit Lions',
       awayTeam: 'Green Bay Packers',
@@ -181,3 +185,25 @@ describe('fetchGamesOn', () => {
     await expect(fetchGamesOn('nfl', '2026-11-26')).rejects.toThrow(/could not be loaded/);
   });
 });
+
+/**
+ * A GAME ID MEANS NOTHING WITHOUT ITS LEAGUE (qodo, PR #760). The score feed
+ * is asked for `(league, id)`. A picker that linked the league shown in its
+ * dropdown, rather than the league the game was found in, could store an NFL
+ * id as a college game — a pool the feed can never find.
+ */
+describe('every game carries the league it was found in', () => {
+  it('mapScoreboard stamps the league it is told', () => {
+    expect(mapScoreboardFor({ events: [event()] }, 'nfl')[0].league).toBe('nfl');
+    expect(mapScoreboardFor({ events: [event()] }, 'college')[0].league).toBe('college');
+  });
+
+  it('fetchGamesOn stamps the league it ASKED — not anything in the payload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ events: [event(), event({ id: '401772511' })] }) }));
+    const college = await fetchGamesOn('college', '2026-11-28');
+    expect(college.map((g) => g.league)).toEqual(['college', 'college']);
+    const nfl = await fetchGamesOn('nfl', '2026-11-26');
+    expect(nfl.map((g) => g.league)).toEqual(['nfl', 'nfl']);
+  });
+});
+

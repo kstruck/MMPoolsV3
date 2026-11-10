@@ -10,7 +10,7 @@ interface WizardStepMatchupProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
     /** Link the pool to the game picked from the schedule. */
-    onLinkGame: (game: ScheduleGame, league: ScheduleLeague) => void;
+    onLinkGame: (game: ScheduleGame) => void;
 }
 
 const kickoffText = (ms: number): string =>
@@ -87,7 +87,7 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState,
                                         type="button"
                                         key={game.id}
                                         disabled={started}
-                                        onClick={() => { onLinkGame(game, search.league); search.clear(); setShowSchedule(false); }}
+                                        onClick={() => { onLinkGame(game); search.clear(); setShowSchedule(false); }}
                                         className="flex w-full items-center justify-between p-2 rounded hover:bg-surface border border-transparent hover:border-navy-600/30 group transition-ui text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-transparent"
                                     >
                                         <span className="flex items-center gap-3">

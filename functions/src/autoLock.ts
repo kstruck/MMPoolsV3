@@ -49,6 +49,30 @@ async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<n
 }
 
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---
+/**
+ * How far ahead of its lock time a grid on the reminders path is locked.
+ *
+ * This job runs every minute. With a 30-second lead it reaches a given grid
+ * anywhere from 30 seconds BEFORE its lock time to 30 seconds AFTER — and in
+ * that second half another job can get there first: `runReminders`
+ * (`reminders.ts`) also locks a squares grid whose time has passed, and draws
+ * its numbers with a biased `Math.random` sort (plan K7; that file sends the
+ * NFL reminders and is not this plan's to change).
+ *
+ * For a SQUARES grid the lead is 90 seconds, so this job has always run once
+ * before the lock time arrives and the other finds the grid locked. A squares
+ * grid therefore locks between 90 and 30 seconds early. Every other pool type
+ * keeps 30 seconds, exactly as before.
+ *
+ * This closes the race while this job is healthy. If it is down at that
+ * minute the other job still decides the grid — which is why K7 is first on
+ * the list for Kevin.
+ */
+export const SQUARES_LOCK_LEAD_MS = 90_000;
+const DEFAULT_LOCK_LEAD_MS = 30_000;
+export const squaresLockLeadMs = (pool: { type?: string }): number =>
+    !pool.type || pool.type === 'SQUARES' ? SQUARES_LOCK_LEAD_MS : DEFAULT_LOCK_LEAD_MS;
+
 export const autoLockPools = functions.scheduler.onSchedule(
     { schedule: "every 1 minutes", timeoutSeconds: 300, memory: "512MiB" },
     withHeartbeat('autoLockPools', async () => {
@@ -90,7 +114,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
                 console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, raw);
                 continue;
             }
-            if (lockAtNum - now <= 30000) duePools.push(pool);
+            if (lockAtNum - now <= squaresLockLeadMs(pool)) duePools.push(pool);
         }
 
         for (const doc of bracketSnapshot.docs) {

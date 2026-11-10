@@ -427,3 +427,16 @@ describe('squaresGameLink — linking an existing pool to a game', () => {
     expect(squaresGameLink(bad, 'nfl')).toBeNull();
   });
 });
+
+describe('squaresGameLink — a game id is the score feed\'s event id', () => {
+  const kickoff = Date.UTC(2026, 10, 26, 18);
+  it('digits are linked', () => {
+    expect(squaresGameLink({ id: '401772510', kickoff, homeTeam: 'A', awayTeam: 'B' } as never, 'nfl')).not.toBeNull();
+  });
+  it('anything else is not — it would be put into the feed\'s URL', () => {
+    for (const id of ['', '   ', 'abc', '401772510/../x', '401772510?x=1', '401 772', '4017725104017725100']) {
+      expect(squaresGameLink({ id, kickoff, homeTeam: 'A', awayTeam: 'B' } as never, 'nfl'), id).toBeNull();
+    }
+  });
+});
+
