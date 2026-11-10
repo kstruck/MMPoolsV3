@@ -19,6 +19,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q3 | qodo (re-review) | PR-A @ `6095d92d` | 5 | 5 | 0 |
 | Q3 | qodo (re-review) | PR-B @ `652fe64c` | 9 | 8 | 1 |
 | W1 | browser walk-through | A + B + C + the reopen flip, on emulators | 9 | 9 | 0 |
+| Q4 | qodo | #758 @ `d8978a82`, #759 @ `10d65cce` | 4 | 4 | 0 |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -404,4 +405,57 @@ defect in a fix — with a sharper edge: the tests for that fix were green
 because they supplied the one input the defect needed to be absent. The new
 tests use the token the app actually sends. The walk-through is being kept as
 a permanent end-to-end test in PR-D for the same reason.
+
+## Round Q4 — qodo on the round-Q3 fixes (2026-11-10)
+
+Re-reviews forced by a draft → ready toggle on each PR; all three surfaces
+read, filtered on `updated_at`.
+
+**#758 @ `d8978a82` — clean.** Bugs (0). Every finding from Q1–Q3 is marked
+Resolved except the one that was rejected in Q1 ("an unknown squares cap shows
+'No limit'" — the page says what the server enforces), which stays open with
+its reasoning.
+
+**#759 @ `10d65cce` — four findings, all on one thing: the pause switch that
+round Q3 added to close its finding 20.** That is §2c's pattern exactly — the
+code written last, to close a reviewer's finding, was the code with the
+defects in it. All four accepted.
+
+| # | Finding | What was wrong | Fix |
+|---|---|---|---|
+| 1 | The simulator and "Fix Sync" still write winners while paused | The switch was read once, by the scheduled sync, and handed down as an argument. The two other callers of the same writer were never told. | The switch is read **inside the transaction that would write the winners**, by the writer itself. No caller passes it; no caller can forget it. |
+| 7 | A pause set while a run is under way is missed | Read once per run, before the first pool. A run that takes a minute writes for a minute after the switch is set. | Same fix. Each pool's transaction reads the switch, so a pause set mid-run holds every pool not yet written, and one that lands while a write is being prepared makes that write retry and see it. |
+| 2 | A paused game may never be caught up | The sync stops looking at a game 36 hours after kickoff (6 hours after its last update once finished). A pause that outlasted that left the game's winners unrecorded for good, while the PR said "nothing is lost". | A pool whose winners were held is **marked** (`squaresWinnersHeld`). Each sync run first looks for marked pools and, if the switch is clear, records them from their stored scores — whatever state the game is in by then. The mark comes off when the sync, the catch-up, "Record winners" or the draw records the pool. |
+| 21 | The pause fails open when the config cannot be read | The read was outside the transaction and a failure meant "not paused". | The read is part of the transaction. If it fails the transaction fails: that pool is left exactly as it was and is tried again on the next pass. Neither fails open nor latches shut. |
+
+**What the switch costs a pool that is not affected.** One extra document read
+per winner write (only once a first quarter is final), and per sync run one
+read of the switch and one query for marked pools that normally returns
+nothing. `system/config` is written only by two hand-run migrations, so the
+read holds nothing up.
+
+**One thing checked before choosing the document.** Reading a document in a
+server transaction takes a lock on it, and `system/config` is read by the NFL
+jobs. A lock held by a squares write would delay anything that WRITES that
+document. Nothing scheduled does — the only writers are
+`migrations/backfillProfileData.ts` — so the switch stays where the rollback
+steps already say it is.
+
+**Fixed in `fde71552`. Tests.** 24 emulator tests: the simulator and "Fix Sync" under the switch; a
+pause set from inside the feed fetch, after the run has started; a pause set
+after the catch-up has looked and before a pool's own transaction; a game
+three days over, recorded on the first run after the switch clears; the whole
+story (paused through four quarters, cleared days later, paid in full); an
+old-rules pool whose mark comes off with its records untouched; one pool
+failing without stopping the next; a marked pool since put on Manual Score Override left for the
+commissioner's button (round Q2, finding 3 — hand-typed scores are never
+recorded on their own); and four with the config read made to fail.
+
+**18 mutants, all red — but five survived their first run.** Each was a
+missing test, not a wrong guard: the mark coming off on the ordinary sync
+path; a marked pool being found among many unmarked ones; a mark removed
+between the catch-up's query and its transaction; event prizes being paid by
+the catch-up; and the catch-up not opening pools at all while paused. Each is
+now written and its mutant fails. The first run of the suite had been green
+with all five holes in it.
 
