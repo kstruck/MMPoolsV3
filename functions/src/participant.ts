@@ -49,6 +49,14 @@ const CLAIM_CODE_TTL_MS = 24 * 60 * 60 * 1000;
 const CLAIM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const CLAIM_CODE_LENGTH = 8;
 
+/** How many codes a mint will draw before giving up. One is enough in practice. */
+const CLAIM_CODE_DRAWS = 5;
+
+/** Not yet expired. A claim with no expiry predates 2026-11 and is never live. */
+function isLiveClaim(claim: ClaimCode | undefined, now: number): boolean {
+    return !!claim && typeof claim.expiresAt === 'number' && claim.expiresAt > now;
+}
+
 /** The throttle bucket for wrong claim codes — per ACCOUNT, across all pools. */
 const CLAIM_CODE_ATTEMPT_SCOPE = "claim-code";
 
@@ -86,35 +94,63 @@ export const createClaimCode = validated(
         );
     }
 
-    const db = admin.firestore();
-    const now = Date.now();
-
-    // A code is looked up by value, so two live codes must never share one.
-    // At 10¹² codes a clash is a once-in-a-lifetime event; this makes it a
-    // re-draw instead of one guest redeeming another's squares.
-    let claimCode = generateShortCode();
-    for (let attempt = 0; attempt < 5; attempt++) {
-        const clash = await db.collection("poolClaims").where("claimCode", "==", claimCode).limit(1).get();
-        if (clash.empty) break;
-        claimCode = generateShortCode();
-    }
-    const claimId = db.collection("poolClaims").doc().id;
-
-    const claimDoc: ClaimCode = {
-        claimId,
-        claimCode,
-        createdAt: now,
-        expiresAt: now + CLAIM_CODE_TTL_MS,
-        guestKeyHash,
-        poolId,
-        uses: 0
-    };
-
-    await db.collection("poolClaims").doc(claimId).set(claimDoc);
-
-    return { claimCode, claimId };
+    return mintClaimCode(admin.firestore(), { poolId, guestKeyHash, now: Date.now() });
     },
 );
+
+/**
+ * Take a claim code nobody else holds, and file the claim under it.
+ *
+ * TWO LIVE CODES MUST NEVER SHARE A VALUE: whoever types one would take the
+ * other guest's squares. So THE CODE IS THE DOCUMENT ID, and it is taken inside
+ * a transaction — there is one document per code, and a concurrent mint of the
+ * same code loses the transaction and draws again.
+ *
+ * This used to be "query for the code, then write under a random id". Two mints
+ * could both pass the query before either wrote, and the last of the five draws
+ * was never checked at all (qodo, PR #758). At 10¹² codes the odds were
+ * negligible; the point is that it is now impossible rather than unlikely, and
+ * that a mint which cannot get a free code FAILS instead of handing one out
+ * unchecked.
+ *
+ * `draw` is a parameter so the tests can force the clash that chance will not.
+ */
+export async function mintClaimCode(
+    db: FirebaseFirestore.Firestore,
+    input: { poolId: string; guestKeyHash: string; now: number },
+    draw: () => string = generateShortCode,
+): Promise<{ claimCode: string; claimId: string }> {
+    const { poolId, guestKeyHash, now } = input;
+    for (let attempt = 0; attempt < CLAIM_CODE_DRAWS; attempt++) {
+        const claimCode = draw();
+        const ref = db.collection("poolClaims").doc(claimCode);
+        // Codes minted before this change sit under a random id for up to their
+        // 24 hours. A live one of those must not be shadowed either.
+        const legacy = await db.collection("poolClaims").where("claimCode", "==", claimCode).limit(5).get();
+        const legacyLive = legacy.docs.some((d) => d.id !== claimCode && isLiveClaim(d.data() as ClaimCode, now));
+
+        const claimDoc: ClaimCode = {
+            claimId: claimCode,
+            claimCode,
+            createdAt: now,
+            expiresAt: now + CLAIM_CODE_TTL_MS,
+            guestKeyHash,
+            poolId,
+            uses: 0
+        };
+
+        const taken = legacyLive || await db.runTransaction(async (t) => {
+            const existing = await t.get(ref);
+            // An EXPIRED claim under this code is dead and is replaced.
+            if (existing.exists && isLiveClaim(existing.data() as ClaimCode, now)) return true;
+            t.set(ref, claimDoc);
+            return false;
+        });
+        if (!taken) return { claimCode, claimId: claimCode };
+    }
+
+    throw new HttpsError('unavailable', 'Could not create a claim code. Please try again.');
+}
 
 /**
  * Move every square held under `guestKeyHash` to `uid`. Runs inside the
@@ -220,15 +256,20 @@ export const claimByCode = validated(
     // Nobody moving their own squares needs ten codes in a quarter of an hour.
     await chargeAccessAttempt(db, CLAIM_CODE_ATTEMPT_SCOPE, uid);
 
-    const claimsSnap = await db.collection("poolClaims")
-        .where("claimCode", "==", claimCode)
-        .limit(1)
-        .get();
-
-    if (claimsSnap.empty) {
-        throw new HttpsError('not-found', 'Invalid claim code');
+    // The code is the document id (see createClaimCode). A code minted before
+    // that change sits under a random id until it expires, so it is still
+    // found by value — but only when no document is filed under the code.
+    let claimDoc: FirebaseFirestore.DocumentSnapshot = await db.collection("poolClaims").doc(claimCode).get();
+    if (!claimDoc.exists) {
+        const legacy = await db.collection("poolClaims")
+            .where("claimCode", "==", claimCode)
+            .limit(1)
+            .get();
+        if (legacy.empty) {
+            throw new HttpsError('not-found', 'Invalid claim code');
+        }
+        claimDoc = legacy.docs[0];
     }
-    const claimDoc = claimsSnap.docs[0];
     const claim = claimDoc.data() as ClaimCode;
 
     const targetPoolId = claim.poolId;

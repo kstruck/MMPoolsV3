@@ -59,7 +59,7 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    rebuild. Reverting D alone re-closes creation; A–C can stay.
 4. **Data:** nothing in A–D writes production data on deploy, and the plan
    contains no migration.
-5. **🛑 A DATA BACKUP IS NOT YET VERIFIED — it is step 1 of the deploy runbook,
+5. **⛔ A DATA BACKUP IS NOT YET VERIFIED — it is step 1 of the deploy runbook,
    and Kevin's to run** (qodo, PR #758, finding 10). The code anchor above is in
    place; a data backup is not something this work could take or check — it has
    no credentials for the production project. Firestore PITR (7-day window) was

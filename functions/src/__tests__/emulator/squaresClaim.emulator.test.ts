@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 import { reserveSquare, reserveSquares, releaseSquares } from '../../squares';
-import { createClaimCode, claimMySquares, claimByCode } from '../../participant';
+import { createClaimCode, claimMySquares, claimByCode, mintClaimCode } from '../../participant';
 import { confirmPayment } from '../../confirmPayment';
 import { hashGuestKey } from '../../lib/guestKey';
 import { GUEST_KEY_PREFIX } from '../../shared/squaresClaim';
@@ -469,5 +469,135 @@ describe('qodo #2 — a claim code cannot be guessed', () => {
     const code = await mint();
     for (let i = 0; i < 10; i++) await expect(redeem(`WRONG${String(i).padStart(3, '2')}`)).rejects.toThrow();
     await expect(redeem(code, authed('victim-uid', 'Victim'))).resolves.toMatchObject({ success: true, claimed: [50, 51] });
+  });
+});
+
+/**
+ * qodo, PR #758 round 3 — TWO LIVE CODES NEVER SHARE A VALUE.
+ *
+ * A claim code is looked up by value and is a bearer credential, so a second
+ * live claim under the same code means one guest's code opens another guest's
+ * squares. The mint used to query for the code and then write under a random
+ * id — two mints could both pass the query — and its last draw was never
+ * checked. The code is now the document id, taken in a transaction.
+ *
+ * Chance will not produce a clash in a test run, so these force one: the mint
+ * takes its draw as a parameter, and here the draw is a fixed sequence.
+ */
+describe('claim codes — one live claim per code', () => {
+  const aliceKey = key('alice-code');
+  const bobKey = key('bob-code');
+  const aliceHash = hashGuestKey(POOL, aliceKey)!;
+  const bobHash = hashGuestKey(POOL, bobKey)!;
+  const NOW = Date.now();
+  const sequence = (...codes: string[]) => {
+    let i = 0;
+    return () => codes[Math.min(i++, codes.length - 1)];
+  };
+  const claims = async (): Promise<Array<{ id: string; claimCode?: string; guestKeyHash?: string }>> =>
+    (await db.collection('poolClaims').get()).docs.map((d) => ({ ...(d.data() as { claimCode?: string; guestKeyHash?: string }), id: d.id }));
+  const mintFor = (guestKeyHash: string, draw: () => string, now = NOW) =>
+    mintClaimCode(db, { poolId: POOL, guestKeyHash, now }, draw);
+
+  it('the claim is filed under its own code', async () => {
+    const { claimCode: code, claimId } = (await mintCode({ data: { poolId: POOL, guestDeviceKey: aliceKey } } as never)) as { claimCode: string; claimId: string };
+    expect(claimId).toBe(code);
+    const all = await claims();
+    expect(all).toHaveLength(1);
+    expect(all[0].id).toBe(code);
+    expect(all[0].claimCode).toBe(code);
+  });
+
+  it('a code another guest already holds is not issued again — the next draw is used', async () => {
+    await mintFor(aliceHash, sequence('AAAAAAAA'));
+    const bob = await mintFor(bobHash, sequence('AAAAAAAA', 'BBBBBBBB'));
+    expect(bob.claimCode).toBe('BBBBBBBB');
+    const all = await claims();
+    expect(all.map((c) => c.id).sort()).toEqual(['AAAAAAAA', 'BBBBBBBB']);
+    // Alice's claim was not touched by Bob's attempt on it.
+    expect(all.find((c) => c.id === 'AAAAAAAA')!.guestKeyHash).toBe(aliceHash);
+    expect(all.find((c) => c.id === 'BBBBBBBB')!.guestKeyHash).toBe(bobHash);
+  });
+
+  it('ATTACK: when every draw is taken the mint FAILS — it does not hand out the last one unchecked', async () => {
+    await mintFor(aliceHash, sequence('AAAAAAAA'));
+    await expect(mintFor(bobHash, sequence('AAAAAAAA'))).rejects.toThrow(/Could not create a claim code/);
+    const all = await claims();
+    expect(all).toHaveLength(1);
+    expect(all[0].guestKeyHash).toBe(aliceHash);
+  });
+
+  it('two mints racing for the same code: exactly one gets it', async () => {
+    const results = await Promise.allSettled([
+      mintFor(aliceHash, sequence('CCCCCCCC', 'DDDDDDDD')),
+      mintFor(bobHash, sequence('CCCCCCCC', 'EEEEEEEE')),
+    ]);
+    const codes = results.map((r) => (r.status === 'fulfilled' ? r.value.claimCode : null));
+    expect(codes.every(Boolean)).toBe(true);
+    expect(new Set(codes).size).toBe(2);
+    expect(codes.filter((c) => c === 'CCCCCCCC')).toHaveLength(1);
+    // Each code leads to the guest it was issued to, and to nobody else.
+    const all = await claims();
+    expect(all).toHaveLength(2);
+    expect(all.find((c) => c.id === codes[0])!.guestKeyHash).toBe(aliceHash);
+    expect(all.find((c) => c.id === codes[1])!.guestKeyHash).toBe(bobHash);
+  });
+
+  it('an EXPIRED claim under a code is dead: the code can be issued again, and opens only the new claim', async () => {
+    await mintFor(aliceHash, sequence('FFFFFFFF'), NOW - 48 * 60 * 60 * 1000);
+    const bob = await mintFor(bobHash, sequence('FFFFFFFF'));
+    expect(bob.claimCode).toBe('FFFFFFFF');
+    const all = await claims();
+    expect(all).toHaveLength(1);
+    expect(all[0].guestKeyHash).toBe(bobHash);
+  });
+
+  it('a live code minted before this change (random id) is not shadowed', async () => {
+    await db.collection('poolClaims').doc('random-legacy-id').set({
+      claimId: 'random-legacy-id', claimCode: 'GGGGGGGG', createdAt: NOW, expiresAt: NOW + 60_000, guestKeyHash: aliceHash, poolId: POOL, uses: 0,
+    });
+    const bob = await mintFor(bobHash, sequence('GGGGGGGG', 'HHHHHHHH'));
+    expect(bob.claimCode).toBe('HHHHHHHH');
+  });
+
+  it('...but an expired one of those does not block the code', async () => {
+    await db.collection('poolClaims').doc('random-legacy-id').set({
+      claimId: 'random-legacy-id', claimCode: 'GGGGGGGG', createdAt: 1, expiresAt: NOW - 1, guestKeyHash: aliceHash, poolId: POOL, uses: 0,
+    });
+    const bob = await mintFor(bobHash, sequence('GGGGGGGG', 'HHHHHHHH'));
+    expect(bob.claimCode).toBe('GGGGGGGG');
+  });
+
+  it('and the reissued code opens the NEW claim, not the dead one that shares its value', async () => {
+    await guestReserve([70], 'Bob', bobKey);
+    // Sorts ahead of the code, so a lookup by value alone would find it first.
+    await db.collection('poolClaims').doc('0-dead-legacy').set({
+      claimId: '0-dead-legacy', claimCode: 'KKKKKKKK', createdAt: 1, expiresAt: NOW - 1, guestKeyHash: aliceHash, poolId: POOL, uses: 0,
+    });
+    const bob = await mintFor(bobHash, sequence('KKKKKKKK'));
+    expect(bob.claimCode).toBe('KKKKKKKK');
+    const res = (await claimCode({ data: { claimCode: 'KKKKKKKK' }, auth: authed('bob-uid', 'Bob') } as never)) as { claimed: number[] };
+    expect(res.claimed).toEqual([70]);
+  });
+
+  it('a code minted before this change still redeems for its remaining life', async () => {
+    await guestReserve([60, 61], 'Alice', aliceKey);
+    await db.collection('poolClaims').doc('random-legacy-id').set({
+      claimId: 'random-legacy-id', claimCode: 'JJJJJJJJ', createdAt: NOW, expiresAt: Date.now() + 60_000, guestKeyHash: aliceHash, poolId: POOL, uses: 0,
+    });
+    const res = (await claimCode({ data: { claimCode: 'JJJJJJJJ' }, auth: authed('alice-uid', 'Alice') } as never)) as { claimed: number[] };
+    expect(res.claimed.sort()).toEqual([60, 61]);
+    expect((await db.collection('poolClaims').doc('random-legacy-id').get()).data()!.uses).toBe(1);
+  });
+
+  it('the code a guest is given opens that guest\'s squares and not another guest\'s', async () => {
+    await guestReserve([60], 'Alice', aliceKey);
+    await guestReserve([70], 'Bob', bobKey);
+    const alice = (await mintCode({ data: { poolId: POOL, guestDeviceKey: aliceKey } } as never)) as { claimCode: string };
+    const bob = (await mintCode({ data: { poolId: POOL, guestDeviceKey: bobKey } } as never)) as { claimCode: string };
+    expect(alice.claimCode).not.toBe(bob.claimCode);
+    const res = (await claimCode({ data: { claimCode: bob.claimCode }, auth: authed('bob-uid', 'Bob') } as never)) as { claimed: number[] };
+    expect(res.claimed).toEqual([70]);
+    expect((await square(60)).reservedByUid ?? null).toBeNull();
   });
 });

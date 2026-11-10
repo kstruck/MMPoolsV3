@@ -10,7 +10,7 @@ import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
-import { countHeldSquares, effectiveSquareCap, isOwnSquare, normalizePlayerName } from '@shared/squaresClaim';
+import { countHeldSquares, duesBuckets, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
 import { claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
 
 interface GridProps {
@@ -189,10 +189,6 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    // they used to be decided three different ways.
    const myUid = currentUser?.id ?? null;
    const identity = React.useMemo(() => ({ uid: myUid, guestKeyHash }), [myUid, guestKeyHash]);
-   const isMine = React.useCallback(
-      (s: (typeof gameState.squares)[number]) => isOwnSquare(s, identity, playerInfo.name),
-      [identity, playerInfo.name],
-   );
 
    // How many squares count against this player's limit — the server's own count.
    const squaresAlreadyOwned = React.useMemo(() => {
@@ -200,15 +196,18 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       return countHeldSquares(gameState.squares, identity, playerInfo.name);
    }, [gameState.squares, playerInfo.name, identity]);
 
-   const unpaidSquaresCount = React.useMemo(() => {
-      if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s => isMine(s) && !s.isPaid && !s.paymentConfirmedAt).length;
-   }, [gameState.squares, playerInfo.name, isMine]);
-
-   const pendingConfirmationCount = React.useMemo(() => {
-      if (!playerInfo.name) return 0;
-      return gameState.squares.filter(s => isMine(s) && !s.isPaid && s.paymentConfirmedAt).length;
-   }, [gameState.squares, playerInfo.name, isMine]);
+   // This player's unpaid squares, split by who can move them on. "I've sent
+   // payment" covers `confirmable` only — the squares stamped with their
+   // account — because that is all the server accepts, and it refuses the whole
+   // request if one square in it is not theirs that way.
+   const dues = React.useMemo(
+      () => (playerInfo.name
+         ? duesBuckets(gameState.squares, identity, playerInfo.name)
+         : { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[] }),
+      [gameState.squares, playerInfo.name, identity],
+   );
+   const unpaidSquaresCount = dues.confirmable.length + dues.hostOnly.length;
+   const pendingConfirmationCount = dues.pending.length;
 
    const currentTotal = squaresAlreadyOwned + selectedSquares.length;
    const remainingAllowance = maxPerPlayer === null ? Infinity : maxPerPlayer - currentTotal;
@@ -350,10 +349,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const handleConfirmPayment = async () => {
       if (!onConfirmPayment || !playerInfo.name) return;
 
-      // Identify squares owned by this user
-      const ownedSquareIds = gameState.squares
-         .filter(s => isMine(s) && !s.isPaid && !s.paymentConfirmedAt)
-         .map(s => s.id);
+      // The squares the server will accept from this player — see `duesBuckets`.
+      const ownedSquareIds = dues.confirmable;
 
       if (ownedSquareIds.length === 0) {
          setPaymentConfirmMsg({ type: 'error', text: "No unpaid squares found to confirm." });
@@ -673,6 +670,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               Total due: <span className="num text-gold-600 font-bold">${unpaidSquaresCount * gameState.costPerSquare}</span>
                            </p>
                         )}
+                        {dues.hostOnly.length > 0 && (
+                           <p className="text-muted" data-testid="dues-host-only">
+                              {currentUser
+                                 ? <><span className="font-bold text-[color:var(--text)] num">{dues.hostOnly.length}</span> of those {dues.hostOnly.length !== 1 ? 'were' : 'was'} entered for you by the organizer. Pay the organizer directly — they mark {dues.hostOnly.length !== 1 ? 'those' : 'that one'} paid.</>
+                                 : <>Sign in to tell the organizer you have paid. Squares you reserved on this browser move to your account when you do.</>}
+                           </p>
+                        )}
                         {pendingConfirmationCount > 0 && (
                            <p className="text-muted italic flex items-center gap-1.5">
                               <Check size={14} className="text-gold-500" />
@@ -687,7 +691,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                      </div>
                   </div>
 
-                  {unpaidSquaresCount > 0 && (
+                  {dues.confirmable.length > 0 && (
                      <button
                         onClick={handleConfirmPayment}
                         disabled={isConfirmingPayment}

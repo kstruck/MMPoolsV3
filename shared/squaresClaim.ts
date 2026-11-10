@@ -123,6 +123,44 @@ export function isOwnSquare(square: ClaimSquare, identity: ClaimIdentity, displa
   return !hasIdentity(square) && name !== '' && normalizePlayerName(square.owner) === name;
 }
 
+/** The fields "has this been paid for?" is read from. */
+export interface DuesSquare extends ClaimSquare {
+  isPaid?: boolean | null;
+  paymentConfirmedAt?: number | null;
+}
+
+/**
+ * A player's unpaid squares, split by WHO can move them on.
+ *
+ *   - `confirmable` — the player can press "I've sent payment" for these. The
+ *     server accepts that only for a square stamped with the caller's ACCOUNT
+ *     (`confirmPayment`), and refuses the whole request if one square in it is
+ *     not — so this list is exactly that rule, not "every square that is mine".
+ *   - `hostOnly` — theirs, unpaid, but not stamped with their account: a square
+ *     the organizer typed in for them, or one still held by this browser as a
+ *     guest. Only the organizer can mark these paid.
+ *   - `pending` — the player has already said they paid; the organizer has not
+ *     confirmed it yet.
+ *
+ * The grid used to send every square that was "mine" — including ones matched
+ * by name alone — so one organizer-entered square made "I've sent payment" fail
+ * for all of the player's squares (qodo, PR #758).
+ */
+export function duesBuckets(
+  squares: ReadonlyArray<DuesSquare>,
+  identity: ClaimIdentity,
+  displayName: string,
+): { confirmable: number[]; hostOnly: number[]; pending: number[] } {
+  const out = { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[] };
+  for (const s of squares) {
+    if (!isOwnSquare(s, identity, displayName) || s.isPaid) continue;
+    if (s.paymentConfirmedAt) out.pending.push(s.id);
+    else if (identity.uid && s.reservedByUid === identity.uid) out.confirmable.push(s.id);
+    else out.hostOnly.push(s.id);
+  }
+  return out;
+}
+
 /**
  * How many squares count against this claimer's limit.
  *

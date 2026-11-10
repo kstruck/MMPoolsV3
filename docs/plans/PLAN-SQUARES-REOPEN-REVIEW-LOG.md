@@ -19,7 +19,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 
 ---
 
-## Round S1 — self-review of PR-A, before the first push
+## Round S1 — self-review of PR-A, before the first push (2026-11-10, ahead of `940b6c10`)
 
 1. **(High) `exemptFromCap` could be true for a signed-out visitor.** The pool
    page computed `squaresPool.ownerId === user?.id`. On a pool document with no
@@ -28,7 +28,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
    **Accepted.** `!!user?.id && squaresPool.ownerId === user.id`. Preview only;
    the server was never affected.
 
-## Round S2 — self-review of PR-B, before the first push
+## Round S2 — self-review of PR-B, before the first push (2026-11-10, ahead of `57290e7d`)
 
 1. **(Critical) Opening the admin page of a FINISHED pool would have rewritten
    its winner records.** The admin page asks the server to reconcile winners
@@ -39,7 +39,10 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
    under the new rules applies only to pools created on or after 2026-11-10
    (`SQUARES_RULES_SINCE_MS`); an unreadable `createdAt` counts as old; the two
    new winner callables refuse an old pool; the pool page shows a recorded
-   amount as recorded. Five emulator tests and eight mutants pin it.
+   amount as recorded. Five emulator tests and eight mutants pinned it **as
+   measured on 2026-11-10 at `57290e7d`**. Later rounds added tests to the same
+   files; the current counts are in each PR's description, which is re-measured
+   at every push, and not in this log.
 
 ## Round Q1 — qodo, PR #758 @ `2499d8d0` (2026-11-10T17:44Z)
 
