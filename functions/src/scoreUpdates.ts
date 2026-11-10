@@ -16,6 +16,7 @@ import { hasConfirmedRole } from "./lib/confirmedRole";
 import { rethrowOrInternal } from "./lib/safeError";
 import { applyWinnerPlan, finalScoresOf, planWinnerWrites, type StoredWinner } from "./lib/squaresWinners";
 import { usesCurrentWinnerRules, type PayoutPool } from "./shared/squaresPayouts";
+import { squaresWinnersPaused } from "./lib/squaresPause";
 
 // The digits for one side of a grid: Fisher–Yates over the system CSPRNG.
 //
@@ -213,7 +214,8 @@ const processGameUpdate = async (
     doc: admin.firestore.DocumentSnapshot,
     espnScores: any,
     actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
-    overrides?: Partial<GameState>
+    overrides?: Partial<GameState>,
+    opts?: { winnersPaused?: boolean },
 ) => {
     const db = admin.firestore();
     const freshPool = { ...doc.data() as GameState, ...overrides };
@@ -266,6 +268,11 @@ const processGameUpdate = async (
     // See SQUARES_RULES_SINCE_MS.
     let storedWinners: StoredWinner[] | null = null;
     const newEventWinners: StoredWinner[] = [];
+    //
+    // The PAUSE SWITCH (lib/squaresPause.ts) does not skip this read — it
+    // skips the reconcile at the end. The scoring-event code below uses these
+    // records to avoid re-writing an event that is already on record; without
+    // them it would reset that event's prize to $0 and re-decide its winner.
     if (isQ1Final && freshPool.axisNumbers && usesCurrentWinnerRules(freshPool as { createdAt?: unknown })) {
         const winnersSnap = await transaction.get(db.collection('pools').doc(doc.id).collection('winners'));
         storedWinners = winnersSnap.docs.map(d => ({ id: d.id, data: d.data() }));
@@ -866,7 +873,10 @@ const processGameUpdate = async (
 
     // WINNERS follow the scores. Computed from the pool as this transaction
     // leaves it: the new scores, and (four-set pools) the numbers drawn above.
-    if (storedWinners) {
+    //
+    // Not while the pause switch is set: no quarter winner is recorded or
+    // changed and no prize amount is set until it is cleared.
+    if (storedWinners && !opts?.winnersPaused) {
         const poolAfter = {
             ...freshPool,
             ...(transactionUpdates.axisNumbers ? { axisNumbers: transactionUpdates.axisNumbers } : {}),
@@ -952,6 +962,10 @@ export const syncGameStatus = onSchedule({
 
         console.log(`[Sync] Processing ${allPools.length} pools (${activePoolsSnap.size} active, ${completedPoolsSnap.size} recently completed)`);
 
+        // One read per run, and only when there is something to process.
+        const winnersPaused = await squaresWinnersPaused(db);
+        if (winnersPaused) console.warn('[Sync] squares winner recording is PAUSED (system/config.squaresWinners.paused). Scores are still synced.');
+
         // 2. Process Each Pool
         let skippedDead = 0;
         for (const doc of allPools) {
@@ -1031,7 +1045,9 @@ export const syncGameStatus = onSchedule({
                         transaction,
                         freshDoc,
                         espnScores,
-                        { uid: 'system', role: 'SYSTEM' }
+                        { uid: 'system', role: 'SYSTEM' },
+                        undefined,
+                        { winnersPaused },
                     );
                 });
 

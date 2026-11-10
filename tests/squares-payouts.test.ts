@@ -309,6 +309,30 @@ describe('M3 — roll over winnings', () => {
       expect(claim(claims, 'final_rollover')).toMatchObject({ owner: 'P12', squareId: 12, sold: true, amount: 396 });
     });
 
+    it('a draw that has been made STANDS when the rule is switched to "last winner" afterwards', () => {
+      // qodo, PR #759 round 3: the rule decides who gets a prize that has not
+      // been awarded. Once a draw has awarded it there is nothing left to decide.
+      const p = rolling([48], { ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'last_winner' } });
+      const claims = allClaims(p, FULL_GAME, { final_rollover: { squareId: 12, owner: 'P12', drawn: true } });
+      expect(claim(claims, 'final_rollover')).toMatchObject({ owner: 'P12', squareId: 12, sold: true, amount: 396 });
+      // The counter-example: with no draw on record, the same pool pays the last winner.
+      expect(claim(allClaims(p, FULL_GAME), 'final_rollover')).toMatchObject({ owner: 'P71' });
+    });
+
+    it('…and when the rule is left unset', () => {
+      const p = rolling([48], { ruleVariations: { quarterlyRollover: true } });
+      const claims = allClaims(p, FULL_GAME, { final_rollover: { squareId: 12, owner: 'P12', drawn: true } });
+      expect(claim(claims, 'final_rollover').owner).toBe('P12');
+    });
+
+    it('a "draw" that names nobody is not a draw', () => {
+      const p = rolling([48], { ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'last_winner' } });
+      for (const owner of [null, 'Rollover', 'Unsold', '']) {
+        const claims = allClaims(p, FULL_GAME, { final_rollover: { squareId: 12, owner, drawn: true } });
+        expect(claim(claims, 'final_rollover').owner, String(owner)).toBe('P71');
+      }
+    });
+
     it('random: a recorded final_rollover that was NOT a draw is not treated as one', () => {
       const p = rolling([48], { ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'random' } });
       const claims = allClaims(p, FULL_GAME, { final_rollover: { squareId: 71, owner: 'P71' } });

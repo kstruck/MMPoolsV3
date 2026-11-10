@@ -1053,14 +1053,19 @@ export const dbService = {
      * refuses if the record now names someone else, so a click meant for a
      * winner that has since changed cannot mark the new one paid.
      */
-    toggleWinnerPaid: async (poolId: string, winnerId: string, expected?: { owner: string; squareId: number }): Promise<{ success: boolean; isPaid: boolean }> => {
+    toggleWinnerPaid: async (
+        poolId: string,
+        winnerId: string,
+        expected?: { owner: string; squareId: number; /** What is being asked for: paid, or not paid. */ paid?: boolean },
+    ): Promise<{ success: boolean; isPaid: boolean; unchanged?: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
             const result = await fn(withCorrelationId({
                 poolId, winnerId,
                 ...(expected ? { expectedOwner: expected.owner, expectedSquareId: expected.squareId } : {}),
+                ...(typeof expected?.paid === 'boolean' ? { paid: expected.paid } : {}),
             }));
-            return result.data as { success: boolean; isPaid: boolean };
+            return result.data as { success: boolean; isPaid: boolean; unchanged?: boolean };
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
@@ -1071,9 +1076,13 @@ export const dbService = {
     },
 
     /** Squares: bring the winner records in line with the scores on the pool. */
-    recomputeSquaresWinners: async (poolId: string): Promise<{ success: boolean; changed: number; eventsNotRecorded?: boolean }> => {
+    recomputeSquaresWinners: async (
+        poolId: string,
+        /** The quarter scores the commissioner is looking at; the server refuses if the stored ones differ. */
+        expectedScores?: Record<'q1' | 'half' | 'q3' | 'final', { home: number; away: number } | null>,
+    ): Promise<{ success: boolean; changed: number; eventsNotRecorded?: boolean }> => {
         const fn = httpsCallable(functions, 'recomputeSquaresWinners');
-        const result = await fn(withCorrelationId({ poolId }));
+        const result = await fn(withCorrelationId({ poolId, ...(expectedScores ? { expectedScores } : {}) }));
         return result.data as { success: boolean; changed: number; eventsNotRecorded?: boolean };
     },
 

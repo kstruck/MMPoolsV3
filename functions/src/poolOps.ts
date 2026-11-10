@@ -779,7 +779,7 @@ export const toggleWinnerPaid = validated(
     // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
     // needs the pool doc's owner fields, unavailable at the role-gate stage).
     { schema: toggleWinnerPaidSchema, label: "toggleWinnerPaid", appCheck: "monitor" },
-    async ({ poolId, winnerId, expectedOwner, expectedSquareId }, request) => {
+    async ({ poolId, winnerId, expectedOwner, expectedSquareId, paid }, request) => {
     // winnerId is the doc ID (e.g. 'q1', 'final')
     const db = admin.firestore();
     const uid = request.auth!.uid;
@@ -809,7 +809,7 @@ export const toggleWinnerPaid = validated(
     // prize to a different square and clear "paid". This used to read the record
     // and write it back in two steps, so a click meant for the OLD winner could
     // land after that change and mark the NEW one paid (qodo, PR #759).
-    const { isNowPaid, amount } = await db.runTransaction(async (t) => {
+    const { isNowPaid, amount, unchanged } = await db.runTransaction(async (t) => {
         const winnerSnap = await t.get(winnerRef);
         if (!winnerSnap.exists) throw new HttpsError('not-found', 'Winner not found');
         const winnerData = winnerSnap.data() as Record<string, unknown>;
@@ -820,8 +820,19 @@ export const toggleWinnerPaid = validated(
             throw new HttpsError('failed-precondition', 'This prize has changed since the page loaded. Check the winner shown now and try again.');
         }
 
-        const next = !winnerData.isPaid;
+        // SET, NOT FLIP, when the page says which it wants. "Mark paid" on a
+        // prize that is already paid is not a request to un-pay it: two clicks,
+        // two tabs or two managers used to cancel each other out, and the
+        // record then showed a handed-over prize as still owed (qodo, PR #759).
+        // A bundle from before this change sends no `paid` and still toggles.
+        const wasPaid = winnerData.isPaid === true;
+        const next = paid === undefined ? !wasPaid : paid;
         const prize = typeof winnerData.amount === 'number' ? winnerData.amount : 0;
+        if (next === wasPaid) {
+            // Already so. Nothing is written — in particular `paidAt` and
+            // `paidAmount` keep saying when, and how much, the FIRST time.
+            return { isNowPaid: wasPaid, amount: prize, unchanged: true };
+        }
         t.update(winnerRef, {
             isPaid: next,
             paidAt: next ? FieldValue.serverTimestamp() : null,
@@ -831,8 +842,11 @@ export const toggleWinnerPaid = validated(
             // total what was handed over, not what the prize has become.
             paidAmount: next ? prize : null,
         });
-        return { isNowPaid: next, amount: prize };
+        return { isNowPaid: next, amount: prize, unchanged: false };
     });
+
+    // Nothing changed, so there is nothing to put in the audit trail.
+    if (unchanged) return { success: true, isPaid: isNowPaid, winnerId, unchanged: true };
 
     // Audit
     await writeAuditEvent({

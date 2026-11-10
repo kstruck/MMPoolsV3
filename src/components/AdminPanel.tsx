@@ -3,8 +3,9 @@ import { logger } from '../utils/logger';
 import React, { useState, useEffect } from 'react';
 import { dbService } from '../services/dbService';
 import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntry, PlayerDetails, Winner } from '../types';
-import { computePeriodPayouts, isPlayerOwner, PERIODS, ROLLOVER, usesCurrentWinnerRules, type PayoutPool, type Period } from '@shared/squaresPayouts';
-import { recordedWinnersOf } from '../utils/payouts';
+import { isPlayerOwner, ROLLOVER, usesCurrentWinnerRules, type PayoutPool } from '@shared/squaresPayouts';
+import { describeWinnerDrift, finalScoresOf, planWinnerWrites, type StoredWinner } from '@shared/squaresWinnerPlan';
+import { payoutTotals } from '../utils/payouts';
 import type { ESPNGame, ESPNCompetitor, ESPNCompetition } from '../types/espn';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
@@ -241,33 +242,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // its winners. This is for scores entered by hand.
   const currentRules = usesCurrentWinnerRules(gameState);
   const isEveryScorePays = !!gameState.ruleVariations?.scoreChangePayout;
-  const finalPeriodScores = React.useMemo(() => {
-    const out: Partial<Record<Period, { home: number; away: number }>> = {};
-    for (const p of PERIODS) {
-      const v = gameState.scores?.[p];
-      if (v) out[p] = { home: Number(v.home) || 0, away: Number(v.away) || 0 };
-    }
-    return out;
-  }, [gameState.scores]);
-  // What the rules call for that is not on record as such — nothing, a
-  // different winner, or a different amount.
-  const unrecorded = React.useMemo(() => {
+  // The quarter scores as the SERVER reads them — one reader, so what this page
+  // compares, sends and is told all agree.
+  const finalPeriodScores = React.useMemo(() => finalScoresOf(gameState.scores), [gameState.scores]);
+  // HOW THE RECORDS DIFFER FROM THE SCORES — by running the server's own
+  // planner on what this page can see. It lists what is missing, what would
+  // change, AND what would be removed. The check this replaces only looked for
+  // missing records, so a quarter switched off after its winner was recorded
+  // left that winner on the books with this page saying everything matched
+  // (qodo, PR #759).
+  const drift = React.useMemo(() => {
     if (!currentRules || !gameState.axisNumbers) return [];
-    const byId = new Map(winnerRecords.map((w) => [w.id, w]));
-    return computePeriodPayouts(gameState as unknown as PayoutPool, finalPeriodScores, recordedWinnersOf(winnerRecords))
-      .flatMap((r) => r.claims)
-      .filter((c) => {
-        const rec = byId.get(c.docId);
-        return !rec || rec.squareId !== c.squareId || rec.owner !== c.owner || rec.amount !== c.amount;
-      });
+    const stored: StoredWinner[] = winnerRecords
+      .filter((w) => !!w.id)
+      .map((w) => ({ id: w.id as string, data: w as unknown as Record<string, unknown> }));
+    const gameFinal = gameState.scores?.gameStatus === 'post' || !!gameState.scores?.final;
+    return describeWinnerDrift(
+      planWinnerWrites(gameState as unknown as PayoutPool, finalPeriodScores, stored, { gameFinal }),
+      stored,
+    );
   }, [currentRules, gameState, finalPeriodScores, winnerRecords]);
+  /** The winner record whose paid state is being saved — one at a time. */
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [eventsNotRecorded, setEventsNotRecorded] = useState(false);
   const handleRecordWinners = async () => {
     if (isRecording) return;
     setIsRecording(true);
     try {
-      const result = await dbService.recomputeSquaresWinners(gameState.id);
+      // The scores on THIS page go with the request. A score is saved by one
+      // request and recorded by this one; if this one got there first the
+      // server would record the winner for the score before the edit. It
+      // refuses instead, and says to try again.
+      const result = await dbService.recomputeSquaresWinners(gameState.id, {
+        q1: finalPeriodScores.q1 ?? null,
+        half: finalPeriodScores.half ?? null,
+        q3: finalPeriodScores.q3 ?? null,
+        final: finalPeriodScores.final ?? null,
+      });
       setEventsNotRecorded(!!result.eventsNotRecorded);
       toast.success(result.changed > 0 ? 'Winners recorded.' : 'Winner records were already up to date.');
     } catch (e) {
@@ -897,20 +909,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   const ms = toEpochMillis(w.paidAt);
                   return ms ? new Date(ms).toLocaleDateString() : null;
                 };
-                const payable = winnerRecords.filter(w => isPlayerOwner(w.owner));
-                const totalOwed = payable.reduce((acc, w) => acc + (w.amount || 0), 0);
-                // What was HANDED OVER, not what each prize has since become.
-                const paidOut = (w: Winner) => (typeof w.paidAmount === 'number' ? w.paidAmount : (w.amount || 0));
-                const totalPaid = payable.filter(w => w.isPaid).reduce((acc, w) => acc + paidOut(w), 0);
+                // Won, handed over, and still to hand over — see `payoutTotals`.
+                const totals = payoutTotals(winnerRecords);
                 const money = (n: number) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
                 return (
                   <>
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <StatTile label="Won So Far" value={money(totalOwed)} accent="gold" />
-                      <StatTile label="Paid Out" value={money(totalPaid)} accent="gold" />
-                      <StatTile label="Pending" value={money(totalOwed - totalPaid)} accent="gold" />
+                      <StatTile label="Won So Far" value={money(totals.won)} accent="gold" />
+                      <StatTile label="Paid Out" value={money(totals.paid)} accent="gold" />
+                      <StatTile label="Pending" value={money(totals.pending)} accent="gold" />
                     </div>
 
                     {/* Winners Table */}
@@ -959,15 +968,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 </div>
                                 {isPlayer && win.id && (
                                   <button
+                                    disabled={payingId === win.id}
                                     onClick={async () => {
+                                      if (payingId) return;
+                                      // Un-marking is deliberate, never the side effect of a second click.
+                                      if (win.isPaid && !window.confirm(`Mark the ${money(win.amount || 0)} prize for ${win.owner} as NOT paid?`)) return;
+                                      setPayingId(win.id!);
                                       try {
-                                        await dbService.toggleWinnerPaid(gameState.id, win.id!, { owner: win.owner, squareId: win.squareId });
+                                        // SAYS WHICH STATE IT WANTS. The server sets it rather than
+                                        // flipping whatever is stored, so two clicks, two tabs or two
+                                        // managers cannot cancel each other out.
+                                        await dbService.toggleWinnerPaid(gameState.id, win.id!, { owner: win.owner, squareId: win.squareId, paid: !win.isPaid });
                                       } catch (e) {
                                         logger.error(e);
                                         toast.error(e instanceof Error && e.message ? e.message : 'Could not update the payout. Please try again.');
+                                      } finally {
+                                        setPayingId(null);
                                       }
                                     }}
-                                    className={'px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 ' + (win.isPaid ? 'bg-[#0F7B4A] text-white' : 'bg-navy-800 hover:bg-navy-700 text-white')}
+                                    className={'px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150 disabled:opacity-50 disabled:cursor-wait ' + (win.isPaid ? 'bg-[#0F7B4A] text-white' : 'bg-navy-800 hover:bg-navy-700 text-white')}
                                   >
                                     {win.isPaid ? <span className="flex items-center gap-1"><CheckCircle size={14} /> Paid</span> : 'Mark Paid'}
                                   </button>
@@ -1059,16 +1078,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-2">Record Winners</h3>
                 {!gameState.axisNumbers ? (
                   <p className="text-sm font-body text-muted">The grid has no numbers yet. Lock the grid first; winners can be recorded after that.</p>
-                ) : unrecorded.length === 0 ? (
-                  <p className="text-sm font-body text-muted">The winner records match the scores above. {gameState.gameId && !gameState.manualScoreOverride ? 'This pool is linked to a game, so winners are recorded for you as each quarter ends.' : ''}</p>
+                ) : drift.length === 0 ? (
+                  <p className="text-sm font-body text-muted" data-testid="winner-records-match">The winner records match the scores above. {gameState.gameId && !gameState.manualScoreOverride ? 'This pool is linked to a game, so winners are recorded for you as each quarter ends.' : ''}</p>
                 ) : (
                   <>
-                    <p className="text-sm font-body text-muted mb-3">
-                      Not on record yet: <span className="font-bold text-[color:var(--text)]">{unrecorded.map((c) => `${c.description} — ${c.owner}`).join('; ')}</span>.
-                      Recording a winner publishes it on the pool page{gameState.reminders?.winner?.enabled ? ' and emails the pool' : ''}, so do it once the score above is right.
-                    </p>
+                    <div className="text-sm font-body text-muted mb-3 space-y-1" data-testid="winner-records-drift">
+                      {(['add', 'change', 'remove', 'events'] as const).map((kind) => {
+                        const lines = drift.filter((d) => d.kind === kind);
+                        if (lines.length === 0) return null;
+                        const lead = kind === 'add' ? 'Not on record yet'
+                          : kind === 'change' ? 'Will change'
+                          : kind === 'remove' ? 'On record, but the scores above no longer call for it — will be removed'
+                          : 'Still to be worked out';
+                        return (
+                          <p key={kind}>
+                            {lead}: <span className="font-bold text-[color:var(--text)]">{lines.map((d) => d.text).join('; ')}</span>.
+                          </p>
+                        );
+                      })}
+                      <p>
+                        Recording publishes this on the pool page{gameState.reminders?.winner?.enabled ? ' and emails the pool about each new winner' : ''}, so do it once the scores above are right.
+                      </p>
+                    </div>
                     <button onClick={handleRecordWinners} disabled={isRecording} className="bg-navy-800 hover:bg-navy-700 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] text-sm transition-ui duration-150">
-                      {isRecording ? 'Recording…' : 'Record winners'}
+                      {isRecording ? 'Recording…' : drift.some((d) => d.kind === 'add') ? 'Record winners' : 'Update winner records'}
                     </button>
                   </>
                 )}

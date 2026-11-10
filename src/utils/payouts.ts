@@ -15,6 +15,7 @@ import {
     type PeriodScore,
     type RecordedWinners,
 } from '@shared/squaresPayouts';
+import { recordedEntry } from '@shared/squaresWinnerPlan';
 
 export interface PeriodCard {
     period: string;
@@ -31,6 +32,13 @@ export interface PeriodCard {
     isRollover?: boolean;
     rolloverAdded: number;
     isLocked: boolean;
+    /**
+     * A finished quarter on a pool played under the OLD rules for which no
+     * winner was ever recorded. The name is the owner of the square the score
+     * lands on and the amount is that quarter's plain share — not a record, and
+     * the page says so.
+     */
+    isUnrecorded?: boolean;
     /** An unclaimed FINAL prize and who it went to (last winner, or the random draw). */
     bonusWinnerName?: string | null;
     bonusAmount?: number;
@@ -49,14 +57,10 @@ export const recordedWinnersOf = (winners: ReadonlyArray<Winner>): RecordedWinne
         // Keyed by document id; the math only ever looks up period ids, so a
         // scoring-event record in here is simply never read.
         if (!w.id) continue;
-        // A DRAWN final prize is read from what the draw chose, not from the
-        // computed owner — the same rule as the server's `recordedEntry`.
-        const drawn = !!w.drawnAt;
-        out[w.id] = {
-            squareId: drawn && typeof w.drawnSquareId === 'number' ? w.drawnSquareId : w.squareId,
-            owner: (drawn && w.drawnOwner ? w.drawnOwner : w.owner) ?? null,
-            drawn,
-        };
+        // ONE reader for a record — the server's. A DRAWN final prize is read
+        // from what the draw chose, not from the computed owner; this page had
+        // its own copy of that rule, with its own null checks (qodo, PR #759).
+        out[w.id] = recordedEntry({ id: w.id, data: w as unknown as Record<string, unknown> });
     }
     return out;
 };
@@ -171,6 +175,28 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
             if (!currentRules) rolloverAdded = 0;
         }
 
+        // AN OLD POOL WITH NO RECORD FOR A FINISHED QUARTER. Its history was
+        // never written down (a hand-scored pool recorded no winners before
+        // 2026-11), so there is nothing to show as fact. What CAN be said
+        // without today's rules is who owns the square the score lands on and
+        // what that quarter's plain share of the pot is. Today's reverse-winner
+        // split, rollover and unclaimed-prize handling are NOT applied to a
+        // game that was not played under them, and the card is flagged so the
+        // page does not present a worked-out figure as a recorded one (qodo,
+        // PR #759).
+        let isUnrecorded = false;
+        if (!currentRules && !official && isFinal && result && !paysNothing) {
+            const regular = result.claims.find((c) => c.docId === period);
+            isUnrecorded = true;
+            winnerName = regular && isPlayerOwner(regular.owner) ? regular.owner : UNSOLD;
+            amount = periodBase(pool, period);
+            reverseWinnerName = null;
+            isRollover = false;
+            rolloverAdded = 0;
+            bonusWinnerName = null;
+            bonusAmount = 0;
+        }
+
         return {
             period,
             label: PERIOD_LABELS[period] || period,
@@ -185,10 +211,42 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
             isRollover,
             rolloverAdded,
             isLocked: isFinal,
+            isUnrecorded,
             bonusWinnerName,
             bonusAmount,
         };
     });
 };
+
+/**
+ * The three totals on the commissioner's Payouts tab, from the winner records.
+ *
+ *   - `won`     — every prize a PLAYER has won, at what it is now.
+ *   - `paid`    — what was actually HANDED OVER: the amount each prize was at
+ *                 the moment it was marked paid, not what it has since become.
+ *   - `pending` — what is still to hand over.
+ *
+ * `pending` is NOT `won − paid`. A prize can fall after it was paid — a drawn
+ * prize set to $0, charity switched on late — and the difference then went
+ * negative, on a page a commissioner reads as "what I still owe" (qodo, PR
+ * #759). An unpaid prize is owed in full; a paid one is owed only what it has
+ * GROWN by since. One that was overpaid owes nothing here; its row says so.
+ */
+export function payoutTotals(winners: ReadonlyArray<Winner>): { won: number; paid: number; pending: number } {
+    let won = 0, paid = 0, pending = 0;
+    for (const w of winners) {
+        if (!isPlayerOwner(w.owner)) continue;
+        const amount = typeof w.amount === 'number' && Number.isFinite(w.amount) ? w.amount : 0;
+        won += amount;
+        if (w.isPaid) {
+            const handed = typeof w.paidAmount === 'number' && Number.isFinite(w.paidAmount) ? w.paidAmount : amount;
+            paid += handed;
+            pending += Math.max(0, amount - handed);
+        } else {
+            pending += amount;
+        }
+    }
+    return { won, paid, pending };
+}
 
 export { UNSOLD, ROLLOVER };

@@ -363,8 +363,16 @@ export function computePeriodPayouts(
       rolloverOut = 0;
       const base0 = { period, isReverse: false, homeDigit: regular.homeDigit, awayDigit: regular.awayDigit } as const;
       const draw = recorded.final_rollover;
-      if (rules.unclaimedFinalPrizeStrategy === 'random' && draw?.drawn && isPlayerOwner(draw.owner)) {
-        // The draw has been made. It is not made twice.
+      if (draw?.drawn && isPlayerOwner(draw.owner)) {
+        // The draw has been made. It is not made twice — AND IT STANDS, whatever
+        // the rule is set to afterwards. This branch used to apply only while
+        // the rule still said "random", so switching the rule to "last winner"
+        // moved the prize to somebody else (clearing "paid", since that was a
+        // statement about the drawn winner), and switching it back returned the
+        // prize to the drawn winner as UNPAID — a prize that had already been
+        // handed over, on the books to be handed over again (qodo, PR #759).
+        // The rule decides who gets a prize that has not been awarded. Once a
+        // draw has awarded it, there is nothing left for the rule to decide.
         claims.push({ ...base0, docId: 'final_rollover', squareId: draw.squareId, owner: draw.owner, sold: true, isRollover: false, amount: unclaimed, description: 'Unclaimed final prize — awarded by random draw' });
       } else if (rules.unclaimedFinalPrizeStrategy === 'random') {
         claims.push({ ...base0, docId: 'final_rollover', squareId: regular.squareId, owner: ROLLOVER, sold: false, isRollover: true, amount: unclaimed, description: 'Unclaimed final prize — awaiting the random draw' });

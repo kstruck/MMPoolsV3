@@ -22,6 +22,12 @@ export const toggleWinnerPaidSchema = z.strictObject({
     // handler refuses if the record now names someone else.
     expectedOwner: z.string().max(200).optional(),
     expectedSquareId: z.number().int().min(-1).max(99).optional(),
+    // What the commissioner is ASKING FOR: paid, or not paid. Optional for the
+    // same reason. Without it the handler flips whatever is stored, so a second
+    // click — a double-click, another tab, a co-manager — quietly undid the
+    // first. With it, a request for the state the record is already in changes
+    // nothing.
+    paid: z.boolean().optional(),
 });
 
 /**

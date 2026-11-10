@@ -828,6 +828,9 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 )}
                                 <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">${card.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
                                 {card.reverseWinnerName && <div className="text-[10px] text-faint font-body">each</div>}
+                                {card.isUnrecorded && (
+                                    <div className="text-[10px] font-body text-muted" data-testid="card-unrecorded">No winner was recorded for this quarter. Shown from the score.</div>
+                                )}
                                 {card.rolloverAdded > 0 && !card.isRollover && (
                                     <div className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400 num">Includes ${card.rolloverAdded.toLocaleString(undefined, { maximumFractionDigits: 2 })} rolled over</div>
                                 )}

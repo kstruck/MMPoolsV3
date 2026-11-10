@@ -29,7 +29,8 @@ import {
 import { applyWinnerPlan, finalScoresOf, isEventWinnerId, PERIOD_WINNER_IDS, planWinnerWrites, recordedEntry, type StoredWinner } from "./lib/squaresWinners";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { squaresGameHasStarted } from "./lib/squaresGame";
-import { computePeriodPayouts, ROLLOVER, scoreEventStrategy, usesCurrentWinnerRules, type PayoutPool, type RecordedWinners } from "./shared/squaresPayouts";
+import { computePeriodPayouts, PERIODS, ROLLOVER, scoreEventStrategy, usesCurrentWinnerRules, type PayoutPool, type Period, type RecordedWinners } from "./shared/squaresPayouts";
+import { assertSquaresWinnersNotPaused } from "./lib/squaresPause";
 
 type PoolDoc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -54,6 +55,19 @@ const recordedOf = (stored: ReadonlyArray<StoredWinner>): RecordedWinners => {
     }
     return out;
 };
+
+/** Are the stored quarter scores exactly the ones the page showed? Quarter by quarter. */
+function sameFinalScores(
+    stored: Partial<Record<Period, { home: number; away: number }>>,
+    expected: Record<Period, { home: number; away: number } | null>,
+): boolean {
+    return PERIODS.every((p) => {
+        const s = stored[p];
+        const e = expected[p];
+        if (!s || !e) return !s && !e;
+        return s.home === e.home && s.away === e.away;
+    });
+}
 
 /**
  * A SUPER_ADMIN acting on a pool they do not run also leaves a row in
@@ -92,7 +106,7 @@ async function auditIfActingAsAdmin(
  */
 export const recomputeSquaresWinners = validated(
     { schema: recomputeSquaresWinnersSchema, label: "recomputeSquaresWinners", appCheck: "monitor" },
-    async ({ poolId }, request) => {
+    async ({ poolId, expectedScores }, request) => {
         const uid = request.auth!.uid;
         await assertNotBannedLive(uid);
         const adminClaim = await confirmedAdminClaim(request);
@@ -106,6 +120,18 @@ export const recomputeSquaresWinners = validated(
             assertPoolOwnerOrSuperAdmin(pool, uid, adminClaim);
             if (!isSquares(pool)) throw new HttpsError('failed-precondition', 'This is not a squares pool.');
             assertCurrentRules(pool);
+            await assertSquaresWinnersNotPaused(db);
+
+            // THE SCORES THE COMMISSIONER WAS LOOKING AT. A typed score is saved
+            // by one request and recorded by this one; if this one arrives
+            // first it would record the winner for the score that was there
+            // BEFORE the edit, and say it had worked (qodo, PR #759).
+            if (expectedScores && !sameFinalScores(finalScoresOf(pool.scores), expectedScores)) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'The scores are still being saved. Wait a moment, check the scores shown, and press Record winners again.',
+                );
+            }
 
             const winnersSnap = await t.get(poolRef.collection('winners'));
             const stored = winnersSnap.docs.map((d) => ({ id: d.id, data: d.data() }));
@@ -156,6 +182,7 @@ export const drawSquaresFinalPrize = validated(
             assertPoolOwnerOrSuperAdmin(pool, uid, adminClaim);
             if (!isSquares(pool)) throw new HttpsError('failed-precondition', 'This is not a squares pool.');
             assertCurrentRules(pool);
+            await assertSquaresWinnersNotPaused(db);
 
             const winnersRef = poolRef.collection('winners');
             const winnersSnap = await t.get(winnersRef);

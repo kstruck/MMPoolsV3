@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    describeWinnerDrift,
     finalScoresOf,
     parseEventWinnerId,
     planWinnerWrites,
@@ -260,5 +261,102 @@ describe('a drawn final prize is never deleted', () => {
 
     it('a record drawn before drawnOwner existed falls back to its owner', () => {
         expect(recordedEntry({ id: 'final_rollover', data: { squareId: 12, owner: 'P12', drawnAt: 1 } })).toEqual({ squareId: 12, owner: 'P12', drawn: true });
+    });
+});
+
+/**
+ * qodo, PR #759 round 3 — WHAT THE COMMISSIONER IS SHOWN before "Record
+ * winners". The page used to look only for records that were missing, so a
+ * record that had to be REMOVED was invisible and the page said everything
+ * matched. It now shows this, built from the plan the server will run.
+ */
+describe('describeWinnerDrift — what the page lists before recording', () => {
+    const drift = (p: PayoutPool, scores: Parameters<typeof planWinnerWrites>[1], existing: StoredWinner[] = [], gameFinal = false) =>
+        describeWinnerDrift(plan(p, scores, existing, gameFinal), existing);
+
+    it('nothing to do reads as nothing', () => {
+        expect(drift(pool(), Q1, [q1Record()])).toEqual([]);
+        expect(drift(pool(), {})).toEqual([]);
+    });
+
+    it('a winner not on record yet', () => {
+        expect(drift(pool(), Q1)).toEqual([{ kind: 'add', text: 'Q1 Winner — P37 ($200.00)' }]);
+    });
+
+    it('THE BUG: a record the scores no longer call for is listed, as a removal', () => {
+        // The first quarter's score was switched off after P37 was recorded.
+        expect(drift(pool(), {}, [q1Record()])).toEqual([{ kind: 'remove', text: 'Q1 Winner — P37 ($200.00)' }]);
+    });
+
+    it('a removal is listed beside the additions, not instead of them', () => {
+        const half = { half: { home: 14, away: 10 } };
+        expect(drift(pool(), half, [q1Record()])).toEqual([
+            { kind: 'add', text: 'Halftime Winner — P4 ($200.00)' },
+            { kind: 'remove', text: 'Q1 Winner — P37 ($200.00)' },
+        ]);
+    });
+
+    it('a winner that changed', () => {
+        const [line] = drift(pool(), { q1: { home: 8, away: 3 } }, [q1Record()]);
+        expect(line.kind).toBe('change');
+        expect(line.text).toBe('Q1 Winner CHANGED: P37 → P38 ($200.00)');
+    });
+
+    it('a prize that changed, and says so when it was already paid', () => {
+        const [line] = drift(pool({}, [0, 1, 2, 3, 5]), Q1, [q1Record({ isPaid: true })]);
+        expect(line).toEqual({ kind: 'change', text: 'Q1 Winner: prize for P37 is now $190.00 (was $200.00) — already marked PAID at the old amount' });
+    });
+
+    it('a drawn prize the scores no longer call for is a change to $0, never a removal', () => {
+        const drawn: StoredWinner = { id: 'final_rollover', data: { period: 'final', squareId: 12, owner: 'P12', amount: 396, drawnAt: 1, drawnOwner: 'P12', drawnSquareId: 12 } };
+        const lines = drift(pool(), Q1, [q1Record(), drawn]);
+        expect(lines).toHaveLength(1);
+        expect(lines[0].kind).toBe('change');
+        expect(lines[0].text).toMatch(/drawn prize for P12 is now \$0\.00/);
+    });
+
+    it('housekeeping the commissioner would not recognise is not listed', () => {
+        // Only the wording of the description differs.
+        const writes = plan(pool(), Q1, [q1Record({ description: 'First quarter' })]);
+        expect(writes).toHaveLength(1);              // the plan does fix it...
+        expect(describeWinnerDrift(writes, [])).toEqual([]); // ...and the page does not offer a button for it
+    });
+
+    it('Every Score Pays: prizes still to be worked out are listed once', () => {
+        const esp = pool({ ruleVariations: { scoreChangePayout: true, scoreChangePayoutStrategy: 'equal_split' } });
+        const events: StoredWinner[] = [
+            { id: 'event_3_0', data: { owner: 'P3', amount: 0 } },
+            { id: 'event_3_3', data: { owner: 'P33', amount: 0 } },
+        ];
+        const lines = describeWinnerDrift(plan(esp, {}, events, true), events);
+        expect(lines).toEqual([{ kind: 'events', text: 'Every Score Pays: the prize for each scoring event' }]);
+    });
+
+    it('a record with no description or owner still reads as something', () => {
+        const bare: StoredWinner = { id: 'q1', data: { squareId: 37 } };
+        expect(describeWinnerDrift([{ kind: 'delete', id: 'q1', audit: { type: 'WINNER_COMPUTED', severity: 'WARNING', message: 'x' } }], [bare]))
+            .toEqual([{ kind: 'remove', text: 'q1 — nobody ($0.00)' }]);
+    });
+});
+
+describe('a draw that has been made stands, whatever the rule says afterwards (qodo r3)', () => {
+    const FULL = { q1: { home: 7, away: 3 }, half: { home: 14, away: 10 }, q3: { home: 21, away: 17 }, final: { home: 28, away: 24 } };
+    const drawnPaid: StoredWinner = {
+        id: 'final_rollover',
+        data: { period: 'final', squareId: 12, owner: 'P12', amount: 396, homeDigit: 8, awayDigit: 4, isReverse: false, isRollover: false,
+            description: 'Unclaimed final prize — awarded by random draw', drawnAt: 1, drawnOwner: 'P12', drawnSquareId: 12, isPaid: true, paidAmount: 396 },
+    };
+    const lastWinner = pool({ ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'last_winner' } }, [48]);
+
+    it('the plan does not move a drawn prize to the last winner — so "paid" is never cleared', () => {
+        const others = plan(lastWinner, FULL).filter((w) => w.kind === 'create' && w.id !== 'final_rollover')
+            .map((w) => ({ id: (w as Extract<WinnerWrite, { kind: 'create' }>).id, data: (w as Extract<WinnerWrite, { kind: 'create' }>).doc }));
+        const writes = plan(lastWinner, FULL, [...others, drawnPaid], true);
+        expect(writes).toEqual([]);
+    });
+
+    it('the counter-example: with no draw, the same pool does name the last winner', () => {
+        const created = only(plan(lastWinner, FULL), 'create').find((w) => w.id === 'final_rollover')!;
+        expect(created.doc).toMatchObject({ owner: 'P71', amount: 396 });
     });
 });
