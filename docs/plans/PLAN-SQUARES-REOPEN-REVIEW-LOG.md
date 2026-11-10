@@ -516,9 +516,9 @@ name each time against a limit of two, and a guest sending it.
 
 | # | Finding | Verdict |
 |---|---|---|
-| 1 | Players can exceed the square limit by merging guest squares into an account | **Accepted** — fixed in #758, where that code lives |
+| 1 | Players can exceed the square limit by merging guest squares into an account | **Accepted** — fixed in #758 (`b111293a`), where that code lives |
 | 2 | A pool can be linked to the wrong game — the server trusts the client's id, league, teams and kickoff | **Rejected as specified; the reachable half is fixed.** See below |
-| 3 | A linked pool can be tied to the wrong league's feed | **Accepted** — fixed in #760 |
+| 3 | A linked pool can be tied to the wrong league's feed | **Accepted** — fixed in #760 (`2cf665a5`) |
 | 4 | Two auto-lock paths draw numbers differently, and the new default reaches both | **Accepted, in the half this plan may touch.** See below |
 | 5 | Winner records are written by default, not held until switched on | **Rejected.** See below |
 
@@ -551,10 +551,11 @@ K7, and the new default (a linked grid locks at kickoff) does put new pools in
 its reach: `runReminders` locks any squares grid whose lock time has passed
 and is still open, drawing with a biased `Math.random` sort. That file sends
 the reminders for every running NFL pool and is outside the delegation.
-What was done instead: the dedicated job (`autoLock.ts`, every minute,
-`crypto.randomInt`) now locks a squares grid from 90 seconds before its lock
-time rather than 30, so it has always run before the lock time arrives and
-`runReminders` finds the grid already locked. That closes the race in normal
+What was done instead, in #760 (`2cf665a5`): the dedicated job
+(`autoLock.ts`, every minute, `crypto.randomInt`) locks a squares grid from 90
+seconds before its lock time rather than 30, so it has always run before the
+lock time arrives and `runReminders` finds the grid already locked. (That
+change is not in #758's own diff; this log is, because the log lives here.) That closes the race in normal
 operation; it does not close it if the dedicated job is down or failing at
 that minute. **K7 is now the first decision for Kevin, not the seventh.**
 
@@ -573,4 +574,11 @@ data-writing job' suggestions."
 **Tests and mutants for the #758 half.** 73 emulator tests in
 `squaresClaim.emulator.test.ts` (58 before this round) and 66 unit (60
 before). 15 mutants, all red on the first run.
+
+**#758's fourth re-review, on `b111293a`: Bugs (0).** One new note, accepted:
+the plan's K7 entry described the 90-second lock lead as a fact while this
+branch's `autoLock.ts` still says 30 — the change is in #760. A reader of
+this PR alone could have taken the race as closed. K7 and the paragraph above
+now say which PR and which commit, and that the race is open until #760
+merges.
 
