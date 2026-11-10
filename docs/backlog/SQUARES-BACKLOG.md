@@ -3,7 +3,7 @@
 **Status: CLOSED OUT — CREATION IS OPEN AGAIN** (PLAN-SQUARES-REOPEN PR-D,
 2026-11). `SQUARES_CREATION_OPEN = true` (`src/config/season.ts`) and
 `HARD_CLOSED_POOL_TYPES` is empty on both sides. Everything on this list is
-fixed or decided; what is left for Kevin is in the plan (K1, K2, K4–K10), not here.
+fixed or decided; what is left for Kevin is in the plan (K1, K2, K4–K11), not here.
 
 | Item | Outcome |
 |---|---|

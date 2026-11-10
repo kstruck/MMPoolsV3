@@ -108,8 +108,17 @@ test.describe('a squares pool, from the wizard to a paid prize', () => {
     await page.locator('#name').fill('Thanksgiving Squares');
     await next(page);
 
-    // ---- Game: a game that has kicked off cannot be picked; one to come can.
+    // ---- Game. The list on screen is always the answer to the question on
+    //      screen: search under "College", switch back to NFL, and the college
+    //      results are gone rather than left there to be clicked (qodo, PR #760).
     await page.locator('#squares-game-date').fill(kickoffDate);
+    await page.locator('#squares-game-league').selectOption('college');
+    await page.getByRole('button', { name: /Find games/i }).click();
+    await page.getByTestId('squares-game-list').waitFor();
+    await page.locator('#squares-game-league').selectOption('nfl');
+    await expect(page.getByTestId('squares-game-list')).toHaveCount(0);
+
+    // A game that has kicked off cannot be picked; one to come can.
     await page.getByRole('button', { name: /Find games/i }).click();
     await page.getByTestId('squares-game-list').waitFor();
     await expect(page.getByRole('button', { name: /Kansas City Chiefs at Dallas Cowboys/ })).toBeDisabled();
@@ -146,6 +155,7 @@ test.describe('a squares pool, from the wizard to a paid prize', () => {
     let pool = await readPool(poolId);
     expect(pool.type).toBe('SQUARES');
     expect(pool.gameId).toBe(GAME_ID);
+    expect(pool.league).toBe('nfl');                      // the league it was FOUND in
     expect(pool.isLocked).toBe(false);
     expect(pool.axisNumbers ?? null).toBeNull();          // numbers are not drawn before the lock
     expect(pool.costPerSquare).toBe(10);

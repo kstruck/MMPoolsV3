@@ -28,11 +28,16 @@
 > 3. **No data backup was verified.** Nothing in A–D writes production data on
 >    deploy, but step 1 of the deploy is still confirming Firestore PITR:
 >    `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`.
-> 4. **Nine items are Kevin's to decide** — plan K1, K2 and K4–K10. Each is in a file
+> 4. **Ten items are Kevin's to decide** — plan K1, K2 and K4–K11. Each is in a file
 >    shared with running pools (`firestore.rules`, `reminders.ts`,
->    `statsTrigger.ts`) or is a setting. K10 must be checked before the first
->    squares pool above ten players: squares needs pricing tiers in
->    Super-Admin → Monetization.
+>    `statsTrigger.ts`) or is a setting. Two before Thanksgiving:
+>    - **K7 first.** `reminders.ts` has a second auto-lock for squares grids
+>      that draws numbers with a biased shuffle. #760 makes the dedicated job
+>      run 90 seconds ahead so it normally gets there first; if that job is
+>      down at kickoff, the biased one decides the grid. The fix is three
+>      lines in a file this work was not allowed to touch.
+>    - **K10.** Squares needs pricing tiers in Super-Admin → Monetization
+>      before the first pool above ten players.
 >
 > **To stop it after it is live, fastest first.**
 > 1. Winner records look wrong on a live game: set
