@@ -276,12 +276,12 @@ describe('duesBuckets — which unpaid squares a player can say they have paid f
 
   it('a square stamped with the player\'s account is confirmable', () => {
     const out = duesBuckets([sq(1, { reservedByUid: 'u-alice' })], me, 'Alice');
-    expect(out).toEqual({ confirmable: [1], hostOnly: [], pending: [] });
+    expect(out).toEqual({ confirmable: [1], hostOnly: [], pending: [], guestHeld: [] });
   });
 
   it('a square the organizer entered under the player\'s name is theirs to PAY but not theirs to confirm', () => {
     const out = duesBuckets([sq(2)], me, 'Alice');
-    expect(out).toEqual({ confirmable: [], hostOnly: [2], pending: [] });
+    expect(out).toEqual({ confirmable: [], hostOnly: [2], pending: [], guestHeld: [] });
   });
 
   it('THE BUG: mixed dues — the confirmable list holds only what the server will accept', () => {
@@ -299,7 +299,34 @@ describe('duesBuckets — which unpaid squares a player can say they have paid f
 
   it('a square still held by this browser as a guest is not confirmable until it is on the account', () => {
     const out = duesBuckets([sq(4, { guestKeyHash: 'hash-alice' })], me, 'Alice');
-    expect(out).toEqual({ confirmable: [], hostOnly: [4], pending: [] });
+    // …and it is marked as the browser's, so the page does not say the organizer entered it.
+    expect(out).toEqual({ confirmable: [], hostOnly: [4], pending: [], guestHeld: [4] });
+  });
+
+  // qodo, PR #759: a signed-in player whose guest squares stayed on the browser
+  // (the merge would have passed the limit) was told the organizer had entered
+  // them. `guestHeld` is how the page tells the two apart.
+  it('guestHeld is exactly the host-only squares under THIS browser\'s key', () => {
+    const out = duesBuckets(
+      [
+        sq(1, { reservedByUid: 'u-alice' }),                       // on the account
+        sq(2),                                                     // organizer-entered: name only
+        sq(3, { owner: 'Ali', guestKeyHash: 'hash-alice' }),       // this browser, another name
+        sq(4, { guestKeyHash: 'hash-alice', reservedByUid: null }),// this browser
+        sq(5, { guestKeyHash: 'hash-bob' }),                       // someone else's browser
+      ],
+      me, 'Alice',
+    );
+    expect(out.confirmable).toEqual([1]);
+    expect(out.hostOnly).toEqual([2, 3, 4]);
+    expect(out.guestHeld).toEqual([3, 4]);
+    for (const id of out.guestHeld) expect(out.hostOnly).toContain(id);
+  });
+
+  it('a player with no browser key has no guestHeld squares', () => {
+    // Square 6 is stored the way a square with no device is: `guestKeyHash: null`.
+    const out = duesBuckets([sq(2), sq(4, { guestKeyHash: 'hash-alice' }), sq(6, { guestKeyHash: null })], { uid: 'u-alice', guestKeyHash: null }, 'Alice');
+    expect(out.guestHeld).toEqual([]);
   });
 
   it('a guest (no account) can confirm nothing', () => {
@@ -319,7 +346,7 @@ describe('duesBuckets — which unpaid squares a player can say they have paid f
       [sq(1, { reservedByUid: 'u-alice', paymentConfirmedAt: 5 }), sq(2, { paymentConfirmedAt: 5 })],
       me, 'Alice',
     );
-    expect(out).toEqual({ confirmable: [], hostOnly: [], pending: [1, 2] });
+    expect(out).toEqual({ confirmable: [], hostOnly: [], pending: [1, 2], guestHeld: [] });
   });
 
   it('a paid square is in no bucket', () => {
@@ -327,7 +354,7 @@ describe('duesBuckets — which unpaid squares a player can say they have paid f
       [sq(1, { reservedByUid: 'u-alice', isPaid: true }), sq(2, { isPaid: true }), sq(3, { reservedByUid: 'u-alice', isPaid: true, paymentConfirmedAt: 5 })],
       me, 'Alice',
     );
-    expect(out).toEqual({ confirmable: [], hostOnly: [], pending: [] });
+    expect(out).toEqual({ confirmable: [], hostOnly: [], pending: [], guestHeld: [] });
   });
 
   it('somebody else\'s square is in no bucket — by account, by device, or by name', () => {
@@ -340,7 +367,7 @@ describe('duesBuckets — which unpaid squares a player can say they have paid f
       ],
       me, 'Alice',
     );
-    expect(out).toEqual({ confirmable: [], hostOnly: [], pending: [] });
+    expect(out).toEqual({ confirmable: [], hostOnly: [], pending: [], guestHeld: [] });
   });
 
   it('a square held under the account but a different typed name is still the player\'s', () => {

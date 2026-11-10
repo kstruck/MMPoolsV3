@@ -150,13 +150,21 @@ export function duesBuckets(
   squares: ReadonlyArray<DuesSquare>,
   identity: ClaimIdentity,
   displayName: string,
-): { confirmable: number[]; hostOnly: number[]; pending: number[] } {
-  const out = { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[] };
+): { confirmable: number[]; hostOnly: number[]; pending: number[]; guestHeld: number[] } {
+  const out = { confirmable: [] as number[], hostOnly: [] as number[], pending: [] as number[], guestHeld: [] as number[] };
   for (const s of squares) {
     if (!isOwnSquare(s, identity, displayName) || s.isPaid) continue;
     if (s.paymentConfirmedAt) out.pending.push(s.id);
     else if (identity.uid && s.reservedByUid === identity.uid) out.confirmable.push(s.id);
-    else out.hostOnly.push(s.id);
+    else {
+      out.hostOnly.push(s.id);
+      // `guestHeld` — the part of `hostOnly` that is NOT "the organizer entered
+      // it for you": the player reserved it on this browser as a guest and it
+      // is still under the browser's key. For a signed-in player that happens
+      // when moving it to the account would have passed the pool's limit. The
+      // page told them the organizer had entered it (qodo, PR #759).
+      if (identity.guestKeyHash && !s.reservedByUid && s.guestKeyHash === identity.guestKeyHash) out.guestHeld.push(s.id);
+    }
   }
   return out;
 }
