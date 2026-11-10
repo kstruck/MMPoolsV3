@@ -12,7 +12,7 @@
 > | #758 | A — the claim path: `0` means no limit, a square belongs to an identity, the guest key is never published | 1 |
 > | #759 | B — money and lock: one payout engine, winner records that follow the scores, numbers drawn once, a pause switch | 2 |
 > | #760 | C — the wizard: picks the game, sets the payouts, creates a pool its own page can open | 3 |
-> | PR-D | the reopen: the three flags, the off switch made usable, the end-to-end test | 4 |
+> | #761 | D — the reopen: the three flags, the off switch made usable, the end-to-end test | 4 |
 >
 > **Squares is still closed in production** and stays closed until all four
 > are merged, functions are deployed and `www` is rebuilt, in that order.
@@ -44,7 +44,7 @@
 >    `system/config.squaresWinners.paused = true`. Scores keep syncing; nothing
 >    is recorded. Clear it and the next sync run records what was held.
 > 2. Stop new squares pools: Super-Admin → Pool Type Availability → SQUARES off.
-> 3. Code: revert PR-D, deploy functions, rebuild `www`. The code anchor from
+> 3. Code: revert #761, deploy functions, rebuild `www`. The code anchor from
 >    before any of this is the branch `backup/pre-squares-reopen-2026-11-10`.
 
 > ## 🟢 2026-10-10 — **PLAN-SPLIT-POT-SETTLEMENT IS SHIPPED — ALL THREE PARTS, PLUS FIVE FOLLOW-UP PRs. EVERYTHING BELOW IS MERGED.**

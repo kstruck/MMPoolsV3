@@ -1,6 +1,6 @@
 # PLAN — reopen Squares: playable, fair, correctly paid, and consistent with the NFL wizards
 
-> **STATUS: BUILT — four PRs open (#758 A, #759 B, #760 C, and D, the reopen),
+> **STATUS: BUILT — four PRs open (#758 A, #759 B, #760 C, #761 D — the reopen),
 > under delegated authority (Kevin, 2026-11-10). NOT MERGED, NOT DEPLOYED.**
 > Squares stays closed in production until all four are merged, functions are
 > deployed and `www` is rebuilt — in that order, by Kevin.
