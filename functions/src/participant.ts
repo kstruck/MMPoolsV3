@@ -12,6 +12,7 @@ import { guestKeyHashOrNull } from "./lib/guestKey";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { chargeAccessAttempt } from "./lib/poolAttempts";
 import type { Square } from "./types";
+import { effectiveSquareCap } from "./shared/squaresClaim";
 
 /** A claim code: lets a guest move their squares to another device or an account. */
 interface ClaimCode {
@@ -159,12 +160,21 @@ export async function mintClaimCode(
  * A square is the guest's only while it still has an OWNER: a square that was
  * released keeps nothing worth claiming, and the squares auto-release in
  * `reminders.ts` clears the owner without clearing the hash.
+ *
+ * THE PER-PLAYER LIMIT APPLIES HERE TOO (qodo, PR #760). Reserving is refused
+ * past the limit; this moved squares onto an account with no count at all, so
+ * a player could fill the limit on one device, fill it again on another, and
+ * merge both into one account. `cap` is the pool's limit (null = none, and
+ * null for the pool's owner, who is exempt everywhere). The move is all or
+ * nothing: over the limit, nothing moves and the squares stay exactly as they
+ * were — reserved, under the guest's name, on the device that holds them.
  */
-function claimGuestSquares(
+export function claimGuestSquares(
     squares: Square[],
     guestKeyHash: string,
     uid: string,
-): { squares: Square[]; claimed: number[]; warnings: string[] } {
+    cap: number | null,
+): { squares: Square[]; claimed: number[]; warnings: string[]; overLimit: { cap: number; wouldHold: number } | null } {
     const claimed: number[] = [];
     const warnings: string[] = [];
     const next = squares.map((s) => {
@@ -183,8 +193,28 @@ function claimGuestSquares(
             guestClaimId: null,
         };
     });
-    return { squares: next, claimed, warnings };
+
+    // What the account would hold afterwards — counted on the result, so a
+    // square already on the account is counted once.
+    const wouldHold = next.filter((s) => !!s.owner && s.reservedByUid === uid).length;
+    if (cap !== null && claimed.length > 0 && wouldHold > cap) {
+        return {
+            squares,
+            claimed: [],
+            warnings: [...warnings, overLimitMessage(cap, claimed.length)],
+            overLimit: { cap, wouldHold },
+        };
+    }
+    return { squares: next, claimed, warnings, overLimit: null };
 }
+
+const overLimitMessage = (cap: number, moving: number): string =>
+    `This pool allows ${cap} ${cap === 1 ? 'square' : 'squares'} per player, and moving ${moving === 1 ? 'this square' : `these ${moving} squares`} to your account would put you over. `
+    + 'They are still reserved under the name they were entered with.';
+
+/** The limit that applies to `uid` on this pool: none for the owner, the pool's otherwise. */
+const claimCapFor = (pool: FirebaseFirestore.DocumentData | undefined, uid: string): number | null =>
+    pool?.ownerId === uid ? null : effectiveSquareCap(pool?.maxSquaresPerPlayer);
 
 /**
  * 3. claimMySquares — a guest who signs in on the SAME browser takes their
@@ -218,7 +248,10 @@ export const claimMySquares = validated(
         if (!poolDoc.exists) throw new HttpsError('not-found', 'Pool not found');
 
         const squares = (poolDoc.data()?.squares || []) as Square[];
-        const outcome = claimGuestSquares(squares, guestKeyHash, uid);
+        // Over the limit nothing moves, and the reason comes back as a warning
+        // rather than an error: the pool page calls this for every signed-in
+        // visitor, and a refusal there is not something they did.
+        const outcome = claimGuestSquares(squares, guestKeyHash, uid, claimCapFor(poolDoc.data(), uid));
 
         if (outcome.claimed.length > 0) {
             t.update(poolRef, {
@@ -291,7 +324,13 @@ export const claimByCode = validated(
         if (!poolDoc.exists) throw new HttpsError('not-found', 'Pool not found');
 
         const squares = (poolDoc.data()?.squares || []) as Square[];
-        const outcome = claimGuestSquares(squares, targetHash, uid);
+        const outcome = claimGuestSquares(squares, targetHash, uid, claimCapFor(poolDoc.data(), uid));
+        // Typing a code is something the player DID, so over the limit it is
+        // refused in words. Thrown before anything is written: the squares stay
+        // where they are and the code is not used up.
+        if (outcome.overLimit) {
+            throw new HttpsError('failed-precondition', outcome.warnings[outcome.warnings.length - 1]);
+        }
 
         if (outcome.claimed.length > 0) {
             // Membership follows the squares — see claimMySquares.

@@ -12,7 +12,7 @@ import { validated } from "./lib/validated";
 import { hasConfirmedRole } from "./lib/confirmedRole";
 import { updatePlayerSchema, releaseSquaresSchema } from "./schemas/squares";
 import { reserveSquareSchema, reserveSquaresSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
-import { planClaim, claimRefusalMessage, normalizePlayerName, type ClaimRefusal } from "./shared/squaresClaim";
+import { planClaim, claimRefusalMessage, type ClaimRefusal } from "./shared/squaresClaim";
 import { guestKeyHashOrNull } from "./lib/guestKey";
 
 
@@ -26,6 +26,7 @@ interface ReserveArgs {
     } | null;
     guestDeviceKey?: string | null;
     pickedAsName?: string | null;
+    onBehalf?: boolean | null;
 }
 
 function refusalToHttpsError(refusal: ClaimRefusal): HttpsError {
@@ -57,7 +58,7 @@ async function reserveSquaresForCaller(
     // Banned users can't reserve (guests/anonymous are unaffected — no account).
     if (request.auth) await assertNotBannedLive(request.auth.uid);
 
-    const { poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName } = args;
+    const { poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName, onBehalf: askedOnBehalf } = args;
 
     // 1. Who is this? A signed-in player is their ACCOUNT. A guest is the device
     //    key their browser holds — stored only as a hash (lib/guestKey.ts).
@@ -119,37 +120,23 @@ async function reserveSquaresForCaller(
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
 
-        // THE COMMISSIONER ENTERING A SQUARE FOR SOMEONE ELSE. The owner is
-        // exempt from the limit precisely so they can type in the players who
-        // paid in person. Stamping the owner's account on those squares put
-        // them on the OWNER's dashboard, let only the owner press "I've paid"
-        // for them, and counted them as the owner's (qodo, PR #758). A square
-        // the owner enters under a name that is not their own carries the name
-        // and no identity — the same as a hand-entered square always has.
+        // THE ORGANIZER ENTERING A SQUARE FOR SOMEONE ELSE. The owner is exempt
+        // from the limit precisely so they can type in the players who paid in
+        // person. Stamping the owner's account on those squares put them on the
+        // OWNER's dashboard, let only the owner press "I've paid" for them, and
+        // counted them as the owner's (qodo, PR #758). Such a square carries
+        // the name and no identity — the same as a hand-entered square always
+        // has.
         //
-        // "THEIR OWN NAME" IS READ FROM THE ACCOUNT, NOT FROM THE REQUEST. This
-        // compared the typed name with `userName` — which, for an account whose
-        // sign-in token carries no name (every email-and-password account, until
-        // its token is next refreshed), falls back to the name that was TYPED.
-        // So the typed name always equalled itself, nothing was ever "for
-        // someone else", and the owner's account went on every square they
-        // entered. The emulator tests passed a token name and never saw it; a
-        // browser walk-through did. The owner's names are the token's, if it has
-        // one, and the one on their profile.
+        // THE PAGE SAYS WHICH, AND THE SERVER FOLLOWS. `onBehalf` is what the
+        // pool page decided with `isEnteringForSomeoneElse` and showed the
+        // organizer beside the name field. The server used to work it out for
+        // itself by comparing names, and was wrong three different ways — see
+        // that function. It is honoured for the pool's OWNER only: anybody else
+        // who sent it would be shedding their own identity, which is how the
+        // per-player limit is counted.
         const isOwner = isAuthenticated && pool.ownerId === userId;
-        let onBehalf = false;
-        if (isOwner) {
-            const ownNames = new Set<string>();
-            const tokenName = normalizePlayerName(request.auth?.token.name);
-            if (tokenName) ownNames.add(tokenName);
-            const profile = await transaction.get(db.collection("users").doc(userId));
-            const profileName = normalizePlayerName(profile.data()?.name);
-            if (profileName) ownNames.add(profileName);
-            // With no name on the account at all there is nothing to compare
-            // against, and the squares stay the owner's — the claim keeps an
-            // identity rather than losing one on a guess.
-            onBehalf = ownNames.size > 0 && !ownNames.has(normalizePlayerName(displayName));
-        }
+        const onBehalf = isOwner && askedOnBehalf === true;
         const identity = onBehalf ? { uid: null, guestKeyHash: null } : callerIdentity;
 
         const plan = planClaim({

@@ -20,6 +20,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q3 | qodo (re-review) | PR-B @ `652fe64c` | 9 | 8 | 1 |
 | W1 | browser walk-through | A + B + C + the reopen flip, on emulators | 9 | 9 | 0 |
 | Q4 | qodo | #758 @ `d8978a82`, #759 @ `10d65cce` | 4 | 4 | 0 |
+| Q5 | qodo | #758 @ `77418e03`, #760 @ `3619b6cb` | 7 | 5 | 2 |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -431,15 +432,32 @@ defects in it. All four accepted.
 **What the switch costs a pool that is not affected.** One extra document read
 per winner write (only once a first quarter is final), and per sync run one
 read of the switch and one query for marked pools that normally returns
-nothing. `system/config` is written only by two hand-run migrations, so the
-read holds nothing up.
+nothing.
 
 **One thing checked before choosing the document.** Reading a document in a
 server transaction takes a lock on it, and `system/config` is read by the NFL
 jobs. A lock held by a squares write would delay anything that WRITES that
-document. Nothing scheduled does — the only writers are
-`migrations/backfillProfileData.ts` — so the switch stays where the rollback
+document — so who writes it was measured, on 2026-11-10 at `fde71552`:
+
+- **Cloud Functions: one file, two calls** — `functions/src/migrations/
+  backfillProfileData.ts` lines 78 and 221, a migration run by hand. Method:
+  every `const`/`let` in `functions/src` (tests excluded) bound to
+  `collection('system').doc('config')` or `doc('system/config')` was listed —
+  19 of them — and each file searched for `.set(` / `.update(` / `.delete(` on
+  that name: none. Then the same three calls made directly on the reference:
+  those two lines and no others.
+- **The client: the Super-Admin settings page** (`src/services/
+  settingsService.ts`, `setDoc` / `updateDoc`), by hand, when a super admin
+  changes a setting.
+
+**No scheduled job writes `system/config`.** Both writers are a person
+pressing something. So a squares write holding a read lock for the length of
+one transaction delays no NFL job, and the switch stays where the rollback
 steps already say it is.
+
+*(Corrected in round Q5. As first written this paragraph said "two hand-run
+migrations" in one sentence and named one file in the next, gave no method,
+and missed the client writer. qodo caught the contradiction.)*
 
 **Fixed in `fde71552`. Tests.** 24 emulator tests: the simulator and "Fix Sync" under the switch; a
 pause set from inside the feed fetch, after the run has started; a pause set
@@ -458,4 +476,101 @@ between the catch-up's query and its transaction; event prizes being paid by
 the catch-up; and the catch-up not opening pools at all while paused. Each is
 now written and its mutant fails. The first run of the suite had been green
 with all five holes in it.
+
+## Round Q5 — qodo on #758 (third re-review) and #760 (first review) (2026-11-10)
+
+All three surfaces read on each. #759's re-review of `fde71552` came back
+**clean** — Bugs (0), all four round-Q4 findings marked Resolved.
+
+### #758 @ `77418e03` — two new
+
+| # | Finding | Verdict |
+|---|---|---|
+| 3 | The review log names two different sets of `system/config` writers | **Accepted.** Both sentences were written from one grep that looked only three lines past each reference. Re-measured properly; the paragraph in round Q4 now carries the method and the result, and names the writer it had missed. |
+| 4 | An organizer can lose ownership of their own squares | **Accepted — and the fix replaces the mechanism rather than patching it.** See below. |
+
+**Finding 4.** The server decided "the organizer is entering this for someone
+else" by comparing the typed name with names it could find for the account.
+A profile name that is only the email prefix — which the sign-up trigger
+writes first, and an interrupted registration leaves behind — made the
+organizer's own real name read as somebody else's, and their square lost its
+account, with nothing on the page to say so.
+
+That is the THIRD way the name comparison has been wrong (a token with no
+name, round W1; token and profile names that differ, so the page and the
+server could disagree about the same square; and this). Three is a pattern:
+the server was guessing at something only the organizer knows.
+
+**It no longer guesses.** One rule, `isEnteringForSomeoneElse`
+(`shared/squaresClaim.ts`): the pool page evaluates it, shows the result
+beside the name field, and sends it with the request as `onBehalf`. The server
+follows it — **for the pool's owner only** — and does not compare names of its
+own. A request with no flag is "these are mine".
+
+The owner-only part is the security half: the per-player limit is counted by
+identity, and a player who could shed theirs would never reach it. Three
+`ATTACK:` tests — a player sending the flag, a player sending it under a new
+name each time against a limit of two, and a guest sending it.
+
+### #760 @ `3619b6cb` — five
+
+| # | Finding | Verdict |
+|---|---|---|
+| 1 | Players can exceed the square limit by merging guest squares into an account | **Accepted** — fixed in #758, where that code lives |
+| 2 | A pool can be linked to the wrong game — the server trusts the client's id, league, teams and kickoff | **Rejected as specified; the reachable half is fixed.** See below |
+| 3 | A linked pool can be tied to the wrong league's feed | **Accepted** — fixed in #760 |
+| 4 | Two auto-lock paths draw numbers differently, and the new default reaches both | **Accepted, in the half this plan may touch.** See below |
+| 5 | Winner records are written by default, not held until switched on | **Rejected.** See below |
+
+**Finding 1.** Reserving past the limit is refused; moving guest squares onto
+an account was not counted at all. Fill the limit on a phone, fill it again on
+a laptop, sign in on each, and one account held twice the limit.
+`claimGuestSquares` now takes the pool's limit and is all-or-nothing: over it,
+nothing moves and the squares stay exactly as they were — reserved, under the
+guest's name, on the device that holds them. `claimMySquares` reports that as
+a warning (the page calls it for every signed-in visitor; a refusal there is
+not something they did); `claimByCode` refuses in words and does not use the
+code up. The owner is exempt, as everywhere.
+
+**Finding 2 — why the server lookup is not built.** Every field of a game
+link is supplied by the pool's own commissioner — who may also type the scores
+by hand, by design, and can write `scores`, `isLocked` and `payouts` straight
+from the client (plan K4, `firestore.rules`, not this plan's to change). A
+mismatched link gives them nothing those do not. Resolving the game on the
+server at creation would make creating a pool depend on a third-party feed
+being reachable at that moment, and still would not cover linking from the
+manage page, which is a client write (K4 again). What a mismatch CAN do to an
+honest commissioner is score the wrong game — and the one way the page could
+produce that is finding 3, which is fixed at its source. Also tightened: a
+game id must be digits. **Recorded as plan K11** with the design that would
+close it properly: one `linkSquaresGame` callable used by both the wizard and
+the manage page, shipped with the K4 rules change.
+
+**Finding 4 — the second auto-lock in `reminders.ts`.** It is real, it is plan
+K7, and the new default (a linked grid locks at kickoff) does put new pools in
+its reach: `runReminders` locks any squares grid whose lock time has passed
+and is still open, drawing with a biased `Math.random` sort. That file sends
+the reminders for every running NFL pool and is outside the delegation.
+What was done instead: the dedicated job (`autoLock.ts`, every minute,
+`crypto.randomInt`) now locks a squares grid from 90 seconds before its lock
+time rather than 30, so it has always run before the lock time arrives and
+`runReminders` finds the grid already locked. That closes the race in normal
+operation; it does not close it if the dedicated job is down or failing at
+that minute. **K7 is now the first decision for Kevin, not the seventh.**
+
+**Finding 5 — rejected.** It asks for winner recording to be off unless a
+config flag turns it on. The house rule it cites is for a NEW scheduled job
+that writes; this job has recorded squares winners since the product shipped,
+and what changed is what it records. A switch that defaults to "held" would
+mean no squares winner is ever recorded until somebody arms it — and that a
+config document lost or reset silently stops every payout record, on a holiday
+afternoon, with nothing failing. The switch is an emergency stop: absent means
+running, and an unreadable config means nothing is written for that pool
+until it can be read (round Q4). qodo's own note on the finding: "Team
+repeatedly rejected 'add fail-closed system/config kill-switch to money or
+data-writing job' suggestions."
+
+**Tests and mutants for the #758 half.** 73 emulator tests in
+`squaresClaim.emulator.test.ts` (58 before this round) and 66 unit (60
+before). 15 mutants, all red on the first run.
 

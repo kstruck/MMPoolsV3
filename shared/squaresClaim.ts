@@ -302,3 +302,41 @@ export function claimRefusalMessage(refusal: ClaimRefusal): string {
     }
   }
 }
+
+/**
+ * Is the organizer entering these squares FOR SOMEBODY ELSE?
+ *
+ * The organizer is exempt from the per-player limit precisely so they can type
+ * in the players who paid in person. Those squares carry the player's name and
+ * no account — otherwise they sit on the organizer's dashboard, count as the
+ * organizer's, and only the organizer can say they were paid for.
+ *
+ * ONE RULE, EVALUATED WHERE THE ORGANIZER CAN SEE IT. The page decides with
+ * this function, says so beside the name field, and sends the answer with the
+ * request (`onBehalf`). The server follows it — for the pool's owner only —
+ * and does not guess.
+ *
+ * It used to guess, by comparing the typed name with names it could find for
+ * the account. That was wrong three ways in three rounds: a sign-in token with
+ * no name made every name "their own" (round W1); the page compared against
+ * the profile name while the server also accepted the token's, so the two
+ * could disagree about the same square; and a profile name that is only the
+ * email prefix — left by an interrupted registration — made the organizer's
+ * own real name read as somebody else's, with nothing on the page to say so
+ * (qodo, round 5).
+ *
+ * An account with no name at all has nothing to compare against: the squares
+ * stay the organizer's. An identity is kept, not dropped on a guess.
+ */
+export function isEnteringForSomeoneElse(input: {
+  isOwner: boolean;
+  typedName: string | null | undefined;
+  accountName: string | null | undefined;
+}): boolean {
+  if (!input.isOwner) return false;
+  const typed = normalizePlayerName(input.typedName);
+  const own = normalizePlayerName(input.accountName);
+  if (typed === '' || own === '') return false;
+  return typed !== own;
+}
+
