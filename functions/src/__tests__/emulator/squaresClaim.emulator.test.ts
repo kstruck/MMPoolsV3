@@ -394,6 +394,68 @@ describe('qodo #12 — a square the commissioner enters for someone else is that
     await expect(confirm({ data: { poolId: POOL, squareIds: [30] }, auth: owner } as never)).resolves.toMatchObject({ success: true });
   });
 
+  /**
+   * THE REAL SHAPE OF A SIGN-IN. Every test above hands the callable a token
+   * with a `name` in it. An email-and-password account's token has NONE until
+   * it is next refreshed, and the callable then fell back to the name that was
+   * TYPED as "the owner's name" — so the typed name always matched itself,
+   * nothing was ever "for someone else", and the owner's account went on every
+   * square they entered. A browser walk-through found it; these pin it.
+   */
+  describe('with a sign-in token that carries no name (how the app really signs in)', () => {
+    const namelessOwner = { uid: OWNER, token: { email: `${OWNER}@example.com` } };
+    const reserveAs = (ids: number[], name: string) => reserveMany({
+      data: { poolId: POOL, squareIds: ids, customerDetails: { name }, pickedAsName: name },
+      auth: namelessOwner,
+    } as never);
+    const profile = (data: Record<string, unknown>) => db.collection('users').doc(OWNER).set({ role: 'COMMISSIONER', email: `${OWNER}@example.com`, ...data });
+
+    it('THE BUG: a square typed for someone else carries the name and NO account', async () => {
+      await profile({ name: 'Olivia Owner' });
+      await reserveAs([22, 23], 'Uncle Ray');
+      for (const id of [22, 23]) {
+        const s = await square(id);
+        expect(s.owner).toBe('Uncle Ray');
+        expect(s.reservedByUid, `square ${id}`).toBeNull();
+      }
+      // ...so the organizer cannot press "I have paid" on it as if it were theirs.
+      await expect(confirm({ data: { poolId: POOL, squareIds: [22] }, auth: namelessOwner } as never)).rejects.toThrow();
+    });
+
+    it('the owner\'s own name — from their PROFILE — still puts the square on their account', async () => {
+      await profile({ name: 'Olivia Owner' });
+      await reserveAs([31], '  olivia   OWNER ');
+      expect((await square(31)).reservedByUid).toBe(OWNER);
+    });
+
+    it('a name on the token and a different one on the profile are both the owner\'s', async () => {
+      await profile({ name: 'Olivia O.' });
+      const both = { uid: OWNER, token: { name: 'Olivia Owner', email: `${OWNER}@example.com` } };
+      const as = (id: number, name: string) => reserveMany({ data: { poolId: POOL, squareIds: [id], customerDetails: { name }, pickedAsName: name }, auth: both } as never);
+      await as(32, 'Olivia Owner');
+      await as(33, 'olivia o.');
+      await as(34, 'Somebody Else');
+      expect((await square(32)).reservedByUid).toBe(OWNER);
+      expect((await square(33)).reservedByUid).toBe(OWNER);
+      expect((await square(34)).reservedByUid).toBeNull();
+    });
+
+    it('an account with no name anywhere keeps its squares — nothing is guessed to be "for someone else"', async () => {
+      await profile({});
+      await reserveAs([35], 'Whoever');
+      expect((await square(35)).reservedByUid).toBe(OWNER);
+    });
+
+    it('a PLAYER with a nameless token still holds a square by account, whatever they type', async () => {
+      await db.collection('users').doc('bob-uid').set({ role: 'MEMBER', name: 'Bob', email: 'bob@example.com' });
+      await reserveMany({
+        data: { poolId: POOL, squareIds: [41], customerDetails: { name: 'For My Wife' }, pickedAsName: 'For My Wife' },
+        auth: { uid: 'bob-uid', token: { email: 'bob@example.com' } },
+      } as never);
+      expect((await square(41)).reservedByUid).toBe('bob-uid');
+    });
+  });
+
   it('a PLAYER typing a different name still holds the square by account — only the owner enters for others', async () => {
     await reserveMany({
       data: { poolId: POOL, squareIds: [40], customerDetails: { name: 'For My Wife' }, pickedAsName: 'For My Wife' },
