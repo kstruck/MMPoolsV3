@@ -304,16 +304,17 @@ export function squaresCreateDefaults(input: {
  *
  * The lock job (`autoLockPools`) runs once a minute and locks a grid as soon as
  * its lock time is within this lead — so a grid locks somewhere between this
- * long before its lock time and one minute less. Why it is 90 seconds and not
- * the 30 it was is in `functions/src/autoLock.ts` (plan K7).
+ * long before its lock time and half a minute after it. It was 90 seconds
+ * while a second, biased auto-lock had to be beaten to the grid; that copy is
+ * gone (plan K7, `functions/src/autoLock.ts`).
  *
  * It lives here, not in the job, because THE PAGE HAS TO TELL PLAYERS THE SAME
  * THING THE JOB DOES. The pool page showed the stored lock time — kickoff — as
- * "Grid locks", and the grid locked up to a minute and a half before it: a
- * player who came back two minutes early could find it shut (qodo, PR #761).
+ * "Grid locks", and the grid locked ahead of it: a player who came back at the
+ * last minute could find it shut (qodo, PR #761).
  * The job and the page read this one number; change it and both move.
  */
-export const SQUARES_LOCK_LEAD_MS = 90_000;
+export const SQUARES_LOCK_LEAD_MS = 30_000;
 
 /** Epoch ms from the shapes a stored lock time has had: a number, a Firestore Timestamp, a date string. */
 function lockTimeMs(raw: unknown): number | null {
@@ -332,7 +333,8 @@ function lockTimeMs(raw: unknown): number | null {
  *
  * The stored lock time less the lead: the EARLIEST the job can lock the grid.
  * It may stay open up to a minute longer, never less, so a deadline shown from
- * this is one the grid always keeps. `null` when the grid will not lock itself
+ * this is one the grid always keeps. (Past that, the server still refuses a
+ * claim once the game itself has started.) `null` when the grid will not lock itself
  * (the lock is off, or has no usable time) — then there is no deadline to show.
  */
 export function squaresPicksCloseMs(pool: unknown): number | null {

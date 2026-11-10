@@ -257,6 +257,26 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   `crypto.randomInt` and keeps numbers already drawn; if that job is down the
   grid stays open until it is back or the organizer locks it by hand, which
   the pool page already tells them how to do.*
+  **BUILT, AND WAITING FOR KEVIN'S YES — branch
+  `claude/squares-k7-one-auto-lock`, its own PR, stacked on PR-C and not part
+  of A–D.** It is better than the three-line skip recommended above, and it is
+  what qodo asked for on the reopen (review log, round Q6, finding 2): the
+  copy in `reminders.ts` is DELETED and `checkLockReminders` calls the
+  dedicated job's own function. So a grid whose time has passed is locked the
+  same way whichever job notices first — numbers that exist are kept, missing
+  ones drawn with `crypto.randomInt`, in a transaction that does nothing if
+  the grid is already locked — and the reminders job stays what it was meant
+  to be, a fallback, instead of being switched off. With nothing left to win a
+  race against, the lock lead goes back from 90 seconds to 30, and the pool
+  page's "Grid locks" time follows it (one shared number).
+  *What it changes in `reminders.ts`:* one call inside the squares-only branch
+  of `checkLockReminders`, the removal of two functions only that branch used
+  (`generateDigits`, `executeAutoLock`), two imports only they used, and
+  `export` on `checkLockReminders` so it can be tested. The dedicated job's
+  module is loaded inside that branch, not at the top of the file, so nothing
+  about how `reminders.ts` loads changes for the NFL, playoff or bracket
+  checks. *On approval:* merge it after PR-C and before PR-D; no data changes;
+  it deploys with the functions.
 - **K8 — the roster summary's "guest dues" reads a value nothing writes** (sweep
   SW4). `lib/rosterSummary.ts:31` counts squares with `reservedByUid ===
   'guest'`; a guest's square has no `reservedByUid`. So dues owed on guest

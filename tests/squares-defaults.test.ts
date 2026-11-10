@@ -447,8 +447,8 @@ describe('squaresPicksCloseMs — the deadline a player is shown is one the grid
   const locking = (lockAt: unknown, enabled: unknown = true) => ({ reminders: { lock: { enabled, lockAt } } });
 
   it('is the lock time less the lead — the earliest the lock job can shut the grid', () => {
-    expect(SQUARES_LOCK_LEAD_MS).toBe(90_000);
-    expect(squaresPicksCloseMs(locking(KICKOFF))).toBe(KICKOFF - 90_000);
+    expect(SQUARES_LOCK_LEAD_MS).toBe(30_000);
+    expect(squaresPicksCloseMs(locking(KICKOFF))).toBe(KICKOFF - 30_000);
   });
 
   // The job locks a grid once `lockAt - now <= lead`. So "now >= close" is
@@ -467,9 +467,9 @@ describe('squaresPicksCloseMs — the deadline a player is shown is one the grid
   });
 
   it('reads every shape a stored lock time has had', () => {
-    expect(squaresPicksCloseMs(locking({ toMillis: () => KICKOFF }))).toBe(KICKOFF - 90_000);
-    expect(squaresPicksCloseMs(locking(new Date(KICKOFF)))).toBe(KICKOFF - 90_000);
-    expect(squaresPicksCloseMs(locking(new Date(KICKOFF).toISOString()))).toBe(KICKOFF - 90_000);
+    expect(squaresPicksCloseMs(locking({ toMillis: () => KICKOFF }))).toBe(KICKOFF - 30_000);
+    expect(squaresPicksCloseMs(locking(new Date(KICKOFF)))).toBe(KICKOFF - 30_000);
+    expect(squaresPicksCloseMs(locking(new Date(KICKOFF).toISOString()))).toBe(KICKOFF - 30_000);
   });
 
   it('is null when the grid will not lock itself — there is no deadline to show', () => {

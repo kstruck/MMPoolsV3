@@ -1,10 +1,9 @@
 
 import * as functions from "firebase-functions/v2";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import * as admin from "firebase-admin";
 // Fixed imports
 import { GameState, NotificationLog, Square, AuditLogEvent, Pool, PlayoffPool, PropsPool, AuditEventType, PlayoffEntry, BracketPool, User, BracketEntry, NFLGame, NFLPickemPool, NFLSurvivorPool, NFLMarginPool, NFLPickemEntry, SurvivorEntry, MarginEntry } from "./types";
-import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { renderEmailHtml, BASE_URL, escapeHtml } from "./emailStyles";
 import { isOptedOut, buildUnsubUrl, getPrefs, EmailCategory } from "./emailPrefs";
 import { courierAuthToken, sendCourierSMS } from "./notifications/smsService";
@@ -583,7 +582,7 @@ export async function notifyWaitlist(db: admin.firestore.Firestore, pool: GameSt
 
 // Removed duplicate import
 
-async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState | PropsPool, now: number, tally?: DeliveryTally) {
+export async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState | PropsPool, now: number, tally?: DeliveryTally) {
     const settings = pool.reminders!.lock;
     if (!settings.lockAt) return;
 
@@ -604,7 +603,21 @@ async function checkLockReminders(db: admin.firestore.Firestore, pool: GameState
         // Time has passed: Execute Auto-Lock if not already locked
         if (!pool.isLocked) {
             if (pool.type === 'SQUARES' || !pool.type) {
-                await executeAutoLock(db, pool as GameState);
+                // ONE AUTO-LOCK FOR A SQUARES GRID (plan K7). This file had its
+                // own copy: it drew the numbers with a biased
+                // `sort(() => Math.random() - 0.5)` and REPLACED numbers a grid
+                // already had. It is gone. The grid is locked by the same
+                // function the every-minute job uses (`autoLock.ts`): numbers
+                // that exist are kept, missing ones are drawn with
+                // `crypto.randomInt`, in a transaction that does nothing if the
+                // grid is already locked — so it no longer matters which of
+                // the two jobs gets to a grid first.
+                //
+                // Loaded HERE, not at the top of the file: nothing about how
+                // this module loads changes for the checks that are not this
+                // one.
+                const { executeAutoLock } = await import("./autoLock");
+                await executeAutoLock(pool as GameState);
             } else {
                 // TODO: Implement auto-lock for Props
                 console.log(`[AutoLock] Props pool auto-lock not implemented yet: ${pool.id}`);
@@ -710,79 +723,6 @@ export const onWinnerComputed = functions.firestore.onDocumentCreated("pools/{po
         await logAudit(db, pool.id, `Sent winner announcement for ${period}`, 'NOTIFICATION_SENT', { dedupeKey: key });
     }
 });
-
-// --- AUTO LOCK LOGIC ---
-
-// --- HELPER: GENERATE DIGITS ---
-function generateDigits(): number[] {
-    return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
-}
-
-// --- EXECUTE AUTO LOCK ---
-async function executeAutoLock(db: admin.firestore.Firestore, pool: GameState) {
-    const poolRef = db.collection('pools').doc(pool.id);
-
-    try {
-        await db.runTransaction(async (t) => {
-            const doc = await t.get(poolRef);
-            if (!doc.exists) return; // Deleted?
-            const currentPool = doc.data() as GameState;
-
-            if (currentPool.isLocked) {
-                console.log(`[AutoLock] Skipped - already locked: ${pool.id}`);
-                return;
-            }
-
-            // Generate Digits
-            const axisNumbers = {
-                home: generateDigits(),
-                away: generateDigits(),
-            };
-
-            const updates: Record<string, unknown> = {
-                isLocked: true,
-                lockGrid: true, // Legacy/UI sync
-                axisNumbers,
-                updatedAt: Timestamp.now(),
-            };
-
-            // Handle 4-Set initialization
-            if (currentPool.numberSets === 4) {
-                updates.quarterlyNumbers = {
-                    q1: axisNumbers
-                };
-            }
-
-            t.update(poolRef, updates);
-
-            // CRITICAL FIX: Skip dedupe to avoid read-after-write transaction errors
-            // Audit Logs
-            await writeAuditEvent({
-                poolId: pool.id,
-                type: 'POOL_LOCKED',
-                message: 'Auto-locked by system (Timer)',
-                severity: 'INFO',
-                actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' }
-                // NO dedupeKey - auto-lock should only happen once anyway
-            }, t);
-
-            const digitsHash = computeDigitsHash({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
-            await writeAuditEvent({
-                poolId: pool.id,
-                type: 'DIGITS_GENERATED',
-                message: 'Auto-Generated Axis Numbers upon Auto-Lock',
-                severity: 'INFO',
-                actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
-                payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets }
-                // NO dedupeKey - prevent read-after-write error
-            }, t);
-        });
-
-        console.log(`[AutoLock] SUCCESSFULLY LOCKED: ${pool.id}`);
-    } catch (e) {
-        console.error(`[AutoLock] Failed to lock pool ${pool.id}:`, e);
-    }
-}
 
 // --- BRACKET REMINDER LOGIC ---
 export type BracketTrigger = '24h' | '1h' | 'locked' | null;

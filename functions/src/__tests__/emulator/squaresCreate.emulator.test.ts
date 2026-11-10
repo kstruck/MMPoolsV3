@@ -18,7 +18,8 @@ vi.mock('../../lib/featureFlags', async (importOriginal) => {
 });
 
 import { createPool } from '../../poolOps';
-import { autoLockPools, SQUARES_LOCK_LEAD_MS, squaresLockLeadMs } from '../../autoLock';
+import { autoLockPools, SQUARES_LOCK_LEAD_MS } from '../../autoLock';
+import { checkLockReminders } from '../../reminders';
 import { reserveSquares } from '../../squares';
 import { withSquaresDefaults } from '../../shared/squaresDefaults';
 import { computePeriodPayouts, squaresPot } from '../../shared/squaresPayouts';
@@ -248,51 +249,155 @@ describe('C1 — a linked game locks itself at kickoff', () => {
 });
 
 /**
- * THE DEDICATED LOCK RUNS AHEAD OF THE LOCK TIME (qodo, PR #760 / plan K7).
+ * K7 — ONE AUTO-LOCK. Two jobs lock a squares grid whose time has come: the
+ * dedicated one (`autoLock.ts`, every minute) and `runReminders` (every
+ * fifteen). The second had its own copy of the lock, which drew the numbers
+ * with a biased `Math.random` sort and REPLACED numbers a grid already had.
  *
- * `runReminders` in `reminders.ts` also locks a squares grid whose time has
- * passed, and draws its numbers with a biased shuffle. This job runs every
- * minute; with a 30-second lead it reached a grid anywhere from 30 seconds
- * before its lock time to 30 seconds after, and in that second half the other
- * job could draw the numbers. At 90 seconds it has always run before the time
- * arrives.
+ * That copy is gone; `checkLockReminders` calls the dedicated job's function.
+ * So these tests drive the reminders path itself and hold it to the same
+ * behaviour — and the 90-second head start that existed only to beat the copy
+ * to the grid is back to 30.
  */
-describe('C2b — a squares grid is locked from 90 seconds before its time, so the dedicated job always gets there first', () => {
+describe('K7 — the lock lead is 30 seconds again, for every pool this job locks', () => {
   const due = async (inMs: number, over: Doc = {}) => {
     const { id } = await createSquares({ gameId: '401772510', gameTime: Date.now() + 48 * HOUR });
     await db.collection('pools').doc(id).update({ 'reminders.lock.lockAt': Date.now() + inMs, ...over });
     return id;
   };
 
-  it('the lead is longer than the job\'s own interval, with room to spare', () => {
-    expect(SQUARES_LOCK_LEAD_MS).toBe(90_000);
-    expect(SQUARES_LOCK_LEAD_MS).toBeGreaterThan(60_000);
-    expect(squaresLockLeadMs({ type: 'SQUARES' })).toBe(90_000);
-    expect(squaresLockLeadMs({})).toBe(90_000);          // a squares pool from before `type` existed
-    expect(squaresLockLeadMs({ type: 'PROPS' })).toBe(30_000);
-    expect(squaresLockLeadMs({ type: 'BRACKET' })).toBe(30_000);
+  it('the lead is 30 seconds', () => {
+    expect(SQUARES_LOCK_LEAD_MS).toBe(30_000);
   });
 
-  it('a grid due in 75 seconds is locked now — a 30-second lead would have left it for the next run, after its time', async () => {
-    const id = await due(75_000);
+  it('a grid due in 20 seconds is locked now', async () => {
+    const id = await due(20_000);
     await runAutoLock();
     const pool = await poolDoc(id);
     expect(pool.isLocked).toBe(true);
     expect(isUsableAxis(pool.axisNumbers)).toBe(true);
   });
 
-  it('a grid due in two minutes is left open — it is not locked early for the sake of it', async () => {
-    const id = await due(120_000);
+  it('a grid due in 75 seconds is left open — players keep that minute', async () => {
+    const id = await due(75_000);
     await runAutoLock();
     const pool = await poolDoc(id);
     expect(pool.isLocked).toBe(false);
     expect(pool.axisNumbers ?? null).toBeNull();
   });
 
-  it('a pool of another type on the same lock setting keeps the 30-second lead', async () => {
-    const id = await due(75_000, { type: 'PROPS' });
+  it('a grid whose time passed while the job was not running is locked on the next run', async () => {
+    const id = await due(-10 * 60_000);
     await runAutoLock();
-    expect((await poolDoc(id)).isLocked).toBe(false);
+    expect((await poolDoc(id)).isLocked).toBe(true);
+  });
+});
+
+describe('K7 — the reminders job locks a squares grid with the SAME function', () => {
+  const PUBLISHED = { home: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0], away: [5, 6, 7, 8, 9, 0, 1, 2, 3, 4] };
+  const sorted = (xs: number[]) => [...xs].sort((a, b) => a - b);
+  const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+  /** A grid whose lock time has passed and that nothing has locked yet. */
+  async function missed(over: Doc = {}) {
+    const { id } = await createSquares({ gameId: '401772510', gameTime: Date.now() + 48 * HOUR });
+    await db.collection('pools').doc(id).update({ 'reminders.lock.lockAt': Date.now() - 60_000, ...over });
+    return id;
+  }
+  /** The reminders job's view of the pool: the document as it read it. */
+  const asRead = async (id: string) => ({ id, ...(await poolDoc(id)) }) as never;
+  const remind = async (id: string, pool?: unknown) => checkLockReminders(db, (pool ?? await asRead(id)) as never, Date.now());
+  const auditTypes = async (id: string) =>
+    (await db.collection('pools').doc(id).collection('audit').get()).docs.map((d) => d.data().type as string);
+
+  it('numbers already on the grid survive, digit for digit — the old copy replaced them', async () => {
+    const id = await missed({ axisNumbers: PUBLISHED });
+    await remind(id);
+    const pool = await poolDoc(id);
+    expect(pool.isLocked).toBe(true);
+    expect(pool.lockGrid).toBe(true);
+    expect(pool.axisNumbers).toEqual(PUBLISHED);
+    expect(await auditTypes(id)).not.toContain('DIGITS_GENERATED');
+  });
+
+  it('a grid with no numbers gets a full set on each axis, and the draw is on record', async () => {
+    const id = await missed();
+    await remind(id);
+    const pool = await poolDoc(id);
+    expect(pool.isLocked).toBe(true);
+    expect(sorted(pool.axisNumbers.home)).toEqual(DIGITS);
+    expect(sorted(pool.axisNumbers.away)).toEqual(DIGITS);
+    const types = await auditTypes(id);
+    expect(types).toContain('POOL_LOCKED');
+    expect(types).toContain('DIGITS_GENERATED');
+  });
+
+  it('a "new numbers each quarter" grid starts its first quarter on the numbers drawn', async () => {
+    const id = await missed({ numberSets: 4 });
+    await remind(id);
+    const pool = await poolDoc(id);
+    expect(pool.quarterlyNumbers.q1).toEqual(pool.axisNumbers);
+  });
+
+  // The race K7 is about: both jobs see the grid open and both go to lock it.
+  it('the two jobs racing: the numbers are drawn ONCE, whichever gets there first', async () => {
+    const id = await missed();
+    const stale = await asRead(id);           // what the reminders job read, grid still open
+    await runAutoLock();                       // the dedicated job gets there first
+    const first = (await poolDoc(id)).axisNumbers;
+    await remind(id, stale);                   // the reminders job arrives with its stale copy
+    expect((await poolDoc(id)).axisNumbers).toEqual(first);
+    expect((await auditTypes(id)).filter((t) => t === 'DIGITS_GENERATED')).toHaveLength(1);
+    expect((await auditTypes(id)).filter((t) => t === 'POOL_LOCKED')).toHaveLength(1);
+  });
+
+  it('…and the other way round', async () => {
+    const id = await missed();
+    await remind(id);
+    const first = (await poolDoc(id)).axisNumbers;
+    await runAutoLock();
+    expect((await poolDoc(id)).axisNumbers).toEqual(first);
+    expect((await auditTypes(id)).filter((t) => t === 'DIGITS_GENERATED')).toHaveLength(1);
+  });
+
+  it('before the lock time it locks nothing', async () => {
+    const { id } = await createSquares({ gameId: '401772510', gameTime: Date.now() + 48 * HOUR });
+    await remind(id);
+    const pool = await poolDoc(id);
+    expect(pool.isLocked).toBe(false);
+    expect(pool.axisNumbers ?? null).toBeNull();
+  });
+
+  it('a grid that is already locked is left exactly as it is', async () => {
+    const id = await missed({ isLocked: true, axisNumbers: PUBLISHED });
+    const before = await poolDoc(id);
+    await remind(id);
+    expect(await poolDoc(id)).toEqual(before);
+    const types = await auditTypes(id);
+    expect(types).not.toContain('POOL_LOCKED');
+    expect(types).not.toContain('DIGITS_GENERATED');
+  });
+
+  // The old copy drew with `sort(() => Math.random() - 0.5)`. Pin Math.random
+  // and that sort gives the SAME order every time — both axes of every grid
+  // alike. The dedicated job draws from `crypto.randomInt`, which a pinned
+  // Math.random does not touch, so its draws still differ. (Chance of two
+  // honest draws matching: 1 in 3,628,800.)
+  it('the draw does not come from Math.random', async () => {
+    const pinned = vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    try {
+      const a = await missed();
+      const b = await missed();
+      await remind(a);
+      await remind(b);
+      const first = (await poolDoc(a)).axisNumbers;
+      const second = (await poolDoc(b)).axisNumbers;
+      expect(sorted(first.home)).toEqual(DIGITS);
+      expect(first.home).not.toEqual(first.away);
+      expect(first.home).not.toEqual(second.home);
+    } finally {
+      pinned.mockRestore();
+    }
   });
 });
 
