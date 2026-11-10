@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 
@@ -6,16 +6,11 @@ import ftest from 'firebase-functions-test';
  * SQUARES — CREATE, KICKOFF LOCK AND THE AFTER-KICKOFF CLAIM, against the
  * emulator (PLAN-SQUARES-REOPEN PR-C).
  *
- * 🛑 SQUARES CREATION IS STILL CLOSED IN THE SHIPPED CODE. `poolCreation.
- * emulator.test.ts` proves the closure at the callable, and that test is
- * untouched. THIS file opens the gate for itself — and only for itself — so the
- * code that runs the moment the gate is lifted is proved before it is lifted,
- * not after. Nothing here changes what production refuses.
+ * Until PR-D this file opened the creation gate for itself with a mock, so the
+ * code that runs the moment the gate is lifted was proved before it was lifted.
+ * The gate is open now and the mock is gone: this runs against the flags as
+ * shipped.
  */
-vi.mock('../../lib/featureFlags', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/featureFlags')>();
-  return { ...actual, HARD_CLOSED_POOL_TYPES: [], isPoolTypeEnabled: () => true };
-});
 
 import { createPool } from '../../poolOps';
 import { autoLockPools } from '../../autoLock';

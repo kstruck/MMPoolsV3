@@ -1,5 +1,47 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-11-10 — **SQUARES REOPEN IS BUILT AND WAITING ON KEVIN: FOUR PRs OPEN, NOTHING MERGED, NOTHING DEPLOYED.**
+>
+> Target is Thanksgiving, 2026-11-26. Plan, review log and sweeps:
+> `docs/plans/PLAN-SQUARES-REOPEN*.md`. Built under Kevin's delegation of
+> 2026-11-10 ("authority to do anything that does not affect current running
+> NFL pools").
+>
+> | PR | What | Merge order |
+> |---|---|---|
+> | #758 | A — the claim path: `0` means no limit, a square belongs to an identity, the guest key is never published | 1 |
+> | #759 | B — money and lock: one payout engine, winner records that follow the scores, numbers drawn once, a pause switch | 2 |
+> | #760 | C — the wizard: picks the game, sets the payouts, creates a pool its own page can open | 3 |
+> | PR-D | the reopen: the three flags, the off switch made usable, the end-to-end test | 4 |
+>
+> **Squares is still closed in production** and stays closed until all four
+> are merged, functions are deployed and `www` is rebuilt, in that order.
+>
+> **Not done, and why.**
+> 1. **`codex exec review` is owed on all four** (CLAUDE.md §2c). `codex` was
+>    not logged in where this was built. Not waived: three separate rounds
+>    here found defects in the previous round's fixes.
+> 2. **`security-audit` is red on every PR, and on `main`.** Eight open
+>    advisories, and the audit allow-list expired 2026-11-09 (open item 1 in
+>    the box below this one said it would). The fixes are dependency upgrades
+>    in lockfiles the running NFL pools share, so they were left for Kevin.
+> 3. **No data backup was verified.** Nothing in A–D writes production data on
+>    deploy, but step 1 of the deploy is still confirming Firestore PITR:
+>    `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`.
+> 4. **Nine items are Kevin's to decide** — plan K1, K2 and K4–K10. Each is in a file
+>    shared with running pools (`firestore.rules`, `reminders.ts`,
+>    `statsTrigger.ts`) or is a setting. K10 must be checked before the first
+>    squares pool above ten players: squares needs pricing tiers in
+>    Super-Admin → Monetization.
+>
+> **To stop it after it is live, fastest first.**
+> 1. Winner records look wrong on a live game: set
+>    `system/config.squaresWinners.paused = true`. Scores keep syncing; nothing
+>    is recorded. Clear it and the next sync run records what was held.
+> 2. Stop new squares pools: Super-Admin → Pool Type Availability → SQUARES off.
+> 3. Code: revert PR-D, deploy functions, rebuild `www`. The code anchor from
+>    before any of this is the branch `backup/pre-squares-reopen-2026-11-10`.
+
 > ## 🟢 2026-10-10 — **PLAN-SPLIT-POT-SETTLEMENT IS SHIPPED — ALL THREE PARTS, PLUS FIVE FOLLOW-UP PRs. EVERYTHING BELOW IS MERGED.**
 >
 > `origin/main` is at #724. Plan, review log and sweeps:
@@ -666,25 +708,18 @@
   !== true); nothing to do.` Firestore has 7-day PITR; user accounts, emails
   and password hashes do not. Do not read "backup job deployed" as "backed
   up". Arming steps and the bucket work are in `PLAN-BACKUPS-PHASE3.md`.
-- **`claimMySquares` is still an open security hole, and the repo is public.**
-  `guestDeviceKey` is a bearer token written onto each square inside the
-  publicly readable `pools/{poolId}` document; the claim check is one equality
-  test, so anyone who opens a share link can claim an unclaimed guest square.
-  Full write-up and the correct repair (reserve path, two claim callables, a
-  live-data migration): `SECURITY-CLAIM-SQUARES.md` — status there is still
-  "open, unfixed". Evidence, re-runnable: `git log --format=%h --
-  SECURITY-CLAIM-SQUARES.md` prints one commit, `9e7411e2` (#233, 2026-07-20);
-  the equality check is still `s.guestDeviceKey === guestDeviceKey` at
-  `functions/src/participant.ts:115`; `git log 9e7411e2..origin/main --
-  functions/src/participant.ts` shows three later commits (#341 ownership
-  laundering, `f4ec2754` maxInstances, `f7fe7dfd` member removal), none of
-  which touches that check. The decision on file (2026-07-2x box, archived):
-  accept through the preseason pilot, fix before Squares carry real entry
-  money again. What limits the blast radius today: Squares pool CREATION is
-  switched off — `SQUARES_CREATION_OPEN = false` in `src/config/season.ts`,
-  landed as `66d365d2` on 2026-08-30 (`git log -S 'SQUARES_CREATION_OPEN =
-  false' -- src/config/season.ts`) — but existing Squares pools remain
-  exposed. This is a Kevin decision, not a drive-by fix.
+- **`claimMySquares` — fixed in code by #758 (PLAN-SQUARES-REOPEN PR-A,
+  2026-11-10); live once that PR is merged and functions are deployed.**
+  `guestDeviceKey` was a bearer token written onto each square inside the
+  publicly readable `pools/{poolId}` document, and the claim check was one
+  equality test, so anyone who opened a share link could claim an unclaimed
+  guest square. The pool document now carries only a hash of the key and
+  every claim path compares hashes. Two deliberate differences from the
+  repair `SECURITY-CLAIM-SQUARES.md` recommended, both argued in the plan
+  (§2 D3, D4): no pepper, and no backfill — every key minted before the fix
+  is treated as compromised and ignored, which needs no production write.
+  Until #758 is deployed, the old code is what runs, on squares pools that
+  are all finished games.
 - **Known product limit, still open: confidence-mode proxy picks are refused
   on the client.** `src/components/NFLPoolDashboard/NFLManagerView.tsx` (the
   comment above the proxy form, ~line 1115) refuses a CONFIDENCE pool on

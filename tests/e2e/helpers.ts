@@ -139,3 +139,62 @@ export async function submitAndExpectPoolCreated(page: Page, submitLabelPattern:
   if (!match) throw new Error(`Did not navigate to a pool URL; landed on ${page.url()}`);
   return match[1];
 }
+
+// ---------------------------------------------------------------------------
+// Reading what the app actually wrote. A test that only looks at the page can
+// be satisfied by a page that shows the right thing over the wrong document.
+// ---------------------------------------------------------------------------
+
+type FsValue = Record<string, unknown>;
+
+/** Firestore's REST wire format -> a plain value. */
+function decode(v: FsValue): unknown {
+  if ('nullValue' in v) return null;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) return (((v.arrayValue as { values?: FsValue[] }).values) ?? []).map(decode);
+  if ('mapValue' in v) return decodeFields(((v.mapValue as { fields?: Record<string, FsValue> }).fields) ?? {});
+  return undefined;
+}
+
+function decodeFields(fields: Record<string, FsValue>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, decode(v)]));
+}
+
+const FIRESTORE = 'http://127.0.0.1:8080/v1/projects/demo-mmp/databases/(default)/documents';
+
+/** One document from the emulator, read with the admin bypass token. Null if it does not exist. */
+export async function readDoc(path: string): Promise<Record<string, unknown> | null> {
+  const res = await fetch(`${FIRESTORE}/${path}`, { headers: { Authorization: 'Bearer owner' } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`readDoc ${path}: ${res.status}`);
+  const doc = (await res.json()) as { fields?: Record<string, FsValue> };
+  return decodeFields(doc.fields ?? {});
+}
+
+/** Merge fields into a document on the emulator (admin bypass) — for config a test needs set. */
+export async function patchDoc(path: string, fields: Record<string, FsValue>, mask: string[]): Promise<void> {
+  const qs = mask.map((m) => `updateMask.fieldPaths=${encodeURIComponent(m)}`).join('&');
+  const res = await fetch(`${FIRESTORE}/${path}?${qs}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
+  if (!res.ok) throw new Error(`patchDoc ${path}: ${res.status}`);
+}
+
+/** Polls until `read` returns something `ok` accepts; returns it. For writes that land a beat after a click. */
+export async function eventually<T>(read: () => Promise<T>, ok: (v: T) => boolean, what: string, timeoutMs = 15_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let last: T = await read();
+  while (!ok(last)) {
+    if (Date.now() > deadline) throw new Error(`eventually: ${what} — last value ${JSON.stringify(last)?.slice(0, 400)}`);
+    await new Promise((r) => setTimeout(r, 300));
+    last = await read();
+  }
+  return last;
+}
+

@@ -55,25 +55,41 @@ describe('assertPoolCreationAllowed ordering (mutation anchor)', () => {
 
 
     /**
-     * 🛑 THE BYPASS DOES NOT CROSS A HARD-CLOSED TYPE (codex r2, 2026-08-28).
-     *
-     * `HARD_CLOSED_POOL_TYPES` claims that NOTHING creates the type while it is
-     * listed. The sim path is a SUPER_ADMIN path, so a carve-out here would
-     * make that claim false — and would let the simulator mint squares pools
-     * that exercise the very defect the closure exists to hide.
+     * NO TYPE IS HARD-CLOSED (PLAN-SQUARES-REOPEN PR-D). The list held
+     * 'SQUARES' from 2026-08-28 until that plan landed. The rule that the
+     * bypass does not cross a hard-closed type is still true and is pinned with
+     * a planted type in `hardClosedMechanism.test.ts` — a loop over an empty
+     * list here would pass whatever the guard did.
      */
-    it('a hard-closed type is refused even WITH a stamped sim run id', async () => {
-        for (const type of HARD_CLOSED_POOL_TYPES) {
-            await expect(assertPoolCreationAllowed(type, { simBypass: true }))
-                .rejects.toThrow(/temporarily disabled/);
-            await expect(assertPoolCreationAllowed(type))
-                .rejects.toThrow(/temporarily disabled/);
+    it('nothing is hard-closed — squares was the only entry and it is reopened', () => {
+        expect([...HARD_CLOSED_POOL_TYPES]).toEqual([]);
+    });
+
+    it('SQUARES is created when its flag is on, absent, or the config is empty', async () => {
+        for (const cfg of [{}, { poolTypeFlags: {} }, { poolTypeFlags: { SQUARES: true } }, { maintenanceMode: false }]) {
+            h.configData = cfg;
+            await expect(assertPoolCreationAllowed('SQUARES')).resolves.toBeUndefined();
         }
+    });
+
+    it('SQUARES is refused when the runtime flag is off — the rollback that needs no deploy', async () => {
+        h.configData = { poolTypeFlags: { SQUARES: false } };
+        await expect(assertPoolCreationAllowed('SQUARES')).rejects.toThrow(/New SQUARES pools are temporarily disabled/);
+        // ...and that flag closes squares only.
+        await expect(assertPoolCreationAllowed('NFL_PICKEM')).resolves.toBeUndefined();
+        await expect(assertPoolCreationAllowed('PROPS')).resolves.toBeUndefined();
+    });
+
+    it('SQUARES is refused in maintenance mode, like every type', async () => {
+        h.configData = { maintenanceMode: true };
+        await expect(assertPoolCreationAllowed('SQUARES')).rejects.toThrow(/maintenance/i);
     });
 
     it('...while the bypass still works for every type that is NOT hard-closed', async () => {
         // The planted counter-example: if the new check had been written to
         // catch everything, the whole sim harness would have gone down with it.
+        // Its own config, not whatever the test before it left behind.
+        h.configData = { maintenanceMode: false, poolTypeFlags: { NFL_PICKEM: false, NFL_SURVIVOR: false, NFL_MARGIN: false } };
         expect(HARD_CLOSED_POOL_TYPES).not.toContain('NFL_PICKEM');
         await expect(assertPoolCreationAllowed('NFL_PICKEM', { simBypass: true })).resolves.toBeUndefined();
         await expect(assertPoolCreationAllowed('NFL_SURVIVOR', { simBypass: true })).resolves.toBeUndefined();
@@ -90,16 +106,13 @@ describe('assertPoolCreationAllowed ordering (mutation anchor)', () => {
  * pool type.
  */
 describe('assertPoolTypePurchasable', () => {
-    it('refuses every hard-closed type', () => {
-        for (const type of HARD_CLOSED_POOL_TYPES) {
-            expect(() => assertPoolTypePurchasable(type)).toThrow(/cannot be purchased or upgraded/);
-        }
-    });
-
-    it('allows the three live NFL types, and every other open type', () => {
+    // "Refuses every hard-closed type" is pinned with a planted type in
+    // `hardClosedMechanism.test.ts`: the list is empty since squares reopened,
+    // and a loop over nothing proves nothing.
+    it('allows every type, SQUARES included now that it is reopened', () => {
         // The planted counter-example: a guard written too wide would have
         // stopped Kevin's own customers paying during launch week.
-        for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN', 'BRACKET', 'PROPS', 'NFL_PLAYOFFS']) {
+        for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN', 'BRACKET', 'PROPS', 'NFL_PLAYOFFS', 'SQUARES']) {
             expect(() => assertPoolTypePurchasable(type), type).not.toThrow();
         }
     });

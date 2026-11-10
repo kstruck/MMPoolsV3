@@ -930,13 +930,19 @@ export const fixParticipantIds = validated(
 
         // 1. Squares pools are DELIBERATELY not scanned here.
         //
-        // Square ownership is not a membership signal. `claimMySquares` sets
-        // `reservedByUid` on proof of a `guestDeviceKey` that is readable from
-        // the world-readable pool document (`firestore.rules` `allow get: if
-        // true`) - the known, accepted-through-the-pilot finding in
-        // SECURITY-CLAIM-SQUARES.md. Unioning it into `participantIds` turned
-        // this repair job into a privilege escalation: the claimant lands in the
-        // array that `setPaidStatus` and reminder targeting treat as membership.
+        // Square ownership ON AN OLD POOL is not a membership signal. Until
+        // PLAN-SQUARES-REOPEN PR-A (2026-11), `claimMySquares` set
+        // `reservedByUid` on proof of a `guestDeviceKey` that was readable from
+        // the world-readable pool document (SECURITY-CLAIM-SQUARES.md). A
+        // `reservedByUid` stamped before that fix may be such a claim, and
+        // nothing on the square says which. Unioning it into `participantIds`
+        // turned this repair job into a privilege escalation: the claimant
+        // lands in the array that `setPaidStatus` and reminder targeting treat
+        // as membership.
+        //
+        // The claim path now proves ownership and adds the claimant to
+        // `participantIds` itself, at claim time — so this job still has
+        // nothing legitimate to add, for old pools or new ones.
         //
         // Removing it costs nothing legitimate. `reserveSquare` already adds an
         // authenticated reserver to `participantIds` at reserve time, so the only

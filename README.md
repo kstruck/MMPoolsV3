@@ -60,19 +60,16 @@ Fully featured tournament suite designed to maximize excitement during Selection
 
 ### ⏹️ Gameday Squares (Super Bowl & Football Grids)
 
-> 🛑 **Creation is temporarily closed (2026-08-30).** New Squares pools cannot be
-> created or purchased — the entry points read "Coming Soon" and the `createPool`
-> callable refuses the type. **Existing Squares pools are unaffected**: they still
-> open, score, and pay out.
+> 🟢 **Creation is open again** (PLAN-SQUARES-REOPEN, 2026-11). It was closed
+> from 2026-08-30 because a pool left on the wizard's default refused every
+> non-owner's first square. That is fixed, along with what the audit behind it
+> found: who may claim a square, what a winner is paid, when a grid's numbers
+> can change, and a setup wizard that links the pool to its game. The plan,
+> its review log and its sweeps are in
+> [`docs/plans/PLAN-SQUARES-REOPEN.md`](docs/plans/PLAN-SQUARES-REOPEN.md).
 >
-> Why: the wizard defaulted `maxSquaresPerPlayer` to `0` and labelled it
-> "(0 = no limit)", but the claim gate refuses whenever
-> `mySquares >= maxSquaresPerPlayer` — so at `0` every non-owner was refused their
-> **first** square and the pool was unplayable by anyone but its commissioner.
-> Shipping that to buyers was worse than not shipping it. The fix list, and the
-> decision already taken (`0` means unlimited — fix the callable, not the wizard),
-> is in [`SQUARES-BACKLOG.md`](docs/backlog/SQUARES-BACKLOG.md). Reopening is two constants and
-> a deploy.
+> To close it again without a deploy: Super-Admin → Pool Type Availability →
+> SQUARES off.
 
 A high-fidelity implementation of the classic football squares grid.
 * **Interactive 100-Square Grid:** Real-time square reservations, payments, and live axis numbers.

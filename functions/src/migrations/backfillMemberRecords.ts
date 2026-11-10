@@ -98,11 +98,13 @@ async function collectMembers(db: Firestore, poolId: string, pool: any): Promise
 
   // Square ownership ENRICHES a member; it never INTRODUCES one.
   //
-  // `squares[].reservedByUid` is settable by `claimMySquares`, which proves
-  // ownership with a `guestDeviceKey` read straight off the world-readable pool
-  // document (`firestore.rules` `allow get: if true`) — the known finding in
-  // SECURITY-CLAIM-SQUARES.md. Minting a Member Record from it would promote
-  // that unverified signal into roster truth, and a Member Record is what
+  // Until PLAN-SQUARES-REOPEN PR-A (2026-11), `squares[].reservedByUid` was
+  // settable by `claimMySquares` on proof of a `guestDeviceKey` read straight
+  // off the world-readable pool document (SECURITY-CLAIM-SQUARES.md). That is
+  // fixed for every claim made since — but a stamp made BEFORE the fix may be
+  // such a claim, nothing on the square says which, and this backfill runs
+  // over old pools. Minting a Member Record from it would promote that
+  // unverified signal into roster truth, and a Member Record is what
   // `setPaidStatus` and the reminder targeting trust.
   //
   // Nothing legitimate is lost: `reserveSquare` already adds an authenticated

@@ -5,6 +5,7 @@ import {
   fillBasicsAndAdvanceToReview,
   advanceToReview,
   submitAndExpectPoolCreated,
+  readDoc,
 } from './helpers';
 
 // Full-stack create-pool E2E: real registration (real onUserCreated trigger),
@@ -69,22 +70,30 @@ async function registerAsAdmin(page: Page, email: string): Promise<void> {
 
 test.describe('unified create-pool wizard — all 7 pool types', () => {
   /**
-   * 🛑 SQUARES CREATION IS CLOSED (Kevin, 2026-08-28) — see
-   * `SQUARES_CREATION_OPEN` in `src/config/season.ts` and `SQUARES-BACKLOG.md`.
-   *
-   * This test used to walk the squares wizard end to end. It now asserts the
-   * closure at the route, which is where a member meets it: `/create/squares`
-   * bounces to "/" for EVERYONE, super admins included — and this test
-   * registers as one, so it is also the proof that the switch has no
-   * super-admin exemption.
-   *
-   * Restore the walk-through when the switch flips back.
+   * SQUARES IS OPEN AGAIN (PLAN-SQUARES-REOPEN PR-D). From 2026-08-28 until
+   * that plan landed, this test asserted that `/create/squares` bounced. It is
+   * the walk-through again, on the path with NO linked game — the commissioner
+   * types the teams and will lock the grid themselves. The linked-game path,
+   * and everything after creation, is `squares-pool.spec.ts`.
    */
-  test('SQUARES — creation is closed, so the route bounces', async ({ page }) => {
+  test('SQUARES — no linked game, teams typed in', async ({ page }) => {
     const email = `e2e-squares-${RUN_ID}@example.com`;
     await registerAsAdmin(page, email);
-    await expect(gotoCreateRoute(page, email, '/create/squares'))
-      .rejects.toThrow(/bounced off \/create\/squares/);
+    await gotoCreateRoute(page, email, '/create/squares');
+    await page.locator('#name').fill('E2E Squares');
+    await page.getByRole('button', { name: 'Next', exact: true }).click(); // Basics -> Matchup & grid
+    await page.locator('#homeTeam').fill('Lions');
+    await page.locator('#awayTeam').fill('Packers');
+    await advanceToReview(page);
+    const poolId = await submitAndExpectPoolCreated(page, /Launch free pool|Start \d+-day trial/i);
+
+    // A pool with no linked game has no game to follow and does not lock itself.
+    const pool = await readDoc(`pools/${poolId}`);
+    expect(pool).not.toBeNull();
+    expect(pool!.homeTeam).toBe('Lions');
+    expect(pool!.awayTeam).toBe('Packers');
+    expect(pool!.gameId ?? null).toBeNull();
+    expect((pool!.reminders as { lock?: { enabled?: boolean } } | undefined)?.lock?.enabled ?? false).toBe(false);
   });
 
   test('BRACKET', async ({ page }) => {
