@@ -3,8 +3,9 @@
 Findings from each review round, verbatim in substance, with the verdict and the
 evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 
-> **STATUS: NOT CONVERGED.** One reviewer (qodo) has reported on PR-A. The
-> second-model round CLAUDE.md §2c requires — `codex exec review` — **has not
+> **STATUS: NOT CONVERGED.** One reviewer (qodo) has reported on PR-A and on
+> PR-B, twice each. The second-model round CLAUDE.md §2c requires —
+> `codex exec review` — **has not
 > run on any PR in this plan**: `codex` is installed but not logged in on the
 > machine this work was done on (`codex login status` → `Not logged in`). That
 > gate is OWED, not waived. Nothing here should be read as "reviewed by codex".
@@ -15,6 +16,8 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | S2 | self-review | PR-B diff before push | 1 | 1 | 0 |
 | Q1 | qodo | PR-A @ `2499d8d0` | 12 | 11 | 1 |
 | Q2 | qodo | PR-B @ `57290e7d` | 11 | 9 | 2 |
+| Q3 | qodo (re-review) | PR-A @ `6095d92d` | 5 | 5 | 0 |
+| Q3 | qodo (re-review) | PR-B @ `652fe64c` | 9 | 8 | 1 |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -235,3 +238,119 @@ All three surfaces read. 7 bugs, 4 "skill insights". Numbering is qodo's.
     true if terse. Carried to Kevin as part of K9.
 
 **Round result:** 9 accepted (one of them as a stated limitation), 2 rejected.
+
+## Round Q3 — qodo's re-review of both PRs (2026-11-10T18:41Z)
+
+A push does not make qodo review again; a draft → ready toggle does. Both PRs
+were toggled at 18:37Z and it re-reviewed each at its current head within four
+minutes, updating its review comment in place. All three surfaces were read
+again on each PR.
+
+### PR #758 @ `6095d92d`
+
+Of the twelve Q1 findings, qodo marks **eleven Resolved** (including the two
+that were left open for Kevin, #6 and #10). The one rejection — #4, "an unknown
+cap shows no limit" — is still listed and still rejected, for the reason in Q1.
+Five new findings. Numbering is qodo's.
+
+3. **(Medium, skill insight) Test counts in the review log are undated.**
+   **Accepted.** Rounds S1 and S2 now carry a date and the commit they were
+   measured ahead of, and the one count in this log says when it was taken and
+   that current counts live in the PR descriptions.
+4. **(Medium, skill insight) An unverified claim about the random generator is
+   stated as fact.** Sweep SW3 said the generator's state "is recoverable from
+   its outputs". Nothing here measured that. **Accepted.** SW3 now says what is
+   known (not a cryptographic source; the earlier quarters' numbers are public)
+   and that recoverability was not measured — and that the fix does not depend
+   on it.
+5. **(Medium, bug) A player cannot confirm payment when one of their squares
+   was entered by the organizer.** `confirmPayment` accepts only squares
+   stamped with the caller's account and refuses the whole request otherwise;
+   the grid sent every square that was "mine", including ones matched by name.
+   **Accepted — a real regression from Q1's fix #3**, which widened "mine"
+   without checking what the server would take. `duesBuckets`
+   (`shared/squaresClaim.ts`) is now the one rule: "I've sent payment" covers
+   the squares on the player's account, and the others are shown as the
+   organizer's to mark paid. 9 unit tests; 5 mutants, all red.
+6. **(Medium, security) Two guests can be issued the same claim code.** The
+   mint queried for the code and then wrote under a random id, so two mints
+   could both pass the query, and the last of its five draws was never
+   checked. **Accepted.** The code is the document id, taken in a transaction;
+   a mint that cannot get a free code fails. Codes minted before the change
+   still redeem. 10 emulator tests, which force the clash chance will not by
+   passing the draw in; 8 mutants, all red.
+17. **(Informational, skill insight) The backup warning uses an emoji outside
+    the house marker set.** **Accepted** — one character.
+
+Fixed in `e530fd3c`. 5 of 5 accepted.
+
+### PR #759 @ `652fe64c`
+
+Of the eleven Q2 findings, qodo marks **seven Resolved** and **dismissed two
+itself** after reading the replies (#4 floor the prize pot — "false positive";
+#11 winner-email wording — "deferred"). Two it still lists: #2 (Every Score
+Pays scored by hand) and #5 (plan and review). Nine new findings.
+
+1. **(High, bug) A quarter switched off after its winner was recorded leaves
+   that winner on the books.** The page's own check looked only for records
+   that were MISSING, so it reported a match and hid the button. **Accepted —
+   and fixed at the root.** The page had a shorter copy of the server's rule.
+   `planWinnerWrites` moved to `shared/squaresWinnerPlan.ts`; the page runs it
+   and lists what would be added, changed and removed (`describeWinnerDrift`).
+5. **(Medium, skill insight) The drawn-prize rule is kept in two copies.**
+   **Accepted** — same move: `recordedEntry` is shared and the page calls it.
+   A test runs both on every shape the two copies used to disagree about.
+6. **(Medium, skill insight) The admin-audit gate compares the raw role
+   claim.** **Rejected.** The gate that lets a SUPER_ADMIN act on a pool they
+   do not run is `assertPoolOwnerOrSuperAdmin`, and it compares the same value
+   the same way (`=== 'SUPER_ADMIN'`, `poolOps.ts:83`). The audit row is written
+   for exactly the callers that gate let through as an admin. Normalising one
+   of the two would make them disagree. Whether `confirmedAdminClaim` should
+   normalise at all is a question about `lib/confirmedRole.ts`, which every
+   pool type's callables share and this work does not touch.
+7. **(Medium, bug) "Record winners" pressed straight after a score edit records
+   the previous score's winner.** **Accepted.** The request now carries the
+   scores the commissioner was looking at and the server refuses if the stored
+   ones differ.
+8. **(Medium, bug) A drawn prize that was paid can come back as unpaid.**
+   Changing the unclaimed-prize rule after a draw moved the prize to the last
+   winner (clearing "paid") and changing it back returned it to the drawn
+   winner, unpaid. **Accepted — and the rule is simpler for it:** a draw that
+   has been made stands, whatever the rule is set to afterwards.
+9. **(Medium, bug) An old pool shows prizes that were never recorded, worked
+   out by today's rules.** **Accepted in part.** A finished quarter with no
+   record on an old pool now shows the owner of the square the score lands on
+   and that quarter's plain share — no reverse split, no rollover, no
+   unclaimed-prize award — and the card says no winner was recorded. It is not
+   blanked: a hand-scored pool recorded no winners at all before 2026-11, and
+   an empty card would be a worse account of that game than a labelled one.
+10. **(Medium, bug) A second click un-pays a prize.** **Accepted.** The page
+    says which state it wants and the server sets it; asking for the state a
+    record is already in writes nothing. Un-marking asks first.
+18. **(Informational, bug) "Pending" can go negative.** **Accepted.**
+    `payoutTotals`: an unpaid prize is owed in full, a paid one only what it
+    has grown by since.
+20. **(Informational, skill insight) The sync cannot be paused if payouts
+    misfire.** **Accepted.** `system/config.squaresWinners.paused`. While set,
+    scores are still kept and no winner record is written; "Record winners" and
+    the draw are refused in words. Clearing it reconciles everything.
+
+Still listed from Q2, unchanged:
+
+- **#2 Every Score Pays scored by hand.** One more guard added in this round:
+  Every Score Pays **cannot be chosen** on a pool with no linked game, with the
+  reason on the option. Entering each score of a game by hand remains plan
+  K9(b).
+- **#5 Plan and review.** The plan, this log and the sweeps are in #758, which
+  merges first. Nothing to change in #759.
+
+Fixed in `10d65cce`. 8 of 9 accepted (one in part), 1 rejected.
+
+### What this round says about the last one
+
+Two of the fourteen new findings are defects **in the fixes for the previous
+round** — #758's "mixed dues" (introduced by Q1's fix #3) and #759's "drawn
+winners can be marked paid twice" (reachable only through Q2's fix #9). That is
+the pattern CLAUDE.md §2c describes for codex: round one finds defects in the
+code, later rounds find defects in the fixes. It is the argument for the codex
+round that is still owed, not against it.

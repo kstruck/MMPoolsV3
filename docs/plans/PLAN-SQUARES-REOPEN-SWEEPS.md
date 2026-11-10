@@ -138,10 +138,16 @@ grep -n "winners" firestore.rules
 | `functions/src/scoreUpdates.ts:629,668,737,772` | creates scoring-event records at `amount: 0` as each score happens | **changed** — never re-writes a record that already exists (M12) |
 | `functions/src/squaresAdmin.ts:180` (`drawSquaresFinalPrize`) | the drawn `final_rollover` record | **changed** (D15) |
 | `functions/src/poolOps.ts:738-742` (`recalculatePoolWinners`) | deletes every record, nulls the period scores | consistent — SUPER_ADMIN repair. The next pass rebuilds from the grid as it stands; nothing to keep in step because there is no marker to go stale (D16). On an old pool (D14) the records are deleted and NOT rebuilt — that tool should not be run on one |
-| `functions/src/poolOps.ts:805-812` (`toggleWinnerPaid`) | `isPaid`, `paidAt`, `paidByUid` | consistent — fields the reconcile never overwrites unless the winner changes |
+| `functions/src/poolOps.ts` (`toggleWinnerPaid`) | `isPaid`, `paidAt`, `paidByUid`, `paidAmount` | **changed** — in a transaction, against the winner the page showed, and (round 3) SET to the state the page asks for rather than flipped. Fields the reconcile never overwrites unless the winner changes |
 | READ: `scoreUpdates.ts:264`, `squaresAdmin.ts:91,131`, `postGameEmail.ts:70`, `lib/commissionerAggregate.ts:15`, `debug.ts:51` | — | consistent. `commissionerAggregate` reads `paidOut` / `paidStatus`, which nothing writes — plan K5 |
 | triggers: `reminders.ts` `onWinnerComputed` (create), `aiCommissioner.ts` `onWinnerUpdate` (write), `rosterAggregate.ts` `onWinnerWrite` (write) | — | consistent. A `Rollover` record and `final_rollover` are new ids those triggers will see; the winner email (if the commissioner enabled it) will announce "Winner Alert: Q1 - Rollover, $0" for a rolled-over quarter. Cosmetic; `reminders.ts` not edited |
 | client | — | none: `allow write: if false` |
+
+**Re-run after qodo round 3** (`10d65cce`): no new writer. The planner moved
+files; `applyWinnerPlan` is still the one place a period record is written. The
+pause switch (`lib/squaresPause.ts`, plan D18) gates `applyWinnerPlan` in the
+sync, and the two commissioner callables that reach it; it does not gate the
+scoring-event rows in the second line above, on purpose.
 
 ## S7 — every writer of `axisNumbers` / `quarterlyNumbers` (PR-B)
 
@@ -191,8 +197,10 @@ Before PR-B there were five copies and they disagreed (plan M1–M4, M7, M8).
 | Site | What | Classification |
 |---|---|---|
 | `shared/squaresPayouts.ts` | `winningSquare`, `reverseSquare`, `computePeriodPayouts`, `computeEventPayouts` | **changed** — the definition |
-| `functions/src/lib/squaresWinners.ts` | calls the definition | **changed** |
-| `src/utils/payouts.ts` | calls the definition (was a second copy) | **changed** |
+| `shared/squaresWinnerPlan.ts` (`planWinnerWrites`, `recordedEntry`) | calls the definition; decides which records to write. In `functions/src/lib/squaresWinners.ts` until qodo round 3, which found the admin page answering "do the records match?" with a shorter rule of its own | **changed** — moved to `shared/` so the page runs the server's planner |
+| `functions/src/lib/squaresWinners.ts` | re-exports the planner; `applyWinnerPlan` writes its plan | **changed** |
+| `src/utils/payouts.ts` | calls the definition (was a second copy); reads a record through the shared `recordedEntry` (was a second copy of the drawn-prize rule — qodo round 3) | **changed** |
+| `src/components/AdminPanel.tsx` — Record Winners card | was a sixth, partial copy: it looked only for MISSING records, so a record that had to be removed was invisible to it. Now runs `planWinnerWrites` and lists its result (`describeWinnerDrift`) | **changed** (qodo round 3, #759 finding 1) |
 | `src/components/AdminPanel.tsx` — Payouts tab | was a third copy with the TRANSPOSED square; now reads the recorded winners | **changed** (M8) |
 | `src/components/AdminPanel.tsx` — Randomizer | was a fourth copy with the transposed square; now reads the `final_rollover` record | **changed** (M7) |
 | `functions/src/scoreUpdates.ts` — scoring-event loop | still looks up the event's square itself (`axis.away.indexOf(aDigit)`, `axis.home.indexOf(hDigit)`) | consistent — same orientation as the definition; the AMOUNT comes from the definition. Folding the lookup into `winningSquare` is a refactor with no behaviour change, left for after the reopen |
