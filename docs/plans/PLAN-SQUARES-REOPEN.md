@@ -219,11 +219,15 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   runs every minute and locks grids due within 30 seconds reaches a given grid
   anywhere from 30 seconds before its lock time to 30 seconds AFTER it, and a
   `runReminders` pass in that second half would have drawn the numbers.
-  **What PR-C does about it, without touching this file:** `autoLockPools`
-  locks a squares grid from 90 seconds before its lock time, so it has always
-  run before the lock time arrives. That closes the race while the dedicated
-  job is healthy. It does not close it if that job is down or failing at that
-  minute — then this copy still decides the grid.
+  **What is done about it without touching this file — in PR-C (#760, commit
+  `2cf665a5`), NOT in the PR this document ships in:** there, `autoLockPools`
+  locks a squares grid from 90 seconds before its lock time
+  (`SQUARES_LOCK_LEAD_MS`), so it has always run before the lock time arrives.
+  On PR-A's own branch `autoLock.ts` is unchanged and still uses 30 seconds:
+  **the race is open until #760 is merged, and squares creation stays closed
+  until after that** (PR-D). Even then it is closed only while the dedicated
+  job is healthy — if that job is down or failing at that minute, this copy
+  still decides the grid.
   **Not changed** — `reminders.ts` also sends the NFL reminders. *Recommendation:
   approve one small PR, before Thanksgiving, that makes `checkLockReminders`
   skip the auto-lock for squares pools (three lines) and leaves the lock
