@@ -14,6 +14,7 @@ import { updatePlayerSchema, releaseSquaresSchema } from "./schemas/squares";
 import { reserveSquareSchema, reserveSquaresSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
 import { planClaim, claimRefusalMessage, normalizePlayerName, type ClaimRefusal } from "./shared/squaresClaim";
 import { guestKeyHashOrNull } from "./lib/guestKey";
+import { squaresGameHasStarted } from "./lib/squaresGame";
 
 
 /** What a claim needs, whichever callable it arrived through. */
@@ -117,6 +118,16 @@ async function reserveSquaresForCaller(
         // Once the grid is locked only the owner may still place a name on it.
         if (pool.isLocked && pool.ownerId !== userId) {
             throw new HttpsError("failed-precondition", "Pool is locked.");
+        }
+
+        // AND ONCE THE GAME HAS STARTED, NOBODY BUT THE OWNER — locked or not.
+        // `isLocked` is a field the commissioner's page can write and the
+        // auto-lock can miss; a grid still open at kickoff sold squares to
+        // people who could see the score. The owner is still let through, as
+        // above: they are the one who types in a square that was paid for in
+        // person before the game and never entered.
+        if (pool.ownerId !== userId && squaresGameHasStarted(pool as Parameters<typeof squaresGameHasStarted>[0], Date.now())) {
+            throw new HttpsError("failed-precondition", "The game has started. Squares can no longer be claimed.");
         }
 
         // THE COMMISSIONER ENTERING A SQUARE FOR SOMEONE ELSE. The owner is

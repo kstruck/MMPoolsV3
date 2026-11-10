@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { withSquaresDefaults } from '@shared/squaresDefaults';
 import { Navigate, useNavigate, useParams } from 'react-router';
 
 import { Header } from '../Header';
@@ -179,7 +180,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
         <div className="min-h-screen bg-page text-[color:var(--text)] font-body selection:bg-gold-500/30 selection:text-[color:var(--text)] flex flex-col">
             <Header user={user} onOpenAuth={onOpenAuth} onLogout={onLogout} onCreatePool={onCreatePool} />
             <AdminPanel
-                gameState={currentPool as GameState}
+                gameState={withSquaresDefaults(currentPool as unknown as Record<string, unknown>) as unknown as GameState}
                 updateConfig={(updates) => updatePool(currentPool.id, updates)}
                 updateScores={(scores) => updatePool(currentPool.id, { scores: { ...currentPool.scores, ...scores } as any })}
                 generateNumbers={() => dbService.lockPool(currentPool.id)}

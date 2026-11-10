@@ -139,10 +139,11 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                                             This pool pays out whenever the score changes.
                                             {gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? (
                                                 <span> <strong>Equal Split:</strong> The total prize pot is divided equally among all scoring events.</span>
-                                            ) : gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? (
-                                                <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
                                             ) : (
-                                                <span> A fixed amount of <strong>${gameState.scoreChangePayoutAmount}</strong> is deducted from the pot for each score.</span>
+                                                // Hybrid — which is also how a pool with no strategy set is
+                                                // paid (`scoreEventStrategy`). This used to describe a third,
+                                                // "fixed amount per score" mode that no code has paid by.
+                                                <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
                                             )}
                                             <br />
                                             <span className="text-faint italic mt-1 block">

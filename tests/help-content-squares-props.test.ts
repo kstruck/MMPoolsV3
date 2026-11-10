@@ -40,11 +40,21 @@ import type { HelpTopic } from '../src/help/types';
  */
 
 import { effectiveSquareCap, planClaim } from '../shared/squaresClaim';
+import { computePeriodPayouts, squaresPot, type PayoutPool } from '../shared/squaresPayouts';
+import { SQUARES_DEFAULT_PAYOUTS, squaresRules, squaresCharity } from '../shared/squaresDefaults';
+import { buildSquaresPayload } from '../src/components/wizard/create/buildSquaresPayload';
 
 const root = resolve(__dirname, '..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
-const SQUARES_WIZARD = read('src/components/wizard/create/CreateSquaresPool.tsx');
+// The squares wizard is three files since PLAN-SQUARES-REOPEN C1/C2: the shell
+// (step list and form defaults) and the two steps that are its own. Every pin
+// below is about what the wizard renders or defaults, so it reads all three.
+const SQUARES_WIZARD = [
+  'src/components/wizard/create/CreateSquaresPool.tsx',
+  'src/components/wizard/create/StepSquaresGame.tsx',
+  'src/components/wizard/create/StepSquaresPayouts.tsx',
+].map(read).join('\n');
 const PROPS_WIZARD = read('src/components/wizard/create/CreatePropsPool.tsx');
 
 const HOST = 'commissioner' as const;
@@ -83,6 +93,8 @@ describe('T13 — the pages this copy is placed on exist', () => {
     // empty every visibility assertion below and they would pass on nothing.
     for (const id of [
       'wizard.squares.grid',
+      'wizard.squares.payouts',
+      'admin.squares.payouts',
       'wizard.props.setup',
       'pool.squares',
       'admin.squares.settings',
@@ -109,6 +121,18 @@ describe('T13 — the pages this copy is placed on exist', () => {
     expect(on('wizard.squares.grid', 'SQUARES', HOST)).toEqual(
       expect.arrayContaining(['matchup.teams', 'maxSquaresPerPlayer', 'numberSets']),
     );
+    expect(on('wizard.squares.grid', 'SQUARES', HOST)).toContain('squares.game');
+    expect(on('wizard.squares.payouts', 'SQUARES', HOST)).toEqual([
+      'squaresPayouts',
+      'charity',
+      'ruleVariations.reverseWinners',
+      'ruleVariations.quarterlyRollover',
+      'ruleVariations.unclaimedFinalPrizeStrategy',
+    ]);
+    // A member reads the prize rules on the pool page, not only the host.
+    expect(on('pool.squares', 'SQUARES', MEMBER)).toEqual(
+      expect.arrayContaining(['squaresPayouts', 'charity', 'ruleVariations.reverseWinners', 'ruleVariations.quarterlyRollover']),
+    );
     expect(on('wizard.props.setup', 'PROPS', HOST)).toEqual(
       expect.arrayContaining(['matchup.teams', 'props.maxCards']),
     );
@@ -125,6 +149,27 @@ describe('T13 — scope: grid rules stay on the grid', () => {
     expect(resolveFor('SQUARES', id)?.id).toBe(id);
     for (const type of POOL_TYPES.filter((t) => t !== 'SQUARES')) {
       expect(resolveFor(type, id), `${id} leaked to ${type}`).toBeUndefined();
+    }
+  });
+
+  it.each([
+    'squares.game',
+    'squaresPayouts',
+    'charity',
+    'ruleVariations.reverseWinners',
+    'ruleVariations.quarterlyRollover',
+    'ruleVariations.unclaimedFinalPrizeStrategy',
+  ])('%s resolves for SQUARES and no other type', (id) => {
+    expect(resolveFor('SQUARES', id)?.id).toBe(id);
+    for (const type of POOL_TYPES.filter((t) => t !== 'SQUARES')) {
+      expect(resolveFor(type, id), `${id} leaked to ${type}`).toBeUndefined();
+    }
+  });
+
+  it('the game picker is a host control; the prize rules reach a member', () => {
+    expect(resolveFor('SQUARES', 'squares.game', MEMBER)).toBeUndefined();
+    for (const id of ['squaresPayouts', 'charity', 'ruleVariations.reverseWinners', 'ruleVariations.quarterlyRollover']) {
+      expect(resolveFor('SQUARES', id, MEMBER)?.id, id).toBe(id);
     }
   });
 
@@ -244,7 +289,9 @@ describe('T13 — the eleven allowlist rows', () => {
     const reason = SCHEMA_PATH_ALLOWLIST['seasonType'];
     expect(reason).toMatch(/^PERMANENT\b/);
     expect(reason).toMatch(/no control/);
-    expect(reason).toMatch(/AdminPanel\.tsx:371/);
+    // Both writers are game pickers, and both stamp it from the game chosen.
+    expect(reason).toMatch(/StepSquaresGame\.tsx/);
+    expect(reason).toMatch(/AdminPanel\.tsx/);
     expect(reason).toMatch(/T13/);
   });
 
@@ -261,13 +308,36 @@ describe('T13 — the eleven allowlist rows', () => {
   });
 
   it('no squares or props surface has a control for seasonType', () => {
-    // The measurement the PERMANENT reason rests on, re-taken every run. A
-    // control added to either wizard makes the row a lie, and this is the only
-    // place that would notice.
-    expect(SQUARES_WIZARD).not.toMatch(/seasonType/);
+    // The measurement the PERMANENT reason rests on, re-taken every run. An
+    // INPUT bound to it in either wizard makes the row a lie, and this is the
+    // only place that would notice. (The squares game picker SETS it from the
+    // chosen game, which is what "derived" means — that is not a control.)
+    expect(SQUARES_WIZARD).not.toMatch(/name="seasonType"/);
+    expect(SQUARES_WIZARD).not.toMatch(/register\(['"`]seasonType/);
     expect(PROPS_WIZARD).not.toMatch(/seasonType/);
-    expect(read('src/components/wizard/create/buildSquaresPayload.ts')).not.toMatch(/seasonType/);
     expect(read('src/components/wizard/create/buildPropsPayload.ts')).not.toMatch(/seasonType/);
+  });
+
+  it('and the squares wizard sends it only as part of a game that was picked', () => {
+    // Run, not grepped. A season type typed into the form state with no game
+    // behind it is not sent; one that arrived with a picked game is.
+    const base = { name: 'Grid', costPerSquare: 5, seasonType: '2', week: 12 };
+    const unlinked = buildSquaresPayload(base);
+    expect('seasonType' in unlinked).toBe(false);
+    expect('week' in unlinked).toBe(false);
+    const linked = buildSquaresPayload({ ...base, gameId: '401', gameTime: 1_800_000_000_000 });
+    expect(linked.seasonType).toBe('2');
+    expect(linked.week).toBe(12);
+  });
+
+  it('the three fields the picker stamps are PERMANENT rows, not copy', () => {
+    for (const path of ['league', 'homeTeamLogo', 'awayTeamLogo']) {
+      expect(SCHEMA_PATH_ALLOWLIST[path], path).toMatch(/^PERMANENT: derived from the chosen game/);
+      // ...and nothing in the wizard binds an input to one.
+      expect(SQUARES_WIZARD).not.toMatch(new RegExp(`name="${path}"`));
+    }
+    // The topic that explains the picker claims no schema path of its own.
+    expect(helpRegistry.getTopic('squares.game')!.fields).toEqual([]);
   });
 });
 
@@ -330,6 +400,150 @@ describe('T13 — copy that names a default matches the code', () => {
     const base = { type: 'SQUARES' as const, name: 'Grid', costPerSquare: 5 };
     expect(squaresCreateInputSchema.safeParse({ ...base, maxSquaresPerPlayer: 0 }).success).toBe(true);
     expect(squaresCreateInputSchema.safeParse({ ...base, maxSquaresPerPlayer: -1 }).success).toBe(false);
+  });
+});
+
+/**
+ * The payouts step (PLAN-SQUARES-REOPEN C2). Every sentence that names a
+ * default or describes what a rule pays is held to the code that decides it —
+ * the wizard's defaults for the first, and `computePeriodPayouts`, RUN, for the
+ * second. That function is the one that records winners.
+ */
+describe('C2 — the payouts copy names the defaults the wizard has', () => {
+  const defaults = (key: string) => buildSquaresPayload({ name: 'Grid', costPerSquare: 5 })[key];
+
+  it('the split starts at 25% each, in the wizard and on the server', () => {
+    expect(SQUARES_WIZARD).toMatch(/squaresPayouts:\s*\{ q1: 25, half: 25, q3: 25, final: 25 \}/);
+    expect({ ...SQUARES_DEFAULT_PAYOUTS }).toEqual({ q1: 25, half: 25, q3: 25, final: 25 });
+    expect(copyOf('squaresPayouts')).toContain('It starts at 25% each');
+  });
+
+  it('a split that does not total 100 is refused, as the copy says', () => {
+    const base = { type: 'SQUARES' as const, name: 'Grid', costPerSquare: 5 };
+    const split = (q1: number, half: number, q3: number, final: number) =>
+      squaresCreateInputSchema.safeParse({ ...base, squaresPayouts: { q1, half, q3, final } }).success;
+    expect(split(25, 25, 25, 25)).toBe(true);
+    expect(split(10, 20, 10, 60)).toBe(true);
+    expect(split(25, 25, 25, 24)).toBe(false);
+    expect(split(25, 25, 25, 26)).toBe(false);
+    expect(split(-10, 60, 25, 25)).toBe(false);
+    expect(copyOf('squaresPayouts')).toContain('must add up to exactly 100%');
+  });
+
+  it('charity starts off', () => {
+    expect(SQUARES_WIZARD).toMatch(/charity:\s*\{ enabled: false/);
+    expect(defaults('charity')).toEqual({ enabled: false, percentage: 0 });
+    expect(squaresCharity(undefined).enabled).toBe(false);
+    expect(copyOf('charity')).toContain('It is off to start with');
+  });
+
+  it('reverse winners starts off, rollover starts ON, and the final prize starts on the last winner', () => {
+    expect(SQUARES_WIZARD).toMatch(/reverseWinners: false, quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'last_winner'/);
+    expect(copyOf('ruleVariations.reverseWinners')).toContain('It is off to start with');
+    expect(copyOf('ruleVariations.quarterlyRollover')).toContain('It starts on.');
+    // The default is named with the option's own words; both labels are pinned.
+    expect(SQUARES_WIZARD).toContain("label: 'Give it to the last player who won'");
+    expect(SQUARES_WIZARD).toContain("label: 'Random draw among the squares that were sold'");
+    const copy = copyOf('ruleVariations.unclaimedFinalPrizeStrategy');
+    expect(copy).toContain('It starts on “Give it to the last player who won”');
+    expect(copy).toContain('“Random draw among the squares that were sold”');
+  });
+
+  it('a stored pool that says nothing reads every rule as OFF — the wizard default is a choice, not a fallback', () => {
+    // The copy says rollover "starts on" for a pool the wizard creates. A
+    // document missing the field is a different thing and is read as off; if
+    // these two ever merged, the page would show a rule the scorer does not run.
+    expect(squaresRules(undefined).quarterlyRollover).toBe(false);
+    expect(squaresRules({ quarterlyRollover: true }).quarterlyRollover).toBe(true);
+  });
+});
+
+describe('C2 — the payouts copy describes what the scorer does', () => {
+  const axis = { home: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], away: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] };
+  // $10 a square, every square sold unless listed: a $1,000 pot, $250 a quarter.
+  const pool = (over: Partial<PayoutPool> = {}, unsold: number[] = []): PayoutPool => ({
+    costPerSquare: 10,
+    squares: Array.from({ length: 100 }, (_, i) => ({ owner: unsold.includes(i) ? null : `P${i}` })),
+    payouts: { q1: 25, half: 25, q3: 25, final: 25 },
+    axisNumbers: axis,
+    ...over,
+  });
+  const sq = (home: number, away: number) => away * 10 + home;
+  const q = (home: number, away: number) => ({ home, away });
+
+  it('reverse winners: two squares, half the prize each', () => {
+    const [q1] = computePeriodPayouts(pool({ ruleVariations: { reverseWinners: true } }), { q1: q(7, 3) });
+    expect(q1.claims.map((c) => [c.squareId, c.amount])).toEqual([[sq(7, 3), 125], [sq(3, 7), 125]]);
+    expect(copyOf('ruleVariations.reverseWinners')).toContain('They take half the prize each');
+  });
+
+  it('reverse winners: matching digits leave one winner with the whole prize', () => {
+    const [q1] = computePeriodPayouts(pool({ ruleVariations: { reverseWinners: true } }), { q1: q(7, 7) });
+    expect(q1.claims.map((c) => [c.squareId, c.amount])).toEqual([[sq(7, 7), 250]]);
+    expect(copyOf('ruleVariations.reverseWinners')).toContain('the one winner takes the whole prize');
+  });
+
+  it('reverse winners off: one square, the whole prize (the counter-example)', () => {
+    const [q1] = computePeriodPayouts(pool(), { q1: q(7, 3) });
+    expect(q1.claims.map((c) => [c.squareId, c.amount])).toEqual([[sq(7, 3), 250]]);
+  });
+
+  it('rollover on: an unsold prize is added to the next quarter', () => {
+    const p = pool({ ruleVariations: { quarterlyRollover: true } }, [sq(7, 3)]);
+    const [q1, half] = computePeriodPayouts(p, { q1: q(7, 3), half: q(4, 0) });
+    const pot = squaresPot(p).net; // 99 sold
+    expect(q1.claims[0]).toMatchObject({ sold: false, amount: 0, isRollover: true });
+    expect(half.claims[0].amount).toBeCloseTo((pot * 0.25) * 2, 2);
+    expect(copyOf('ruleVariations.quarterlyRollover')).toContain('added to the next quarter');
+  });
+
+  it('rollover off: an unsold prize is paid to nobody and the next quarter is unchanged', () => {
+    const p = pool({ ruleVariations: { quarterlyRollover: false } }, [sq(7, 3)]);
+    const [q1, half] = computePeriodPayouts(p, { q1: q(7, 3), half: q(4, 0) });
+    const pot = squaresPot(p).net;
+    expect(q1.claims[0]).toMatchObject({ sold: false, owner: 'Unsold', isRollover: false });
+    expect(q1.claims[0].amount).toBeCloseTo(pot * 0.25, 2);
+    expect(half.claims[0].amount).toBeCloseTo(pot * 0.25, 2);
+    expect(copyOf('ruleVariations.quarterlyRollover')).toContain('is not paid to anyone');
+  });
+
+  it('an unsold final square: the last player who won takes it', () => {
+    const p = pool({ ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'last_winner' } }, [sq(1, 1)]);
+    const results = computePeriodPayouts(p, { q1: q(7, 3), half: q(4, 0), q3: q(4, 7), final: q(1, 1) });
+    const extra = results[3].claims.find((c) => c.docId === 'final_rollover')!;
+    // The third quarter's winner is the most recent one.
+    expect(extra).toMatchObject({ sold: true, owner: `P${sq(4, 7)}` });
+    expect(extra.amount).toBeCloseTo(squaresPot(p).net * 0.25, 2);
+  });
+
+  it('an unsold final square on a random-draw pool waits for the draw', () => {
+    const p = pool({ ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'random' } }, [sq(1, 1)]);
+    const results = computePeriodPayouts(p, { q1: q(7, 3), final: q(1, 1) });
+    const extra = results[1].claims.find((c) => c.docId === 'final_rollover')!;
+    expect(extra).toMatchObject({ sold: false, isRollover: true });
+    expect(copyOf('ruleVariations.unclaimedFinalPrizeStrategy')).toContain('leaves the prize waiting');
+  });
+
+  it('nobody won anything all game: the final prize stays unsold', () => {
+    const unsold = [sq(7, 3), sq(1, 1)];
+    const p = pool({ ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'last_winner' } }, unsold);
+    const results = computePeriodPayouts(p, { q1: q(7, 3), final: q(1, 1) });
+    const extra = results[1].claims.find((c) => c.docId === 'final_rollover')!;
+    expect(extra).toMatchObject({ sold: false, owner: 'Unsold' });
+    expect(copyOf('ruleVariations.unclaimedFinalPrizeStrategy')).toContain('the prize stays unsold');
+  });
+
+  it('charity comes off first, rounded down to a whole dollar', () => {
+    // 33 squares at $7 = $231; 10% is $23.10 → $23 to charity, $208 in prizes.
+    const p: PayoutPool = {
+      costPerSquare: 7,
+      squares: Array.from({ length: 100 }, (_, i) => ({ owner: i < 33 ? 'x' : null })),
+      charity: { enabled: true, percentage: 10 },
+    };
+    expect(squaresPot(p)).toMatchObject({ gross: 231, charity: 23, net: 208 });
+    // ...and off means nothing comes off, whatever percentage is still stored.
+    expect(squaresPot({ ...p, charity: { enabled: false, percentage: 10 } })).toMatchObject({ charity: 0, net: 231 });
+    expect(copyOf('charity')).toContain('rounded down to a whole dollar');
   });
 });
 

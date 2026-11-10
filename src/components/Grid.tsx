@@ -190,6 +190,17 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    const myUid = currentUser?.id ?? null;
    const identity = React.useMemo(() => ({ uid: myUid, guestKeyHash }), [myUid, guestKeyHash]);
 
+   // THE ORGANIZER TYPING SOMEBODY ELSE'S NAME. The server enters those squares
+   // for that person — name only, no account — and it decides by exactly this
+   // comparison (`reserveSquaresForCaller` in functions/src/squares.ts). The
+   // form says so, because a commissioner whose account reads "Kevin Struck"
+   // and who types "Kev" would otherwise not know their own squares had been
+   // entered as somebody else's.
+   const enteringForSomeoneElse = !!currentUser
+      && currentUser.id === gameState.ownerId
+      && playerInfo.name.trim() !== ''
+      && normalizePlayerName(playerInfo.name) !== normalizePlayerName(currentUser.name);
+
    // How many squares count against this player's limit — the server's own count.
    const squaresAlreadyOwned = React.useMemo(() => {
       if (!playerInfo.name) return 0;
@@ -540,6 +551,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               className={`w-full bg-page border border-line rounded-lg px-4 py-3 font-body text-[color:var(--text)] focus:ring-2 focus:ring-gold-500 outline-none text-lg placeholder:text-faint`}
                               placeholder="e.g. John Smith"
                            />
+                           {enteringForSomeoneElse && (
+                              <p className="mt-2 text-xs font-body text-muted" data-testid="entering-for-someone">
+                                 You run this pool, and this is not the name on your account — so these squares are entered <span className="font-bold text-[color:var(--text)]">for {playerInfo.name.trim()}</span>, not for you. They carry that name only: mark them paid yourself on the Players tab. To take squares of your own, use your account name ({currentUser?.name}).
+                              </p>
+                           )}
                         </div>
                         {/* ... Details fields ... */}
                         <div>

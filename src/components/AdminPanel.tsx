@@ -6,7 +6,8 @@ import type { PoolTheme, GameState, Scores, Square, User, PropCard, WaitlistEntr
 import { isPlayerOwner, ROLLOVER, usesCurrentWinnerRules, type PayoutPool } from '@shared/squaresPayouts';
 import { describeWinnerDrift, finalScoresOf, planWinnerWrites, type StoredWinner } from '@shared/squaresWinnerPlan';
 import { payoutTotals } from '../utils/payouts';
-import type { ESPNGame, ESPNCompetitor, ESPNCompetition } from '../types/espn';
+import type { ScheduleGame, ScheduleLeague } from '../services/espnSchedule';
+import { squaresGameLink } from '@shared/squaresDefaults';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
@@ -101,16 +102,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
 
 
-  // Auto-detect season type: Dec-Feb is postseason, otherwise regular
-  const getDefaultSeasonType = () => {
-    const month = new Date().getMonth();
-    return (month === 11 || month === 0 || month === 1) ? '3' : '2';
-  };
-  const [seasonType, setSeasonType] = useState(getDefaultSeasonType());
-  const [week, setWeek] = useState('2'); // Default to Divisional for postseason
-  const [scheduleGames, setScheduleGames] = useState<ESPNGame[]>([]);
-  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
-  const [showSchedule, setShowSchedule] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   // Players Tab State
@@ -389,88 +380,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const fetchSchedule = async () => {
-    setIsLoadingSchedule(true);
-    setScheduleGames([]);
-    setShowSchedule(true);
-    try {
-      const leaguePath = gameState.league === 'college' || gameState.league === 'ncaa' ? 'college-football' : 'nfl';
-      let url = `https://site.api.espn.com/apis/site/v2/sports/football/${leaguePath}/scoreboard?seasontype=${seasonType}&week=${week}`;
-      if (leaguePath === 'college-football') {
-        url += `&groups=${cfbConference}`;
-        // If searching specific conference, disable limit to ensure visibility, though groups usually limits enough
-        url += `&limit=100`;
-      }
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch schedule');
-      const data = await response.json();
-      const events = data.events || [];
-
-      // Filter for future games only (based on user request)
-      const now = new Date();
-      // Optional: buffer of 0 hours, strict future.
-      const upcoming = events.filter((e: ESPNGame) => {
-        const gameDate = new Date(e.date);
-        return gameDate > now;
-      });
-
-      setScheduleGames(upcoming);
-    } catch (e) {
-      logger.error(e);
-      // Sandbox fix: Remove alert
-      setShowSchedule(false);
+  /**
+   * Link this pool to a game picked from the schedule.
+   *
+   * Writes what the create wizard's link writes (`squaresGameLink`): the game,
+   * its kickoff, the teams and badges, and THE GRID LOCKING ITSELF AT KICKOFF.
+   * The version this replaces renamed the pool to "Away @ Home" whatever it was
+   * called, set the lock to fifteen minutes before kickoff, and on a pool with
+   * no reminder settings switched on payment-reminder emails to every player.
+   * The pool keeps its name unless it never had one.
+   */
+  const linkGame = (game: ScheduleGame, league: ScheduleLeague) => {
+    const patch = squaresGameLink(game, league, { reminders: gameState.reminders, scores: gameState.scores });
+    if (!patch) {
+      toast.error('That game could not be linked. Pick it from the schedule again.');
+      return;
     }
-    setIsLoadingSchedule(false);
-  };
-
-  const selectGame = (game: ESPNGame) => {
-    const comp: ESPNCompetition = game.competitions[0];
-    const home = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'home')?.team;
-    const away = comp.competitors.find((c: ESPNCompetitor) => c.homeAway === 'away')?.team;
-    if (!home || !away) return; // Guard clause
-    // Auto-set the Lock Time to the game start time
-    const gameDate = new Date(game.date);
-    const existingReminders = gameState.reminders || {
-      payment: { enabled: true, graceMinutes: 60, repeatEveryHours: 24, notifyUsers: true },
-      lock: { enabled: true, scheduleMinutes: [60, 30, 15], lockAt: gameDate.getTime() - (15 * 60 * 1000) },
-      winner: { enabled: true, channels: ['email'], includeDigits: true, includeCharityImpact: true }
-    };
-
-    // Auto-Name Logic
-    let candidateName = `${away.displayName} @ ${home.displayName}`;
-    let counter = 2;
-    // Check if taken (simple loop)
-    // Note: checkNameAvailable returns TRUE if available, FALSE if taken
-    if (!checkNameAvailable(candidateName)) {
-      while (!checkNameAvailable(`${candidateName} (${counter})`)) {
-        counter++;
-      }
-      candidateName = `${candidateName} (${counter})`;
+    const unnamed = !gameState.name || gameState.name === 'New Pool';
+    let name = gameState.name;
+    if (unnamed) {
+      name = `${game.awayTeam} @ ${game.homeTeam}`;
+      for (let n = 2; !checkNameAvailable(name) && n < 50; n++) name = `${game.awayTeam} @ ${game.homeTeam} (${n})`;
     }
-
-    updateConfig({
-      name: candidateName, // Set the auto-generated unique name
-      homeTeam: home.displayName,
-      awayTeam: away.displayName,
-      gameId: game.id,
-      homeTeamLogo: home.logo,
-      awayTeamLogo: away.logo,
-      seasonType: seasonType as '1' | '2' | '3', // Save the season type
-      week: parseInt(week), // Save the week number
-      reminders: {
-        ...existingReminders,
-        lock: {
-          ...existingReminders.lock,
-          lockAt: gameDate.getTime() - (15 * 60 * 1000)
-        }
-      },
-      scores: {
-        ...gameState.scores,
-        startTime: game.date // Ensure startTime is set for the wizard to use
-      }
-    });
-
-    setShowSchedule(false);
+    updateConfig({ ...(patch as Partial<GameState>), ...(unnamed ? { name } : {}) });
+    toast.success(`Linked to ${game.awayTeam} at ${game.homeTeam}. The grid locks itself at kickoff.`);
   };
 
   const handleFetchLiveScores = async () => {
@@ -618,32 +551,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const [cfbConference, setCfbConference] = useState('80'); // Default to All FBS
 
-  /* Helper to estimate current NFL week */
-  /* Helper to estimate current NFL week */
-  const getEstimatedWeek = () => {
-    const now = new Date();
-    // Week 1 is roughly first week of Sept.
-    // If we are in Jan/Feb, we are late season (Week 18+ or playoffs)
-    // 2024 season started Sept 5.
-    // Let's assume current season starts first thursday of Sept.
-
-    let year = now.getFullYear();
-    if (now.getMonth() < 6) year--; // If Jan-June, we are in the tail of previous year's season
-
-    const seasonStart = new Date(year, 8, 5); // Approx Sept 5th
-    const diff = now.getTime() - seasonStart.getTime();
-
-    // If before season start, return 1
-    if (diff < 0) return 1;
-
-    const weekNum = Math.ceil(diff / (1000 * 60 * 60 * 24 * 7));
-    // Cap at 18
-    return Math.max(1, weekNum);
-  };
-
-  const currentEstimatedWeek = getEstimatedWeek();
 
 
 
@@ -717,19 +625,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <WizardStepMatchup
                 gameState={gameState}
                 updateConfig={updateConfig}
-                seasonType={seasonType}
-                setSeasonType={setSeasonType}
-                week={week}
-                setWeek={setWeek}
-                scheduleGames={scheduleGames}
-                isLoadingSchedule={isLoadingSchedule}
-                showSchedule={showSchedule}
-                setShowSchedule={setShowSchedule}
-                fetchSchedule={fetchSchedule}
-                selectGame={selectGame}
-                currentEstimatedWeek={currentEstimatedWeek}
-                cfbConference={cfbConference}
-                setCfbConference={setCfbConference}
+                onLinkGame={linkGame}
               />
             )}
             {wizardStep === 2 && (

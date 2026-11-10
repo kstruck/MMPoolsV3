@@ -35,6 +35,9 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   date: 'PERMANENT: derived from the chosen game.',
   gameTime: 'PERMANENT: derived from the chosen game.',
   week: 'PERMANENT: derived from the chosen game.',
+  league: 'PERMANENT: derived from the chosen game. The squares wizard\'s game picker stamps it beside gameId (StepSquaresGame.tsx pick); the reader chooses a league to SEARCH in, which the squares.game topic explains, and never sets this field.',
+  homeTeamLogo: 'PERMANENT: derived from the chosen game — the badge that game\'s feed carries for the home team. No control offers it.',
+  awayTeamLogo: 'PERMANENT: derived from the chosen game, same as homeTeamLogo.',
   theme: "PERMANENT: legacy single-string theme, superseded by the branding fields. No control offers it — the squares and props wizards send the constant 'default' (CreateSquaresPool.tsx:43, CreatePropsPool.tsx:83).",
 
   // ---- PERMANENT: legacy aliases kept for older payloads ------------------
@@ -108,7 +111,7 @@ export const SCHEMA_PATH_ALLOWLIST: Readonly<Record<string, string>> = Object.fr
   // belonging to the part chosen — neither is true of a one-game pool. It would
   // have put a topic in the Help panel of a pool with no such control, which is
   // voice rule 5's failure mode with a different face.
-  seasonType: 'PERMANENT: the three NFL season types are explained by the seasonType topic. SQUARES and PROPS accept the field but offer no control for it — neither create wizard binds it and neither payload builder sends it — and the only writer is the legacy squares game picker, which stamps it from the chosen game alongside gameId and week (AdminPanel.tsx:371). Derived from the chosen game, same as the week row above. (T13)',
+  seasonType: 'PERMANENT: the three NFL season types are explained by the seasonType topic. SQUARES and PROPS accept the field but offer no control for it — neither create wizard binds an input to it. The only writers are the two squares game pickers, which stamp it from the chosen game alongside gameId and week (StepSquaresGame.tsx pick in the create wizard; AdminPanel.tsx on the manage page). Derived from the chosen game, same as the week row above. (T13; picker added by PLAN-SQUARES-REOPEN C1)',
   // T9 removed confidenceMode and isListedPublic. It WITHDREW lockMode and
   // lockBufferMinutes mid-review because the shipped client ignored lockMode;
   // 93f44bb2 (#482) fixed that, so both rows are gone and both topics are

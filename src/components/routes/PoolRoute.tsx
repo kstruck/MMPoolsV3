@@ -33,6 +33,8 @@ import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
 import { claimRefusalMessage, effectiveSquareCap, planClaim, squareCapSentence } from '@shared/squaresClaim';
 import { hashGuestKey } from '../../utils/guestKey';
+import { withSquaresDefaults } from '@shared/squaresDefaults';
+import { squaresPot, type PayoutPool } from '@shared/squaresPayouts';
 
 interface PoolRouteProps {
     user: User | null;
@@ -422,7 +424,14 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     }
 
     // --- SQUARES LOGIC ---
-    const squaresPool = pool as GameState;
+    // Every nested object the squares page dereferences is present after this,
+    // and a missing value reads the way the server treats it (C0).
+    const squaresPool = withSquaresDefaults(pool as unknown as Record<string, unknown>) as unknown as GameState;
+    // The pot, the charity share and the prize pool — from the function that
+    // pays from them. The page used to work each out inline, and floored the
+    // prize pool on its own, so with a charity share it could read a dollar
+    // short of what the four prizes below it add up to.
+    const pot = squaresPot(squaresPool as unknown as PayoutPool);
 
     // Helper Functions
 
@@ -681,7 +690,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 <div className="relative z-10">
                                     <div className="flex items-center gap-2 mb-2"><div className="bg-gold-500/20 p-1.5 rounded-lg"><Heart size={18} className="text-gold-600" /></div><h3 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em]">Proudly Supporting</h3></div>
                                     <h2 className="text-2xl font-display font-bold uppercase text-gold-600 mb-1 leading-tight">{squaresPool.charity.name}</h2>
-                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}</span>
+                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num" data-testid="charity-amount">${pot.charity.toLocaleString()}</span>
                                 </div>
                             </div>
                         )}
@@ -690,8 +699,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         <div className="bg-card rounded-xl border border-line shadow-card flex flex-col overflow-hidden h-full">
                             <div className="flex border-b border-line bg-page px-6 py-4"><h3 className="text-sm font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">Payout Structure</h3></div>
                             <div className="p-6 flex-1 flex flex-col justify-center">
-                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num">${(squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare).toLocaleString()}</span></div>
-                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num" data-testid="total-pot">${pot.gross.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num" data-testid="net-prize-pool">${pot.net.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></div>
                                 <div className="space-y-1 mt-2">
                                     {quarterlyPayouts.map((card) => {
                                         return (
@@ -817,11 +826,11 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
                             <div className="bg-page/50 border border-line rounded-lg p-3 w-full mb-4 grid grid-cols-2 gap-4">
                                 <div className="flex flex-col items-center border-r border-line border-dashed pr-2">
-                                    <span className="text-[10px] font-display font-bold text-brandred-500 uppercase tracking-[0.06em] mb-1">{squaresPool.homeTeam ? "Home Digit" : "Row Digit"}</span>
+                                    <span className="text-[10px] font-display font-bold text-brandred-500 uppercase tracking-[0.06em] mb-1">{squaresPool.homeTeam ? "Home Digit" : "Column Digit"}</span>
                                     <span className="text-2xl font-display font-bold text-[color:var(--text)] num">{homeDigit}</span>
                                 </div>
                                 <div className="flex flex-col items-center pl-2">
-                                    <span className="text-[10px] font-display font-bold text-gold-600 uppercase tracking-[0.06em] mb-1">{squaresPool.awayTeam ? "Away Digit" : "Col Digit"}</span>
+                                    <span className="text-[10px] font-display font-bold text-gold-600 uppercase tracking-[0.06em] mb-1">{squaresPool.awayTeam ? "Away Digit" : "Row Digit"}</span>
                                     <span className="text-2xl font-display font-bold text-[color:var(--text)] num">{awayDigit}</span>
                                 </div>
                             </div>

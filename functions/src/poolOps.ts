@@ -7,6 +7,7 @@ import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema, clearLegacyCoManagersSchema } from "./schemas/poolOps";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { squaresCreateDefaults, SQUARES_DEFAULT_PAYOUTS } from "./shared/squaresDefaults";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
@@ -101,7 +102,7 @@ export const assertPoolOwnerOrManagerNoCo = (pool: any, uid: string, userRole?: 
 
 // Default per-period payout split for a new SQUARES pool (percent of pot).
 // Matches the legacy SetupWizard default; must sum to 100.
-export const DEFAULT_SQUARES_PAYOUTS = { q1: 25, half: 25, q3: 25, final: 25 } as const;
+export const DEFAULT_SQUARES_PAYOUTS = SQUARES_DEFAULT_PAYOUTS;
 
 // Server-controlled / privileged fields a client must never set on pool creation.
 // Billing, lifecycle, membership, and scoring state are set by the server only.
@@ -413,22 +414,53 @@ export const createPool = validated(
         // Initialize Squares-specific data
         if (isSquaresPool) {
             newPool.squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));
-            newPool.scores = {
-                current: null,
-                q1: null,
-                half: null,
-                q3: null,
-                final: null,
-                gameStatus: 'pre'
-            };
-            // Quarterly payout percentages. `payouts` is a privileged field
-            // (stripped from every client payload above), and the old
-            // SetupWizard that used to seed 25/25/25/25 is gone — without this
-            // default every new squares pool paid $0 per period
-            // (scoreUpdates.ts getSafePayout returns 0 for a missing map).
-            // Commissioners still tune these post-create in the AdminPanel
-            // Payouts tab.
-            newPool.payouts = { ...DEFAULT_SQUARES_PAYOUTS };
+            // A COMPLETE squares document (shared/squaresDefaults.ts). The squares
+            // pages read `ruleVariations`, `charity`, `payouts` and `scores` with
+            // no guard; a pool created with only a grid threw on its own page.
+            //
+            // `payouts` is a privileged field, stripped from every client payload
+            // above, so the wizard's split arrives as `squaresPayouts` and is
+            // copied in only once `validateCreateInput` has accepted it (four
+            // percentages that add up to 100). With none sent, the even split.
+            //
+            // A linked game also sets the grid to lock itself at kickoff.
+            //
+            // A LINK IS ALL OF IT OR NONE OF IT. A `gameId` with no kickoff
+            // would be scored from the feed and never locked — squares on sale
+            // while the game is played — so it is refused rather than stored.
+            // So is a game that has already kicked off: nobody could claim a
+            // square on it, and the grid would lock empty within the minute.
+            const wantsLink = typeof data.gameId === 'string' && data.gameId.trim() !== '';
+            if (wantsLink) {
+                const kickoff = typeof data.gameTime === 'number' && Number.isFinite(data.gameTime) ? data.gameTime : null;
+                if (kickoff === null || kickoff <= 0) {
+                    throw new HttpsError('invalid-argument', 'That game has no kickoff time. Pick it from the schedule again.');
+                }
+                if (kickoff <= now.toMillis()) {
+                    throw new HttpsError('failed-precondition', 'That game has already kicked off. Pick a game that has not started.');
+                }
+            } else {
+                // Not linked: nothing half-linked is left on the document.
+                delete newPool.gameId;
+                delete newPool.gameTime;
+            }
+            const seeded = squaresCreateDefaults({
+                requestedPayouts: data.squaresPayouts,
+                ruleVariations: data.ruleVariations,
+                charity: data.charity,
+                reminders: data.reminders,
+                gameId: data.gameId,
+                gameTime: data.gameTime,
+                numberSets: data.numberSets,
+            });
+            newPool.payouts = seeded.payouts;
+            newPool.ruleVariations = seeded.ruleVariations;
+            newPool.charity = seeded.charity;
+            newPool.scoreEvents = seeded.scoreEvents;
+            newPool.numberSets = seeded.numberSets;
+            newPool.scores = seeded.scores;
+            if (seeded.reminders) newPool.reminders = seeded.reminders;
+            delete newPool.squaresPayouts;
         }
 
         // Explicitly remove undefined for safety (though JSON.parse above handles most)
