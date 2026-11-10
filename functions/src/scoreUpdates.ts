@@ -14,9 +14,9 @@ import { isDeadSyncPool } from "./lib/scanBounds";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { hasConfirmedRole } from "./lib/confirmedRole";
 import { rethrowOrInternal } from "./lib/safeError";
-import { applyWinnerPlan, finalScoresOf, planWinnerWrites, type StoredWinner } from "./lib/squaresWinners";
+import { applyWinnerPlan, finalScoresOf, planWinnerWrites, reconcileHeldPools, type StoredWinner } from "./lib/squaresWinners";
 import { usesCurrentWinnerRules, type PayoutPool } from "./shared/squaresPayouts";
-import { squaresWinnersPaused } from "./lib/squaresPause";
+import { WINNERS_HELD_FIELD, squaresWinnersPausedIn } from "./lib/squaresPause";
 
 // The digits for one side of a grid: Fisher–Yates over the system CSPRNG.
 //
@@ -214,8 +214,7 @@ const processGameUpdate = async (
     doc: admin.firestore.DocumentSnapshot,
     espnScores: any,
     actor: { uid: string, role: 'SYSTEM' | 'ADMIN' | 'USER' | 'ESPN' | 'GUEST', label?: string },
-    overrides?: Partial<GameState>,
-    opts?: { winnersPaused?: boolean },
+    overrides?: Partial<GameState>
 ) => {
     const db = admin.firestore();
     const freshPool = { ...doc.data() as GameState, ...overrides };
@@ -269,11 +268,15 @@ const processGameUpdate = async (
     let storedWinners: StoredWinner[] | null = null;
     const newEventWinners: StoredWinner[] = [];
     //
-    // The PAUSE SWITCH (lib/squaresPause.ts) does not skip this read — it
-    // skips the reconcile at the end. The scoring-event code below uses these
-    // records to avoid re-writing an event that is already on record; without
-    // them it would reset that event's prize to $0 and re-decide its winner.
+    // The PAUSE SWITCH (lib/squaresPause.ts) is read HERE, in this transaction,
+    // and by nobody on this function's behalf — so the scheduled sync, the
+    // simulator and "Fix Sync" all pass it, and a pause that lands while this
+    // write is being prepared is seen. It does not skip the winners read: the
+    // scoring-event code below uses those records to avoid re-writing an event
+    // that is already on record. It skips the reconcile at the end.
+    let winnersPaused = false;
     if (isQ1Final && freshPool.axisNumbers && usesCurrentWinnerRules(freshPool as { createdAt?: unknown })) {
+        winnersPaused = await squaresWinnersPausedIn(transaction, db);
         const winnersSnap = await transaction.get(db.collection('pools').doc(doc.id).collection('winners'));
         storedWinners = winnersSnap.docs.map(d => ({ id: d.id, data: d.data() }));
     }
@@ -876,7 +879,14 @@ const processGameUpdate = async (
     //
     // Not while the pause switch is set: no quarter winner is recorded or
     // changed and no prize amount is set until it is cleared.
-    if (storedWinners && !opts?.winnersPaused) {
+    const winnersHeld = (freshPool as unknown as Record<string, unknown>)[WINNERS_HELD_FIELD] === true;
+    if (storedWinners && winnersPaused) {
+        // Held back. MARK the pool, once, so the catch-up finds it when the
+        // switch is cleared — even if the game has left the sync's window by then.
+        if (!winnersHeld) transaction.update(doc.ref, { [WINNERS_HELD_FIELD]: true });
+    } else if (storedWinners) {
+        // Recorded here, so a mark left by an earlier pause comes off.
+        if (winnersHeld) transaction.update(doc.ref, { [WINNERS_HELD_FIELD]: FieldValue.delete() });
         const poolAfter = {
             ...freshPool,
             ...(transactionUpdates.axisNumbers ? { axisNumbers: transactionUpdates.axisNumbers } : {}),
@@ -937,6 +947,15 @@ export const syncGameStatus = onSchedule({
     const failureLogged = new Set<string>();
 
     try {
+        // 0. Winners the pause switch held back, now that it may be clear. Before
+        // the early return below: a held game may be the only thing there is to do.
+        try {
+            const caughtUp = await reconcileHeldPools(db);
+            if (caughtUp > 0) console.log(`[Sync] Recorded winners held by the pause switch for ${caughtUp} pool(s).`);
+        } catch (e) {
+            console.error('[Sync] Catch-up of held winners failed; will retry next run:', e);
+        }
+
         // 1. Fetch Active Pools AND Recently Completed Pools
         // Get active/in-progress pools
         const activePoolsSnap = await db.collection("pools")
@@ -961,10 +980,6 @@ export const syncGameStatus = onSchedule({
         }
 
         console.log(`[Sync] Processing ${allPools.length} pools (${activePoolsSnap.size} active, ${completedPoolsSnap.size} recently completed)`);
-
-        // One read per run, and only when there is something to process.
-        const winnersPaused = await squaresWinnersPaused(db);
-        if (winnersPaused) console.warn('[Sync] squares winner recording is PAUSED (system/config.squaresWinners.paused). Scores are still synced.');
 
         // 2. Process Each Pool
         let skippedDead = 0;
@@ -1045,9 +1060,7 @@ export const syncGameStatus = onSchedule({
                         transaction,
                         freshDoc,
                         espnScores,
-                        { uid: 'system', role: 'SYSTEM' },
-                        undefined,
-                        { winnersPaused },
+                        { uid: 'system', role: 'SYSTEM' }
                     );
                 });
 

@@ -30,7 +30,7 @@ import { applyWinnerPlan, finalScoresOf, isEventWinnerId, PERIOD_WINNER_IDS, pla
 import { writeAdminAudit } from "./lib/adminAudit";
 import { squaresGameHasStarted } from "./lib/squaresGame";
 import { computePeriodPayouts, PERIODS, ROLLOVER, scoreEventStrategy, usesCurrentWinnerRules, type PayoutPool, type Period, type RecordedWinners } from "./shared/squaresPayouts";
-import { assertSquaresWinnersNotPaused } from "./lib/squaresPause";
+import { WINNERS_HELD_FIELD, assertSquaresWinnersNotPaused } from "./lib/squaresPause";
 
 type PoolDoc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -120,7 +120,7 @@ export const recomputeSquaresWinners = validated(
             assertPoolOwnerOrSuperAdmin(pool, uid, adminClaim);
             if (!isSquares(pool)) throw new HttpsError('failed-precondition', 'This is not a squares pool.');
             assertCurrentRules(pool);
-            await assertSquaresWinnersNotPaused(db);
+            await assertSquaresWinnersNotPaused(t, db);
 
             // THE SCORES THE COMMISSIONER WAS LOOKING AT. A typed score is saved
             // by one request and recorded by this one; if this one arrives
@@ -137,6 +137,11 @@ export const recomputeSquaresWinners = validated(
             const stored = winnersSnap.docs.map((d) => ({ id: d.id, data: d.data() }));
             const plan = planWinnerWrites(pool as PayoutPool, finalScoresOf(pool.scores), stored, { gameFinal: gameIsFinal(pool) });
             await applyWinnerPlan(t, poolId, plan, { uid, role: 'ADMIN', label: 'Recompute winners' });
+            // Recorded by hand, so a mark left by an earlier pause comes off:
+            // there is nothing left for the catch-up to do on this pool.
+            if ((pool as Record<string, unknown>)[WINNERS_HELD_FIELD] === true) {
+                t.update(poolRef, { [WINNERS_HELD_FIELD]: FieldValue.delete() });
+            }
 
             // EVERY SCORE PAYS, SCORED BY HAND. Scoring-event records are made
             // as the live feed reports each score; four quarter-end scores
@@ -182,7 +187,7 @@ export const drawSquaresFinalPrize = validated(
             assertPoolOwnerOrSuperAdmin(pool, uid, adminClaim);
             if (!isSquares(pool)) throw new HttpsError('failed-precondition', 'This is not a squares pool.');
             assertCurrentRules(pool);
-            await assertSquaresWinnersNotPaused(db);
+            await assertSquaresWinnersNotPaused(t, db);
 
             const winnersRef = poolRef.collection('winners');
             const winnersSnap = await t.get(winnersRef);
@@ -248,6 +253,8 @@ export const drawSquaresFinalPrize = validated(
             // Mirrored on the pool for the admin page; the winner record is the money.
             t.update(poolRef, {
                 randomWinner: { squareId: claim.squareId, owner: claim.owner, amount: claim.amount, timestamp: drawnAt.toMillis() },
+                // The whole plan was just applied, so a mark left by a pause comes off.
+                [WINNERS_HELD_FIELD]: FieldValue.delete(),
                 updatedAt: Timestamp.now(),
             });
 

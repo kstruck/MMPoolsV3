@@ -286,12 +286,22 @@ export function describeWinnerDrift(
 ): WinnerDrift[] {
     const byId = new Map(existing.map((w) => [w.id, w]));
     const out: WinnerDrift[] = [];
+    // "Q1 Winner — Alice ($250.00)" for a player. For a square nobody owns the
+    // description already says so ("… — square unsold, prize rolls over"), so
+    // no name is added — the stored owner there is the word "Rollover" or
+    // "Unsold", which is a marker and not a person — and the amount is given
+    // only when there is one.
+    const line = (description: unknown, owner: unknown, amount: unknown, fallback: string): string => {
+        const what = String(description ?? fallback);
+        if (typeof owner === 'string' && isPlayerOwner(owner)) return `${what} — ${owner} (${money(amount)})`;
+        return Number(amount) > 0 ? `${what} (${money(amount)})` : what;
+    };
     for (const w of writes) {
         if (w.kind === 'create') {
-            out.push({ kind: 'add', text: `${String(w.doc.description ?? w.id)} — ${String(w.doc.owner)} (${money(w.doc.amount)})` });
+            out.push({ kind: 'add', text: line(w.doc.description, w.doc.owner, w.doc.amount, w.id) });
         } else if (w.kind === 'delete') {
             const rec = byId.get(w.id)?.data ?? {};
-            out.push({ kind: 'remove', text: `${String(rec.description ?? w.id)} — ${String(rec.owner ?? 'nobody')} (${money(rec.amount)})` });
+            out.push({ kind: 'remove', text: line(rec.description, rec.owner, rec.amount, w.id) });
         } else if (w.kind === 'update' && w.audit) {
             out.push({ kind: 'change', text: w.audit.message });
         } else if (w.kind === 'audit') {

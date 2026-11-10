@@ -335,7 +335,18 @@ describe('describeWinnerDrift — what the page lists before recording', () => {
     it('a record with no description or owner still reads as something', () => {
         const bare: StoredWinner = { id: 'q1', data: { squareId: 37 } };
         expect(describeWinnerDrift([{ kind: 'delete', id: 'q1', audit: { type: 'WINNER_COMPUTED', severity: 'WARNING', message: 'x' } }], [bare]))
-            .toEqual([{ kind: 'remove', text: 'q1 — nobody ($0.00)' }]);
+            .toEqual([{ kind: 'remove', text: 'q1' }]);
+    });
+
+    it('a square nobody owns is described, not named — "Rollover" and "Unsold" are markers, not people', () => {
+        // Rollover on, the winning square unsold: the record to add is a $0 marker.
+        const rolling = pool({ ruleVariations: { quarterlyRollover: true } }, [37]);
+        expect(drift(rolling, Q1)).toEqual([{ kind: 'add', text: 'Q1 Winner — square unsold, prize rolls over' }]);
+        // Rollover off: the prize stays with the organizer, and the amount is said.
+        expect(drift(pool({}, [37]), Q1)).toEqual([{ kind: 'add', text: 'Q1 Winner — square unsold ($198.00)' }]);
+        // And the same when such a record has to be removed.
+        const stale: StoredWinner = { id: 'q1', data: { squareId: 37, owner: 'Unsold', amount: 198, description: 'Q1 Winner — square unsold' } };
+        expect(drift(pool({}, [37]), {}, [stale])).toEqual([{ kind: 'remove', text: 'Q1 Winner — square unsold ($198.00)' }]);
     });
 });
 
