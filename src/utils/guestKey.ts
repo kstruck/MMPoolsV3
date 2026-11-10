@@ -66,6 +66,26 @@ export async function hashGuestKey(poolId: string, key: string | null | undefine
 }
 
 /**
+ * WHO THE SERVER WILL COUNT THIS CLAIM AGAINST: the account if there is one,
+ * AND this browser's guest hash — both, not one or the other.
+ *
+ * `reserveSquaresForCaller` hashes the key the page sends whether or not the
+ * player is signed in, and counts squares held under either. The pool page's
+ * preview dropped the hash for a signed-in player, so somebody whose guest
+ * squares had NOT moved to their account (the merge is refused when it would
+ * pass the per-player limit) was shown a selection as fine and then refused by
+ * the server (qodo, PR #761). The grid already counted both; this is the one
+ * place that builds the identity, so the two cannot differ again.
+ */
+export async function claimIdentityFor(
+  uid: string | null | undefined,
+  poolId: string,
+  guestKey: string | null | undefined,
+): Promise<{ uid: string | null; guestKeyHash: string | null }> {
+  return { uid: uid || null, guestKeyHash: await hashGuestKey(poolId, guestKey) };
+}
+
+/**
  * Take this browser's guest squares into the signed-in account — at most once
  * per pool, account and browser session, and never two at a time.
  *

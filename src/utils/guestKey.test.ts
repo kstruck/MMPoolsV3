@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { GUEST_KEY_PREFIX, isCurrentGuestKey } from '@shared/squaresClaim';
-import { GUEST_KEY_STORAGE, claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from './guestKey';
+import { GUEST_KEY_PREFIX, isCurrentGuestKey, planClaim } from '@shared/squaresClaim';
+import { GUEST_KEY_STORAGE, claimGuestSquaresOnce, claimIdentityFor, getOrCreateGuestKey, hashGuestKey, readGuestKey } from './guestKey';
 
 /**
  * The guest device key (PLAN-SQUARES-REOPEN A3).
@@ -132,3 +132,45 @@ describe('claimGuestSquaresOnce — once means once it has WORKED', () => {
     expect(await claimGuestSquaresOnce('p', 'u', ok, blocked)).toBe('claimed');
   });
 });
+
+describe('claimIdentityFor — the page previews with the identity the server counts', () => {
+  const POOL = 'pool-1';
+  const KEY = `${GUEST_KEY_PREFIX}00000000-0000-4000-8000-000000000000`;
+
+  it('a guest is this browser\'s hash and no account', async () => {
+    expect(await claimIdentityFor(null, POOL, KEY)).toEqual({ uid: null, guestKeyHash: await hashGuestKey(POOL, KEY) });
+    expect(await claimIdentityFor(undefined, POOL, KEY)).toEqual({ uid: null, guestKeyHash: await hashGuestKey(POOL, KEY) });
+  });
+
+  it('a SIGNED-IN player is the account AND this browser\'s hash — the server counts both', async () => {
+    const identity = await claimIdentityFor('gina-uid', POOL, KEY);
+    expect(identity.uid).toBe('gina-uid');
+    expect(identity.guestKeyHash).toBe(await hashGuestKey(POOL, KEY));
+    expect(identity.guestKeyHash).not.toBeNull();
+  });
+
+  it('a signed-in player on a browser that never reserved as a guest is the account alone', async () => {
+    expect(await claimIdentityFor('gina-uid', POOL, null)).toEqual({ uid: 'gina-uid', guestKeyHash: null });
+  });
+
+  // The case the preview got wrong: guest squares that did not move to the
+  // account (the merge would have passed the limit) and carry another name.
+  it('so squares still held as a guest count toward the limit once signed in', async () => {
+    const hash = await hashGuestKey(POOL, KEY);
+    const squares = Array.from({ length: 10 }, (_, id) => ({ id, owner: null as string | null, reservedByUid: null as string | null, guestKeyHash: null as string | null }));
+    squares[0] = { id: 0, owner: 'Gina', reservedByUid: 'gina-uid', guestKeyHash: null };
+    squares[1] = { id: 1, owner: 'Gigi', reservedByUid: null, guestKeyHash: hash };
+    squares[2] = { id: 2, owner: 'Gigi', reservedByUid: null, guestKeyHash: hash };
+    const ask = (identity: { uid: string | null; guestKeyHash: string | null }) => planClaim({
+      squares, squareIds: [5], identity, displayName: 'Gina', maxSquaresPerPlayer: 3, exemptFromCap: false, now: 1,
+    });
+
+    const plan = ask(await claimIdentityFor('gina-uid', POOL, KEY));
+    expect(plan.ok).toBe(false);
+    expect(plan.ok ? null : plan.refusal).toMatchObject({ code: 'LIMIT', cap: 3, held: 3 });
+
+    // What the page used to preview with: the account alone. It said yes.
+    expect(ask({ uid: 'gina-uid', guestKeyHash: null }).ok).toBe(true);
+  });
+});
+

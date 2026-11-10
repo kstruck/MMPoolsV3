@@ -812,3 +812,83 @@ describe('claim codes — one live claim per code', () => {
     expect((await square(60)).reservedByUid ?? null).toBeNull();
   });
 });
+
+describe('qodo r6 — a claim code is used once', () => {
+  const codeFor = async (deviceKey: string) =>
+    ((await mintCode({ data: { poolId: POOL, guestDeviceKey: deviceKey } } as never)) as { claimCode: string }).claimCode;
+  const redeem = (code: string, auth: unknown) =>
+    claimCode({ data: { claimCode: code }, auth } as never) as Promise<{ claimed: number[] }>;
+  const phone = key('phone');
+  const gina = authed('gina-uid', 'Gina');
+  const mallory = authed('mallory-uid', 'Mallory');
+
+  beforeEach(() => seedPool({ maxSquaresPerPlayer: 0 }));
+
+  it('ATTACK: a code that already moved squares cannot take the squares reserved after it', async () => {
+    await guestReserve([1, 2], 'Gina', phone);
+    const code = await codeFor(phone);
+    expect((await redeem(code, gina)).claimed).toEqual([1, 2]);
+
+    // Still inside the code's 24 hours, the guest reserves more on that phone.
+    await guestReserve([3], 'Gina', phone);
+    await expect(redeem(code, mallory)).rejects.toThrow(/already been used/);
+
+    const later = await square(3);
+    expect(later.reservedByUid ?? null).toBeNull();
+    expect(later.guestKeyHash).toBe(hashGuestKey(POOL, phone));
+    expect((await pool()).participantIds ?? []).not.toContain('mallory-uid');
+  });
+
+  it('the account that used it cannot reuse it either — a fresh code moves the new square', async () => {
+    await guestReserve([1], 'Gina', phone);
+    const code = await codeFor(phone);
+    await redeem(code, gina);
+    await guestReserve([2], 'Gina', phone);
+
+    await expect(redeem(code, gina)).rejects.toThrow(/already been used/);
+    expect((await redeem(await codeFor(phone), gina)).claimed).toEqual([2]);
+  });
+
+  it('the code records when it was spent', async () => {
+    await guestReserve([1], 'Gina', phone);
+    const code = await codeFor(phone);
+    const before = Date.now();
+    await redeem(code, gina);
+    const stored = (await db.collection('poolClaims').doc(code).get()).data() as { uses: number; consumedAt: number };
+    expect(stored.uses).toBe(1);
+    expect(stored.consumedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('a code redeemed before `consumedAt` existed is spent by its count alone', async () => {
+    await guestReserve([1], 'Gina', phone);
+    const code = await codeFor(phone);
+    await db.collection('poolClaims').doc(code).update({ uses: 1 });
+    await expect(redeem(code, gina)).rejects.toThrow(/already been used/);
+    expect((await square(1)).reservedByUid ?? null).toBeNull();
+  });
+
+  it('a code marked spent is spent whatever its count says', async () => {
+    await guestReserve([1], 'Gina', phone);
+    const code = await codeFor(phone);
+    await db.collection('poolClaims').doc(code).update({ consumedAt: Date.now(), uses: 0 });
+    await expect(redeem(code, gina)).rejects.toThrow(/already been used/);
+  });
+
+  it('a redemption that moved nothing does not spend the code', async () => {
+    const code = await codeFor(phone);
+    expect((await redeem(code, gina)).claimed).toEqual([]);
+    await guestReserve([1], 'Gina', phone);
+    expect((await redeem(code, gina)).claimed).toEqual([1]);
+  });
+
+  it('two redemptions at once: the squares move once, to one account', async () => {
+    await guestReserve([1, 2], 'Gina', phone);
+    const code = await codeFor(phone);
+    const results = await Promise.allSettled([redeem(code, gina), redeem(code, mallory)]);
+    const moved = results.filter((r) => r.status === 'fulfilled' && (r.value as { claimed: number[] }).claimed.length > 0);
+    expect(moved).toHaveLength(1);
+    const owners = new Set((await pool()).squares.filter((sq) => [1, 2].includes(sq.id)).map((sq) => sq.reservedByUid));
+    expect(owners.size).toBe(1);
+  });
+});
+
