@@ -1017,6 +1017,13 @@ export interface SystemSettings {
   autoClose?: { enabled?: boolean; dryRun?: boolean };
   // Live-score ticker scroll duration in seconds (higher = slower). Default 60.
   tickerDurationSec?: number;
+  // EMERGENCY STOP for squares winner records. `paused: true` stops every
+  // path that writes them; absent or false means running. It is read by the
+  // server only, inside the transaction that would write
+  // (functions/src/lib/squaresPause.ts) — declared here so the shape of this
+  // document says it exists. Nothing on the client reads or writes it: the
+  // settings page saves field by field (`updateDoc`), so it cannot drop it.
+  squaresWinners?: { paused?: boolean };
 }
 
 

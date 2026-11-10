@@ -77,6 +77,24 @@ describe('the pot', () => {
     expect(squaresPot(pool({ charity: { enabled: true, percentage: 15 } }, [0, 1, 2]))).toMatchObject({ charity: 145, net: 825 });
   });
 
+  // A fee with cents is allowed by the create contract. The prize pot keeps
+  // them: flooring it would strand money the players paid in.
+  it('keeps the cents of a fee that has them — the prize pot is not floored', () => {
+    // 97 squares × $2.50 = $242.50; 10% = $24.25 → $24 to charity; $218.50 for prizes.
+    const pot = squaresPot(pool({ costPerSquare: 2.5, charity: { enabled: true, percentage: 10 } }, [0, 1, 2]));
+    expect(pot).toEqual({ sold: 97, gross: 242.5, charity: 24, net: 218.5 });
+    expect(pot.charity + pot.net).toBe(pot.gross);
+  });
+
+  it('is exact to the cent — 100 squares at $1.10 is $110, not 110.00000000000001', () => {
+    expect(100 * 1.1).not.toBe(110);
+    expect(squaresPot(pool({ costPerSquare: 1.1 }))).toEqual({ sold: 100, gross: 110, charity: 0, net: 110 });
+    // 100 × $1.10 with 7% to charity: $7.70 → $7; $103 for prizes.
+    expect(squaresPot(pool({ costPerSquare: 1.1, charity: { enabled: true, percentage: 7 } }))).toEqual({ sold: 100, gross: 110, charity: 7, net: 103 });
+    // 97 × $1.40 = $135.80; 10% = $13.58 → $13; the rest is $122.80, not 122.80000000000001.
+    expect(squaresPot(pool({ costPerSquare: 1.4, charity: { enabled: true, percentage: 10 } }, [0, 1, 2]))).toEqual({ sold: 97, gross: 135.8, charity: 13, net: 122.8 });
+  });
+
   it('ignores a charity percentage that is switched off, and bounds one that is not sane', () => {
     expect(squaresPot(pool({ charity: { enabled: false, percentage: 50 } })).charity).toBe(0);
     expect(squaresPot(pool({ charity: { enabled: true, percentage: 250 } })).net).toBe(0);

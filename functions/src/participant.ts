@@ -31,10 +31,27 @@ interface ClaimCode {
     guestClaimId?: string;
     poolId?: string;
     uses: number;
+    /** When this code moved squares. Set once; a code that carries it is spent. */
+    consumedAt?: number;
 }
 
-/** A claim code is for moving squares NOW, not a standing credential. */
+/**
+ * A claim code is for moving squares NOW, not a standing credential.
+ *
+ * TWO BOUNDS. It expires a day after it is made, and it is SPENT THE FIRST TIME
+ * IT MOVES A SQUARE (`isSpentClaim`). It used to count its uses and never look
+ * at the count: a guest who redeemed a code and then reserved more squares on
+ * the same device left those squares open, for the rest of the day, to anyone
+ * who had seen the code (qodo, PR #761).
+ */
 const CLAIM_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Already used to move squares. `uses` covers a code redeemed before `consumedAt` existed. */
+function isSpentClaim(claim: ClaimCode | undefined): boolean {
+    return !!claim && (typeof claim.consumedAt === 'number' || (typeof claim.uses === 'number' && claim.uses >= 1));
+}
+
+const SPENT_CLAIM_MESSAGE = 'This claim code has already been used. Generate a new one on the device that reserved the squares.';
 
 /**
  * 8 characters from 32 — about 1.1 × 10¹² codes.
@@ -323,6 +340,14 @@ export const claimByCode = validated(
         const poolDoc = await t.get(poolRef);
         if (!poolDoc.exists) throw new HttpsError('not-found', 'Pool not found');
 
+        // SPENT? Read HERE, in the transaction that would move the squares, so
+        // two redemptions of one code cannot both pass: the second sees the
+        // first one's mark. (The copy read above is only for finding the pool.)
+        const liveClaim = await t.get(claimDoc.ref);
+        if (isSpentClaim(liveClaim.data() as ClaimCode | undefined)) {
+            throw new HttpsError('failed-precondition', SPENT_CLAIM_MESSAGE);
+        }
+
         const squares = (poolDoc.data()?.squares || []) as Square[];
         const outcome = claimGuestSquares(squares, targetHash, uid, claimCapFor(poolDoc.data(), uid));
         // Typing a code is something the player DID, so over the limit it is
@@ -338,9 +363,14 @@ export const claimByCode = validated(
                 squares: outcome.squares,
                 participantIds: FieldValue.arrayUnion(uid),
             });
+            // Spent — but only by a redemption that MOVED something. One that
+            // was refused over the limit, or found nothing to move, leaves the
+            // code as it was.
+            const usedAt = Date.now();
             t.update(claimDoc.ref, {
                 uses: FieldValue.increment(1),
-                lastUsedAt: Date.now()
+                lastUsedAt: usedAt,
+                consumedAt: usedAt,
             });
         }
         return outcome.claimed;

@@ -72,19 +72,37 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    place; a data backup is not something this work could take or check — it has
    no credentials for the production project. Firestore PITR (7-day window) was
    measured enabled on 2026-08-10 (`PLAN-BACKUPS-PHASE3.md`) and has **not** been
-   re-measured. Before the first deploy of any of A–D:
-   - confirm PITR is still on — the command that measured it in August:
+   re-measured.
+
+   **BOTH of these, before the first deploy of any of A–D. Neither stands in
+   for the other** (qodo, PR #761, finding 10 — this section used to end "decide
+   with PITR alone or create the bucket first", which let the rollout go ahead
+   without the full backup it was asked to have):
+   - **PITR is on.** The command that measured it in August:
      `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
      → `pointInTimeRecoveryEnablement` must read `POINT_IN_TIME_RECOVERY_ENABLED`.
-     PITR is the recovery floor for this rollout: any bad write in the last
-     seven days can be read back while the database exists.
-   - a full EXPORT (the copy that survives a deleted database) needs the
-     off-region bucket from `PLAN-BACKUPS-PHASE3.md` Step 4, which that plan
-     records as not created yet. If it exists:
-     `gcloud firestore export gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11 --project gridiron-gamble-uzuqo`.
-     If it does not, that is a known open gap of Phase 3, not something this
-     plan closes — say so, and decide with PITR alone or create the bucket first.
-   Do not deploy until PITR has been confirmed and the result recorded here.
+     PITR reads back any bad write of the last seven days — while the database
+     exists. It is the quick undo, not the backup.
+   - **A full EXPORT has been taken and its location is written down here.**
+     This is the copy that survives a deleted database and outlives seven
+     days. It needs the off-region bucket from `PLAN-BACKUPS-PHASE3.md` Step 4,
+     which that plan records as not created yet. **If the bucket does not
+     exist, creating it is part of this step** (Step 4 there: one
+     `gcloud storage buckets create` command, with the expected output and
+     what to do if the name is taken). Then:
+     `gcloud firestore export gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11 --project gridiron-gamble-uzuqo`
+     → expect `outputUriPrefix: gs://…/pre-squares-reopen-2026-11` and
+     `state: SUCCESSFUL` (or, while it runs, an operation name to check with
+     `gcloud firestore operations list --project gridiron-gamble-uzuqo`).
+
+   **Going ahead on PITR alone is not a choice this plan makes.** The
+   instruction this work was given is "a full backup is in place". Only Kevin
+   can waive it, and if he does, the waiver is recorded on this line with the
+   date: _(none recorded)_.
+
+   Do not deploy until both results are recorded here:
+   - PITR confirmed on: _(date, by whom)_
+   - Export taken: _(date, `gs://` path)_
 6. **Merge precondition** (qodo, finding 6). The required `security-audit`
    check is red on `main` for 8 advisories in shared dependencies. None of
    A–D may be merged over it silently: either the dependency PRs (#750, #754,
