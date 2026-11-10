@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GUEST_KEY_PREFIX, isCurrentGuestKey } from '@shared/squaresClaim';
-import { GUEST_KEY_STORAGE, getOrCreateGuestKey, readGuestKey } from './guestKey';
+import { GUEST_KEY_STORAGE, claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from './guestKey';
 
 /**
  * The guest device key (PLAN-SQUARES-REOPEN A3).
@@ -52,5 +52,83 @@ describe('readGuestKey', () => {
   it('returns the key once one has been minted', () => {
     const key = getOrCreateGuestKey();
     expect(readGuestKey()).toBe(key);
+  });
+});
+
+describe('hashGuestKey — the browser computes the hash the server stores', () => {
+  const POOL = 'pool-1';
+  const KEY = `${GUEST_KEY_PREFIX}00000000-0000-4000-8000-000000000000`;
+  // The SAME vector is pinned against the server's hashGuestKey in
+  // functions/src/__tests__/guestKeyHash.test.ts. If one side changes, one test fails.
+  const VECTOR = '5920afc84010a532bfeda347b4d6da138a7dc14f746bdb13f0939802072a6445';
+
+  it('is sha256(poolId:key) in hex — byte for byte what the server writes on the square', async () => {
+    expect(await hashGuestKey(POOL, KEY)).toBe(VECTOR);
+  });
+
+  it('is different on a different pool — one device cannot be followed across pools', async () => {
+    expect(await hashGuestKey('pool-2', KEY)).not.toBe(VECTOR);
+  });
+
+  it('gives no hash for a key the server would not honour', async () => {
+    expect(await hashGuestKey(POOL, LEGACY_KEY)).toBeNull();
+    expect(await hashGuestKey(POOL, '')).toBeNull();
+    expect(await hashGuestKey(POOL, null)).toBeNull();
+    expect(await hashGuestKey('', KEY)).toBeNull();
+  });
+});
+
+describe('claimGuestSquaresOnce — once means once it has WORKED', () => {
+  const store = () => {
+    const data = new Map<string, string>();
+    return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, data };
+  };
+  const ok = () => Promise.resolve({ success: true });
+  const fail = () => Promise.resolve({ success: false });
+
+  it('a successful claim is remembered and not repeated', async () => {
+    const s = store();
+    const claim = vi.fn(ok);
+    expect(await claimGuestSquaresOnce('p', 'u', claim, s)).toBe('claimed');
+    expect(await claimGuestSquaresOnce('p', 'u', claim, s)).toBe('already-done');
+    expect(claim).toHaveBeenCalledTimes(1);
+  });
+
+  it('a FAILED claim is not remembered — the next attempt runs', async () => {
+    const s = store();
+    expect(await claimGuestSquaresOnce('p', 'u', fail, s)).toBe('failed');
+    expect(s.data.size).toBe(0);
+    const retry = vi.fn(ok);
+    expect(await claimGuestSquaresOnce('p', 'u', retry, s)).toBe('claimed');
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('a claim that throws counts as failed, and frees the slot', async () => {
+    const s = store();
+    expect(await claimGuestSquaresOnce('p', 'u', () => Promise.reject(new Error('timeout')), s)).toBe('failed');
+    expect(await claimGuestSquaresOnce('p', 'u', ok, s)).toBe('claimed');
+  });
+
+  it('never runs two at once for the same pool and account', async () => {
+    const s = store();
+    let finish!: (v: { success: boolean }) => void;
+    const slow = vi.fn(() => new Promise<{ success: boolean }>((resolve) => { finish = resolve; }));
+    const first = claimGuestSquaresOnce('p', 'u', slow, s);
+    expect(await claimGuestSquaresOnce('p', 'u', slow, s)).toBe('in-flight');
+    finish({ success: true });
+    expect(await first).toBe('claimed');
+    expect(slow).toHaveBeenCalledTimes(1);
+  });
+
+  it('is kept per pool and per account', async () => {
+    const s = store();
+    await claimGuestSquaresOnce('p', 'u', ok, s);
+    expect(await claimGuestSquaresOnce('p2', 'u', ok, s)).toBe('claimed');
+    expect(await claimGuestSquaresOnce('p', 'u2', ok, s)).toBe('claimed');
+  });
+
+  it('still works with storage blocked — it just is not remembered', async () => {
+    const blocked = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+    expect(await claimGuestSquaresOnce('p', 'u', ok, blocked)).toBe('claimed');
   });
 });

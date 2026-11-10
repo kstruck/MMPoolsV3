@@ -10,8 +10,8 @@ import { PropLeaderboard } from './Props/PropLeaderboard';
 import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
-import { countHeldSquares, effectiveSquareCap, normalizePlayerName } from '@shared/squaresClaim';
-import { getOrCreateGuestKey, readGuestKey } from '../utils/guestKey';
+import { countHeldSquares, effectiveSquareCap, isOwnSquare, normalizePlayerName } from '@shared/squaresClaim';
+import { claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
 
 interface GridProps {
    gameState: GameState;
@@ -66,26 +66,32 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       setGuestKey(getOrCreateGuestKey());
    }, []);
 
+   // The hash the server stores for this browser's key ON THIS POOL — how the
+   // page recognises a guest's own squares. Computed here because the pool
+   // document carries only the hash, never the key.
+   const [guestKeyHash, setGuestKeyHash] = useState<string | null>(null);
+   useEffect(() => {
+      let live = true;
+      void hashGuestKey(gameState.id, guestKey).then((h) => { if (live) setGuestKeyHash(h); });
+      return () => { live = false; };
+   }, [gameState.id, guestKey]);
+
    // A guest who has since signed in takes their guest squares into the
    // account — on this browser, where the device key lives. Without this a
    // player who reserved first and signed up second never saw those squares on
    // their dashboard and could not use "I've paid". Once per pool, account and
-   // session, and only when the grid still holds an unclaimed guest square.
+   // session — but "once" is recorded only when it SUCCEEDS, so a timeout is
+   // retried the next time the grid changes (at most three times a page load).
    const signedInUid = currentUser?.id;
    const hasUnclaimedGuestSquare = gameState.squares.some(s => s.owner && s.guestKeyHash && !s.reservedByUid);
+   const failedClaims = React.useRef(0);
    useEffect(() => {
-      if (!signedInUid || !gameState.id || !hasUnclaimedGuestSquare) return;
+      if (!signedInUid || !gameState.id || !hasUnclaimedGuestSquare || failedClaims.current >= 3) return;
       const key = readGuestKey();
       if (!key) return;
-      const flag = `mmp_guest_claim:${gameState.id}:${signedInUid}`;
-      try {
-         if (sessionStorage.getItem(flag)) return;
-         sessionStorage.setItem(flag, '1');
-      } catch {
-         return;
-      }
-      void dbService.claimMySquares(gameState.id, key, { quiet: true });
-   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare]);
+      void claimGuestSquaresOnce(gameState.id, signedInUid, () => dbService.claimMySquares(gameState.id, key, { quiet: true }))
+         .then((outcome) => { if (outcome === 'failed') failedClaims.current += 1; });
+   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare, gameState.squares]);
 
    // --- Player Identity State ---
    const [playerInfo, setPlayerInfo] = useState<{
@@ -178,19 +184,21 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    // `null` = no limit. ONE reader for the cap (`shared/squaresClaim.ts`), the
    // same one the server enforces with — this line used to read `|| 100`.
    const maxPerPlayer = effectiveSquareCap(gameState.maxSquaresPerPlayer);
-   const myName = normalizePlayerName(playerInfo.name);
+   // WHO this player is to the server: their account, and this browser's device
+   // hash. The same identity for "mine", for the limit, and for "I've paid" —
+   // they used to be decided three different ways.
+   const myUid = currentUser?.id ?? null;
+   const identity = React.useMemo(() => ({ uid: myUid, guestKeyHash }), [myUid, guestKeyHash]);
    const isMine = React.useCallback(
-      (s: { owner: string | null }) => !!s.owner && myName !== '' && normalizePlayerName(s.owner) === myName,
-      [myName],
+      (s: (typeof gameState.squares)[number]) => isOwnSquare(s, identity, playerInfo.name),
+      [identity, playerInfo.name],
    );
 
-   // How many squares count against this player's limit: held by their account
-   // or under their name — the server's own count, minus the device hash it
-   // alone can compute.
+   // How many squares count against this player's limit — the server's own count.
    const squaresAlreadyOwned = React.useMemo(() => {
       if (!playerInfo.name) return 0;
-      return countHeldSquares(gameState.squares, { uid: currentUser?.id ?? null, guestKeyHash: null }, playerInfo.name);
-   }, [gameState.squares, playerInfo.name, currentUser?.id]);
+      return countHeldSquares(gameState.squares, identity, playerInfo.name);
+   }, [gameState.squares, playerInfo.name, identity]);
 
    const unpaidSquaresCount = React.useMemo(() => {
       if (!playerInfo.name) return 0;

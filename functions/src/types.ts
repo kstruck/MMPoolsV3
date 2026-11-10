@@ -13,6 +13,8 @@ export interface Square {
     // restricted /pools/{poolId}/squarePrivate/{squareId} subcollection (audit H1).
     isPaid?: boolean;
     reservedAt?: number | null;
+    /** When the square was claimed. NOT `reservedAt` — see `planClaim` in shared/squaresClaim.ts. */
+    claimedAt?: number | null;
     /**
      * LEGACY — the guest's raw device key. No longer written (PLAN-SQUARES-REOPEN
      * A3): it sat on the world-readable pool document. Still present on squares

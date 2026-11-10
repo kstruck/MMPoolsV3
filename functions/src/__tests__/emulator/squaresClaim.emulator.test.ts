@@ -46,6 +46,9 @@ interface StoredSquare {
   guestKeyHash?: string | null;
   guestDeviceKey?: string | null;
   reservedAt?: number | null;
+  claimedAt?: number | null;
+  paymentConfirmedAt?: number | null;
+  paymentConfirmedByUid?: string | null;
 }
 
 /** `undefined` in `overrides` REMOVES that field, so a test can seed a pool without it. */
@@ -78,7 +81,7 @@ const guestReserve = (squareIds: number[], name: string, deviceKey: string | nul
   } as never);
 
 beforeEach(async () => {
-  for (const col of ['pools', 'users', 'poolClaims']) {
+  for (const col of ['pools', 'users', 'poolClaims', 'pool_access_attempts']) {
     const snap = await db.collection(col).get();
     await Promise.all(snap.docs.map((d) => db.recursiveDelete(d.ref)));
   }
@@ -170,7 +173,7 @@ describe('A2 — a signed-in player owns their squares by account', () => {
     const s = await square(7);
     expect(s.reservedByUid).toBe('bob-uid');
     expect(s.guestKeyHash).toBeNull();
-    expect(typeof s.reservedAt).toBe('number');
+    expect(typeof s.claimedAt).toBe('number');
     expect((await pool()).participantIds).toContain('bob-uid');
   });
 
@@ -351,5 +354,120 @@ describe('A3 — only the device that reserved can claim', () => {
     await db.collection('pools').doc(POOL).update({ squares });
     const res = await claimMine({ data: { poolId: POOL, guestDeviceKey: victimKey }, auth: authed('victim-uid', 'Victim') } as never);
     expect(res.claimed).toEqual([51]);
+  });
+});
+
+describe('qodo #12 — a square the commissioner enters for someone else is that player\'s, not the commissioner\'s', () => {
+  const owner = authed(OWNER, 'Olivia Owner');
+  const ownerReserve = (ids: number[], name: string, email?: string) => reserveMany({
+    data: { poolId: POOL, squareIds: ids, customerDetails: { name, ...(email ? { email } : {}) }, pickedAsName: name },
+    auth: owner,
+  } as never);
+  const privateOf = async (id: number) =>
+    (await db.collection('pools').doc(POOL).collection('squarePrivate').doc(String(id)).get()).data() as Record<string, unknown>;
+
+  it('carries the name and NO account — it is not on the commissioner\'s dashboard', async () => {
+    await ownerReserve([20, 21], 'Cash Carl');
+    for (const id of [20, 21]) {
+      const s = await square(id);
+      expect(s.owner).toBe('Cash Carl');
+      expect(s.reservedByUid).toBeNull();
+      expect(s.guestKeyHash).toBeNull();
+    }
+  });
+
+  it('the commissioner cannot press "I have paid" on it as if it were theirs', async () => {
+    await ownerReserve([20], 'Cash Carl');
+    await expect(confirm({ data: { poolId: POOL, squareIds: [20] }, auth: owner } as never)).rejects.toThrow();
+  });
+
+  it('its contact details are the player\'s as typed — never the commissioner\'s own email by default', async () => {
+    await ownerReserve([20], 'Cash Carl');
+    expect((await privateOf(20)).email).not.toBe(`${OWNER}@example.com`);
+    await ownerReserve([21], 'Emailed Emma', 'emma@example.com');
+    expect((await privateOf(21)).email).toBe('emma@example.com');
+  });
+
+  it('the commissioner\'s OWN squares, under their own name, still belong to their account', async () => {
+    await ownerReserve([30], 'olivia  owner');
+    expect((await square(30)).reservedByUid).toBe(OWNER);
+    await expect(confirm({ data: { poolId: POOL, squareIds: [30] }, auth: owner } as never)).resolves.toMatchObject({ success: true });
+  });
+
+  it('a PLAYER typing a different name still holds the square by account — only the owner enters for others', async () => {
+    await reserveMany({
+      data: { poolId: POOL, squareIds: [40], customerDetails: { name: 'For My Wife' }, pickedAsName: 'For My Wife' },
+      auth: authed('bob-uid', 'Bob'),
+    } as never);
+    expect((await square(40)).reservedByUid).toBe('bob-uid');
+  });
+});
+
+describe('qodo #8 / #11 — a fresh claim starts clean, and does not arm the unpaid auto-release', () => {
+  it('a re-booked square does not inherit the last holder\'s "payment sent"', async () => {
+    const squares = Array.from({ length: 100 }, (_, i) => ({ id: i, owner: null as string | null }));
+    // What the auto-release leaves: owner cleared, the old marks still there.
+    Object.assign(squares[9], { paymentConfirmedAt: 555, paymentConfirmedByUid: 'old-holder', reservedAt: 123 });
+    await seedPool({ squares });
+    await guestReserve([9], 'New Holder', key('new-device'));
+    const s = await square(9);
+    expect(s.owner).toBe('New Holder');
+    expect(s.paymentConfirmedAt).toBeNull();
+    expect(s.paymentConfirmedByUid).toBeNull();
+  });
+
+  it('no square is ever given a reservedAt — the field the auto-release in reminders.ts is switched on by', async () => {
+    await guestReserve([1, 2], 'Guest', key('device'));
+    await reserveMany({ data: { poolId: POOL, squareIds: [3], customerDetails: { name: 'Bob' }, pickedAsName: 'Bob' }, auth: authed('bob-uid', 'Bob') } as never);
+    await reserveOne({ data: { poolId: POOL, squareId: 4, customerDetails: { name: 'Bob' }, pickedAsName: 'Bob' }, auth: authed('bob-uid', 'Bob') } as never);
+    const all = (await pool()).squares;
+    expect(all.filter((s) => s.reservedAt != null)).toEqual([]);
+    expect(all.filter((s) => typeof s.claimedAt === 'number').map((s) => s.id)).toEqual([1, 2, 3, 4]);
+  });
+});
+
+describe('qodo #2 — a claim code cannot be guessed', () => {
+  const victimKey = key('victim-device');
+  const mallory = authed('mallory-uid', 'Mallory');
+  const redeem = (code: string, auth = mallory) => claimCode({ data: { claimCode: code }, auth } as never);
+  const mint = async () => ((await mintCode({ data: { poolId: POOL, guestDeviceKey: victimKey } } as never)) as { claimCode: string }).claimCode;
+
+  beforeEach(() => guestReserve([50, 51], 'Victim', victimKey));
+
+  it('is 8 characters with no look-alikes', async () => {
+    expect(await mint()).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+  });
+
+  it('can be typed in lower case with a dash, as read off another screen', async () => {
+    const code = await mint();
+    const typed = `${code.slice(0, 4).toLowerCase()}-${code.slice(4).toLowerCase()}`;
+    await expect(redeem(typed, authed('victim-uid', 'Victim'))).resolves.toMatchObject({ success: true, claimed: [50, 51] });
+  });
+
+  it('ATTACK: ten wrong guesses and the account is stopped — even a RIGHT code is then refused', async () => {
+    const code = await mint();
+    for (let i = 0; i < 10; i++) {
+      await expect(redeem(`WRONG${String(i).padStart(3, '2')}`)).rejects.toThrow(/invalid claim code/i);
+    }
+    await expect(redeem('WRONGXYZ')).rejects.toThrow(/too many attempts/i);
+    await expect(redeem(code)).rejects.toThrow(/too many attempts/i);
+    expect((await square(50)).reservedByUid ?? null).toBeNull();
+  });
+
+  it('ATTACK: redeeming a code of your own does not reset the count', async () => {
+    // Anyone can mint a code for their own squares. If a right code refunded the
+    // slot, an attacker would redeem their own every ninth guess and never run out.
+    const malloryKey = key('mallory-device');
+    await guestReserve([60], 'Mallory', malloryKey);
+    const own = ((await mintCode({ data: { poolId: POOL, guestDeviceKey: malloryKey } } as never)) as { claimCode: string }).claimCode;
+    for (let i = 0; i < 9; i++) await expect(redeem(`WRONG${String(i).padStart(3, '2')}`)).rejects.toThrow(/invalid claim code/i);
+    await expect(redeem(own)).resolves.toMatchObject({ success: true });
+    await expect(redeem('WRONGXYZ')).rejects.toThrow(/too many attempts/i);
+  });
+
+  it('one account running out does not stop anybody else', async () => {
+    const code = await mint();
+    for (let i = 0; i < 10; i++) await expect(redeem(`WRONG${String(i).padStart(3, '2')}`)).rejects.toThrow();
+    await expect(redeem(code, authed('victim-uid', 'Victim'))).resolves.toMatchObject({ success: true, claimed: [50, 51] });
   });
 });

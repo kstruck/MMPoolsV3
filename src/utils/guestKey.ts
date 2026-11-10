@@ -39,3 +39,76 @@ export function getOrCreateGuestKey(): string {
   }
   return key;
 }
+
+/**
+ * The hash the SERVER stores for this browser's key on a given pool:
+ * `sha256(poolId + ":" + key)`, hex. Must stay byte-for-byte equal to
+ * `hashGuestKey` in `functions/src/lib/guestKey.ts` — pinned by a test that
+ * runs both over the same input.
+ *
+ * WHY THE BROWSER COMPUTES IT. A guest's squares are identified on the pool
+ * document by this hash and nothing else. Without it the page cannot tell which
+ * squares are this guest's, so its preview of the limit undercounted them and
+ * let through a selection the server then refused (qodo, PR #758).
+ *
+ * Resolves `null` where Web Crypto is unavailable (an insecure origin): the
+ * page then previews by name only and the server still decides.
+ */
+export async function hashGuestKey(poolId: string, key: string | null | undefined): Promise<string | null> {
+  if (!poolId || !isCurrentGuestKey(key)) return null;
+  try {
+    const bytes = new TextEncoder().encode(`${poolId}:${key}`);
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Take this browser's guest squares into the signed-in account — at most once
+ * per pool, account and browser session, and never two at a time.
+ *
+ * The "done" mark is written only AFTER the claim succeeds. It used to be
+ * written before the call, and the call swallows its own failures, so one
+ * timeout meant no further attempt until the browser was closed (qodo, PR #758).
+ */
+const claimsInFlight = new Set<string>();
+
+export async function claimGuestSquaresOnce(
+  poolId: string,
+  uid: string,
+  claim: () => Promise<{ success: boolean }>,
+  storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeSessionStorage(),
+): Promise<'claimed' | 'already-done' | 'in-flight' | 'failed'> {
+  const flag = `mmp_guest_claim:${poolId}:${uid}`;
+  try {
+    if (storage?.getItem(flag)) return 'already-done';
+  } catch {
+    // Storage blocked: fall through and rely on the in-flight guard alone.
+  }
+  if (claimsInFlight.has(flag)) return 'in-flight';
+  claimsInFlight.add(flag);
+  try {
+    const result = await claim();
+    if (!result.success) return 'failed';
+    try {
+      storage?.setItem(flag, '1');
+    } catch {
+      // Not remembered; the server call is idempotent, so a repeat is harmless.
+    }
+    return 'claimed';
+  } catch {
+    return 'failed';
+  } finally {
+    claimsInFlight.delete(flag);
+  }
+}
+
+function safeSessionStorage(): Storage | null {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}

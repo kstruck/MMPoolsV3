@@ -267,6 +267,8 @@ export interface Square {
   guestKeyHash?: string | null;
   guestClaimId?: string | null;
   reservedAt?: number | null;
+  /** When the square was claimed. NOT `reservedAt` — see `planClaim` in shared/squaresClaim.ts. */
+  claimedAt?: number | null;
   paidAt?: number | null;
   reservedByUid?: string | null;
   paidByUid?: string | null;

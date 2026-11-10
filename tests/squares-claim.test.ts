@@ -11,6 +11,7 @@ import {
   squareCapLabel,
   squareCapSentence,
   type ClaimSquare,
+  isOwnSquare,
 } from '../shared/squaresClaim';
 
 /**
@@ -21,7 +22,10 @@ import {
  * the callable hands in, what it writes — is proven against the emulator in
  * `functions/src/__tests__/emulator/squaresClaim.emulator.test.ts`.
  */
-type Sq = ClaimSquare & { isPaid?: boolean; guestDeviceKey?: string | null; reservedAt?: number | null };
+type Sq = ClaimSquare & {
+  isPaid?: boolean; guestDeviceKey?: string | null; reservedAt?: number | null; claimedAt?: number | null;
+  paymentConfirmedAt?: number | null; paymentConfirmedByUid?: string | null;
+};
 
 const emptyGrid = (): Sq[] => Array.from({ length: 100 }, (_, i) => ({ id: i, owner: null }));
 const guest = (hash: string) => ({ uid: null, guestKeyHash: hash });
@@ -182,7 +186,7 @@ describe('planClaim — what gets written', () => {
     if (!plan.ok) throw new Error('expected ok');
     expect(plan.squares[9]).toMatchObject({
       owner: 'Typed Name', pickedAsName: 'Typed Name', isPaid: false,
-      reservedByUid: 'u1', guestKeyHash: null, reservedAt: 1000,
+      reservedByUid: 'u1', guestKeyHash: null, claimedAt: 1000,
     });
   });
   it('a guest square carries the device hash and no uid', () => {
@@ -203,5 +207,56 @@ describe('planClaim — what gets written', () => {
     if (!plan.ok) throw new Error('expected ok');
     expect(plan.squares[4]).toEqual(squares[4]);
     expect(JSON.stringify(squares)).toBe(before);
+  });
+});
+
+describe('planClaim — a fresh claim starts clean', () => {
+  it('the previous holder\'s "I have sent payment" does not pass to the next holder', () => {
+    // What the unpaid auto-release leaves behind: no owner, the old marks still on the square.
+    const freed: Sq = { id: 9, owner: null, paymentConfirmedAt: 555, paymentConfirmedByUid: 'old-holder', isPaid: false };
+    const plan = claim({ squares: gridWith(freed), squareIds: [9], identity: account('new-holder') });
+    if (!plan.ok) throw new Error('expected ok');
+    expect(plan.squares[9]).toMatchObject({ owner: 'Alice', reservedByUid: 'new-holder', paymentConfirmedAt: null, paymentConfirmedByUid: null, isPaid: false });
+  });
+
+  it('records WHEN under claimedAt and never writes reservedAt — the switch for the unsafe auto-release', () => {
+    const stale: Sq = { id: 9, owner: null, reservedAt: 123 };
+    const plan = claim({ squares: gridWith(stale), squareIds: [9] });
+    if (!plan.ok) throw new Error('expected ok');
+    expect(plan.squares[9].claimedAt).toBe(1000);
+    expect(plan.squares[9].reservedAt).toBeNull();
+  });
+
+  it('leaves every square it did not reserve exactly as it was', () => {
+    const other: Sq = { id: 3, owner: 'Bob', reservedByUid: 'bob', paymentConfirmedAt: 777, reservedAt: 5 };
+    const plan = claim({ squares: gridWith(other), squareIds: [9] });
+    if (!plan.ok) throw new Error('expected ok');
+    expect(plan.squares[3]).toEqual(other);
+  });
+});
+
+describe('isOwnSquare — one answer to "is this square mine?"', () => {
+  const mine = account('u1');
+
+  it('held by my account, whatever name is on it', () => {
+    expect(isOwnSquare({ id: 1, owner: 'Typed Differently', reservedByUid: 'u1' }, mine, 'Alice')).toBe(true);
+  });
+
+  it('held by this browser as a guest', () => {
+    expect(isOwnSquare({ id: 1, owner: 'Anything', guestKeyHash: 'dev' }, guest('dev'), 'Alice')).toBe(true);
+  });
+
+  it('my name on a square with NO identity — hand-entered or legacy', () => {
+    expect(isOwnSquare({ id: 1, owner: ' alice ' }, mine, 'Alice')).toBe(true);
+  });
+
+  it('my name on a square that belongs to someone else\'s account is NOT mine', () => {
+    expect(isOwnSquare({ id: 1, owner: 'Alice', reservedByUid: 'other' }, mine, 'Alice')).toBe(false);
+    expect(isOwnSquare({ id: 1, owner: 'Alice', guestKeyHash: 'their-device' }, guest('dev'), 'Alice')).toBe(false);
+  });
+
+  it('nobody owns an empty square, and an empty name matches nothing', () => {
+    expect(isOwnSquare({ id: 1, owner: null, reservedByUid: 'u1' }, mine, 'Alice')).toBe(false);
+    expect(isOwnSquare({ id: 1, owner: '' }, nobody, '')).toBe(false);
   });
 });

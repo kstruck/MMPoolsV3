@@ -106,6 +106,24 @@ function hasIdentity(square: ClaimSquare): boolean {
 }
 
 /**
+ * Is this square the claimer's OWN — for "already mine", for the squares a
+ * player is shown as theirs, and for the ones their "I've paid" covers.
+ *
+ * By IDENTITY first. A name match counts only on a square that carries no
+ * identity at all (a legacy square, or one the commissioner typed in), where
+ * the name is all there is. ONE definition: the grid used to decide "mine" by
+ * name alone, so a signed-in player's "I've paid" skipped every square they
+ * held under a different typed name while the limit still counted them.
+ */
+export function isOwnSquare(square: ClaimSquare, identity: ClaimIdentity, displayName: string): boolean {
+  // `isHeldBy` already refuses a square with no owner, and an empty owner
+  // matches no name — so an unowned square is nobody's without a check here.
+  if (isHeldBy(square, identity)) return true;
+  const name = normalizePlayerName(displayName);
+  return !hasIdentity(square) && name !== '' && normalizePlayerName(square.owner) === name;
+}
+
+/**
  * How many squares count against this claimer's limit.
  *
  * Held by the same IDENTITY, or under the same NAME. The union is deliberate:
@@ -172,7 +190,6 @@ export function planClaim<S extends ClaimSquare>(input: ClaimPlanInput<S>): Clai
   const ids = [...new Set(input.squareIds)];
   if (ids.length === 0) return { ok: false, refusal: { code: 'NO_SQUARES' } };
 
-  const name = normalizePlayerName(displayName);
   const byId = new Map(input.squares.map((s) => [s.id, s]));
   const reserved: number[] = [];
   const alreadyHeld: number[] = [];
@@ -184,9 +201,7 @@ export function planClaim<S extends ClaimSquare>(input: ClaimPlanInput<S>): Clai
       reserved.push(id);
       continue;
     }
-    const mine = isHeldBy(square, input.identity)
-      || (!hasIdentity(square) && normalizePlayerName(square.owner) === name);
-    if (!mine) return { ok: false, refusal: { code: 'TAKEN', squareId: id } };
+    if (!isOwnSquare(square, input.identity, displayName)) return { ok: false, refusal: { code: 'TAKEN', squareId: id } };
     alreadyHeld.push(id);
   }
 
@@ -206,7 +221,21 @@ export function planClaim<S extends ClaimSquare>(input: ClaimPlanInput<S>): Clai
       owner: displayName,
       pickedAsName: displayName,
       isPaid: false,
-      reservedAt: input.now,
+      // A fresh claim starts with a clean payment state. A square the unpaid
+      // auto-release freed keeps its previous holder's "I've sent payment"
+      // marks, and the new holder would otherwise inherit them.
+      paymentConfirmedAt: null,
+      paymentConfirmedByUid: null,
+      // WHEN it was claimed — under `claimedAt`, deliberately NOT `reservedAt`.
+      // `reservedAt` is the switch for the unpaid auto-release in
+      // `functions/src/reminders.ts`, which has never run because nothing wrote
+      // the field. That job picks its squares outside its transaction and
+      // releases them by id inside it, and it ignores `paymentConfirmedAt` — so
+      // switching it on would free squares that were paid during the run,
+      // re-bought by someone else, or awaiting the commissioner's confirmation
+      // (qodo, PR #758). It stays off until that job is fixed: PLAN K6.
+      claimedAt: input.now,
+      reservedAt: null,
       // A signed-in player's square belongs to the ACCOUNT. The device hash is
       // kept only for a guest, where it is the only identity there is.
       reservedByUid: input.identity.uid,

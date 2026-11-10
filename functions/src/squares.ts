@@ -12,7 +12,7 @@ import { validated } from "./lib/validated";
 import { hasConfirmedRole } from "./lib/confirmedRole";
 import { updatePlayerSchema, releaseSquaresSchema } from "./schemas/squares";
 import { reserveSquareSchema, reserveSquaresSchema, markSquaresPaidSchema } from "./schemas/squaresProps";
-import { planClaim, claimRefusalMessage, type ClaimRefusal } from "./shared/squaresClaim";
+import { planClaim, claimRefusalMessage, normalizePlayerName, type ClaimRefusal } from "./shared/squaresClaim";
 import { guestKeyHashOrNull } from "./lib/guestKey";
 
 
@@ -88,7 +88,8 @@ async function reserveSquaresForCaller(
     // never carried.
     const displayName = (pickedAsName || userName || "").trim();
 
-    const identity = {
+    // Resolved inside the transaction, once the pool's owner is known.
+    const callerIdentity = {
         uid: isAuthenticated ? userId : null,
         guestKeyHash: guestKeyHashOrNull(poolId, guestDeviceKey),
     };
@@ -118,13 +119,24 @@ async function reserveSquaresForCaller(
             throw new HttpsError("failed-precondition", "Pool is locked.");
         }
 
+        // THE COMMISSIONER ENTERING A SQUARE FOR SOMEONE ELSE. The owner is
+        // exempt from the limit precisely so they can type in the players who
+        // paid in person. Stamping the owner's account on those squares put
+        // them on the OWNER's dashboard, let only the owner press "I've paid"
+        // for them, and counted them as the owner's (qodo, PR #758). A square
+        // the owner enters under a name that is not their own carries the name
+        // and no identity — the same as a hand-entered square always has.
+        const isOwner = isAuthenticated && pool.ownerId === userId;
+        const onBehalf = isOwner && normalizePlayerName(displayName) !== normalizePlayerName(userName);
+        const identity = onBehalf ? { uid: null, guestKeyHash: null } : callerIdentity;
+
         const plan = planClaim({
             squares: pool.squares,
             squareIds,
             identity,
             displayName,
             maxSquaresPerPlayer: pool.maxSquaresPerPlayer,
-            exemptFromCap: pool.ownerId === userId,
+            exemptFromCap: isOwner,
             now: Date.now(),
         });
         if (!plan.ok) throw refusalToHttpsError(plan.refusal);
@@ -144,7 +156,10 @@ async function reserveSquaresForCaller(
         for (const squareId of plan.reserved) {
             // PII (email/phone/etc) is written to the restricted subcollection, NOT the pool doc.
             const privateRef = poolRef.collection(SQUARE_PRIVATE).doc(String(squareId));
-            transaction.set(privateRef, buildSquarePrivate(squareId, { email: userEmail, ...customerDetails }));
+            // On-behalf: the contact details are the PLAYER's, as typed — never the
+            // commissioner's own email by default, or the player's payment
+            // reminders would go to the commissioner.
+            transaction.set(privateRef, buildSquarePrivate(squareId, { email: onBehalf ? "Unknown" : userEmail, ...customerDetails }));
 
             await writeAuditEvent({
                 poolId,
@@ -152,7 +167,7 @@ async function reserveSquaresForCaller(
                 message: `Square #${squareId} reserved by ${displayName}`,
                 severity: 'INFO',
                 actor: { uid: userId, role, label: displayName },
-                payload: { squareId, ownerName: displayName, email: userEmail }
+                payload: { squareId, ownerName: displayName, email: onBehalf ? (customerDetails?.email || "Unknown") : userEmail, ...(onBehalf ? { enteredByOwner: true } : {}) }
             }, transaction);
         }
 

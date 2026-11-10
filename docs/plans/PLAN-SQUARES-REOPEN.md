@@ -58,8 +58,30 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
 3. **Code:** revert PR-D (one small commit) → redeploy functions → Coolify
    rebuild. Reverting D alone re-closes creation; A–C can stay.
 4. **Data:** nothing in A–D writes production data on deploy, and the plan
-   contains no migration. Firestore PITR (7-day window) was measured enabled on
-   2026-08-10 (`PLAN-BACKUPS-PHASE3.md`); it has not been re-measured since.
+   contains no migration.
+5. **🛑 A DATA BACKUP IS NOT YET VERIFIED — it is step 1 of the deploy runbook,
+   and Kevin's to run** (qodo, PR #758, finding 10). The code anchor above is in
+   place; a data backup is not something this work could take or check — it has
+   no credentials for the production project. Firestore PITR (7-day window) was
+   measured enabled on 2026-08-10 (`PLAN-BACKUPS-PHASE3.md`) and has **not** been
+   re-measured. Before the first deploy of any of A–D:
+   - confirm PITR is still on — the command that measured it in August:
+     `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
+     → `pointInTimeRecoveryEnablement` must read `POINT_IN_TIME_RECOVERY_ENABLED`.
+     PITR is the recovery floor for this rollout: any bad write in the last
+     seven days can be read back while the database exists.
+   - a full EXPORT (the copy that survives a deleted database) needs the
+     off-region bucket from `PLAN-BACKUPS-PHASE3.md` Step 4, which that plan
+     records as not created yet. If it exists:
+     `gcloud firestore export gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11 --project gridiron-gamble-uzuqo`.
+     If it does not, that is a known open gap of Phase 3, not something this
+     plan closes — say so, and decide with PITR alone or create the bucket first.
+   Do not deploy until PITR has been confirmed and the result recorded here.
+6. **Merge precondition** (qodo, finding 6). The required `security-audit`
+   check is red on `main` for 8 advisories in shared dependencies. None of
+   A–D may be merged over it silently: either the dependency PRs (#750, #754,
+   #755, #756, #746) land first and the check goes green, or Kevin records an
+   explicit decision to merge with it red.
 
 ---
 
@@ -157,6 +179,47 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   unfillable.* Unchanged until ruled.
 - ~~**K3 — the Randomizer picks its winner in the commissioner's browser.**~~
   **Built in PR-B (D15)** — it is squares-only code, inside the delegation.
+- **K6 — "auto-release unpaid squares" has never run, and still does not.**
+  The job (`reminders.ts:494-540`) only acts on squares with a `reservedAt`,
+  and nothing ever wrote one. PR-A first stamped it, which would have switched
+  the job on — and the job is not safe to run: it picks its squares outside its
+  transaction and releases them by id inside it, and it ignores "I've sent
+  payment", so it can free a square that was paid during the run, re-bought by
+  someone else, or is waiting on the commissioner (qodo, PR #758, finding 11).
+  PR-A now records `claimedAt` instead and leaves the job dormant. **Not fixed**
+  — `reminders.ts` also sends the NFL reminders. *Recommendation: approve a
+  small PR that re-checks eligibility inside the transaction and reads
+  `claimedAt`; until then PR-C labels the setting "not available yet".*
+- **K7 — a second auto-lock for squares pools is live in `reminders.ts`, and its
+  numbers are biased** (sweep SW1). `runReminders` → `checkLockReminders` →
+  `executeAutoLock` locks any squares pool whose `lockAt` has passed and draws
+  the numbers with `sort(() => Math.random() - 0.5)` — which leaves digits near
+  where they started, and which `autoLock.ts`'s own header calls unacceptable
+  for real-money numbers. `autoLockPools` fires 30 seconds earlier, so this copy
+  only acts when that job has missed a run — but then it decides the grid.
+  **Not changed** — `reminders.ts` also sends the NFL reminders. *Recommendation:
+  approve deleting `executeAutoLock` from `reminders.ts` (and K6's fix) in one
+  small PR; `autoLockPools` is the dedicated job and PR-C fixes it.*
+- **K8 — the roster summary's "guest dues" reads a value nothing writes** (sweep
+  SW4). `lib/rosterSummary.ts:31` counts squares with `reservedByUid ===
+  'guest'`; a guest's square has no `reservedByUid`. So dues owed on guest
+  squares are always $0 in the commissioner's totals. **Not changed** — that
+  file feeds every pool type. *Recommendation: count squares with a
+  `guestKeyHash` and no `reservedByUid`, in its own PR.*
+- **K9 — two things about winner emails and hand scoring that this plan does
+  not build** (qodo, PR #759, findings 2 and 11).
+  (a) The winner email (`onWinnerComputed`, `reminders.ts`) announces every
+  record on creation, whoever its owner is, and never on a change — so a
+  rolled-over quarter is announced as "Rollover, $0" and the winner of the
+  random draw is not announced at all. *Recommendation: skip records whose
+  owner is not a player, and announce a draw; goes in the same small
+  `reminders.ts` PR as K6 and K7.*
+  (b) Every Score Pays needs the game linked to the live feed. A pool scored by
+  hand has no scoring events, and they cannot be rebuilt from quarter scores.
+  The admin page says so and blocks Manual Score Override on such a pool.
+  *Recommendation: leave it — hand-entering every score of a game is not
+  something a commissioner will do; revisit only if a game ever is not on the
+  feed.*
 - **K4 — `firestore.rules`: `isLocked`, `scores`, `payouts` and `randomWinner`
   are commissioner-writable.** PR-B makes the server paths correct and audited,
   but a commissioner using an old browser bundle (or the console) can still
@@ -179,8 +242,9 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 
 - **A1** `0` = unlimited: zero-guard in the callable; one shared reader
   (`shared/squaresCap.ts`) replacing all six; help copy; drift pins inverted.
-- **A2** Identity: stamp `reservedByUid` and `reservedAt` (the squares
-  auto-release reads `reservedAt`, and nothing ever wrote it); cap by identity ∪ name; same-name
+- **A2** Identity: stamp `reservedByUid`, and `claimedAt` — **not** `reservedAt`
+  (see K6); a square the commissioner enters under someone else's name carries
+  the name and no identity; cap by identity ∪ name; same-name
   different-identity square is "already taken", not silent success; one
   name-normalizer shared by server and client.
 - **A3** Guest key hash: reserve writes `guestKeyHash`, never the raw key;

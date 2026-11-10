@@ -10,6 +10,7 @@ import { claimMySquaresSchema } from "./schemas/participantOps";
 import { randomInt } from "crypto";
 import { guestKeyHashOrNull } from "./lib/guestKey";
 import { assertNotBannedLive } from "./lib/systemGuards";
+import { chargeAccessAttempt } from "./lib/poolAttempts";
 import type { Square } from "./types";
 
 /** A claim code: lets a guest move their squares to another device or an account. */
@@ -33,6 +34,23 @@ interface ClaimCode {
 
 /** A claim code is for moving squares NOW, not a standing credential. */
 const CLAIM_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 8 characters from 32 — about 1.1 × 10¹² codes.
+ *
+ * It was 6 (1.07 × 10⁹), and `claimByCode` graded unlimited guesses against it.
+ * A code is a BEARER credential: whoever types a live one takes the guest's
+ * squares and joins the pool, with no device key. Two bounds now, because
+ * neither is enough alone: a longer code, and a per-account limit on wrong
+ * guesses in `claimByCode` (qodo, PR #758).
+ *
+ * No 0/O or 1/I: a person reads this off one screen and types it on another.
+ */
+const CLAIM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const CLAIM_CODE_LENGTH = 8;
+
+/** The throttle bucket for wrong claim codes — per ACCOUNT, across all pools. */
+const CLAIM_CODE_ATTEMPT_SCOPE = "claim-code";
 
 // 1. (removed 2026-09-11) `onUserCreated` / `createParticipantProfile` — this
 // file used to export a SECOND Auth-create trigger that wrote `users/{uid}` with
@@ -69,9 +87,18 @@ export const createClaimCode = validated(
     }
 
     const db = admin.firestore();
-    const claimCode = generateShortCode();
-    const claimId = db.collection("poolClaims").doc().id;
     const now = Date.now();
+
+    // A code is looked up by value, so two live codes must never share one.
+    // At 10¹² codes a clash is a once-in-a-lifetime event; this makes it a
+    // re-draw instead of one guest redeeming another's squares.
+    let claimCode = generateShortCode();
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const clash = await db.collection("poolClaims").where("claimCode", "==", claimCode).limit(1).get();
+        if (clash.empty) break;
+        claimCode = generateShortCode();
+    }
+    const claimId = db.collection("poolClaims").doc().id;
 
     const claimDoc: ClaimCode = {
         claimId,
@@ -176,10 +203,22 @@ export const claimMySquares = validated(
 export const claimByCode = validated(
     { schema: claimByCodeSchema, label: "claimByCode", appCheck: "monitor" },
     async (input, request) => {
-    const { claimCode } = input;
+    const claimCode = normalizeClaimCode(input.claimCode);
     const db = admin.firestore();
     const uid = request.auth!.uid;
     await assertNotBannedLive(uid);
+
+    // EVERY ATTEMPT IS CHARGED — ten in fifteen minutes per account, right or
+    // wrong, taken before the lookup so a caller who hangs up mid-call still
+    // pays. Per account, not per code: an attacker does not know the code, so
+    // there is nothing to count against it.
+    //
+    // NOT refunded on a correct code, unlike the pool-password throttle this
+    // reuses. There, a correct password ends the guessing. Here anyone can mint
+    // a code of their own (`createClaimCode` is public), so a refund would let
+    // an attacker redeem their own code every ninth guess and never run out.
+    // Nobody moving their own squares needs ten codes in a quarter of an hour.
+    await chargeAccessAttempt(db, CLAIM_CODE_ATTEMPT_SCOPE, uid);
 
     const claimsSnap = await db.collection("poolClaims")
         .where("claimCode", "==", claimCode)
@@ -396,10 +435,17 @@ export const syncParticipantIndices = onDocumentWritten("pools/{poolId}", async 
  * drawn from the system CSPRNG.
  */
 function generateShortCode() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let res = "";
-    for (let i = 0; i < 6; i++) {
-        res += chars.charAt(randomInt(chars.length));
+    for (let i = 0; i < CLAIM_CODE_LENGTH; i++) {
+        res += CLAIM_CODE_ALPHABET.charAt(randomInt(CLAIM_CODE_ALPHABET.length));
     }
     return res;
+}
+
+/**
+ * The code as it is compared: upper-cased, with the spaces and dashes a person
+ * adds when reading one off another screen removed.
+ */
+export function normalizeClaimCode(raw: string): string {
+    return raw.toUpperCase().replace(/[\s-]/g, "");
 }

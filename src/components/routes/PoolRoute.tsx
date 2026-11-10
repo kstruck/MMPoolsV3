@@ -32,6 +32,7 @@ import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStat
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
 import { claimRefusalMessage, effectiveSquareCap, planClaim, squareCapSentence } from '@shared/squaresClaim';
+import { hashGuestKey } from '../../utils/guestKey';
 
 interface PoolRouteProps {
     user: User | null;
@@ -432,16 +433,18 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
         const normalizedName = name.trim();
 
         // A PREVIEW of the server's decision, from the same function the
-        // callable runs (`planClaim`), so the page and the server cannot
-        // disagree about a limit again. It is a preview only: the server
-        // decides, and it alone knows the guest's device identity.
+        // callable runs (`planClaim`) and with the same identity — the account,
+        // or for a guest the hash of this browser's key — so the page and the
+        // server cannot disagree about a limit. It is a preview only: the
+        // server decides.
+        const isOwner = !!user?.id && squaresPool.ownerId === user.id;
         const preview = planClaim({
             squares: squaresPool.squares,
             squareIds: ids,
-            identity: { uid: user?.id ?? null, guestKeyHash: null },
+            identity: { uid: user?.id ?? null, guestKeyHash: user?.id ? null : await hashGuestKey(squaresPool.id, guestKey) },
             displayName: normalizedName,
             maxSquaresPerPlayer: squaresPool.maxSquaresPerPlayer,
-            exemptFromCap: !!user?.id && squaresPool.ownerId === user.id,
+            exemptFromCap: isOwner,
             now: Date.now(),
         });
         if (!preview.ok) return { success: false, message: claimRefusalMessage(preview.refusal) };
