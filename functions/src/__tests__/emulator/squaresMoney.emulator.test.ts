@@ -1498,3 +1498,36 @@ describe('qodo r4 — the pause switch is read where the winners are written', (
     });
   });
 });
+
+// qodo (PR #761) read the winners gate as looking only at the stored pool, so
+// that a simulation which had to DRAW the numbers skipped the winners for that
+// update. It does not: the drawn numbers are merged into the pool the gate
+// reads (`{ ...doc.data(), ...overrides }`). This pins that.
+describe('qodo r6 — the simulator on a grid that was never locked', () => {
+  it('draws the numbers AND records the first-quarter winner in the same update', async () => {
+    await seedPool({ axisNumbers: undefined, isLocked: false });
+    await sync(Q1);
+
+    const after = await pool();
+    const axis = after.axisNumbers as { home: number[]; away: number[] };
+    expect([...axis.home].sort()).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect([...axis.away].sort()).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+    // 7–3 on the numbers that were just drawn: away digit → row, home digit → column.
+    const square = axis.away.indexOf(3) * 10 + axis.home.indexOf(7);
+    expect((await winners()).q1).toMatchObject({ owner: `P${square}`, squareId: square, amount: 200 });
+  });
+
+  it('and every later period is judged on those same numbers', async () => {
+    await seedPool({ axisNumbers: undefined, isLocked: false });
+    await sync(Q1);
+    const drawn = (await pool()).axisNumbers;
+    await sync(HALF);
+    expect((await pool()).axisNumbers).toEqual(drawn);
+    const axis = drawn as { home: number[]; away: number[] };
+    // 14–10 at the half: away 0, home 4.
+    const square = axis.away.indexOf(0) * 10 + axis.home.indexOf(4);
+    expect((await winners()).half).toMatchObject({ owner: `P${square}`, amount: 200 });
+  });
+});
+

@@ -64,6 +64,13 @@ export const DEFAULT_MAINTENANCE_MODE = false;
 export interface FlagConfig {
   poolTypeFlags?: Partial<Record<string, boolean>>;
   maintenanceMode?: boolean;
+  /**
+   * The squares winner-record pause. Declared here because this is the shape
+   * of `system/config`; it is NOT read through this module. `squaresPause.ts`
+   * reads it inside the transaction that would write the winners, which is the
+   * only place a pause can be honoured without a race.
+   */
+  squaresWinners?: { paused?: boolean };
 }
 
 /** Merge a raw config's poolTypeFlags over the fail-open defaults. */
