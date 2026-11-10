@@ -47,7 +47,9 @@ describe('createPool side-effect bundle (emulator)', () => {
     const res = (await wrappedCreatePool({ data: { name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never)) as { poolId: string };
     expect(res.poolId).toBeTruthy();
 
-    const pool = (await db.collection('pools').doc(res.poolId).get()).data() as Record<string, any>;
+    const pool = (await db.collection('pools').doc(res.poolId).get()).data() as {
+      type?: string; squares: unknown[]; billing: { status: string }; ownerId: string; isLocked: boolean;
+    };
     // A create with no `type` is a squares pool — that is what the wizard's
     // predecessor sent, and what an old client still sends.
     expect(pool.type ?? 'SQUARES').toBe('SQUARES');
@@ -66,7 +68,7 @@ describe('createPool side-effect bundle (emulator)', () => {
     const participations = await db.collection('users').doc('u1').collection('participations').get();
     expect(participations.size).toBe(0);
 
-    const user = (await db.collection('users').doc('u1').get()).data() as Record<string, any>;
+    const user = (await db.collection('users').doc('u1').get()).data() as { role: string };
     expect(user.role).toBe('COMMISSIONER');
   });
 
