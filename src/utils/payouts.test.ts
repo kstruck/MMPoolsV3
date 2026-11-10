@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateQuarterlyPayouts } from './payouts';
+import { calculateQuarterlyPayouts, recordedWinnersOf } from './payouts';
 import type { GameState, Winner } from '../types';
 
 /**
@@ -167,5 +167,44 @@ describe('Every Score Pays', () => {
       const p = pool({ ruleVariations: { scoreChangePayout: true, scoreChangePayoutStrategy: strategy } });
       expect(calculateQuarterlyPayouts(p, []).map((c) => c.amount)).toEqual([0, 200, 0, 400]);
     }
+  });
+});
+
+describe('a pool played under the old rules shows its records and nothing worked out today', () => {
+  // Rollover was ON, but the old server recorded an unsold quarter as "Unsold" and moved nothing.
+  const OLD = Date.UTC(2026, 1, 8);
+  const NEW = Date.UTC(2026, 10, 20);
+  const played = (createdAt: number) => pool({
+    createdAt,
+    ruleVariations: { quarterlyRollover: true },
+    scores: scores({ gameStatus: 'post', current: { home: 14, away: 10 }, q1: { home: 7, away: 3 }, half: { home: 14, away: 10 } }),
+  }, [37]);
+  const recorded = [
+    { id: 'q1', period: 'q1', squareId: 37, owner: 'Unsold', amount: 198, homeDigit: 7, awayDigit: 3 },
+    { id: 'half', period: 'half', squareId: 4, owner: 'P4', amount: 198, homeDigit: 4, awayDigit: 0 },
+  ] as Winner[];
+
+  it('no "includes $X rolled over" on a card whose pool never rolled anything', () => {
+    const half = card(calculateQuarterlyPayouts(played(OLD), recorded), 'half');
+    expect(half).toMatchObject({ winnerName: 'P4', amount: 198, rolloverAdded: 0 });
+  });
+
+  it('a pool on the current rules does show what rolled in', () => {
+    const rolled = [
+      { id: 'q1', period: 'q1', squareId: 37, owner: 'Rollover', amount: 0, homeDigit: 7, awayDigit: 3 },
+      { id: 'half', period: 'half', squareId: 4, owner: 'P4', amount: 396, homeDigit: 4, awayDigit: 0 },
+    ] as Winner[];
+    expect(card(calculateQuarterlyPayouts(played(NEW), rolled), 'half')).toMatchObject({ amount: 396, rolloverAdded: 198 });
+  });
+});
+
+describe('recordedWinnersOf', () => {
+  it('reads a drawn final prize from what the draw chose', () => {
+    const w = [{ id: 'final_rollover', period: 'final', squareId: 71, owner: 'P71', amount: 5, homeDigit: 8, awayDigit: 4, drawnAt: 1, drawnOwner: 'P12', drawnSquareId: 12 }] as Winner[];
+    expect(recordedWinnersOf(w)).toEqual({ final_rollover: { squareId: 12, owner: 'P12', drawn: true } });
+  });
+
+  it('skips a record with no document id', () => {
+    expect(recordedWinnersOf([{ period: 'q1', squareId: 1, owner: 'A', amount: 1, homeDigit: 1, awayDigit: 0 }] as Winner[])).toEqual({});
   });
 });

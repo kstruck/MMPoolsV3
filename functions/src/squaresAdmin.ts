@@ -17,7 +17,7 @@ import * as crypto from "crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { validated } from "./lib/validated";
-import { assertPoolOwnerOrSuperAdmin } from "./poolOps";
+import { assertPoolOwnerOrSuperAdmin, isPoolCommissioner } from "./poolOps";
 import { confirmedAdminClaim } from "./lib/confirmedRole";
 import { assertNotBannedLive } from "./lib/systemGuards";
 import { writeAuditEvent } from "./audit";
@@ -26,9 +26,10 @@ import {
     recomputeSquaresWinnersSchema,
     unlockSquaresPoolSchema,
 } from "./schemas/squaresAdmin";
-import { applyWinnerPlan, finalScoresOf, PERIOD_WINNER_IDS, planWinnerWrites, type StoredWinner } from "./lib/squaresWinners";
+import { applyWinnerPlan, finalScoresOf, isEventWinnerId, PERIOD_WINNER_IDS, planWinnerWrites, recordedEntry, type StoredWinner } from "./lib/squaresWinners";
+import { writeAdminAudit } from "./lib/adminAudit";
 import { squaresGameHasStarted } from "./lib/squaresGame";
-import { computePeriodPayouts, ROLLOVER, usesCurrentWinnerRules, type PayoutPool, type RecordedWinners } from "./shared/squaresPayouts";
+import { computePeriodPayouts, ROLLOVER, scoreEventStrategy, usesCurrentWinnerRules, type PayoutPool, type RecordedWinners } from "./shared/squaresPayouts";
 
 type PoolDoc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -49,15 +50,33 @@ const gameIsFinal = (pool: PoolDoc) => pool.scores?.gameStatus === 'post' || !!p
 const recordedOf = (stored: ReadonlyArray<StoredWinner>): RecordedWinners => {
     const out: Record<string, { squareId: number; owner: string | null; drawn?: boolean }> = {};
     for (const w of stored) {
-        if (!PERIOD_WINNER_IDS.has(w.id)) continue;
-        out[w.id] = {
-            squareId: Number(w.data.squareId),
-            owner: typeof w.data.owner === 'string' ? w.data.owner : null,
-            drawn: !!w.data.drawnAt,
-        };
+        if (PERIOD_WINNER_IDS.has(w.id)) out[w.id] = recordedEntry(w);
     }
     return out;
 };
+
+/**
+ * A SUPER_ADMIN acting on a pool they do not run also leaves a row in
+ * `admin_audit`, the SUPER_ADMIN actor log. A commissioner acting on their own
+ * pool does not: that belongs in the pool's own audit trail, which every
+ * callable here already writes, the same as `lockPool` and `toggleWinnerPaid`.
+ * Best-effort and after the commit — an audit write must not undo the action.
+ */
+async function auditIfActingAsAdmin(
+    pool: PoolDoc,
+    request: { auth?: { uid: string; token: { email?: string } } },
+    adminClaim: string | undefined,
+    action: string,
+    poolId: string,
+    metadata: Record<string, unknown>,
+): Promise<void> {
+    const uid = request.auth!.uid;
+    if (adminClaim !== 'SUPER_ADMIN' || isPoolCommissioner(pool, uid)) return;
+    await writeAdminAudit({
+        actorUid: uid, actorEmail: request.auth!.token.email, action,
+        targetType: 'pool', targetId: poolId, metadata, status: 'success',
+    }).catch((e) => console.error(`[squaresAdmin] admin audit failed for ${action}`, e));
+}
 
 /**
  * Recompute the winner records from the scores on the pool.
@@ -80,7 +99,7 @@ export const recomputeSquaresWinners = validated(
         const db = admin.firestore();
         const poolRef = db.collection('pools').doc(poolId);
 
-        return db.runTransaction(async (t) => {
+        const result = await db.runTransaction(async (t) => {
             const snap = await t.get(poolRef);
             if (!snap.exists) throw new HttpsError('not-found', 'Pool not found.');
             const pool = snap.data() as PoolDoc;
@@ -92,8 +111,19 @@ export const recomputeSquaresWinners = validated(
             const stored = winnersSnap.docs.map((d) => ({ id: d.id, data: d.data() }));
             const plan = planWinnerWrites(pool as PayoutPool, finalScoresOf(pool.scores), stored, { gameFinal: gameIsFinal(pool) });
             await applyWinnerPlan(t, poolId, plan, { uid, role: 'ADMIN', label: 'Recompute winners' });
-            return { success: true, changed: plan.filter((w) => w.kind !== 'audit').length };
+
+            // EVERY SCORE PAYS, SCORED BY HAND. Scoring-event records are made
+            // as the live feed reports each score; four quarter-end scores
+            // cannot be turned back into them, and guessing would be paying on
+            // a guess. So a finished Every-Score-Pays game with no event
+            // records is REPORTED, not papered over (qodo, PR #759).
+            const eventsNotRecorded = scoreEventStrategy(pool as PayoutPool) !== null
+                && gameIsFinal(pool)
+                && !stored.some((w) => isEventWinnerId(w.id));
+            return { pool, changed: plan.filter((w) => w.kind !== 'audit').length, eventsNotRecorded };
         });
+        await auditIfActingAsAdmin(result.pool, request, adminClaim, 'SQUARES_RECOMPUTE_WINNERS', poolId, { changed: result.changed });
+        return { success: true, changed: result.changed, eventsNotRecorded: result.eventsNotRecorded };
     },
 );
 
@@ -119,7 +149,7 @@ export const drawSquaresFinalPrize = validated(
         const db = admin.firestore();
         const poolRef = db.collection('pools').doc(poolId);
 
-        return db.runTransaction(async (t) => {
+        const drawn = await db.runTransaction(async (t) => {
             const snap = await t.get(poolRef);
             if (!snap.exists) throw new HttpsError('not-found', 'Pool not found.');
             const pool = snap.data() as PoolDoc;
@@ -176,6 +206,10 @@ export const drawSquaresFinalPrize = validated(
                 drawnAt,
                 drawnByUid: uid,
                 drawnFrom: sold.length,
+                // What the draw CHOSE, kept apart from `owner` / `squareId`,
+                // which a later change of rule can overwrite.
+                drawnOwner: claim.owner,
+                drawnSquareId: claim.squareId,
             };
             t.set(winnersRef.doc('final_rollover'), record, { merge: true });
 
@@ -199,8 +233,10 @@ export const drawSquaresFinalPrize = validated(
                 payload: { docId: 'final_rollover', squareId: claim.squareId, winner: claim.owner, amount: claim.amount, drawnFrom: sold.length, rng: 'crypto.randomInt' },
             }, t);
 
-            return { success: true, squareId: claim.squareId, owner: claim.owner, amount: claim.amount };
+            return { pool, squareId: claim.squareId, owner: claim.owner, amount: claim.amount, drawnFrom: sold.length };
         });
+        await auditIfActingAsAdmin(drawn.pool, request, adminClaim, 'SQUARES_FINAL_PRIZE_DRAW', poolId, { squareId: drawn.squareId, winner: drawn.owner, amount: drawn.amount, drawnFrom: drawn.drawnFrom });
+        return { success: true, squareId: drawn.squareId, owner: drawn.owner, amount: drawn.amount };
     },
 );
 
@@ -223,7 +259,7 @@ export const unlockSquaresPool = validated(
         const db = admin.firestore();
         const poolRef = db.collection('pools').doc(poolId);
 
-        return db.runTransaction(async (t) => {
+        const unlocked = await db.runTransaction(async (t) => {
             const snap = await t.get(poolRef);
             if (!snap.exists) throw new HttpsError('not-found', 'Pool not found.');
             const pool = snap.data() as PoolDoc;
@@ -251,7 +287,9 @@ export const unlockSquaresPool = validated(
                 actor: { uid, role: 'ADMIN', label: request.auth!.token.name || 'Owner' },
                 payload: { numbersDiscarded: hadNumbers },
             }, t);
-            return { success: true, numbersDiscarded: hadNumbers };
+            return { pool, numbersDiscarded: hadNumbers };
         });
+        await auditIfActingAsAdmin(unlocked.pool, request, adminClaim, 'SQUARES_UNLOCK', poolId, { numbersDiscarded: unlocked.numbersDiscarded });
+        return { success: true, numbersDiscarded: unlocked.numbersDiscarded };
     },
 );

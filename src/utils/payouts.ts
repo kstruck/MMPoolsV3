@@ -8,6 +8,7 @@ import {
     ROLLOVER,
     scoreEventStrategy,
     UNSOLD,
+    usesCurrentWinnerRules,
     type PayoutPool,
     type Period,
     type PeriodResult,
@@ -48,10 +49,13 @@ export const recordedWinnersOf = (winners: ReadonlyArray<Winner>): RecordedWinne
         // Keyed by document id; the math only ever looks up period ids, so a
         // scoring-event record in here is simply never read.
         if (!w.id) continue;
+        // A DRAWN final prize is read from what the draw chose, not from the
+        // computed owner — the same rule as the server's `recordedEntry`.
+        const drawn = !!w.drawnAt;
         out[w.id] = {
-            squareId: w.squareId,
-            owner: w.owner ?? null,
-            drawn: !!w.drawnAt,
+            squareId: drawn && typeof w.drawnSquareId === 'number' ? w.drawnSquareId : w.squareId,
+            owner: (drawn && w.drawnOwner ? w.drawnOwner : w.owner) ?? null,
+            drawn,
         };
     }
     return out;
@@ -93,6 +97,7 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
     );
 
     const strategy = scoreEventStrategy(pool);
+    const currentRules = usesCurrentWinnerRules(squaresPool);
     let carry = 0;
     return PERIODS.map((period) => {
         const isFinal = !!finalScores[period];
@@ -158,6 +163,12 @@ export const calculateQuarterlyPayouts = (squaresPool: GameState, winners: Winne
             }
             bonusWinnerName = officialBonus ? (officialBonus.owner === ROLLOVER ? 'Awaiting random draw' : officialBonus.owner) : null;
             bonusAmount = officialBonus?.amount ?? 0;
+            // A pool played under the old rules shows its RECORDS and nothing
+            // worked out by today's math. The old server recorded an unsold
+            // period as `Unsold` and rolled nothing forward; today's math would
+            // read that as a rollover and caption the next card "includes $X
+            // rolled over" — money that pool never moved (qodo, PR #759).
+            if (!currentRules) rolloverAdded = 0;
         }
 
         return {

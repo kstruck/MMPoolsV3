@@ -1,4 +1,5 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { randomInt } from "crypto";
 import { ESPN_SITE_API } from './lib/espnHost';
 import { isPoolOwnerOrManager } from './poolOps';
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -16,11 +17,16 @@ import { rethrowOrInternal } from "./lib/safeError";
 import { applyWinnerPlan, finalScoresOf, planWinnerWrites, type StoredWinner } from "./lib/squaresWinners";
 import { usesCurrentWinnerRules, type PayoutPool } from "./shared/squaresPayouts";
 
-// Helper to generate random digits
+// The digits for one side of a grid: Fisher–Yates over the system CSPRNG.
+//
+// `crypto.randomInt`, not `Math.random`. These decide who is paid, and in a
+// four-set pool the EARLIER quarters' numbers are already public when the
+// next set is drawn — `Math.random`'s generator can be reconstructed from its
+// own outputs (sweep SW3, PLAN-SQUARES-REOPEN-SWEEPS.md).
 const generateDigits = (): number[] => {
     const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     for (let i = nums.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = randomInt(i + 1);
         [nums[i], nums[j]] = [nums[j], nums[i]];
     }
     return nums;

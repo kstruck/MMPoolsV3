@@ -641,6 +641,11 @@ export interface Winner {
   drawnByUid?: string;
   /** How many sold squares the draw chose from. */
   drawnFrom?: number;
+  /** What the draw chose — kept apart from `owner` / `squareId`, which follow the rules. */
+  drawnOwner?: string;
+  drawnSquareId?: number;
+  /** What the prize was when it was marked paid. The prize itself can change afterwards. */
+  paidAmount?: number | null;
 }
 
 // --- AUDIT LOG ---

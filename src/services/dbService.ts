@@ -1048,10 +1048,18 @@ export const dbService = {
     },
 
     // --- CLOUD FUNCTIONS ---
-    toggleWinnerPaid: async (poolId: string, winnerId: string): Promise<{ success: boolean; isPaid: boolean }> => {
+    /**
+     * `expected` is the winner the commissioner was looking at. The server
+     * refuses if the record now names someone else, so a click meant for a
+     * winner that has since changed cannot mark the new one paid.
+     */
+    toggleWinnerPaid: async (poolId: string, winnerId: string, expected?: { owner: string; squareId: number }): Promise<{ success: boolean; isPaid: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
-            const result = await fn(withCorrelationId({ poolId, winnerId }));
+            const result = await fn(withCorrelationId({
+                poolId, winnerId,
+                ...(expected ? { expectedOwner: expected.owner, expectedSquareId: expected.squareId } : {}),
+            }));
             return result.data as { success: boolean; isPaid: boolean };
         } catch (error) {
             await errorHandler.handleError(error, {
@@ -1063,10 +1071,10 @@ export const dbService = {
     },
 
     /** Squares: bring the winner records in line with the scores on the pool. */
-    recomputeSquaresWinners: async (poolId: string): Promise<{ success: boolean; changed: number }> => {
+    recomputeSquaresWinners: async (poolId: string): Promise<{ success: boolean; changed: number; eventsNotRecorded?: boolean }> => {
         const fn = httpsCallable(functions, 'recomputeSquaresWinners');
         const result = await fn(withCorrelationId({ poolId }));
-        return result.data as { success: boolean; changed: number };
+        return result.data as { success: boolean; changed: number; eventsNotRecorded?: boolean };
     },
 
     /** Squares: the one-time server-side random draw for an unclaimed final prize. */

@@ -41,6 +41,9 @@ export interface Winner {
     drawnAt?: unknown;
     drawnByUid?: string;
     drawnFrom?: number; // how many sold squares the draw chose from
+    drawnOwner?: string; // what the draw chose, apart from the computed `owner`
+    drawnSquareId?: number;
+    paidAmount?: number | null; // what the prize was when it was marked paid
 }
 
 export interface Scores {

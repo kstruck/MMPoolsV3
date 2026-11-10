@@ -111,7 +111,7 @@ const Q3 = feed({ period: 4, current: [21, 17], q1: [7, 3], half: [14, 10], q3: 
 const FINAL = feed({ period: 4, state: 'post', current: [28, 24], q1: [7, 3], half: [14, 10], q3: [21, 17], final: [28, 24] });
 
 beforeEach(async () => {
-  for (const col of ['pools', 'users']) {
+  for (const col of ['pools', 'users', 'admin_audit']) {
     const snap = await db.collection(col).get();
     await Promise.all(snap.docs.map((d) => db.recursiveDelete(d.ref)));
   }
@@ -706,5 +706,178 @@ describe('drawSquaresFinalPrize — the random draw happens once, on the server'
     await sync(FINAL);
     await expect(draw({ data: { poolId: POOL }, auth: stranger } as never)).rejects.toThrow(/permission/i);
     expect((await winners()).final_rollover.owner).toBe('Rollover');
+  });
+});
+
+describe('qodo #9 — the draw cannot be undone by taking the final score away', () => {
+  const randomRules = { ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'random' } };
+  const call = { data: { poolId: POOL }, auth: owner } as never;
+
+  it('ATTACK: final score off, then on again — the drawn winner stands and no second draw is offered', async () => {
+    await seedPool(randomRules, [48]);
+    await sync(FINAL);
+    const first = await draw(call) as { squareId: number; owner: string };
+
+    // The commissioner switches the final score off on the admin page…
+    await poolRef().update({ 'scores.final': null });
+    await recompute(call);
+    const kept = (await winners()).final_rollover;
+    expect(kept.drawnAt).toBeTruthy();
+    expect(kept).toMatchObject({ drawnOwner: first.owner, drawnSquareId: first.squareId, amount: 0 });
+    await expect(draw(call)).rejects.toThrow(/already been made/i);
+
+    // …and back on.
+    await poolRef().update({ 'scores.final': { home: 28, away: 24 } });
+    await recompute(call);
+    expect((await winners()).final_rollover).toMatchObject({ owner: first.owner, squareId: first.squareId, amount: 396 });
+    await expect(draw(call)).rejects.toThrow(/already been made/i);
+  });
+
+  it('says so loudly when a drawn prize drops to $0', async () => {
+    await seedPool(randomRules, [48]);
+    await sync(FINAL);
+    await draw(call);
+    await poolRef().update({ 'scores.final': null });
+    await recompute(call);
+    const loud = (await audits()).filter((a) => a.severity === 'CRITICAL');
+    expect(loud).toHaveLength(1);
+    expect(String(loud[0].message)).toMatch(/cannot be made again/);
+  });
+
+  it('a change of rule and back still ends on the player the draw chose', async () => {
+    await seedPool(randomRules, [48]);
+    await sync(FINAL);
+    const first = await draw(call) as { squareId: number; owner: string };
+
+    await poolRef().update({ 'ruleVariations.unclaimedFinalPrizeStrategy': 'last_winner' });
+    await recompute(call);
+    expect((await winners()).final_rollover).toMatchObject({ owner: 'P71', drawnOwner: first.owner });
+
+    await poolRef().update({ 'ruleVariations.unclaimedFinalPrizeStrategy': 'random' });
+    await recompute(call);
+    expect((await winners()).final_rollover).toMatchObject({ owner: first.owner, squareId: first.squareId });
+    await expect(draw(call)).rejects.toThrow(/already been made/i);
+  });
+});
+
+describe('qodo #7 / #8 — marking a prize paid', () => {
+  const toggle = (extra: Doc = {}, auth: { uid: string; token: Doc } = owner) => togglePaid({ data: { poolId: POOL, winnerId: 'q1', ...extra }, auth } as never);
+
+  it('records what the prize WAS when it was paid, and keeps that when the prize later changes', async () => {
+    await seedPool({}, [0, 1, 2, 3, 5]);         // 95 sold → Q1 prize $190
+    await sync(Q1);
+    await toggle();
+    expect((await winners()).q1).toMatchObject({ isPaid: true, amount: 190, paidAmount: 190 });
+
+    // Five more squares sell; the pot, and so the prize, goes up.
+    const squares = (await pool()).squares as Square[];
+    for (const id of [0, 1, 2, 3, 5]) squares[id].owner = `Late${id}`;
+    await poolRef().update({ squares });
+    await sync(HALF);
+    expect((await winners()).q1).toMatchObject({ isPaid: true, amount: 200, paidAmount: 190 });
+  });
+
+  it('un-marking clears the paid amount', async () => {
+    await seedPool();
+    await sync(Q1);
+    await toggle();
+    await toggle();
+    expect((await winners()).q1).toMatchObject({ isPaid: false, paidAmount: null, paidByUid: null });
+  });
+
+  it('ATTACK: a click meant for a winner that has since changed does not mark the NEW winner paid', async () => {
+    await seedPool();
+    await sync(Q1);                                // on the page: Q1 → P37
+    // The score is corrected before the click lands: Q1 is now P38's.
+    await sync(feed({ period: 4, state: 'post', current: [28, 24], q1: [8, 3], half: [14, 10], q3: [21, 17], final: [28, 24] }));
+    await expect(toggle({ expectedOwner: 'P37', expectedSquareId: 37 })).rejects.toThrow(/has changed since the page loaded/i);
+    const q1 = (await winners()).q1;
+    expect(q1.owner).toBe('P38');
+    expect(q1.isPaid).not.toBe(true);
+  });
+
+  it('ATTACK: either half of what was on the page is enough to catch a changed winner', async () => {
+    await seedPool();
+    await sync(Q1);
+    await sync(feed({ period: 4, state: 'post', current: [28, 24], q1: [8, 3], half: [14, 10], q3: [21, 17], final: [28, 24] }));
+    await expect(toggle({ expectedOwner: 'P37' })).rejects.toThrow(/has changed since the page loaded/i);
+    await expect(toggle({ expectedSquareId: 37 })).rejects.toThrow(/has changed since the page loaded/i);
+    expect((await winners()).q1.isPaid).not.toBe(true);
+  });
+
+  it('a click for the winner who IS on record goes through', async () => {
+    await seedPool();
+    await sync(Q1);
+    await expect(toggle({ expectedOwner: 'P37', expectedSquareId: 37 })).resolves.toMatchObject({ isPaid: true });
+  });
+
+  it('a page built before this change — no expected winner sent — still works', async () => {
+    await seedPool();
+    await sync(Q1);
+    await expect(toggle()).resolves.toMatchObject({ isPaid: true });
+  });
+
+  it('ATTACK: someone who does not run the pool cannot mark a prize paid', async () => {
+    await seedPool();
+    await sync(Q1);
+    await expect(toggle({}, stranger)).rejects.toThrow(/permission/i);
+    expect((await winners()).q1.isPaid).toBeUndefined();
+  });
+});
+
+describe('qodo #2 — Every Score Pays scored by hand is reported, not papered over', () => {
+  const byHand = { current: { home: 9, away: 3 }, q1: { home: 3, away: 0 }, half: { home: 3, away: 3 }, q3: { home: 6, away: 3 }, final: { home: 9, away: 3 }, gameStatus: 'post', startTime: KICKOFF };
+  const call = { data: { poolId: POOL }, auth: owner } as never;
+
+  it('a finished Every-Score-Pays game with no scoring events says so', async () => {
+    await seedPool({ scores: byHand, ruleVariations: { scoreChangePayout: true, scoreChangePayoutStrategy: 'equal_split' } });
+    await expect(recompute(call)).resolves.toMatchObject({ success: true, eventsNotRecorded: true });
+  });
+
+  it('…and stops saying so once the events exist', async () => {
+    await seedPool({ ruleVariations: { scoreChangePayout: true, scoreChangePayoutStrategy: 'equal_split', combineTDandXP: true } });
+    await sync(feed({ period: 4, state: 'post', current: [3, 0], q1: [3, 0], half: [3, 0], q3: [3, 0], final: [3, 0], plays: [{ home: 3, away: 0 }] }));
+    await expect(recompute(call)).resolves.toMatchObject({ eventsNotRecorded: false });
+  });
+
+  it('is never raised on a pool that pays by the quarter, or on a game still going', async () => {
+    await seedPool({ scores: byHand });
+    await expect(recompute(call)).resolves.toMatchObject({ eventsNotRecorded: false });
+    await seedPool({ scores: { ...byHand, final: null, gameStatus: 'in' }, ruleVariations: { scoreChangePayout: true } });
+    await expect(recompute(call)).resolves.toMatchObject({ eventsNotRecorded: false });
+  });
+});
+
+describe('qodo #6 — a SUPER_ADMIN acting on someone else\'s pool leaves a row in admin_audit', () => {
+  const pregame = { scores: { current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre', startTime: new Date(Date.now() + 3 * 3600_000).toISOString() } };
+  const adminAudit = async () => (await db.collection('admin_audit').get()).docs.map((d) => d.data() as Doc);
+
+  it('unlock by a SUPER_ADMIN who does not run the pool is logged there, with the pool', async () => {
+    await seedPool(pregame);
+    await unlock({ data: { poolId: POOL }, auth: superAdmin } as never);
+    const rows = await adminAudit();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ actorUid: ADMIN, action: 'SQUARES_UNLOCK', targetType: 'pool', targetId: POOL, status: 'success' });
+  });
+
+  it('the commissioner\'s own action is NOT — it is in the pool\'s audit trail', async () => {
+    await seedPool(pregame);
+    await unlock({ data: { poolId: POOL }, auth: owner } as never);
+    expect(await adminAudit()).toEqual([]);
+    expect((await audits()).map((a) => a.type)).toEqual(['POOL_UNLOCKED']);
+  });
+
+  it('a SUPER_ADMIN who runs the pool themselves is its commissioner here, not an outside admin', async () => {
+    await seedPool({ ...pregame, ownerId: ADMIN, createdByUid: ADMIN });
+    await unlock({ data: { poolId: POOL }, auth: superAdmin } as never);
+    expect(await adminAudit()).toEqual([]);
+  });
+
+  it('a SUPER_ADMIN making the draw or recording winners is logged too', async () => {
+    await seedPool({ ruleVariations: { quarterlyRollover: true, unclaimedFinalPrizeStrategy: 'random' } }, [48]);
+    await sync(FINAL);
+    await recompute({ data: { poolId: POOL }, auth: superAdmin } as never);
+    await draw({ data: { poolId: POOL }, auth: superAdmin } as never);
+    expect((await adminAudit()).map((r) => r.action).sort()).toEqual(['SQUARES_FINAL_PRIZE_DRAW', 'SQUARES_RECOMPUTE_WINNERS']);
   });
 });

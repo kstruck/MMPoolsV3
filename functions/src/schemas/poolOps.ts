@@ -17,6 +17,11 @@ export const recalculatePoolWinnersSchema = z.strictObject({
 export const toggleWinnerPaidSchema = z.strictObject({
     poolId,
     winnerId,
+    // The winner the commissioner was LOOKING AT when they clicked. Optional —
+    // a bundle built before 2026-11 does not send it. When present, the
+    // handler refuses if the record now names someone else.
+    expectedOwner: z.string().max(200).optional(),
+    expectedSquareId: z.number().int().min(-1).max(99).optional(),
 });
 
 /**

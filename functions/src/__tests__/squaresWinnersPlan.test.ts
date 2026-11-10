@@ -3,6 +3,7 @@ import {
     finalScoresOf,
     parseEventWinnerId,
     planWinnerWrites,
+    recordedEntry,
     type StoredWinner,
     type WinnerWrite,
 } from '../lib/squaresWinners';
@@ -228,5 +229,36 @@ describe('isUsableAxis', () => {
         expect(isUsableAxis({ home: [0, 1, 2], away: IDENTITY.away })).toBe(false);
         expect(isUsableAxis({ home: [0, 0, 2, 3, 4, 5, 6, 7, 8, 9], away: IDENTITY.away })).toBe(false);
         expect(isUsableAxis({ home: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], away: IDENTITY.away })).toBe(false);
+    });
+});
+
+describe('a drawn final prize is never deleted', () => {
+    const drawn = (over: Record<string, unknown> = {}): StoredWinner => ({
+        id: 'final_rollover',
+        data: { period: 'final', squareId: 12, owner: 'P12', amount: 396, drawnAt: 1, drawnOwner: 'P12', drawnSquareId: 12, ...over },
+    });
+
+    it('with no unclaimed prize called for, it is kept at $0 — with a CRITICAL line — not removed', () => {
+        const writes = plan(pool(), Q1, [q1Record(), drawn()]);
+        expect(only(writes, 'delete')).toEqual([]);
+        expect(only(writes, 'update')).toEqual([expect.objectContaining({ id: 'final_rollover', fields: { amount: 0 }, audit: expect.objectContaining({ severity: 'CRITICAL' }) })]);
+    });
+
+    it('already at $0: nothing more is written', () => {
+        expect(plan(pool(), Q1, [q1Record(), drawn({ amount: 0 })])).toEqual([]);
+    });
+
+    it('an UNDRAWN final_rollover that is no longer called for is still removed', () => {
+        const writes = plan(pool(), Q1, [q1Record(), drawn({ drawnAt: undefined, drawnOwner: undefined, drawnSquareId: undefined, owner: 'Rollover' })]);
+        expect(only(writes, 'delete').map((w) => w.id)).toEqual(['final_rollover']);
+    });
+
+    it('the draw is read from what was DRAWN, not from the owner a later rule change computed', () => {
+        expect(recordedEntry(drawn({ owner: 'P71', squareId: 71 }))).toEqual({ squareId: 12, owner: 'P12', drawn: true });
+        expect(recordedEntry(q1Record())).toEqual({ squareId: 37, owner: 'P37', drawn: false });
+    });
+
+    it('a record drawn before drawnOwner existed falls back to its owner', () => {
+        expect(recordedEntry({ id: 'final_rollover', data: { squareId: 12, owner: 'P12', drawnAt: 1 } })).toEqual({ squareId: 12, owner: 'P12', drawn: true });
     });
 });

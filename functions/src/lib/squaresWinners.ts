@@ -37,6 +37,21 @@ export const PERIOD_WINNER_IDS: ReadonlySet<string> = new Set([
 
 export const isEventWinnerId = (id: string): boolean => id.startsWith('event_');
 
+/**
+ * A stored period record as the payout math takes it.
+ *
+ * For a DRAWN `final_rollover` the winner is read from `drawnOwner` /
+ * `drawnSquareId` — what the draw chose — not from `owner`, which a later
+ * change of rule can overwrite. The draw is a fact; the current owner is a
+ * computed value.
+ */
+export function recordedEntry(w: StoredWinner): { squareId: number; owner: string | null; drawn?: boolean } {
+    const drawn = !!w.data.drawnAt;
+    const owner = drawn && typeof w.data.drawnOwner === 'string' ? w.data.drawnOwner : w.data.owner;
+    const squareId = drawn && w.data.drawnSquareId !== undefined && w.data.drawnSquareId !== null ? w.data.drawnSquareId : w.data.squareId;
+    return { squareId: Number(squareId), owner: typeof owner === 'string' ? owner : null, drawn };
+}
+
 /** `event_14_7` / `event_rev_14_7` → the score that event produced. */
 export function parseEventWinnerId(id: string): { home: number; away: number; isReverse: boolean } | null {
     const m = /^event_(rev_)?(\d+)_(\d+)$/.exec(id);
@@ -93,11 +108,7 @@ export function planWinnerWrites(
     const recorded: Record<string, { squareId: number; owner: string | null; drawn?: boolean }> = {};
     for (const w of existing) {
         if (!PERIOD_WINNER_IDS.has(w.id)) continue;
-        recorded[w.id] = {
-            squareId: Number(w.data.squareId),
-            owner: typeof w.data.owner === 'string' ? w.data.owner : null,
-            drawn: !!w.data.drawnAt,
-        };
+        recorded[w.id] = recordedEntry(w);
     }
 
     const claims = computePeriodPayouts(pool, scores, recorded as RecordedWinners).flatMap((r) => r.claims);
@@ -166,6 +177,27 @@ export function planWinnerWrites(
 
     for (const w of existing) {
         if (!PERIOD_WINNER_IDS.has(w.id) || wanted.has(w.id)) continue;
+
+        // 🛑 A DRAWN RECORD IS NEVER DELETED. Deleting it took `drawnAt` with
+        // it, so a commissioner who disliked the draw could switch the final
+        // score off and on and draw again (qodo, PR #759). It is kept at $0
+        // while the scores call for no unclaimed prize, and it is still what
+        // `drawSquaresFinalPrize` refuses a second draw on.
+        if (w.data.drawnAt) {
+            if (w.data.amount !== 0) {
+                writes.push({
+                    kind: 'update', id: w.id, fields: { amount: 0 },
+                    audit: {
+                        type: 'WINNER_COMPUTED',
+                        severity: 'CRITICAL',
+                        message: `The scores no longer call for an unclaimed final prize, so the drawn prize for ${String(w.data.drawnOwner ?? w.data.owner)} is now $0.00 (was ${money(w.data.amount)}). The draw stays on record and cannot be made again`,
+                        payload: { docId: w.id, drawnOwner: w.data.drawnOwner ?? w.data.owner, previousAmount: w.data.amount, wasPaid: w.data.isPaid === true },
+                    },
+                });
+            }
+            continue;
+        }
+
         const wasPaid = w.data.isPaid === true;
         writes.push({
             kind: 'delete', id: w.id,

@@ -335,6 +335,15 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
     related: ['weekly-prize', 'season-prize', 'profit'],
   },
   {
+    id: 'squares-winner',
+    term: 'Squares winner',
+    short: 'The square that won a quarter, who holds it, and the prize it is owed. It is what your commissioner pays from.',
+    long: 'Each time a quarter ends, the square whose two digits match the score is recorded as that quarter’s winner, with its prize beside it.\n\nIf your pool gives part of the pot to charity, that comes off first and each prize is a share of what is left. With reverse winners on, the square with the two digits swapped shares the prize, half each.\n\nA winning square nobody bought is either kept by the organizer or rolled into the next quarter, whichever your commissioner chose when setting up the pool.\n\nPaid, next to a winner, means the prize has been handed over. It is separate from whether that player has paid for their squares.',
+    contextHeading: 'Squares Winner Record',
+    audience: ['member', 'commissioner', 'admin'],
+    related: ['payout-record'],
+  },
+  {
     id: 'weekly-prize',
     term: 'Weekly prize',
     short: 'What you are owed for your place in one scored week, in a pool that pays out weekly.',
