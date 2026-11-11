@@ -7,6 +7,7 @@ Rounds of review on `PLAN-SQUARES-SERVER-FIELDS.md` and its PR. Newest last.
 | S0 | self, before the first commit | 4 | 4 | — |
 | M1 | mutation testing | 49 mutants, 48 red | — | 1 survivor (equivalent — see below) |
 | X1 | codex (`gpt-5.6-terra`), first round, at `3b929a6b` against #761 | 1 | 1 | — |
+| X2 | codex, second round, at `09553dbd` | 1 | 1 | — |
 | Q1 | qodo, first review of #765 (at `448a5aed`) | 10 | 8 (2 of them on #761) | 2 rejected (4, 6) |
 | SW | sweeps (`PLAN-SQUARES-SERVER-FIELDS-SWEEPS.md`) | 0 | — | — |
 | Q2 | qodo, re-review of #765 (at `cace846f`, after the draft/ready toggle) | 1 | 1 | — |
@@ -96,3 +97,11 @@ Merged in with this round: #760's codex fix (`squaresGameLink` keeps scores
 only for the same game). This PR's server path already started a different
 game from fresh scores; the manage page's client link that #760 fixed is
 replaced here by the callable.
+
+## Round X2 — codex, second round, at `09553dbd` (2026-11-11)
+
+| # | codex's finding | Verdict | What changed |
+|---|---|---|---|
+| 1 | P1: the rule is scoped to `type == 'SQUARES'`, so a squares pool with NO `type` is not covered and its managers can still write every protected field. The server treats a typeless pool as squares (`isSquares` in `squaresAdmin.ts`, `lockPool`) | **Accepted — real.** The app was squares-only before `type` existed, and every server path already reads a missing type as squares | `isSquares` is now true for `'SQUARES'`, a missing type and `null`. NFL pools are unaffected: every NFL rule already requires an NFL type. 4 rule cases (48 assertions); mutant (scope back to `'SQUARES'` only): 3 of them red |
+
+**Also in this round: a defect from the #760 merge, found by the emulator suite, not by a reviewer.** #760's codex fix made `squaresGameLink` keep scores only when told the pool's current game. This PR's callable did not pass it, so re-linking the SAME game lost the scores. Fixed (the callable passes `gameId`); mutant (always claim the same game) red.

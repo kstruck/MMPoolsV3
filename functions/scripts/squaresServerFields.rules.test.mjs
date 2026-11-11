@@ -179,10 +179,20 @@ for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN', 'BRACKET', 'NFL_
     );
 }
 
+// ---- E. squares pools from before `type` existed ---------------------------------------
+// codex, PR #765 round 2: the server treats a pool with no type as squares
+// (`isSquares`, `lockPool`); the rule must too.
+console.log('\nE. a squares pool with NO type is a squares pool');
+const { type: _ignored, ...TYPELESS } = SQUARES;
+await refused('no type: isLocked', TYPELESS, { isLocked: true });
+await refused('no type: payouts once locked', { ...TYPELESS, ...LOCKED }, { payouts: PRIZE_CHANGES.payouts });
+await refused('type null: quarterlyNumbers', { ...SQUARES, type: null }, { quarterlyNumbers: { q1: AXIS } });
+await allowed('no type: an ordinary field', TYPELESS, { name: 'Renamed' });
+
 await env.cleanup();
 
 // Empty-pass guard: a broken loop above must not report a short run as green.
-const EXPECTED_CASES = 10 + 4 + 14 + 6 + 2 + 2 + 6;
+const EXPECTED_CASES = 10 + 4 + 14 + 6 + 2 + 2 + 6 + 4;
 if (cases !== EXPECTED_CASES) {
     console.error(`\nRan ${cases} cases, expected ${EXPECTED_CASES}.`);
     process.exit(1);
