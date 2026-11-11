@@ -158,10 +158,12 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    a bucket in `us` or `us-central*`. That instruction is corrected there. A
    restore of this export reads from `gs://mmpools-firestore-exports`.
 
-   **Not part of the gate — Kevin's call:** delete protection is OFF on the
-   database. PITR does not survive a deleted database; the export does.
-   Turning it on is one reversible command and touches no data:
-   `gcloud firestore databases update --database="(default)" --delete-protection --project gridiron-gamble-uzuqo`
+   **Delete protection — turned ON 2026-11-11 by Kevin** (not part of the
+   gate). It had read `DELETE_PROTECTION_DISABLED`; PITR does not survive a
+   deleted database. `gcloud firestore databases update --database="(default)" --delete-protection --project gridiron-gamble-uzuqo`
+   returned `done: true` and `deleteProtectionState: DELETE_PROTECTION_ENABLED`,
+   with `pointInTimeRecoveryEnablement` still `POINT_IN_TIME_RECOVERY_ENABLED`.
+   To undo: the same command with `--no-delete-protection`.
 6. **Merge precondition** (qodo, finding 6). The required `security-audit`
    check is red on `main` for 8 advisories in shared dependencies. None of
    A–D may be merged over it silently: either the dependency PRs (#750, #754,
