@@ -11,8 +11,9 @@ import { dbService } from '../services/dbService';
 import { StatusCard } from './StatusCard';
 import { PayoutSummaryCard } from './PayoutSummaryCard';
 import { countHeldSquares, duesBuckets, effectiveSquareCap, isEnteringForSomeoneElse, isOwnSquare } from '@shared/squaresClaim';
-import { claimCodeFailureText, claimGuestSquaresOnce, getOrCreateGuestKey, hashGuestKey, readGuestKey } from '../utils/guestKey';
+import { claimCodeFailureText, getOrCreateGuestKey, hashGuestKey } from '../utils/guestKey';
 import { useAccountPrefill } from '../hooks/useAccountPrefill';
+import { useGuestSquaresMerge } from '../hooks/useGuestSquaresMerge';
 
 interface GridProps {
    gameState: GameState;
@@ -78,30 +79,16 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    }, [gameState.id, guestKey]);
 
    // A guest who has since signed in takes their guest squares into the
-   // account — on this browser, where the device key lives. Without this a
-   // player who reserved first and signed up second never saw those squares on
-   // their dashboard and could not use "I've paid". Once per pool, account and
-   // session — but "once" is recorded only when it SUCCEEDS, so a timeout is
-   // retried the next time the grid changes (at most three times a page load).
-   // A merge the server refused because it would pass the pool's limit is not
-   // "done" either: it is asked again when the limit, the account's count or
-   // this browser's count changes (`retryKey`), and not otherwise.
-   const signedInUid = currentUser?.id;
-   const hasUnclaimedGuestSquare = gameState.squares.some(s => s.owner && s.guestKeyHash && !s.reservedByUid);
-   const failedClaims = React.useRef(0);
-   const poolCap = gameState.maxSquaresPerPlayer;
-   useEffect(() => {
-      if (!signedInUid || !gameState.id || !hasUnclaimedGuestSquare || failedClaims.current >= 3) return;
-      const key = readGuestKey();
-      if (!key) return;
-      const onAccount = gameState.squares.filter(s => s.owner && s.reservedByUid === signedInUid).length;
-      const onThisBrowser = guestKeyHash
-         ? gameState.squares.filter(s => s.owner && !s.reservedByUid && s.guestKeyHash === guestKeyHash).length
-         : 0;
-      const retryKey = `${effectiveSquareCap(poolCap) ?? 'none'}:${onAccount}:${onThisBrowser}`;
-      void claimGuestSquaresOnce(gameState.id, signedInUid, () => dbService.claimMySquares(gameState.id, key, { quiet: true }), undefined, retryKey)
-         .then((outcome) => { if (outcome === 'failed') failedClaims.current += 1; });
-   }, [signedInUid, gameState.id, hasUnclaimedGuestSquare, gameState.squares, guestKeyHash, poolCap]);
+   // account — on this browser, where the device key lives. When it asks, when
+   // it asks again and when it gives up are in the hook, where they are tested.
+   useGuestSquaresMerge({
+      uid: currentUser?.id,
+      poolId: gameState.id,
+      squares: gameState.squares,
+      cap: gameState.maxSquaresPerPlayer,
+      guestKeyHash,
+      claim: (key) => dbService.claimMySquares(gameState.id, key, { quiet: true }),
+   });
 
    // --- Player Identity State ---
    const [playerInfo, setPlayerInfo] = useState<{

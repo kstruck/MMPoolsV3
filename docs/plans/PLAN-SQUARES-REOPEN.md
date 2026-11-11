@@ -92,10 +92,19 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
      what to do if the name is taken). Then:
      `gcloud firestore export gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11 --project gridiron-gamble-uzuqo`
      The export runs in the background: the command returning means it
-     STARTED. **What shows it worked is the files:**
-     `gcloud storage ls --recursive gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11`
-     If the listing is empty it is still running or it failed:
-     `gcloud firestore operations list --project gridiron-gamble-uzuqo`.
+     STARTED. **Two things, both, show it worked — files alone do not**
+     (qodo, PR #760: an export that is still running, or was cancelled or
+     failed part-way, leaves files behind too, and the export is only usable
+     once its operation is done):
+     1. **The operation finished without an error.**
+        `gcloud firestore operations list --project gridiron-gamble-uzuqo`
+        → find the entry for this export (its output location is the
+        `pre-squares-reopen-2026-11` path) and read it: it must say it is
+        done, and it must carry no error. If it is not done yet, wait and run
+        the command again. Do not go on while it is still running.
+     2. **The files are there.**
+        `gcloud storage ls --recursive gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11`
+     Record the export as taken only when both are true.
 
      **UNVERIFIED — what those commands print.** None of the three was run
      for this plan; there are no credentials for the project here. What to
@@ -106,9 +115,10 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
      the listing shows a `.overall_export_metadata` file and one directory
      per collection (`all_namespaces/kind_pools/…`) with sizes that are not
      zero; the operations list has `done` and `error` on each entry. **If
-     what you see differs, trust the screen, not this page** — a listing with
-     real files in it is the proof, whatever they are called — and write
-     down what it actually printed next to "Export taken" below.
+     what you see differs, trust the screen, not this page** — the field
+     names may not be these; what has to be true is that the operation has
+     finished, that it reports no error, and that the files exist — and
+     write down what it actually printed next to "Export taken" below.
      *(Round Q7 corrected a field name here that had been written from
      memory; round Q8 marks the rest for what it is.)*
 
