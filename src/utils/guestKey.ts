@@ -101,8 +101,19 @@ export async function claimIdentityFor(
  * remembered WITH what the answer depended on (`retryKey` — the limit, and how
  * many squares the account and this browser hold): the same question is not
  * asked twice, a changed one is.
+ *
+ * AND A CHANGED QUESTION THAT ARRIVES WHILE ONE IS IN FLIGHT IS NOT DROPPED
+ * (qodo, PR #761). The limit is raised while a claim is on its way; the page
+ * asks again and is told "in flight"; the first claim, which read the pool
+ * before the change, comes back "over the limit" — and writes nothing, so
+ * nothing prompts the page to ask a third time. The newest question asked
+ * during a flight is kept (`askedMeanwhile`), and if the flight ends in a
+ * refusal that a different question might not get, it is asked then.
  */
 const claimsInFlight = new Set<string>();
+type Claim = () => Promise<{ success: boolean; overLimit?: boolean }>;
+type ClaimStorage = Pick<Storage, 'getItem' | 'setItem'> | null;
+const askedMeanwhile = new Map<string, { claim: Claim; storage: ClaimStorage; retryKey: string }>();
 /** The same memory as the session flag, for a browser that blocks storage. */
 const refusedOverLimit = new Map<string, string>();
 const CLAIMED = '1';
@@ -111,8 +122,8 @@ const overLimitMark = (retryKey: string) => `over:${retryKey}`;
 export async function claimGuestSquaresOnce(
   poolId: string,
   uid: string,
-  claim: () => Promise<{ success: boolean; overLimit?: boolean }>,
-  storage: Pick<Storage, 'getItem' | 'setItem'> | null = safeSessionStorage(),
+  claim: Claim,
+  storage: ClaimStorage = safeSessionStorage(),
   /** What an over-the-limit answer depends on. A refusal is retried only when this changes. */
   retryKey = '',
 ): Promise<'claimed' | 'already-done' | 'in-flight' | 'failed' | 'over-limit'> {
@@ -125,24 +136,41 @@ export async function claimGuestSquaresOnce(
   }
   remembered = remembered || refusedOverLimit.get(flag);
   if (remembered === CLAIMED || remembered === overLimitMark(retryKey)) return 'already-done';
-  if (claimsInFlight.has(flag)) return 'in-flight';
+  if (claimsInFlight.has(flag)) {
+    // Only the newest question matters; an older one waiting is replaced.
+    askedMeanwhile.set(flag, { claim, storage, retryKey });
+    return 'in-flight';
+  }
   claimsInFlight.add(flag);
+  let refused = false;
   try {
     const result = await claim();
     if (!result.success) return 'failed';
-    const mark = result.overLimit ? overLimitMark(retryKey) : CLAIMED;
-    if (result.overLimit) refusedOverLimit.set(flag, mark);
+    refused = result.overLimit === true;
+    const mark = refused ? overLimitMark(retryKey) : CLAIMED;
+    if (refused) refusedOverLimit.set(flag, mark);
     else refusedOverLimit.delete(flag);
     try {
       storage?.setItem(flag, mark);
     } catch {
       // Not remembered; the server call is idempotent, so a repeat is harmless.
     }
-    return result.overLimit ? 'over-limit' : 'claimed';
+    return refused ? 'over-limit' : 'claimed';
   } catch {
     return 'failed';
   } finally {
     claimsInFlight.delete(flag);
+    const next = askedMeanwhile.get(flag);
+    askedMeanwhile.delete(flag);
+    // Ask the question that arrived meanwhile — but only after a refusal over
+    // the limit. A claim that moved the squares needs no follow-up, and one
+    // that failed is retried by the page itself. If the waiting question is
+    // the SAME one that was just refused, the call below finds the refusal
+    // remembered and asks nothing: there is no second check for that here,
+    // because there would be nothing for it to do.
+    if (next && refused) {
+      void claimGuestSquaresOnce(poolId, uid, next.claim, next.storage, next.retryKey);
+    }
   }
 }
 

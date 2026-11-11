@@ -23,6 +23,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q5 | qodo | #758 @ `77418e03`, #760 @ `3619b6cb` | 7 | 5 | 2 |
 | Q6 | qodo | #761 @ `04996b6b` | 13 | 8 | 3, and 2 that are Kevin's |
 | Q7 | qodo | #758 @ `0ac1bdb6`, #759 @ `085a0d07`, #760 @ `e4a06808`, #761 @ `c7af924f` | 8 | 7 | 1 kept as built, for Kevin to confirm |
+| Q8 | qodo | #758 @ `74e37a35`, #761 @ `d9d81fe6` (#759 and #760: nothing new) | 6 | 5 | 1 kept as built, for Kevin to confirm |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -689,7 +690,7 @@ somebody else's finding, is the code most likely to be wrong.
 | #759 | The claim-code comment says six characters | **Accepted.** It is eight |
 | #760 | Guests cannot renew a spent transfer code | **Accepted.** See below |
 | #760 | The pause switch has no entry in the client settings defaults | **Accepted** (in #759). I declined this in round Q6; it costs one inert line and the rule it cites is the repo's own |
-| #760 | The prize pot skips the floor | **Kept as built — recorded as decision D19, for Kevin to confirm.** qodo accepts the reason and asks that the departure be recorded and confirmed rather than live in a code comment. It is right about that |
+| #760 | The prize pot skips the floor | **Kept as built — recorded as decision D23 (first labelled D19, which was taken), for Kevin to confirm.** qodo accepts the reason and asks that the departure be recorded and confirmed rather than live in a code comment. It is right about that |
 
 **The two that were consequences of round Q6's "a claim code is used once"
 and round Q5's "a merge respects the limit".**
@@ -711,4 +712,40 @@ and round Q5's "a merge respects the limit".**
 **Tests and mutants.** 7 + 5 client tests (over-limit retry, failure text),
 2 unit (`guestHeld`), 2 emulator (82 in the file). 13 mutants, all red on the
 first run.
+
+## Round Q8 — qodo after round Q7 (2026-11-10T23:56Z)
+
+**#759 came back with no open bugs and nothing new. #760 came back with
+nothing new** — its one listed bug is "a pool can score the wrong game",
+rejected with reasons in round Q5 (plan K11). Six new findings, on #758 and
+#761; four of the six are about what round Q7 wrote in the plan.
+
+| # | Finding | Verdict |
+|---|---|---|
+| 1 | The backup step states expected output nobody ran | **Accepted.** Marked UNVERIFIED, with where the wording comes from and "trust the screen, not this page" |
+| 2 | The money example in the pot decision does not add up | **Accepted.** I wrote "a full pool" over the numbers for 97 squares. It now shows the sum, and it is the case the test runs |
+| 3 | Two decisions share the label D19 | **Accepted.** I took D19 without looking; it was in use. The pot decision is D23 |
+| 4 | Guest claims miss a limit change that arrives mid-claim | **Accepted.** See below |
+| 5 | The new "Get a new code" control misses the button style | **Accepted** — it carries the classes the "Sync" button beside it has |
+| 6 | Winners are recorded when the pause field is absent | **Kept as built — Kevin's to confirm.** See below |
+
+**4.** The page asks the server to merge guest squares; while that is in
+flight the limit is raised; the page asks again and is told "in flight"; the
+first claim, which read the pool before the change, comes back "over the
+limit" — and writes nothing, so nothing prompts a third ask. The newest
+question asked during a flight is now kept, and asked when the flight ends
+in a refusal that a different question might not get.
+
+**6.** The finding itself says the design is deliberate and asks for one of
+two things: confirm it with the maintainer and say so here, or require an
+explicit "on". It is decision D18 and it was rejected as a code change in
+round Q5 for a stated reason — a switch that must be armed means no squares
+winner is recorded until somebody arms it, and a config document that is
+lost or reset stops every payout record with nothing failing. What can be
+done from here is done: it is recorded, and **it is on the list put to Kevin
+to confirm**, with the pot decision (D23).
+
+**Three of these six are the same mistake**: something written into a
+document from memory instead of from a command or a file — a field name
+(round Q7), a label, an example's arithmetic. Each took a reviewer to find.
 
