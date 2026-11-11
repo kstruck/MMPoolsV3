@@ -9,6 +9,7 @@ Rounds of review on `PLAN-SQUARES-SERVER-FIELDS.md` and its PR. Newest last.
 | — | codex | — | **OWED** | not available where this was built |
 | Q1 | qodo, first review of #765 (at `448a5aed`) | 10 | 8 (2 of them on #761) | 2 rejected (4, 6) |
 | SW | sweeps (`PLAN-SQUARES-SERVER-FIELDS-SWEEPS.md`) | 0 | — | — |
+| Q2 | qodo, re-review of #765 (at `cace846f`, after the draft/ready toggle) | 1 | 1 | — |
 
 ## Round S0 — self-review, before the first commit (2026-11-11)
 
@@ -65,3 +66,17 @@ The in-transaction kickoff re-check (finding 8) was not mutated, because no test
 - non-owners cannot reserve.
 
 This matters only on a grid still unlocked at the original kickoff, because the link sets the auto-lock for that time. The remedy is to re-link the same game: the link reads the feed's new kickoff, passes the clock check and rewrites `gameTime`. This is accepted rather than adding a sync-side writer of `gameTime`, which would make the field the rule protects writable by the feed path.
+
+## Round Q2 — qodo's re-review at `cace846f` (2026-11-11)
+
+| # | qodo's finding | Verdict | What changed |
+|---|---|---|---|
+| 1 | 🛑 A played pool can still be moved: **unlink** (no play check) → clear its scores (allowed on an unlinked pool) → link another game. The old score history and the sync's dedupe markers stay | **Accepted — real; a hole in round Q1's own fix.** The Q1 guard read only the scores, which the commissioner controls once the pool is unlinked, and the winner records, which an unlocked grid never has | "Played" now also reads what only the server writes: the sync's `SCORE_STEP:` and `WINNER_EVENT…` markers in `audit_dedupe`. Firestore rules give clients no access to that collection, so it falls under the default deny. Only those key prefixes are read: the reminder jobs write other keys there, and a reminder is not play. A game change also clears the pool's `scoreEvents` history. Unlink stays allowed, because any later link of another game is refused. 4 new emulator tests: three marker kinds, plus a reminder key that must **not** block |
+
+**Mutation check (round Q2):** 4 mutants, **4 red**:
+- the score-step markers are ignored;
+- the event markers are ignored;
+- any dedupe key counts as play;
+- the score history is kept.
+
+**What this round confirms about round Q1:** code written to close a finding has never been reviewed. Q1's guard was checked against the attack as qodo described it, and that was not enough: it read state the attacker controls. The question to ask of every guard is whether the caller can change what it reads.

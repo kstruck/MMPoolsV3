@@ -229,6 +229,28 @@ describe('linkSquaresPoolGame — changing the game (qodo #765, findings 1 and 9
     expect(await audits()).toHaveLength(0);
   });
 
+  // qodo #765 round 2: unlink → clear the scores (allowed on an unlinked pool)
+  // → link another game. What the sync left behind only the server can write.
+  for (const key of [`SCORE_STEP:${POOL}:7:0`, `WINNER_EVENT:${POOL}:7:0`, `WINNER_EVENT_REV:${POOL}:7:0`]) {
+    it(`a grid the score sync has played cannot be moved, even unlinked with its scores cleared (${key.split(':')[0]})`, async () => {
+      await seedFeed(GAME, { kickoff: Date.now() + 48 * HOUR, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+      await seedPool(); // unlinked, scores show nothing
+      await poolRef().collection('audit_dedupe').doc(key).set({ createdAt: admin.firestore.Timestamp.now() });
+      await expect(call({ poolId: POOL, gameId: GAME })).rejects.toThrow(/already has scores or winners/);
+      expect('gameId' in (await pool())).toBe(false);
+    });
+  }
+
+  it('a reminder the pool was sent is not play: its dedupe key does not block a game change', async () => {
+    await seedFeed(GAME, { kickoff: Date.now() + 48 * HOUR, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+    await seedLinkedTo({ scoreEvents: [{ id: 'e1', home: 7, away: 0, description: 'old game' }] });
+    await poolRef().collection('audit_dedupe').doc(`LOCK_REMINDER:${POOL}:60`).set({ createdAt: admin.firestore.Timestamp.now() });
+    await call({ poolId: POOL, gameId: GAME });
+    const p = await pool();
+    expect(p.gameId).toBe(GAME);
+    expect(p.scoreEvents).toEqual([]); // the old game's score history goes with it
+  });
+
   it('a grid with a winner on record cannot be moved to another game, even with its scores cleared', async () => {
     await seedFeed(GAME, { kickoff: Date.now() + 48 * HOUR, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
     await seedPool(); // unlinked, scores show nothing

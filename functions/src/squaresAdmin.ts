@@ -425,13 +425,30 @@ export const linkSquaresPoolGame = validated(
             // keeps a period score it already holds, and its event records and
             // de-duplication markers are kept per pool, not per game, so a grid
             // carrying another game's play would be scored partly from that game.
-            // A grid that has PLAYED one (scores show play, or a winner is on
-            // record) cannot be moved to another; that is a new pool. Re-linking
-            // the SAME game keeps what it has.
+            // A grid that has PLAYED one cannot be moved to another; that is a
+            // new pool. Re-linking the SAME game keeps what it has.
+            //
+            // "Played" is read from what only the server writes, as well as the
+            // scores (qodo #765 round 2): an unlinked pool's scores are the
+            // commissioner's to clear, so unlink → clear → link would otherwise
+            // pass. The sync's score-step and event-winner markers in
+            // `audit_dedupe` (no client access in firestore.rules) and the
+            // winner records stay. Reminder jobs write other keys there, so only
+            // the play keys are looked for.
             const changingGame = pool.gameId !== game.id;
             if (changingGame) {
-                const winners = await t.get(poolRef.collection('winners').limit(1));
-                if (squaresScoresShowPlay(pool.scores as Parameters<typeof squaresScoresShowPlay>[0]) || !winners.empty) {
+                const dedupes = poolRef.collection('audit_dedupe');
+                const keyed = (prefix: string) => dedupes
+                    .orderBy(admin.firestore.FieldPath.documentId())
+                    .startAt(prefix).endAt(`${prefix}\uf8ff`).limit(1);
+                const [winners, steps, events] = await Promise.all([
+                    t.get(poolRef.collection('winners').limit(1)),
+                    t.get(keyed('SCORE_STEP:')),
+                    t.get(keyed('WINNER_EVENT')),
+                ]);
+                const played = squaresScoresShowPlay(pool.scores as Parameters<typeof squaresScoresShowPlay>[0])
+                    || !winners.empty || !steps.empty || !events.empty;
+                if (played) {
                     throw new HttpsError('failed-precondition', 'This grid already has scores or winners from a game. Its game cannot be changed — start a new pool for another game.');
                 }
             }
@@ -449,7 +466,13 @@ export const linkSquaresPoolGame = validated(
                 seasonType: FieldValue.delete(),
                 week: FieldValue.delete(),
             };
-            t.update(poolRef, { ...staleGameFields, ...patch, updatedAt: Timestamp.now() });
+            t.update(poolRef, {
+                ...staleGameFields,
+                ...patch,
+                // The score history shown on the pool belongs to the game too.
+                ...(changingGame ? { scoreEvents: [] } : {}),
+                updatedAt: Timestamp.now(),
+            });
             await writeAuditEvent({
                 poolId, type: 'POOL_GAME_LINKED', severity: 'INFO',
                 message: `Linked to ${game.awayTeam} @ ${game.homeTeam}`,
