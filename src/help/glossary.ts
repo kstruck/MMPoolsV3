@@ -38,6 +38,7 @@ export const GLOSSARY_ALLOWLIST: Readonly<Record<string, string>> = Object.freez
   'Golden Scenario': 'Simulation fixture vocabulary; engineering only.',
   'Scenario Oracle': 'Simulation fixture vocabulary; engineering only.',
   'Health Snapshot': 'Operations probe result, read only on the admin Overview tab.',
+  'Squares Game Link': 'Engineering rule behind the game picker. A commissioner meets it as the picker\'s own message when a played grid cannot change game, not as a term.',
   'Member Record': 'The storage shape behind the Roster. Readers meet it as the Roster, which is mirrored.',
   'Pool Homepage (Overview)': 'Duplicate CONTEXT.md heading for the same concept as "Pool Homepage", which is mirrored as pool-homepage.',
   'Profile Subject': 'Internal modeling term covering both a player and an Expert; readers meet each separately.',

@@ -60,6 +60,16 @@ describe('linkSquaresGame — "linked" is said only once the pool is saved', () 
         expect(save).not.toHaveBeenCalled();
       });
     }
+    // qodo, PR #760: the winners subscription starts empty and empties on error.
+    it('winner records NOT KNOWN yet (null): a change of game waits — "not-ready", nothing saved', async () => {
+      const save = savesOk();
+      expect(await linkSquaresGame({ game: game(), pool: { ...named, gameId: OTHER }, winnerCount: null, nameIsFree: free, save, nowMs: before })).toEqual({ status: 'not-ready' });
+      expect(save).not.toHaveBeenCalled();
+    });
+    it('…but re-linking the SAME game does not need them', async () => {
+      const save = savesOk();
+      expect((await linkSquaresGame({ game: game(), pool: { ...named, gameId: '401772510' }, winnerCount: null, nameIsFree: free, save, nowMs: before })).status).toBe('linked');
+    });
     it('re-linking the SAME game on a played grid is not a change, and goes through', async () => {
       const save = savesOk();
       const out = await linkSquaresGame({ game: game(), pool: { ...named, gameId: '401772510', scoreEvents: [{ home: 7, away: 0 }] }, winnerCount: 2, nameIsFree: free, save, nowMs: before });

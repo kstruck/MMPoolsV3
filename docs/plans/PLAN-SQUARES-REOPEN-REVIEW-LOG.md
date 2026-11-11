@@ -982,3 +982,10 @@ Triggered by the draft/ready toggle at `3e8a2bd8`; 4 new findings.
 | 9 | The rounds lack watcher evidence (`mmp-qodo-cycle`) | **Rejected.** Round Q12 states why the watcher could not run there (`gh` was unavailable) and what replaced it: every surface read by hand, every round. A record cannot be backdated for a tool that did not run, and the substitute is written down rather than hidden | — |
 
 Tests: 5 new (four ways a grid shows it has played, plus the same game still linking). Mutant: the check removed fails 4.
+
+## Round Q14 — qodo, re-review of #760 at `b3e7c260` (2026-11-11)
+
+| # | qodo's finding | Verdict | What changed |
+|---|---|---|---|
+| 1 | The played-grid check reads the winner count from the winners subscription, which is empty before its first snapshot and is emptied on an error. In either window a played grid whose hand-typed scores were cleared could be moved | **Accepted — real** | The page passes `null` until a snapshot has arrived (and again after an error). On a change of game, `linkSquaresGame` treats `null` as NOT KNOWN and returns `not-ready`: nothing is written, and the page says the records have not loaded. A same-game re-link does not need them. 2 tests; mutant (the `null` check removed): red. The page's own wiring (`winnersLoaded ? count : null`) has no component test; this file has no AdminPanel harness |
+| 9 | The played-grid rule is not in the domain glossary | **Accepted** | `CONTEXT.md`: new entry "Squares Game Link" |
