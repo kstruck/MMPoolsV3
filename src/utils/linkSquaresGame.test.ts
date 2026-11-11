@@ -27,6 +27,19 @@ describe('linkSquaresGame — "linked" is said only once the pool is saved', () 
     expect('name' in patch).toBe(false);
   });
 
+  // codex, PR #760: "Change Game" carried the old game's scores onto the new one.
+  it('changing the game starts from fresh scores; re-linking the same game keeps them', async () => {
+    const played = { current: { home: 24, away: 17 }, q1: null, half: null, q3: null, final: { home: 24, away: 17 }, gameStatus: 'post' };
+    const other = savesOk();
+    await linkSquaresGame({ game: game(), pool: { ...named, scores: played, gameId: '401770000' }, nameIsFree: free, save: other, nowMs: before });
+    const fresh = (other.mock.calls[0][0] as { scores: Record<string, unknown> }).scores;
+    expect(fresh.gameStatus).not.toBe('post');
+    expect(fresh.final).toBeNull();
+    const same = savesOk();
+    await linkSquaresGame({ game: game(), pool: { ...named, scores: played, gameId: '401772510' }, nameIsFree: free, save: same, nowMs: before });
+    expect((same.mock.calls[0][0] as { scores: Record<string, unknown> }).scores.final).toEqual({ home: 24, away: 17 });
+  });
+
   it('the league is the one the game was FOUND in', async () => {
     const save = savesOk();
     await linkSquaresGame({ game: game({ league: 'college' }), pool: named, nameIsFree: free, save, nowMs: before });
