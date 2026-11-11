@@ -40,6 +40,8 @@ export interface LinkablePool {
   name?: string | null;
   reminders?: unknown;
   scores?: unknown;
+  /** The game the pool is linked to now. A different one starts from fresh scores. */
+  gameId?: unknown;
 }
 
 export async function linkSquaresGame(input: {
@@ -55,7 +57,7 @@ export async function linkSquaresGame(input: {
   const { game, pool } = input;
   if (hasStarted(game, input.nowMs())) return { status: 'started' };
   // The league the game was found in travels with it (see useScheduleSearch).
-  const patch = squaresGameLink(game, game.league, { reminders: pool.reminders, scores: pool.scores });
+  const patch = squaresGameLink(game, game.league, { reminders: pool.reminders, scores: pool.scores, gameId: pool.gameId });
   if (!patch) return { status: 'not-a-game' };
 
   // The pool keeps its name unless it never had one. A name is only ever

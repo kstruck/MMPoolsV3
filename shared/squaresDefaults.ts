@@ -207,7 +207,7 @@ export interface LinkableGame {
 export function squaresGameLink(
   game: LinkableGame,
   league: 'nfl' | 'college',
-  existing: { reminders?: unknown; scores?: unknown } = {},
+  existing: { reminders?: unknown; scores?: unknown; gameId?: unknown } = {},
 ): Record<string, unknown> | null {
   const id = typeof game.id === 'string' ? game.id.trim() : '';
   const kickoff = finite(game.kickoff);
@@ -231,7 +231,16 @@ export function squaresGameLink(
         lockAt: kickoff,
       },
     },
-    scores: { ...EMPTY_SCORES, ...asObject(existing.scores), startTime: new Date(kickoff).toISOString() },
+    // Scores belong to ONE game (codex, PR #760). Re-linking the same game
+    // keeps what it has; any other game — or a pool that had none — starts
+    // from nothing. Carrying another game's scores kept its final and its
+    // status: the score sync skips a pool whose status is 'post', so the new
+    // game would never be scored, and the claim check would call it started.
+    scores: {
+      ...EMPTY_SCORES,
+      ...(existing.gameId === id ? asObject(existing.scores) : {}),
+      startTime: new Date(kickoff).toISOString(),
+    },
   };
   // A badge that is not the feed's own is not written; the page falls back to the name.
   if (isFeedLogoUrl(game.homeLogo)) patch.homeTeamLogo = game.homeLogo;

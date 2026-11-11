@@ -3,12 +3,13 @@
 Findings from each review round, verbatim in substance, with the verdict and the
 evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 
-> **STATUS: NOT CONVERGED.** One reviewer (qodo) has reported on PR-A and on
-> PR-B, twice each. The second-model round CLAUDE.md §2c requires —
-> `codex exec review` — **has not
-> run on any PR in this plan**: `codex` is installed but not logged in on the
-> machine this work was done on (`codex login status` → `Not logged in`). That
-> gate is OWED, not waived. Nothing here should be read as "reviewed by codex".
+> **STATUS: codex round 1 RUN 2026-11-11** on every PR in this plan (round X1
+> below). Until then it had not run: `codex` was not logged in where this was
+> built. It ran in the cloud session, logged in with the environment's
+> `OPENAI_API_KEY`, on model `gpt-5.6-terra` (codex's default, `gpt-6.1-sol`,
+> is not available to that key). Each PR was reviewed on its OWN increment:
+> #758 against `main`, #759 against PR-A, #760 against PR-B, #762 and #761
+> against PR-C.
 
 | Round | Reviewer | Artifact | Findings | Accepted | Rejected |
 |---|---|---|---|---|---|
@@ -28,7 +29,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q10 | qodo | #758 @ `ed3af116`, #760 @ `c9191f58` (#759, #761, #762: nothing new) | 7 | 6 | 1 that is Kevin's (K11) |
 | Q11 | qodo | all five, at the heads of round Q10 (`542b1313`, `b63403d8`, `3ec26e4b`, `5bf4640a`, `2a6232f1`) | 4 (raised 8 times across the five PRs) | 3 | 1 that is Kevin's (K11) |
 | Q12 | qodo | all five, at the heads of round Q11 (`2776f1ef`, `ff34bd2c`, `7eb7b825`, `b1919e2d`, `b23d25fc`) | 3 (raised 4 times) | 1 | 2 — **not fixed, put to Kevin** |
-| — | codex | — | **OWED** | — | — |
+| X1 | codex (`gpt-5.6-terra`) | #758, #759, #760, #761, #762 | 2 | 1 | 1 |
 
 ---
 
@@ -955,3 +956,16 @@ answer cannot be kept for a later one, about ten lines and their tests; or
 stop moving guest squares automatically and give the player a button.
 
 Nothing in the code changed in this round. Both threads are left open.
+
+## Round X1 — codex, first round on every PR (2026-11-11)
+
+`codex exec review -c model=gpt-5.6-terra --base <the PR below it>`, run from a
+clean checkout of each PR's head.
+
+| PR | codex's verdict | Finding | Our verdict | What changed |
+|---|---|---|---|---|
+| #758 (A) | "No discrete, actionable regressions" | — | — | — |
+| #759 (B) | 1 finding, P2 | `drawSquaresFinalPrize` accepts any final score on the grid, even one typed while the game is still `in`, and the draw is made once | **Rejected.** (1) On a feed-scored pool `scores.final` is written only when the feed says the game is final (`scoreUpdates.ts`, `isGameFinal`), so a final there means the game is over. (2) On a hand-scored pool the commissioner IS the scorer, and "a final score is entered" is the app's only meaning of "over" (`AdminPanel` `gameFinal`, `squaresAdmin.ts` `gameIsFinal`). (3) The draw does not depend on the score: it picks uniformly from the squares that were sold (`crypto.randomInt`). If the final is corrected, the drawn record is kept (`squaresWinnerPlan.ts`, "A DRAWN RECORD IS NEVER DELETED"): at $0 if no unclaimed prize remains, and the same drawn owner if one is called for again. So drawing early pays nobody wrongly and lets nobody re-draw | — |
+| #760 (C) | 1 finding, P1 | "Change Game" on the manage page carried the old game's scores, including its final and a `post` status. The score sync skips `post` pools, so the new game would never be scored, and the claim check would call it started | **Accepted — real** | `squaresGameLink` keeps the scores only when the SAME game is re-linked (`existing.gameId === id`); any other game, or a pool that had none, starts from fresh scores. The manage page passes the pool's current `gameId`. 2 tests; 2 mutants (always carry; drop the `gameId` pass-through), 2 red. #765's server path already did this |
+| #762 (K7) | "No discrete regressions" | — | — | — |
+| #761 (D) | "consistently reopens Squares … retains server-side runtime enforcement" | — | — | — |
