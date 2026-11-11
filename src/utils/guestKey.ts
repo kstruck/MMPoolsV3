@@ -86,109 +86,96 @@ export async function claimIdentityFor(
 }
 
 /**
- * Take this browser's guest squares into the signed-in account — at most once
- * per pool, account and browser session, and never two at a time.
+ * Take this browser's guest squares into the signed-in account — one call at
+ * a time for a pool and account, and told how it ended.
  *
- * FOUR RULES, each of which was a bug before it was a rule (qodo, PRs #758 –
- * #761):
+ * THIS REMEMBERS NOTHING. It used to keep "done" in the browser session under
+ * the pool and the account, and every round of review found another way that
+ * memory outlived what it meant (qodo, PRs #758 – #762): recorded before the
+ * call, so one timeout ended it; recorded for a refusal; recorded for a
+ * success that had moved nothing, so squares reserved afterwards stayed
+ * outside the account; kept across a change of browser key. Whether a
+ * question has been answered is decided by the caller, which can see the grid
+ * (`useGuestSquaresMerge`). What is left here is what only this can do:
  *
- *  1. "Done" is recorded only when the claim WORKED. It used to be recorded
- *     before the call, so one timeout meant no further attempt that session.
- *  2. "Refused over the limit" is not "done". The server moves nothing when
- *     the squares would put the account past the pool's limit. That refusal
- *     is remembered WITH what it depended on (`retryKey` — the limit, and how
- *     many squares the account and this browser hold): the same question is
- *     not asked twice, a changed one is.
- *  3. A question asked WHILE a claim is in flight is not dropped. The newest
- *     one is kept and asked when the flight lands — unless the flight moved
- *     the squares, which answers every question.
- *  4. The caller is told how the WHOLE chain ended, not how its first call
- *     did. The follow-up used to be fired and forgotten, so a follow-up that
- *     failed was seen by nobody; and a flight that failed threw the waiting
- *     question away.
+ *  1. NEVER TWO AT ONCE. While a claim for a pool and account is in flight,
+ *     another call returns `in-flight`.
+ *  2. A QUESTION ASKED MEANWHILE IS NOT DROPPED. The newest one is kept and
+ *     asked when the flight lands — after a refusal, a success that moved
+ *     nothing, or a failure. Not after a claim that MOVED the squares: that
+ *     question was asked of a grid that no longer exists. And not if it is
+ *     the very question that has just been answered.
+ *  3. THE CALLER IS TOLD HOW THE WHOLE CHAIN ENDED, and which question that
+ *     answer belongs to — the follow-up used to be fired and forgotten, so a
+ *     follow-up that failed was seen by nobody.
  *
- * So one call is one CHAIN: the claim, then at most two follow-ups for
- * questions that arrived meanwhile. While a chain is running every other
- * call returns `in-flight` and leaves its question for the chain to pick up.
- * The promise resolves with the chain's last real answer.
+ * So one call is one CHAIN: the claim, then at most two follow-ups.
  */
-type Claim = () => Promise<{ success: boolean; overLimit?: boolean }>;
-type ClaimStorage = Pick<Storage, 'getItem' | 'setItem'> | null;
-export type GuestClaimOutcome = 'claimed' | 'already-done' | 'in-flight' | 'failed' | 'over-limit';
+type ClaimResult = {
+  success: boolean;
+  overLimit?: boolean;
+  /** The squares the server moved. Empty, or absent, means it moved none. */
+  claimed?: ReadonlyArray<unknown>;
+};
+type Claim = () => Promise<ClaimResult>;
+/** A real answer from the server, as opposed to no answer at all. */
+type Answer = 'claimed' | 'nothing-moved' | 'over-limit';
+export type GuestMergeOutcome = Answer | 'in-flight' | 'failed';
+export interface GuestMergeEnd {
+  outcome: GuestMergeOutcome;
+  /** The question the outcome belongs to: the last one this chain asked. */
+  question: string;
+}
 
-const claimsInFlight = new Set<string>();
-const askedMeanwhile = new Map<string, { claim: Claim; storage: ClaimStorage; retryKey: string }>();
-/** The same memory as the session flag, for a browser that blocks storage. */
-const refusedOverLimit = new Map<string, string>();
-const CLAIMED = '1';
-const overLimitMark = (retryKey: string) => `over:${retryKey}`;
+const mergesInFlight = new Set<string>();
+const askedMeanwhile = new Map<string, { claim: Claim; question: string }>();
 /** A chain is the claim plus at most this many follow-ups, however many questions arrive. */
 const MAX_ASKS_PER_CHAIN = 3;
 
-/** Has this question already been answered for good — moved, or refused for exactly this state? */
-function isSettled(flag: string, storage: ClaimStorage, retryKey: string): boolean {
-  let remembered: string | null | undefined;
-  try {
-    remembered = storage?.getItem(flag);
-  } catch {
-    // Storage blocked: the in-memory copy below is all there is.
-  }
-  remembered = remembered || refusedOverLimit.get(flag);
-  return remembered === CLAIMED || remembered === overLimitMark(retryKey);
-}
-
-/** Ask once, and remember the answer if it is one worth remembering. */
-async function askOnce(flag: string, claim: Claim, storage: ClaimStorage, retryKey: string): Promise<'claimed' | 'failed' | 'over-limit'> {
-  let result: { success: boolean; overLimit?: boolean };
+async function askOnce(claim: Claim): Promise<Answer | 'failed'> {
+  let result: ClaimResult;
   try {
     result = await claim();
   } catch {
     return 'failed';
   }
   if (!result.success) return 'failed';
-  const refused = result.overLimit === true;
-  const mark = refused ? overLimitMark(retryKey) : CLAIMED;
-  if (refused) refusedOverLimit.set(flag, mark);
-  else refusedOverLimit.delete(flag);
-  try {
-    storage?.setItem(flag, mark);
-  } catch {
-    // Not remembered; the server call is idempotent, so a repeat is harmless.
-  }
-  return refused ? 'over-limit' : 'claimed';
+  if (result.overLimit === true) return 'over-limit';
+  return Array.isArray(result.claimed) && result.claimed.length > 0 ? 'claimed' : 'nothing-moved';
 }
 
-export async function claimGuestSquaresOnce(
+export async function mergeGuestSquares(
   poolId: string,
   uid: string,
   claim: Claim,
-  storage: ClaimStorage = safeSessionStorage(),
-  /** What an over-the-limit answer depends on. A refusal is retried only when this changes. */
-  retryKey = '',
-): Promise<GuestClaimOutcome> {
-  const flag = `mmp_guest_claim:${poolId}:${uid}`;
-  if (isSettled(flag, storage, retryKey)) return 'already-done';
-  if (claimsInFlight.has(flag)) {
+  /** What the answer depends on. Used only to tell one question from another. */
+  question = '',
+): Promise<GuestMergeEnd> {
+  const flight = `${poolId}:${uid}`;
+  if (mergesInFlight.has(flight)) {
     // Only the newest question matters; an older one waiting is replaced.
-    askedMeanwhile.set(flag, { claim, storage, retryKey });
-    return 'in-flight';
+    askedMeanwhile.set(flight, { claim, question });
+    return { outcome: 'in-flight', question };
   }
-  claimsInFlight.add(flag);
+  mergesInFlight.add(flight);
   try {
-    let outcome = await askOnce(flag, claim, storage, retryKey);
+    let asked = question;
+    let outcome = await askOnce(claim);
     for (let asks = 1; asks < MAX_ASKS_PER_CHAIN && outcome !== 'claimed'; asks++) {
-      const next = askedMeanwhile.get(flag);
-      askedMeanwhile.delete(flag);
-      // Nothing arrived meanwhile, or what arrived is the question that was
-      // just refused: the chain is over.
-      if (!next || isSettled(flag, next.storage, next.retryKey)) break;
-      outcome = await askOnce(flag, next.claim, next.storage, next.retryKey);
+      const next = askedMeanwhile.get(flight);
+      askedMeanwhile.delete(flight);
+      // Nothing arrived meanwhile, or what arrived is the question that has
+      // just been ANSWERED. (After a failure the same question is worth
+      // asking again: nothing has answered it.)
+      if (!next || (outcome !== 'failed' && next.question === asked)) break;
+      asked = next.question;
+      outcome = await askOnce(next.claim);
     }
-    return outcome;
+    return { outcome, question: asked };
   } finally {
-    claimsInFlight.delete(flag);
+    mergesInFlight.delete(flight);
     // A question still waiting belongs to this chain and ends with it.
-    askedMeanwhile.delete(flag);
+    askedMeanwhile.delete(flight);
   }
 }
 
@@ -208,12 +195,4 @@ export function claimCodeFailureText(error: unknown): string {
   if ((code === 'failed-precondition' || code === 'resource-exhausted') && message) return message;
   if (code === 'not-found') return 'That code was not recognised. Check it against the other device and try again.';
   return 'The squares could not be moved. Try again in a moment.';
-}
-
-function safeSessionStorage(): Storage | null {
-  try {
-    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
-  } catch {
-    return null;
-  }
 }

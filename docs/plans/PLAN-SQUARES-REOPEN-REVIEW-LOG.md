@@ -27,6 +27,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q8 | qodo | #758 @ `74e37a35`, #761 @ `d9d81fe6` (#759 and #760: nothing new) | 6 | 5 | 1 kept as built, for Kevin to confirm |
 | Q9 | qodo | #762 @ `d7e3bd11` (first review of the K7 PR) | 1 | 1 | 0 |
 | Q10 | qodo | #758 @ `ed3af116`, #760 @ `c9191f58` (#759, #761, #762: nothing new) | 7 | 6 | 1 that is Kevin's (K11) |
+| Q11 | qodo | all five, at the heads of round Q10 (`542b1313`, `b63403d8`, `3ec26e4b`, `5bf4640a`, `2a6232f1`) | 4 (raised 8 times across the five PRs) | 3 | 1 that is Kevin's (K11) |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -873,3 +874,71 @@ mutants: 16 red on the first run. The seventeenth showed that "no follow-up
 after the squares moved" was guarded only where the browser has session
 storage; a test for the storage-blocked case was added and the mutant is red.
 
+## Round Q11 — qodo at the heads of round Q10 (2026-11-11T01:02Z – 01:04Z)
+
+**Surfaces.** On all five PRs: the issue comments (the report, and the
+"updated up to" note naming the head reviewed — each names the head pushed in
+round Q10), and the inline review threads. The reviews list was not pulled
+again this round; in round Q10 it held nothing but empty review containers.
+
+**Round Q10 said the guest merge had been "rebuilt rather than patched a
+fourth time". It drew three more findings, and they are the same mistake.**
+The rebuild moved the retry into one place and left the MEMORY where it was:
+"done", kept in the browser session under the pool and the account. Every
+finding below is that memory outliving what it meant.
+
+Eight threads, four findings:
+
+| # | Raised on | Finding | Verdict |
+|---|---|---|---|
+| 1 | #758, #761, #762 | A success that moved NOTHING is remembered as done — and the hook asks when ANY guest holds a square, so most signed-in visitors got that empty success. Squares they then reserve as a guest and sign back in to are never moved to the account, until the tab is closed | **Accepted** |
+| 2 | #762 | A new browser key is answered with the old key's result | **Accepted** |
+| 3 | #758, #759, #762 | Three failures for one account, or one pool, stop the next account or pool on the same mounted grid; and a result that lands late is charged to whoever is there now | **Accepted** |
+| 4 | #762 | A started game can still be linked — the refusal is in the browser only | **Kevin's — plan K11 and K4.** The same finding as round Q10's 4 and 7, raised on the K7 PR. The thread stays open |
+
+**Finding 1 was worse than qodo said.** The grid gives every visitor a browser
+key on arrival, so "this browser has a key" was true of everyone: every
+signed-in visitor to a grid with any guest square on it was asked for, moved
+nothing, and was marked done for the session.
+
+**What was built — the memory is gone from the helper.**
+
+- **`mergeGuestSquares`** (was `claimGuestSquaresOnce`) remembers nothing and
+  writes nothing to the browser session. It does what only it can: one call
+  at a time for a pool and account; the newest question asked meanwhile is
+  asked when the flight lands; the caller is told how the chain ended **and
+  which question that answer belongs to**. A success that moved no squares is
+  reported as `nothing-moved`, not as a move.
+- **`useGuestSquaresMerge`** decides whether to ask, because it can see the
+  grid. It asks only when a square is held under **this** browser's key, and
+  not before that key's hash is known. The question is the key, the limit,
+  the account's count and **which** squares the browser holds. An answer is
+  kept only against the question it answered, only for the life of the page,
+  and is dropped when the browser holds nothing — so the same squares, given
+  up and reserved again, are a new question. Failures are counted per pool
+  and account, against the one that asked.
+
+**A design that was written first and thrown away.** The first draft kept the
+session memory and keyed it by the counts ("limit : on the account : on this
+browser"). It was abandoned before it was committed: the same counts come
+round again — merge two, give two back, reserve two — and the old answer
+would have met them. Naming the squares instead of counting them, and
+dropping the answer when there is nothing to ask about, is what closes that;
+and once the answer is dropped that readily there is nothing worth writing to
+the session.
+
+**What it costs.** A signed-in player whose browser still holds guest squares
+is asked for once per page load, where before it was once per browser
+session. For a player over the pool's limit that is one refused call per
+load. The call is idempotent.
+
+Tests: 22 on the helper (40 in `guestKey.test.ts`), 37 on the hook. **38
+mutants. 36 were red on the first run; the two that survived were gaps in
+the tests, not in the code**, and a test was added for each: an answer that
+lands after the grid has already shown the move must not be kept (the
+listener is usually quicker than the call), and a failed attempt must not be
+retried by a re-render that changed nothing. 38 of 38 are red now.
+
+**If this draws a fifth round on the same mechanism, it goes to Kevin as a
+question — whether guest squares should move to an account automatically at
+all, or only when the player asks — and not into a fifth fix.**
