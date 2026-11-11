@@ -542,7 +542,13 @@ service cloud.firestore {
                         || request.resource.data.get('type', '') == 'SQUARES';
         let linked = resource.data.get('gameId', '') != null && resource.data.get('gameId', '') != '';
         let locked = resource.data.get('isLocked', false) == true;
-        let handScored = resource.data.get('manualScoreOverride', false) == true || !linked;
+        // Hand-scored BEFORE and AFTER this write (codex, PR #765): reading only
+        // the stored flag let one write turn the override off and change the
+        // scores together, leaving a linked pool that claims feed scoring
+        // with scores the commissioner typed.
+        let handScored = (resource.data.get('manualScoreOverride', false) == true
+                          && request.resource.data.get('manualScoreOverride', false) == true)
+                         || !linked;
         return !isSquares || (
           !changed.hasAny(['quarterlyNumbers', 'isLocked', 'randomWinner', 'gameId', 'gameTime', 'league'])
           && (!(linked || locked) || !changed.hasAny(['homeTeam', 'awayTeam']))

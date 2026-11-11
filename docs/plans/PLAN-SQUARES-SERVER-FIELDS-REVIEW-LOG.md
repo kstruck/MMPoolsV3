@@ -6,7 +6,7 @@ Rounds of review on `PLAN-SQUARES-SERVER-FIELDS.md` and its PR. Newest last.
 |---|---|---|---|---|
 | S0 | self, before the first commit | 4 | 4 | — |
 | M1 | mutation testing | 49 mutants, 48 red | — | 1 survivor (equivalent — see below) |
-| — | codex | — | **OWED** | not available where this was built |
+| X1 | codex (`gpt-5.6-terra`), first round, at `3b929a6b` against #761 | 1 | 1 | — |
 | Q1 | qodo, first review of #765 (at `448a5aed`) | 10 | 8 (2 of them on #761) | 2 rejected (4, 6) |
 | SW | sweeps (`PLAN-SQUARES-SERVER-FIELDS-SWEEPS.md`) | 0 | — | — |
 | Q2 | qodo, re-review of #765 (at `cace846f`, after the draft/ready toggle) | 1 | 1 | — |
@@ -80,3 +80,19 @@ This matters only on a grid still unlocked at the original kickoff, because the 
 - the score history is kept.
 
 **What this round confirms about round Q1:** code written to close a finding has never been reviewed. Q1's guard was checked against the attack as qodo described it, and that was not enough: it read state the attacker controls. The question to ask of every guard is whether the caller can change what it reads.
+
+## Round X1 — codex, first round (2026-11-11)
+
+`codex exec review -c model=gpt-5.6-terra --base origin/claude/squares-reopen`,
+on this PR's own increment. codex was logged in for the first time in this
+session, with the environment's `OPENAI_API_KEY`; its default model is not
+available to that key.
+
+| # | codex's finding | Verdict | What changed |
+|---|---|---|---|
+| 1 | P1: one write can switch Manual Score Override OFF and change the scores. The rule read only the STORED flag, so it allowed the scores, leaving a linked, locked pool that claims feed scoring with typed scores. `recomputeSquaresWinners` could record payouts from them before the next sync corrected them | **Accepted — real.** The same class of error as qodo round Q2: a guard that reads state the caller controls, here the "before" half of a write that also changes it | `handScored` needs the override ON both before and after the write. 2 rule cases: the combined write is refused, and turning the override off alone is allowed. Mutant: the old one-sided check fails the new case |
+
+Merged in with this round: #760's codex fix (`squaresGameLink` keeps scores
+only for the same game). This PR's server path already started a different
+game from fresh scores; the manage page's client link that #760 fixed is
+replaced here by the callable.

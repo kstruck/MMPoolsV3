@@ -140,6 +140,10 @@ await refused('scores on a locked, linked pool without Manual Score Override', {
 await allowed('scores on a locked, linked pool WITH Manual Score Override', { ...SQUARES, ...LINKED, ...LOCKED, manualScoreOverride: true }, { scores: NEW_SCORES });
 await allowed('scores on a locked, unlinked pool (hand-scored)', { ...SQUARES, ...LOCKED }, { scores: NEW_SCORES });
 await allowed('scores on an unlocked, linked pool', { ...SQUARES, ...LINKED }, { scores: NEW_SCORES });
+// codex, PR #765: one write that switches the override OFF and changes the
+// scores would leave typed scores on a pool that claims feed scoring.
+await refused('scores in the same write that turns Manual Score Override OFF', { ...SQUARES, ...LINKED, ...LOCKED, manualScoreOverride: true }, { scores: NEW_SCORES, manualScoreOverride: false });
+await allowed('turning Manual Score Override off on its own', { ...SQUARES, ...LINKED, ...LOCKED, manualScoreOverride: true }, { manualScoreOverride: false });
 
 // ---- B. what the admin page still does ------------------------------------------
 console.log('\nB. no collateral on the admin page');
@@ -178,7 +182,7 @@ for (const type of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN', 'BRACKET', 'NFL_
 await env.cleanup();
 
 // Empty-pass guard: a broken loop above must not report a short run as green.
-const EXPECTED_CASES = 10 + 4 + 14 + 4 + 2 + 2 + 6;
+const EXPECTED_CASES = 10 + 4 + 14 + 6 + 2 + 2 + 6;
 if (cases !== EXPECTED_CASES) {
     console.error(`\nRan ${cases} cases, expected ${EXPECTED_CASES}.`);
     process.exit(1);

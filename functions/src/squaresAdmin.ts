@@ -452,9 +452,12 @@ export const linkSquaresPoolGame = validated(
                     throw new HttpsError('failed-precondition', 'This grid already has scores or winners from a game. Its game cannot be changed — start a new pool for another game.');
                 }
             }
+            // The shared link keeps the scores only for the SAME game (#760's
+            // codex fix): it is told the pool's current game, and decides.
             const patch = squaresGameLink(game, leagueKey, {
                 reminders: pool.reminders,
-                scores: changingGame ? undefined : pool.scores,
+                scores: pool.scores,
+                gameId: pool.gameId,
             });
             if (!patch) throw new HttpsError('not-found', 'That game cannot be linked. Pick it from the list again.');
             // Badges, season type and week belong to ONE game. The link writes
