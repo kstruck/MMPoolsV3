@@ -9,6 +9,7 @@ import { formatPrize, payoutTotals } from '../utils/payouts';
 import { retryWhile, isScoresNotSavedYet } from '../utils/retryWhile';
 import type { ScheduleGame } from '../services/espnSchedule';
 import { linkSquaresGame } from '../utils/linkSquaresGame';
+import { now as serverNow } from '../utils/serverClock';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
@@ -428,14 +429,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       pool: gameState,
       nameIsFree: checkNameAvailable,
       save: (patch) => updateConfig(patch as Partial<GameState>),
+      nowMs: serverNow,
     });
     if (outcome.status === 'linked') {
       toast.success(`Linked to ${game.awayTeam} at ${game.homeTeam}. The grid locks itself just before kickoff.`);
       return true;
     }
-    toast.error(outcome.status === 'not-a-game'
-      ? 'That game could not be linked. Pick it from the schedule again.'
-      : 'The game was NOT linked — the pool could not be saved, and nothing has changed. Try again in a moment.');
+    toast.error(
+      outcome.status === 'started' ? 'That game has already kicked off, so it cannot be linked. Nothing has changed.'
+        : outcome.status === 'not-a-game' ? 'That game could not be linked. Pick it from the schedule again.'
+          : 'The game was NOT linked — the pool could not be saved, and nothing has changed. Try again in a moment.',
+    );
     return false;
   };
 
