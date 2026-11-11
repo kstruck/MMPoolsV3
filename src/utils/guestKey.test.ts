@@ -266,3 +266,105 @@ describe('claimCodeFailureText — the player is told what the server said', () 
   });
 });
 
+describe('claimGuestSquaresOnce — a changed question asked mid-flight is not dropped', () => {
+  const store = () => {
+    const data = new Map<string, string>();
+    return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => { data.set(k, v); }, data };
+  };
+  /** A claim the test answers when it chooses. */
+  const pending = () => {
+    let answer!: (r: { success: boolean; overLimit?: boolean }) => void;
+    const promise = new Promise<{ success: boolean; overLimit?: boolean }>((res) => { answer = res; });
+    return { claim: vi.fn(() => promise), answer };
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it('the limit is raised while a claim is in flight: the old refusal is followed by a new ask', async () => {
+    const s = store();
+    const first = pending();
+    const running = claimGuestSquaresOnce('mf-1', 'u', first.claim, s, '3:3:2');
+
+    // The organizer raises the limit; the page asks again and is told to wait.
+    const second = vi.fn(() => Promise.resolve({ success: true, overLimit: false }));
+    expect(await claimGuestSquaresOnce('mf-1', 'u', second, s, '10:3:2')).toBe('in-flight');
+    expect(second).not.toHaveBeenCalled();
+
+    // The first claim read the pool before the change, so it is refused.
+    first.answer({ success: true, overLimit: true });
+    expect(await running).toBe('over-limit');
+    await settle();
+
+    expect(second).toHaveBeenCalledTimes(1);
+    // …and it moved them: the next ask is "already done".
+    expect(await claimGuestSquaresOnce('mf-1', 'u', second, s, '10:5:0')).toBe('already-done');
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it('the SAME question asked mid-flight is not asked twice', async () => {
+    const s = store();
+    const first = pending();
+    const running = claimGuestSquaresOnce('mf-2', 'u', first.claim, s, '3:3:2');
+    const again = vi.fn(() => Promise.resolve({ success: true, overLimit: true }));
+    expect(await claimGuestSquaresOnce('mf-2', 'u', again, s, '3:3:2')).toBe('in-flight');
+    first.answer({ success: true, overLimit: true });
+    await running;
+    await settle();
+    expect(again).not.toHaveBeenCalled();
+  });
+
+  it('a claim that MOVED the squares needs no follow-up', async () => {
+    const s = store();
+    const first = pending();
+    const running = claimGuestSquaresOnce('mf-3', 'u', first.claim, s, '3:1:2');
+    const later = vi.fn(() => Promise.resolve({ success: true }));
+    await claimGuestSquaresOnce('mf-3', 'u', later, s, '3:3:0');
+    first.answer({ success: true, overLimit: false });
+    expect(await running).toBe('claimed');
+    await settle();
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it('a claim that FAILED is left to the page\'s own retry — no follow-up here', async () => {
+    const s = store();
+    const first = pending();
+    const running = claimGuestSquaresOnce('mf-4', 'u', first.claim, s, '3:3:2');
+    const later = vi.fn(() => Promise.resolve({ success: true }));
+    await claimGuestSquaresOnce('mf-4', 'u', later, s, '10:3:2');
+    first.answer({ success: false });
+    expect(await running).toBe('failed');
+    await settle();
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it('only the NEWEST question asked mid-flight is followed up', async () => {
+    const s = store();
+    const first = pending();
+    const running = claimGuestSquaresOnce('mf-5', 'u', first.claim, s, '3:3:2');
+    const stale = vi.fn(() => Promise.resolve({ success: true, overLimit: true }));
+    const newest = vi.fn(() => Promise.resolve({ success: true, overLimit: false }));
+    await claimGuestSquaresOnce('mf-5', 'u', stale, s, '4:3:2');
+    await claimGuestSquaresOnce('mf-5', 'u', newest, s, '10:3:2');
+    first.answer({ success: true, overLimit: true });
+    await running;
+    await settle();
+    expect(stale).not.toHaveBeenCalled();
+    expect(newest).toHaveBeenCalledTimes(1);
+  });
+
+  it('a question left over from one flight does not leak into the next', async () => {
+    const s = store();
+    const first = pending();
+    const running = claimGuestSquaresOnce('mf-6', 'u', first.claim, s, '3:3:2');
+    const queued = vi.fn(() => Promise.resolve({ success: true, overLimit: true }));
+    await claimGuestSquaresOnce('mf-6', 'u', queued, s, '4:3:2');
+    first.answer({ success: false });           // failed: the queued question is discarded
+    await running;
+    await settle();
+    // A fresh flight that is refused must not find the old question waiting.
+    const refusedAgain = () => Promise.resolve({ success: true, overLimit: true });
+    expect(await claimGuestSquaresOnce('mf-6', 'u', refusedAgain, s, '5:3:2')).toBe('over-limit');
+    await settle();
+    expect(queued).not.toHaveBeenCalled();
+  });
+});
+

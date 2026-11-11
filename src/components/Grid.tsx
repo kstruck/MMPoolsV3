@@ -621,7 +621,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                           Code: <span className="font-mono font-bold text-lg select-all ml-1" data-testid="transfer-code">{generatedCode}</span>
                                        </div>
                                        {/* A code works ONCE. Squares reserved here after it was used need a new one. */}
-                                       <button onClick={handleGenerateCode} data-testid="transfer-code-new" className="mt-1.5 w-full text-[10px] text-muted hover:text-[color:var(--text)] underline underline-offset-2 transition-colors duration-150">
+                                       <button onClick={handleGenerateCode} data-testid="transfer-code-new" className="mt-1.5 w-full text-[10px] font-display font-bold uppercase tracking-[0.05em] text-muted hover:text-[color:var(--text)] underline underline-offset-2 transition-colors duration-150">
                                           Get a new code
                                        </button>
                                     </>
