@@ -396,10 +396,20 @@ describe('squaresGameLink — linking an existing pool to a game', () => {
     expect(reminders.lock).toEqual({ enabled: false, lockAt: 1, scheduleMinutes: [60, 15] });
   });
 
-  it('keeps scores that are already on the pool', () => {
+  it('re-linking the SAME game keeps the scores already on the pool', () => {
     const scores = { current: { home: 3, away: 0 }, q1: { home: 3, away: 0 }, half: null, q3: null, final: null, gameStatus: 'in' };
-    const linked = squaresGameLink(game, 'nfl', { scores })!;
+    const linked = squaresGameLink(game, 'nfl', { scores, gameId: game.id })!;
     expect(linked.scores).toEqual({ ...scores, startTime: new Date(KICKOFF).toISOString() });
+  });
+
+  // codex, PR #760: "Change Game" kept the old game's scores — its final and
+  // its 'post' status — so the sync never picked the new game up.
+  it('ANOTHER game, or a pool with no game before, starts from fresh scores', () => {
+    const played = { current: { home: 24, away: 17 }, q1: { home: 7, away: 3 }, half: null, q3: null, final: { home: 24, away: 17 }, gameStatus: 'post' };
+    const fresh = squaresGameLink(game, 'nfl')!.scores;
+    expect(squaresGameLink(game, 'nfl', { scores: played, gameId: '401770000' })!.scores).toEqual(fresh);
+    expect(squaresGameLink(game, 'nfl', { scores: played })!.scores).toEqual(fresh);
+    expect((fresh as { gameStatus?: string }).gameStatus).not.toBe('post');
   });
 
   it('a college game is linked as college; anything else as nfl', () => {
