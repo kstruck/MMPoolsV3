@@ -8,7 +8,7 @@ import { describeWinnerDrift, finalScoresOf, planWinnerWrites, type StoredWinner
 import { formatPrize, payoutTotals } from '../utils/payouts';
 import { retryWhile, isScoresNotSavedYet } from '../utils/retryWhile';
 import type { ScheduleGame } from '../services/espnSchedule';
-import { squaresGameLink } from '@shared/squaresDefaults';
+import { linkSquaresGame } from '../utils/linkSquaresGame';
 
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import Sparkles from 'lucide-react/dist/esm/icons/sparkles';
@@ -63,7 +63,8 @@ import {
 
 interface AdminPanelProps {
   gameState: GameState;
-  updateConfig: (updates: Partial<GameState>) => void;
+  /** The pool write. The route's is async; a rejection means nothing was saved. */
+  updateConfig: (updates: Partial<GameState>) => void | Promise<void>;
   updateScores: (scores: Partial<Scores>) => void;
   generateNumbers: () => Promise<void> | void;
   resetGame: () => void;
@@ -418,21 +419,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
    * no reminder settings switched on payment-reminder emails to every player.
    * The pool keeps its name unless it never had one.
    */
-  const linkGame = (game: ScheduleGame) => {
-    // The league the game was found in travels with it (see useScheduleSearch).
-    const patch = squaresGameLink(game, game.league, { reminders: gameState.reminders, scores: gameState.scores });
-    if (!patch) {
-      toast.error('That game could not be linked. Pick it from the schedule again.');
-      return;
+  const linkGame = async (game: ScheduleGame): Promise<boolean> => {
+    // The write is awaited, and "Linked" is said only after it lands
+    // (`linkSquaresGame`). It used to be said on the next line whatever
+    // happened to the write.
+    const outcome = await linkSquaresGame({
+      game,
+      pool: gameState,
+      nameIsFree: checkNameAvailable,
+      save: (patch) => updateConfig(patch as Partial<GameState>),
+    });
+    if (outcome.status === 'linked') {
+      toast.success(`Linked to ${game.awayTeam} at ${game.homeTeam}. The grid locks itself just before kickoff.`);
+      return true;
     }
-    const unnamed = !gameState.name || gameState.name === 'New Pool';
-    let name = gameState.name;
-    if (unnamed) {
-      name = `${game.awayTeam} @ ${game.homeTeam}`;
-      for (let n = 2; !checkNameAvailable(name) && n < 50; n++) name = `${game.awayTeam} @ ${game.homeTeam} (${n})`;
-    }
-    updateConfig({ ...(patch as Partial<GameState>), ...(unnamed ? { name } : {}) });
-    toast.success(`Linked to ${game.awayTeam} at ${game.homeTeam}. The grid locks itself just before kickoff.`);
+    toast.error(outcome.status === 'not-a-game'
+      ? 'That game could not be linked. Pick it from the schedule again.'
+      : 'The game was NOT linked — the pool could not be saved, and nothing has changed. Try again in a moment.');
+    return false;
   };
 
   const handleFetchLiveScores = async () => {
