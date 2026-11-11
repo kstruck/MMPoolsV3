@@ -59,8 +59,12 @@
 >
 > **To stop it after it is live, fastest first.**
 > 1. Winner records look wrong on a live game: set
->    `system/config.squaresWinners.paused = true`. Scores keep syncing; nothing
->    is recorded. Clear it and the next sync run records what was held.
+>    `system/config.squaresWinners.paused = true`. Scores keep syncing; no
+>    quarter winner is recorded or changed and no prize amount is set. One
+>    thing still is, on purpose: an Every-Score-Pays pool notes each scoring
+>    event at $0 as it happens, because an event not noted then cannot be
+>    rebuilt later (D18). Clear the switch and the next sync run records what
+>    was held, and sets those events' prizes.
 > 2. Stop new squares pools: Super-Admin → Pool Type Availability → SQUARES off.
 > 3. Code: revert #761, deploy functions, rebuild `www`. The code anchor from
 >    before any of this is the branch `backup/pre-squares-reopen-2026-11-10`.
