@@ -1022,3 +1022,5 @@ clean checkout of each PR's head.
 | #760 (C) | 1 finding, P1 | "Change Game" on the manage page carried the old game's scores, including its final and a `post` status. The score sync skips `post` pools, so the new game would never be scored, and the claim check would call it started | **Accepted — real** | `squaresGameLink` keeps the scores only when the SAME game is re-linked (`existing.gameId === id`); any other game, or a pool that had none, starts from fresh scores. The manage page passes the pool's current `gameId`. 2 tests; 2 mutants (always carry; drop the `gameId` pass-through), 2 red. #765's server path already did this |
 | #762 (K7) | "No discrete regressions" | — | — | — |
 | #761 (D) | "consistently reopens Squares … retains server-side runtime enforcement" | — | — | — |
+
+**Round X2 — codex on #760's fix (`3e8a2bd8`):** "No discrete, actionable regression introduced by the diff was identified." The #760 finding is closed.

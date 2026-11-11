@@ -21,9 +21,12 @@
 > qodo marked both High on the reopen itself.
 >
 > **Not done, and why.**
-> 1. **`codex exec review` is owed on all five** (CLAUDE.md §2c). `codex` was
->    not logged in where this was built. Not waived: three separate rounds
->    here found defects in the previous round's fixes.
+> 1. **`codex exec review` HAS RUN on all five (2026-11-11), plus #763–#765**
+>    — in the cloud session, logged in with the environment's
+>    `OPENAI_API_KEY`, on `gpt-5.6-terra` (codex's default model is not
+>    available to that key). #758, #761, #762 clean in round 1; #760 had one
+>    real finding (fixed, round 2 clean); #759's one finding was rejected with
+>    reasoning. Verdicts: `PLAN-SQUARES-REOPEN-REVIEW-LOG.md`, round X1.
 > 2. **`security-audit` is red on every PR, and on `main`.** Eight open
 >    advisories, and the audit allow-list expired 2026-11-09 (open item 1 in
 >    the box below this one said it would). The fixes are dependency upgrades
