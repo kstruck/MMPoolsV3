@@ -60,7 +60,7 @@ Fully featured tournament suite designed to maximize excitement during Selection
 
 ### ⏹️ Gameday Squares (Super Bowl & Football Grids)
 
-> 🟢 **Creation is open again** (PLAN-SQUARES-REOPEN, 2026-11). It was closed
+> ✅ **Creation is open again** (PLAN-SQUARES-REOPEN, 2026-11). It was closed
 > from 2026-08-30 because a pool left on the wizard's default refused every
 > non-owner's first square. That is fixed, along with what the audit behind it
 > found: who may claim a square, what a winner is paid, when a grid's numbers
