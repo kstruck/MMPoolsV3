@@ -307,16 +307,33 @@ session does not have to re-derive it.
 This is the copy that survives a regional problem. Scheduled backups (step 5)
 do **not** do this — they stay in the source database's location.
 
-Pick a region **different from** the `locationId` you recorded in Step 1. If
-`locationId` was `nam5` or any `us-*` region, use `us-east1`; if it was already
-`us-east1`, use `us-west1`. Substitute your choice for `<REGION>` below.
+🛑 **CORRECTED 2026-11-11 — the export bucket CANNOT be off-region.** This step
+used to say "pick a region different from `locationId` — for `nam5`, use
+`us-east1`". Run for real on 2026-11-11, the export into a `us-east1` bucket was
+refused:
+
+```
+ERROR: (gcloud.firestore.export) INVALID_ARGUMENT: Bucket mmpools-firestore-backups is in location
+us-east1. This database can only operate on buckets spanning location us or us-central1 or us-central2
+or us-central3 or us-central4 or us-central5 or us-central6.
+```
+
+So for this database (`nam5`) the export bucket goes in **`us`** (the US
+multi-region), and `<REGION>` below is `us`. The copy in a different place is
+made AFTER the export, by copying it into a second bucket — see step 6.
+
+**What exists now (2026-11-11):** `gs://mmpools-firestore-exports` (location
+`us`, versioning on, public access prevented — the export bucket) and
+`gs://mmpools-firestore-backups` (location `us-east1`, versioning on — created
+under the old instruction, kept as the place the copy goes). No lifecycle rule
+is set on either yet (step 3 below was not run).
 
 0. **Set the bucket name once**, in the PowerShell window you will use for the
    rest of this section. Every command below reads `$BACKUP_BUCKET`, so if the
    name has to change in step 1 you change it here and nowhere else:
 
    ```
-   $BACKUP_BUCKET = "mmpools-firestore-backups"
+   $BACKUP_BUCKET = "mmpools-firestore-exports"
    ```
 
    ⚠️ This variable lives only in the current terminal. **If you close it or
@@ -390,6 +407,28 @@ Pick a region **different from** the `locationId` you recorded in Step 1. If
    ```
 
    and read the most recent entry's `done` and `error` fields.
+
+6. **The copy in a second place** (added 2026-11-11, after the region
+   correction above). Once step 5 shows the export finished, copy it into the
+   `us-east1` bucket:
+
+   ```
+   gcloud storage cp --recursive gs://$BACKUP_BUCKET/<export folder> gs://mmpools-firestore-backups/
+   ```
+
+   A restore reads from a bucket the database can operate on — for `nam5`,
+   the `us` bucket. To restore from the `us-east1` copy, copy it back into the
+   `us` bucket first.
+
+   **What a real run printed (2026-11-11, from Cloud Shell, which is bash —
+   `BACKUP_BUCKET=…` there, not `$BACKUP_BUCKET = "…"`):** the export command
+   printed `Waiting for [...operations/...] to finish...done.` followed by
+   `operationState: PROCESSING` — the "done" there means the request was
+   accepted, NOT that the export finished. `gcloud firestore operations list`
+   then showed the entry with `done: true`, `operationState: SUCCESSFUL`, a
+   `response:` block and no `error:`. The top-level listing of the folder was
+   one `<folder>.overall_export_metadata` file and an `all_namespaces/`
+   directory.
 
 ---
 
@@ -931,6 +970,11 @@ must **not** target the production database.
    ```
    gcloud firestore databases create --database=restore-drill --location=us-east1 --type=firestore-native --project gridiron-gamble-uzuqo
    ```
+
+   **UNVERIFIED (2026-11-11):** a `us-east1` database may not be able to
+   import from the `us` export bucket — the same location rule that refused
+   the export (Step 4) applies to imports. If step 2 below is refused with a
+   location error, create the scratch database with `--location=nam5` instead.
 
 2. Import the manual export from step 4 into it:
 

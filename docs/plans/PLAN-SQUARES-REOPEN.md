@@ -67,8 +67,9 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    rebuild. Reverting D alone re-closes creation; A–C can stay.
 4. **Data:** nothing in A–D writes production data on deploy, and the plan
    contains no migration.
-5. **⛔ A DATA BACKUP IS NOT YET VERIFIED — it is step 1 of the deploy runbook,
-   and Kevin's to run** (qodo, PR #758, finding 10). The code anchor above is in
+5. **✅ DATA BACKUP VERIFIED 2026-11-11 (Kevin) — both halves recorded at the
+   end of this item.** It was step 1 of the deploy runbook and Kevin's to run
+   (qodo, PR #758, finding 10); the text below is kept as the procedure. The code anchor above is in
    place; a data backup is not something this work could take or check — it has
    no credentials for the production project. Firestore PITR (7-day window) was
    measured enabled on 2026-08-10 (`PLAN-BACKUPS-PHASE3.md`) and has **not** been
@@ -128,8 +129,36 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    date: _(none recorded)_.
 
    Do not deploy until both results are recorded here:
-   - PITR confirmed on: _(date, by whom)_
-   - Export taken: _(date, `gs://` path)_
+   - PITR confirmed on: **2026-11-11, by Kevin**, from Google Cloud Shell
+     (`gcloud firestore databases describe --database="(default)"`, which
+     reads the same setting as the `npx firebase` command above):
+     `pointInTimeRecoveryEnablement: POINT_IN_TIME_RECOVERY_ENABLED`,
+     `versionRetentionPeriod: 604800s` (seven days), `earliestVersionTime:
+     '2026-11-04T14:01:00Z'`. Same output: `backupSchedulesEnabled: true` and
+     `deleteProtectionState: DELETE_PROTECTION_DISABLED` — see the note below.
+   - Export taken: **2026-11-11, by Kevin** —
+     `gs://mmpools-firestore-exports/pre-squares-reopen-2026-11`. Both checks
+     passed:
+     1. `gcloud firestore operations list`: `done: true`, `operationState:
+        SUCCESSFUL`, no `error`, started `2026-11-11T14:06:14Z`, ended
+        `14:11:04Z`, **253,613 documents, 246,290,809 bytes**. Operation
+        `projects/gridiron-gamble-uzuqo/databases/(default)/operations/ASA1ZGU5N2E5NzcyNTktYTk4Yi01ZTU0LTFjMzgtMGY4NGY3NTEkGnNlbmlsZXBpcAkKMxI`.
+     2. The folder holds `pre-squares-reopen-2026-11.overall_export_metadata`
+        and `all_namespaces/` (top-level listing).
+   - Copy in the `us-east1` bucket (`gs://mmpools-firestore-backups/pre-squares-reopen-2026-11`):
+     _pending — Kevin's step 7/8; not required for the gate above, which the
+     export alone satisfies._
+
+   **The bucket this section first named does not work.** The export was
+   first sent to a `us-east1` bucket, as `PLAN-BACKUPS-PHASE3.md` Step 4
+   instructed, and Firestore refused it: a `nam5` database can only export to
+   a bucket in `us` or `us-central*`. That instruction is corrected there. A
+   restore of this export reads from `gs://mmpools-firestore-exports`.
+
+   **Not part of the gate — Kevin's call:** delete protection is OFF on the
+   database. PITR does not survive a deleted database; the export does.
+   Turning it on is one reversible command and touches no data:
+   `gcloud firestore databases update --database="(default)" --delete-protection --project gridiron-gamble-uzuqo`
 6. **Merge precondition** (qodo, finding 6). The required `security-audit`
    check is red on `main` for 8 advisories in shared dependencies. None of
    A–D may be merged over it silently: either the dependency PRs (#750, #754,
