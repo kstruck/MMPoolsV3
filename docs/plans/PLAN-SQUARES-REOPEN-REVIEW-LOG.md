@@ -25,6 +25,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q7 | qodo | #758 @ `0ac1bdb6`, #759 @ `085a0d07`, #760 @ `e4a06808`, #761 @ `c7af924f` | 8 | 7 | 1 kept as built, for Kevin to confirm |
 | Q8 | qodo | #758 @ `74e37a35`, #761 @ `d9d81fe6` (#759 and #760: nothing new) | 6 | 5 | 1 kept as built, for Kevin to confirm |
 | Q9 | qodo | #762 @ `d7e3bd11` (first review of the K7 PR) | 1 | 1 | 0 |
+| Q10 | qodo | #758 @ `ed3af116`, #760 @ `c9191f58` (#759, #761, #762: nothing new) | 7 | 6 | 1 that is Kevin's (K11) |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -765,4 +766,57 @@ the page could say a game was linked while the pool had not changed. The
 link is now `linkSquaresGame`: it awaits the save and reports what happened;
 the page toasts on that, and the picker closes only once the link is saved.
 10 tests on the link, 1 call-site, 9 mutants, all red.
+
+## Round Q10 — qodo at the heads of round Q9 (2026-11-11T00:29Z – 00:32Z)
+
+**Surfaces.** For this round all three were read on all five PRs: the issue
+comments (qodo's report and its "updated up to" note, which names the head
+it reviewed), the inline review threads, and the reviews list. The reviews
+list on each PR holds only empty review containers — qodo's, one per pass,
+and one for each reply made here — and nothing that is not also an inline
+thread. A re-review was asked for by the draft → ready toggle after each
+push, and each report was read only once its "updated up to" note named the
+pushed head.
+
+**A correction to rounds Q6 and Q7 (finding 5 below).** Both say "all three
+surfaces read". In those rounds, and in Q8 and Q9, what was read was the
+issue comments and the inline threads; the reviews list was not pulled until
+this round. It was then read back to each PR's first review and holds
+nothing the other two do not, so no finding was missed — but the sentence
+was written before it was true, and it is the fifth thing in this log found
+to have been written from memory rather than from a command.
+
+**#759, #761 and #762 raised nothing new. #762 is clean: no bugs, no
+insights.** Seven new findings, on #758 and #760:
+
+| # | PR | Finding | Verdict |
+|---|---|---|---|
+| 1 | #758 | Guests lose a queued ownership claim | **Accepted** — see "the guest merge" below |
+| 2 | #760 | Failed guest merges go untracked | **Accepted** — same |
+| 3 | #760 | Incomplete exports pass the backup gate | **Accepted.** The plan took files in the bucket as proof. An export still running, or one that failed part-way, leaves files too. The gate is now both: the operation has finished with no error, and the files are there |
+| 4 | #760 | A started game can be linked to a pool | **Accepted, in the half this work can reach.** The link itself now refuses a game that has kicked off, by the server's clock; before, only the greyed-out button did. Refusing it on the server is K11 |
+| 5 | #760 | Two qodo rounds omit the surface-read record | **Accepted** — the paragraph above, including what rounds Q6 and Q7 got wrong |
+| 6 | #760 | Pool names collide after many game links | **Accepted.** The search for a free name stopped at 49 and used that one unchecked. A pool with no free name is linked and keeps the name it has |
+| 7 | #760 | The manage page's game link is a client write | **Kevin's — plan K11 and K4.** It is the same finding as "a pool can score the wrong game" (round Q5) from the other side, and the answer is the same: one `linkSquaresGame` callable, with the rules change that makes the link fields server-only |
+
+**The guest merge (1 and 2) — rebuilt rather than patched a fourth time.**
+Rounds Q7, Q8 and now Q10 each found a way the guest-to-account merge gave
+up too early or told nobody what happened. Each fix added a branch; each
+branch drew the next finding. The cause was that the retry was split between
+two places that could not see each other: a helper that remembered answers,
+and an effect inside the grid that counted failures.
+
+- **The helper owns the whole chain.** One call is the claim plus, at most,
+  two follow-ups for questions that arrived while it was in flight. A
+  question that arrives meanwhile is asked when the flight lands — after a
+  refusal *or a failure*, not after a move. The caller is told how the chain
+  **ended**, so a follow-up that fails is counted.
+- **The grid's effect is a hook** (`useGuestSquaresMerge`), so when it asks,
+  when it asks again and when it gives up are tested on a rendered hook
+  rather than argued from the code — which is what finding 1 asked for.
+
+Tests: 11 on the chain (42 in `guestKey.test.ts`), 18 on the hook. 17
+mutants: 16 red on the first run. The seventeenth showed that "no follow-up
+after the squares moved" was guarded only where the browser has session
+storage; a test for the storage-blocked case was added and the mutant is red.
 
