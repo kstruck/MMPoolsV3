@@ -289,7 +289,8 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   page's "Grid locks" time follows it (one shared number).
   *What it changes in `reminders.ts`:* one call inside the squares-only branch
   of `checkLockReminders`, the removal of two functions only that branch used
-  (`generateDigits`, `executeAutoLock`), two imports only they used, and
+  (`generateDigits`, `executeAutoLock`), the three imports only they used
+  (`computeDigitsHash`, `writeAuditEvent`, `Timestamp`), and
   `export` on `checkLockReminders` so it can be tested. The dedicated job's
   module is loaded inside that branch, not at the top of the file, so nothing
   about how `reminders.ts` loads changes for the NFL, playoff or bracket
