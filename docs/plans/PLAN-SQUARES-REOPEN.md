@@ -60,8 +60,11 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    flag is what closes squares creation again, immediately.
    - **To stop winner records being written** (a payout looks wrong on a live
      game): set `system/config.squaresWinners.paused = true` in the Firebase
-     console. Scores keep syncing; nothing is recorded, changed or drawn until
-     it is cleared. Clear it (`false`) and the next sync run — within a
+     console. Scores keep syncing; no quarter winner is recorded or changed,
+     no prize amount is set and nothing is drawn until it is cleared. One
+     thing is still recorded, on purpose: an Every-Score-Pays pool notes each
+     scoring event at $0 as it happens, because an event not noted then
+     cannot be rebuilt later (D18). Clear it (`false`) and the next sync run — within a
      minute — records everything that was held, including a game that
      finished days earlier. It applies to every road to the winner records:
      the scheduled sync, the simulator, "Fix Sync" and the commissioner's
