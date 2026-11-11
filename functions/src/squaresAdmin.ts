@@ -5,12 +5,15 @@
  *   recomputeSquaresWinners — bring the winner records in line with the scores.
  *   drawSquaresFinalPrize   — the "random draw" for an unclaimed final prize.
  *   unlockSquaresPool       — reopen a grid before kickoff; discards the numbers.
+ *   linkSquaresPoolGame     — link the pool to a game the SERVER looked up.
  *
- * Each used to be a raw client write (or nothing at all). A pool's `scores`,
- * `isLocked` and `randomWinner` are all commissioner-writable under
- * firestore.rules, so none of this is an authorization boundary against the
- * commissioner — it is what makes the outcome RECORDED, AUDITED and, for the
- * draw, not re-rollable.
+ * Each used to be a raw client write (or nothing at all). Since
+ * PLAN-SQUARES-SERVER-FIELDS, firestore.rules refuses a squares commissioner a
+ * direct write of `isLocked`, `randomWinner`, `quarterlyNumbers`, the game link
+ * and — once locked — the prize terms and feed scores
+ * (`squaresServerFieldsUnchanged()`), so for those these callables ARE the
+ * boundary. They also make the outcome RECORDED, AUDITED and, for the draw,
+ * not re-rollable.
  */
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
@@ -23,9 +26,12 @@ import { assertNotBannedLive } from "./lib/systemGuards";
 import { writeAuditEvent } from "./audit";
 import {
     drawSquaresFinalPrizeSchema,
+    linkSquaresPoolGameSchema,
     recomputeSquaresWinnersSchema,
     unlockSquaresPoolSchema,
 } from "./schemas/squaresAdmin";
+import { firestoreFixtureReader, lookupSquaresGame, squaresFeedGameHasStarted, type SquaresFeedGame } from "./lib/squaresFeedGame";
+import { squaresGameLink } from "./shared/squaresDefaults";
 import { applyWinnerPlan, finalScoresOf, isEventWinnerId, PERIOD_WINNER_IDS, planWinnerWrites, recordedEntry, type StoredWinner } from "./lib/squaresWinners";
 import { writeAdminAudit } from "./lib/adminAudit";
 import { squaresGameHasStarted } from "./lib/squaresGame";
@@ -325,5 +331,104 @@ export const unlockSquaresPool = validated(
         });
         await auditIfActingAsAdmin(unlocked.pool, request, adminClaim, 'SQUARES_UNLOCK', poolId, { numbersDiscarded: unlocked.numbersDiscarded });
         return { success: true, numbersDiscarded: unlocked.numbersDiscarded };
+    },
+);
+
+/**
+ * Link a squares pool to a game — or unlink it — with the game looked up in the
+ * score feed BY THE SERVER (PLAN-SQUARES-SERVER-FIELDS §2b; plan K11).
+ *
+ * The manage page used to write the link straight onto the pool: the game id,
+ * league, teams and kickoff all as the browser described them. A crafted write
+ * could pair one game's scores with another game's teams and kickoff, or link a
+ * game already under way — and a grid linked to a game under way locks within
+ * the minute on whatever numbers it has. The picker greyed such a game out, but
+ * a greyed-out button was the only thing that refused it.
+ *
+ * Now the browser sends only the event id. The feed is asked first, outside the
+ * transaction (it is a network call); then the pool is re-read and written in a
+ * transaction, through the same shared `squaresGameLink` the create path uses,
+ * so a pool linked here is shaped exactly like one linked at creation.
+ *
+ * Refused, writing nothing:
+ *   - the caller is not the pool's owner (or a confirmed SUPER_ADMIN);
+ *   - the pool is not squares, or its grid is locked — reopen it first;
+ *   - the feed cannot be reached (`unavailable` — try again), or does not have
+ *     that game (`not-found`);
+ *   - the game has started, by the feed's state or the server's clock.
+ *
+ * Unlinking clears the link and switches off the kickoff auto-lock the link
+ * switched on; the lock time itself is kept, so re-linking puts it back.
+ */
+export const linkSquaresPoolGame = validated(
+    { schema: linkSquaresPoolGameSchema, label: "linkSquaresPoolGame", appCheck: "monitor" },
+    async ({ poolId, gameId, league }, request) => {
+        const uid = request.auth!.uid;
+        await assertNotBannedLive(uid);
+        const adminClaim = await confirmedAdminClaim(request);
+        const leagueKey = league === 'college' ? 'college' : 'nfl';
+
+        let game: SquaresFeedGame | null = null;
+        if (gameId !== null) {
+            const found = await lookupSquaresGame(gameId, leagueKey, { readFixture: firestoreFixtureReader });
+            if (found === 'unreachable') {
+                throw new HttpsError('unavailable', 'Could not reach the schedule. Nothing was changed — try again in a minute.');
+            }
+            if (found === 'not-found') {
+                throw new HttpsError('not-found', 'That game was not found on the schedule. Pick it from the list again.');
+            }
+            if (squaresFeedGameHasStarted(found, Date.now())) {
+                throw new HttpsError('failed-precondition', 'That game has already kicked off. Pick a game that has not started.');
+            }
+            game = found;
+        }
+
+        const db = admin.firestore();
+        const poolRef = db.collection('pools').doc(poolId);
+        const result = await db.runTransaction(async (t) => {
+            const snap = await t.get(poolRef);
+            if (!snap.exists) throw new HttpsError('not-found', 'Pool not found.');
+            const pool = snap.data() as PoolDoc;
+            assertPoolOwnerOrSuperAdmin(pool, uid, adminClaim);
+            if (!isSquares(pool)) throw new HttpsError('failed-precondition', 'This is not a squares pool.');
+            if (pool.isLocked === true) {
+                throw new HttpsError('failed-precondition', 'The grid is locked. Reopen it before changing its game.');
+            }
+
+            const actor = { uid, role: 'ADMIN' as const, label: request.auth!.token.name || 'Owner' };
+            if (game === null) {
+                const hadLink = typeof pool.gameId === 'string' && pool.gameId !== '';
+                if (!hadLink) return { pool, linked: false as const, changed: false };
+                t.update(poolRef, {
+                    gameId: FieldValue.delete(),
+                    gameTime: FieldValue.delete(),
+                    league: FieldValue.delete(),
+                    'reminders.lock.enabled': false,
+                    updatedAt: Timestamp.now(),
+                });
+                await writeAuditEvent({
+                    poolId, type: 'POOL_GAME_LINKED', severity: 'INFO',
+                    message: `Game unlinked (was ${pool.gameId})`,
+                    actor, payload: { unlinked: pool.gameId },
+                }, t);
+                return { pool, linked: false as const, changed: true };
+            }
+
+            const patch = squaresGameLink(game, leagueKey, { reminders: pool.reminders, scores: pool.scores });
+            if (!patch) throw new HttpsError('not-found', 'That game cannot be linked. Pick it from the list again.');
+            t.update(poolRef, { ...patch, updatedAt: Timestamp.now() });
+            await writeAuditEvent({
+                poolId, type: 'POOL_GAME_LINKED', severity: 'INFO',
+                message: `Linked to ${game.awayTeam} @ ${game.homeTeam}`,
+                actor,
+                payload: { gameId: game.id, league: leagueKey, homeTeam: game.homeTeam, awayTeam: game.awayTeam, kickoff: game.kickoff },
+            }, t);
+            return { pool, linked: true as const, changed: true };
+        });
+
+        await auditIfActingAsAdmin(result.pool, request, adminClaim, 'SQUARES_LINK_GAME', poolId, { gameId, league: leagueKey });
+        return result.linked && game
+            ? { linked: true, gameId: game.id, homeTeam: game.homeTeam, awayTeam: game.awayTeam, kickoff: game.kickoff }
+            : { linked: false, changed: result.changed };
     },
 );

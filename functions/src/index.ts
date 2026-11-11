@@ -13,7 +13,7 @@ export { reserveSquare, reserveSquares, markSquaresPaid, updatePlayer, releaseSq
 export { confirmPayment } from './confirmPayment';
 export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
-export { recomputeSquaresWinners, drawSquaresFinalPrize, unlockSquaresPool } from "./squaresAdmin";
+export { recomputeSquaresWinners, drawSquaresFinalPrize, unlockSquaresPool, linkSquaresPoolGame } from "./squaresAdmin";
 export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
 export { onSystemConfigWritten } from "./systemConfigAudit";
 export { onUserCreated, syncAllUsers } from "./userSync";

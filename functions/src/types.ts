@@ -279,6 +279,9 @@ export type AuditEventType =
     | 'POOL_STATUS_CHANGED'
     | 'POOL_LOCKED'
     | 'POOL_UNLOCKED'
+    // PLAN-SQUARES-SERVER-FIELDS: a squares pool linked to (or unlinked from) a game
+    // by linkSquaresPoolGame. Payload {gameId, league, homeTeam, awayTeam, kickoff} or {unlinked}.
+    | 'POOL_GAME_LINKED'
     | 'DIGITS_GENERATED'
     | 'SCORE_FINALIZED'
     | 'WINNER_COMPUTED'

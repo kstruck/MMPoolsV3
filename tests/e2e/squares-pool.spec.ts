@@ -93,9 +93,30 @@ async function claimSquares(page: Page, ids: number[]): Promise<void> {
 
 const next = (page: Page) => page.getByRole('button', { name: 'Next', exact: true }).click();
 
+/**
+ * The same game, as the SERVER sees it. Since PLAN-SQUARES-SERVER-FIELDS the
+ * create callable looks a linked game up in the score feed itself and stores
+ * what the feed says; in an emulator run the feed is this fixture document
+ * (`lib/squaresFeedGame.ts`, used only when the emulators are running).
+ */
+async function seedServerFeed(): Promise<void> {
+  const s = (v: string) => ({ stringValue: v });
+  await patchDoc(`emulatorFixtures/squaresFeed_${GAME_ID}`, {
+    kickoff: { integerValue: String(kickoff.getTime()) },
+    state: s('pre'),
+    homeTeam: s('Detroit Lions'),
+    awayTeam: s('Green Bay Packers'),
+    homeLogo: s(team('Detroit Lions', 'DET').logo),
+    awayLogo: s(team('Green Bay Packers', 'GB').logo),
+    seasonType: s('2'),
+    week: { integerValue: '12' },
+  }, ['kickoff', 'state', 'homeTeam', 'awayTeam', 'homeLogo', 'awayLogo', 'seasonType', 'week']);
+}
+
 test.describe('a squares pool, from the wizard to a paid prize', () => {
   test('create with a linked game → claim three ways → lock → score → record → pay', async ({ browser }) => {
     test.setTimeout(240_000);
+    await seedServerFeed();
     const email = `e2e-sq-owner-${RUN_ID}@example.com`;
     const ownerName = `E2E ${email}`;   // what registerFreshUser types as the account name
     const page = await newVisitor(browser);
@@ -235,6 +256,13 @@ test.describe('a squares pool, from the wizard to a paid prize', () => {
     //      Square 37 is row 3, column 7: the away digit at index 3, the home digit at index 7.
     const q1 = { home: axis.home[7], away: axis.away[3] };
     await page.goto(`/admin/${poolId}?tab=scoring`);
+    // The pool is LINKED and LOCKED, so its scores are the feed's: the inputs
+    // are read-only and the rules refuse a typed score
+    // (PLAN-SQUARES-SERVER-FIELDS). Entering them by hand is what Manual Score
+    // Override is for — the switch a commissioner uses when the feed fails.
+    await expect(page.getByText(/these scores come from the score feed/i)).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('checkbox', { name: /Manual score override/i }).click({ force: true });
+    await eventually(() => readPool(poolId), (p) => p.manualScoreOverride === true, 'Manual Score Override to be on');
     await page.getByRole('checkbox', { name: /Enable 1st Quarter scoring/i }).click({ force: true });
     const scores = page.locator('input[type="number"]');
     await scores.nth(0).fill(String(q1.home));

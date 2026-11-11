@@ -5,6 +5,7 @@ import { DebouncedInput } from './DebouncedInputs';
 import { getTeamLogo } from '../../constants';
 import type { ScheduleGame, ScheduleLeague } from '../../services/espnSchedule';
 import { useScheduleSearch } from '../../hooks/useScheduleSearch';
+import { LockedTermsNotice } from './LockedTermsNotice';
 
 interface WizardStepMatchupProps {
     gameState: GameState;
@@ -12,6 +13,8 @@ interface WizardStepMatchupProps {
     /** Link the pool to the game picked from the schedule. */
     /** Resolves `true` once the pool is saved with the link, `false` if it was not. */
     onLinkGame: (game: ScheduleGame) => Promise<boolean>;
+    /** The grid is locked: its game cannot be changed until it is reopened (PLAN-SQUARES-SERVER-FIELDS). */
+    locked?: boolean;
 }
 
 const kickoffText = (ms: number): string =>
@@ -30,7 +33,7 @@ const kickoffText = (ms: number): string =>
  * They were labelled the other way round, on the one screen a commissioner
  * reads to learn which side is which.
  */
-export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState, updateConfig, onLinkGame }) => {
+export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState, updateConfig, onLinkGame, locked = false }) => {
     // Prefer API logos, fallback to local map
     const homeLogo = gameState.homeTeamLogo || getTeamLogo(gameState.homeTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined));
     const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined));
@@ -64,12 +67,13 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState,
                                 : 'No game linked. Find it on the schedule and the pool is scored and locked for you.'}
                         </p>
                     </div>
-                    <button onClick={() => setShowSchedule(!showSchedule)} className={`px-5 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 flex items-center gap-2 ${showSchedule ? 'bg-card hover:bg-surface text-muted border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] fine:hover:-translate-y-px'}`}>
+                    <button onClick={() => setShowSchedule(!showSchedule)} disabled={locked} className={`disabled:opacity-50 disabled:cursor-not-allowed ${`px-5 py-2.5 rounded-md text-sm font-display font-bold uppercase tracking-[0.05em] transition-ui duration-150 flex items-center gap-2 ${showSchedule ? 'bg-card hover:bg-surface text-muted border border-line' : 'bg-brandred-600 hover:bg-brandred-500 text-white shadow-[0_6px_16px_rgba(196,52,46,0.28)] fine:hover:-translate-y-px'}`}`}>
                         <Calendar size={18} />
                         {showSchedule ? 'Hide Schedule' : gameState.gameId ? 'Change Game' : 'Find Game'}
                     </button>
                 </div>
-                {showSchedule && (
+                {locked && <LockedTermsNotice>The grid is locked, so its game cannot be changed. To change it, reopen the grid first — that discards the drawn numbers.</LockedTermsNotice>}
+                {showSchedule && !locked && (
                     <div className="mb-6 bg-card border border-line rounded-xl p-4 animate-in fade-in" data-testid="admin-game-search">
                         <div className="flex flex-wrap items-end gap-3 mb-4">
                             <label htmlFor="admin-game-league" className="block text-xs text-faint">

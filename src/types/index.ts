@@ -658,6 +658,7 @@ export type AuditEventType =
   | 'POOL_CREATED'
   | 'POOL_LOCKED'
   | 'POOL_UNLOCKED'
+  | 'POOL_GAME_LINKED'
   | 'POOL_STATUS_CHANGED'
   | 'DIGITS_GENERATED' // payload: { period, commitHash }
   | 'SCORE_FINALIZED'  // payload: { period, home, away, eventId, sourceHash }

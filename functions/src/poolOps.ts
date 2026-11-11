@@ -7,7 +7,8 @@ import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema, clearLegacyCoManagersSchema } from "./schemas/poolOps";
 import { writeAdminAudit } from "./lib/adminAudit";
-import { squaresCreateDefaults, SQUARES_DEFAULT_PAYOUTS } from "./shared/squaresDefaults";
+import { isFeedLogoUrl, squaresCreateDefaults, SQUARES_DEFAULT_PAYOUTS } from "./shared/squaresDefaults";
+import { firestoreFixtureReader, lookupSquaresGame, squaresFeedGameHasStarted } from "./lib/squaresFeedGame";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
@@ -430,15 +431,43 @@ export const createPool = validated(
             // while the game is played — so it is refused rather than stored.
             // So is a game that has already kicked off: nobody could claim a
             // square on it, and the grid would lock empty within the minute.
+            //
+            // THE GAME IS THE FEED'S, NOT THE WIZARD'S (PLAN-SQUARES-SERVER-FIELDS
+            // §2c; plan K11). The wizard's id is looked up in the score feed and
+            // the pool stores what the feed says — kickoff, teams, badges, season
+            // type, week. The kickoff the wizard sent is not used: a crafted
+            // request could otherwise pair one game's scores with another game's
+            // teams and kickoff, or pass off a started game as not started.
             const wantsLink = typeof data.gameId === 'string' && data.gameId.trim() !== '';
             if (wantsLink) {
-                const kickoff = typeof data.gameTime === 'number' && Number.isFinite(data.gameTime) ? data.gameTime : null;
-                if (kickoff === null || kickoff <= 0) {
-                    throw new HttpsError('invalid-argument', 'That game has no kickoff time. Pick it from the schedule again.');
+                const league = data.league === 'college' ? 'college' : 'nfl';
+                const found = await lookupSquaresGame(data.gameId.trim(), league, { readFixture: firestoreFixtureReader });
+                if (found === 'unreachable') {
+                    throw new HttpsError('unavailable', 'Could not reach the schedule to check that game. Try again, or create the pool without a game and link it later.');
                 }
-                if (kickoff <= now.toMillis()) {
+                if (found === 'not-found') {
+                    throw new HttpsError('invalid-argument', 'That game was not found on the schedule. Pick it from the schedule again.');
+                }
+                if (squaresFeedGameHasStarted(found, now.toMillis())) {
                     throw new HttpsError('failed-precondition', 'That game has already kicked off. Pick a game that has not started.');
                 }
+                for (const key of ['homeTeamLogo', 'awayTeamLogo', 'seasonType', 'week'] as const) {
+                    delete newPool[key];
+                    delete data[key];
+                }
+                const feedFields: Record<string, unknown> = {
+                    gameId: found.id,
+                    gameTime: found.kickoff,
+                    league,
+                    homeTeam: found.homeTeam,
+                    awayTeam: found.awayTeam,
+                };
+                if (isFeedLogoUrl(found.homeLogo)) feedFields.homeTeamLogo = found.homeLogo;
+                if (isFeedLogoUrl(found.awayLogo)) feedFields.awayTeamLogo = found.awayLogo;
+                if (found.seasonType) feedFields.seasonType = found.seasonType;
+                if (found.week) feedFields.week = found.week;
+                Object.assign(newPool, feedFields);
+                Object.assign(data, feedFields);
             } else {
                 // Not linked: nothing half-linked is left on the document.
                 delete newPool.gameId;
