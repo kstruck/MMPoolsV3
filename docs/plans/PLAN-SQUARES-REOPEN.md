@@ -146,8 +146,11 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
      2. The folder holds `pre-squares-reopen-2026-11.overall_export_metadata`
         and `all_namespaces/` (top-level listing).
    - Copy in the `us-east1` bucket (`gs://mmpools-firestore-backups/pre-squares-reopen-2026-11`):
-     _pending — Kevin's step 7/8; not required for the gate above, which the
-     export alone satisfies._
+     **made 2026-11-11, by Kevin** — `gcloud storage cp --recursive` reported
+     `Completed files 1026/1026 | 236.9MiB/236.9MiB`. (The export's own
+     246,290,809-byte figure above counts document bytes, not file sizes, so
+     the two are not expected to match.) Not required for the gate above,
+     which the export alone satisfies.
 
    **The bucket this section first named does not work.** The export was
    first sent to a `us-east1` bucket, as `PLAN-BACKUPS-PHASE3.md` Step 4
