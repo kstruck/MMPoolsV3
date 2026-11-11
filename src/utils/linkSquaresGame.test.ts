@@ -9,13 +9,16 @@ const game = (over: Partial<ScheduleGame> = {}): ScheduleGame => ({
 });
 const named = { name: 'Family squares', reminders: undefined, scores: undefined };
 const free = () => true;
+/** A save that goes through. Typed, so `mock.calls[0][0]` is the patch. */
+const savesOk = () => vi.fn<(patch: Record<string, unknown>) => Promise<void>>(async () => {});
+type LinkPatch = { gameId: string; league: string; reminders: { lock: Record<string, unknown> } };
 
 describe('linkSquaresGame — "linked" is said only once the pool is saved', () => {
   it('a save that goes through: linked, with the game, its league and the lock at kickoff', async () => {
-    const save = vi.fn(async (_patch: Record<string, unknown>) => {});
+    const save = savesOk();
     expect(await linkSquaresGame({ game: game(), pool: named, nameIsFree: free, save })).toEqual({ status: 'linked', name: null });
     expect(save).toHaveBeenCalledTimes(1);
-    const patch = save.mock.calls[0][0] as Record<string, any>;
+    const patch = save.mock.calls[0][0] as unknown as LinkPatch;
     expect(patch.gameId).toBe('401772510');
     expect(patch.league).toBe('nfl');
     expect(patch.reminders.lock).toMatchObject({ enabled: true, lockAt: KICKOFF });
@@ -23,7 +26,7 @@ describe('linkSquaresGame — "linked" is said only once the pool is saved', () 
   });
 
   it('the league is the one the game was FOUND in', async () => {
-    const save = vi.fn(async (_patch: Record<string, unknown>) => {});
+    const save = savesOk();
     await linkSquaresGame({ game: game({ league: 'college' }), pool: named, nameIsFree: free, save });
     expect((save.mock.calls[0][0] as Record<string, unknown>).league).toBe('college');
   });
@@ -63,7 +66,7 @@ describe('linkSquaresGame — "linked" is said only once the pool is saved', () 
   });
 
   it('a pool with a name keeps it; one that never had a name takes the matchup', async () => {
-    const save = vi.fn(async (_patch: Record<string, unknown>) => {});
+    const save = savesOk();
     for (const name of [undefined, null, '', 'New Pool']) {
       save.mockClear();
       const out = await linkSquaresGame({ game: game(), pool: { name }, nameIsFree: free, save });
@@ -74,7 +77,7 @@ describe('linkSquaresGame — "linked" is said only once the pool is saved', () 
 
   it('a matchup name that is taken gets the next free number', async () => {
     const taken = new Set(['Green Bay Packers @ Detroit Lions', 'Green Bay Packers @ Detroit Lions (2)']);
-    const save = vi.fn(async (_patch: Record<string, unknown>) => {});
+    const save = savesOk();
     const out = await linkSquaresGame({ game: game(), pool: {}, nameIsFree: (n) => !taken.has(n), save });
     expect(out).toEqual({ status: 'linked', name: 'Green Bay Packers @ Detroit Lions (3)' });
   });
