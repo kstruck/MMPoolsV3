@@ -448,7 +448,10 @@ export const createPool = validated(
                 if (found === 'not-found') {
                     throw new HttpsError('invalid-argument', 'That game was not found on the schedule. Pick it from the schedule again.');
                 }
-                if (squaresFeedGameHasStarted(found, now.toMillis())) {
+                // The clock is read NOW, not at the top of the call: billing,
+                // config and the feed request (with its retry) all ran since
+                // (codex, PR #765 round 3). It is read again before the write.
+                if (squaresFeedGameHasStarted(found, Date.now())) {
                     throw new HttpsError('failed-precondition', 'That game has already kicked off. Pick a game that has not started.');
                 }
                 for (const key of ['homeTeamLogo', 'awayTeamLogo', 'seasonType', 'week'] as const) {
@@ -507,6 +510,12 @@ export const createPool = validated(
             const currentRole = userDoc.data()?.role as string | undefined;
             assertNotBanned(claimRole, currentRole);
 
+            // Last look at the clock before a squares pool linked to a game is
+            // written: kickoff can pass while the steps above run.
+            if (isSquaresPool && typeof newPool.gameId === 'string'
+                && typeof newPool.gameTime === 'number' && newPool.gameTime <= Date.now()) {
+                throw new HttpsError('failed-precondition', 'That game has just kicked off. Pick a game that has not started.');
+            }
             t.set(poolRef, newPool);
 
             writePoolCreationSideEffects(t, {

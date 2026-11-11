@@ -105,3 +105,9 @@ replaced here by the callable.
 | 1 | P1: the rule is scoped to `type == 'SQUARES'`, so a squares pool with NO `type` is not covered and its managers can still write every protected field. The server treats a typeless pool as squares (`isSquares` in `squaresAdmin.ts`, `lockPool`) | **Accepted — real.** The app was squares-only before `type` existed, and every server path already reads a missing type as squares | `isSquares` is now true for `'SQUARES'`, a missing type and `null`. NFL pools are unaffected: every NFL rule already requires an NFL type. 4 rule cases (48 assertions); mutant (scope back to `'SQUARES'` only): 3 of them red |
 
 **Also in this round: a defect from the #760 merge, found by the emulator suite, not by a reviewer.** #760's codex fix made `squaresGameLink` keep scores only when told the pool's current game. This PR's callable did not pass it, so re-linking the SAME game lost the scores. Fixed (the callable passes `gameId`); mutant (always claim the same game) red.
+
+## Round X3 — codex, third round, at `bae951a6` (2026-11-11)
+
+| # | codex's finding | Verdict | What changed |
+|---|---|---|---|
+| 1 | P1: `createPool` checks kickoff against `now`, read at the top of the call, before billing, config and the feed request (with its retry). A game that kicks off during those steps is still linked | **Accepted — real, narrow** (a window of seconds) | The check after the lookup reads the clock then (`Date.now()`), and the creation transaction looks once more before it writes a linked squares pool. **Not covered by a test**, like round Q1's finding 8: the gap is between clock reads inside one call. Both checks are the same comparison the tested one makes |
