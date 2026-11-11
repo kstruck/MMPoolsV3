@@ -260,6 +260,22 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 
 ### Needs Kevin (work continues without them)
 
+> **RULED 2026-11-11 — Kevin: "go with all of your recommendations"**, given
+> in chat in answer to a table of seven decisions (K7, K11/K4/K1, K12, D23,
+> D18, K10, the Dependabot PRs), each with its recommendation:
+>
+> | # | Ruling |
+> |---|---|
+> | **K7** | **Approved** — PR #762 (`checkLockReminders` no longer auto-locks squares pools; `SQUARES_LOCK_LEAD_MS` back to 30 s). Merge order #758 → #759 → #760 → #762 → #761. |
+> | **K11, K4, K1** | **Deferred, and the fix is to be built** as its own PR before the first real-money squares pool: a `linkSquaresGame` callable that takes the game from the score feed, and `firestore.rules` making the link fields, `quarterlyNumbers`, `isLocked`, `scores`, `payouts` and `randomWinner` server-only. Until it ships, the gap below stands as an accepted risk. |
+> | **K12** | **Leave it.** No change. |
+> | **D23** | **Confirmed** — the prize pot keeps its cents. |
+> | **D18** | **Confirmed** — winner records are written unless `system/config.squaresWinners.paused` is set; unset means running. |
+> | **K10** | Kevin asked for research into the squares pricing tiers and a recommendation (not yet ruled on the tiers themselves). |
+> | **Dependabot PRs** | Build and test them first; Kevin merges. |
+>
+> **Not in that table, so still open:** K2, K5, K6, K8, K9 below.
+
 - **⛔ K7 IS THE ONE TO DECIDE FIRST** (it is listed in order below, but
   round Q5 changed its weight — read it before the others). **#761, the
   reopen, is not to be merged until K7 is decided and K1/K4 have been seen**
