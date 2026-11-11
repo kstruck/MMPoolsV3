@@ -599,16 +599,20 @@ describe('unlockSquaresPool — reopening sales discards the numbers', () => {
     expect(res.generated).toBe(true);
   });
 
-  const started: Array<[string, Doc]> = [
+  const started: Array<[string, Doc, Doc?]> = [
     ['the feed says the game is in progress', { gameStatus: 'in', startTime: pregame.scores.startTime }],
     ['the game is over', { gameStatus: 'post', startTime: pregame.scores.startTime }],
     ['a period score has been entered by hand', { gameStatus: 'pre', q1: { home: 0, away: 0 }, startTime: pregame.scores.startTime }],
     ['points are on the board', { gameStatus: 'pre', current: { home: 3, away: 0 }, startTime: pregame.scores.startTime }],
     ['the scheduled kickoff has passed, even though the feed still says "pre"', { gameStatus: 'pre', startTime: new Date(Date.now() - 60_000).toISOString() }],
+    // qodo #765, finding 2: under Manual Score Override the commissioner typed
+    // "not started, kickoff tomorrow" after kickoff. The pool's gameTime — which
+    // only the server writes — still says the game has started.
+    ['the pool\'s server-owned kickoff has passed, though the scores were typed back to "not started"', { gameStatus: 'pre', startTime: pregame.scores.startTime }, { gameTime: Date.now() - 60_000, manualScoreOverride: true }],
   ];
-  for (const [why, scores] of started) {
+  for (const [why, scores, extra] of started) {
     it(`REFUSED once ${why} — and the numbers stay`, async () => {
-      await seedPool({ scores: { current: null, q1: null, half: null, q3: null, final: null, ...scores } });
+      await seedPool({ scores: { current: null, q1: null, half: null, q3: null, final: null, ...scores }, ...(extra ?? {}) });
       await expect(unlock({ data: { poolId: POOL }, auth: owner } as never)).rejects.toThrow(/game has started/i);
       const p = await pool();
       expect(p.isLocked).toBe(true);

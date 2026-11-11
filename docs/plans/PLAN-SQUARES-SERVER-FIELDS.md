@@ -10,7 +10,11 @@
 > under the 2026-11-10 delegation and are each Kevin's to veto.
 >
 > **Stacked on PR-D (`claude/squares-reopen`, #761).** It needs the squares
-> code from A–D. Merge after #761.
+> code from A–D. Merge after #761. It is #765.
+>
+> Companions: `PLAN-SQUARES-SERVER-FIELDS-REVIEW-LOG.md` (every review round)
+> and `PLAN-SQUARES-SERVER-FIELDS-SWEEPS.md` (the grep-built list of every
+> browser write the rule refuses).
 
 ## 0. Blast radius — why this cannot reach a running NFL pool
 
@@ -159,10 +163,22 @@ Manual Score Override first, which is what a commissioner has to do too.
 
 ## 5. Deploy and rollback
 
-Ships after #758–#762 and #761 are merged. **Deploy functions BEFORE rules**
-(CLAUDE.md §3): the new callable must exist before the rule stops the old
-client write, or a commissioner on the old page cannot link a game in the
-gap. Then `www`, so the page calls the callable.
+Ships after #758–#762 and #761 are merged. **Order: functions → `www` →
+rules** (qodo #765, finding 3; CLAUDE.md §3 already puts functions before
+rules). Each step leaves a working site:
+
+| After | Old page | New page |
+|---|---|---|
+| functions | links by direct write — old rules allow it | not live yet |
+| `www` | only in a tab left open from before | calls `linkSquaresPoolGame`, which now exists; old rules allow every write it still makes |
+| rules | a tab left open from before gets "permission denied" on a link or a frozen field; reloading fixes it | unchanged |
+
+The rule cannot be made safe in any order: its purpose is to refuse a write
+the old page makes. This order leaves only a stale open tab exposed, and only
+until it is reloaded.
+
+Mid-rollout, the first step is the one to undo: redeploy the previous rules.
+The functions and `www` can stay; the new page works under the old rules.
 
 Rollback: revert the PR and redeploy rules. The rules change only refuses
 writes; reverting it restores the old permissions with no data to repair.

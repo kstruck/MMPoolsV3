@@ -8,7 +8,7 @@ import {
     type StoredWinner,
     type WinnerWrite,
 } from '../lib/squaresWinners';
-import { isUsableAxis, squaresGameHasStarted } from '../lib/squaresGame';
+import { isUsableAxis, squaresGameHasStarted, squaresScoresShowPlay } from '../lib/squaresGame';
 import type { PayoutPool } from '../shared/squaresPayouts';
 
 /**
@@ -214,6 +214,29 @@ describe('squaresGameHasStarted', () => {
         expect(squaresGameHasStarted({ scores: { gameStatus: 'pre', startTime: 'TBD' } }, NOW)).toBe(false);
         expect(squaresGameHasStarted({ scores: { gameStatus: 'pre', startTime: '' } }, NOW)).toBe(false);
         expect(squaresGameHasStarted({ scores: { gameStatus: 'pre', startTime: 0 } }, NOW)).toBe(false);
+        expect(squaresGameHasStarted({ gameTime: 'TBD', scores: { gameStatus: 'pre' } }, NOW)).toBe(false);
+        expect(squaresGameHasStarted({ gameTime: 0 }, NOW)).toBe(false);
+    });
+
+    // qodo #765, finding 2. Under Manual Score Override a commissioner can type
+    // "not started" into the scores after kickoff; the server-owned gameTime
+    // still says the game has started, so the grid cannot be reopened and re-drawn.
+    it('🛑 forged pre-game scores do not hide a kickoff the pool\'s gameTime says has passed', () => {
+        const forged = { gameStatus: 'pre', startTime: '2026-11-27T21:30:00Z', current: null, q1: null };
+        expect(squaresGameHasStarted({ gameTime: NOW - 60_000, scores: forged }, NOW)).toBe(true);
+        expect(squaresGameHasStarted({ gameTime: NOW, scores: null }, NOW)).toBe(true);
+        expect(squaresGameHasStarted({ gameTime: NOW + 60_000, scores: forged }, NOW)).toBe(false);
+    });
+});
+
+describe('squaresScoresShowPlay — played, not merely scheduled', () => {
+    it('a kickoff time alone is not play; status, a period or points are', () => {
+        expect(squaresScoresShowPlay(null)).toBe(false);
+        expect(squaresScoresShowPlay({ gameStatus: 'pre', startTime: '2020-01-01T00:00:00Z' })).toBe(false);
+        expect(squaresScoresShowPlay({ gameStatus: 'in' })).toBe(true);
+        expect(squaresScoresShowPlay({ gameStatus: 'post' })).toBe(true);
+        expect(squaresScoresShowPlay({ half: { home: 0, away: 0 } })).toBe(true);
+        expect(squaresScoresShowPlay({ current: { home: 0, away: 7 } })).toBe(true);
     });
 });
 

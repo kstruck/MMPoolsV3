@@ -186,3 +186,54 @@ describe('linkSquaresPoolGame — unlinking', () => {
     expect((await pool()).gameId).toBe(GAME);
   });
 });
+
+describe('linkSquaresPoolGame — changing the game (qodo #765, findings 1 and 9)', () => {
+  const OTHER = '401772599';
+  const oldKickoff = () => Date.now() + 24 * HOUR;
+  const seedLinkedTo = (over: Doc = {}) => {
+    const kickoff = oldKickoff();
+    return seedPool({
+      gameId: OTHER, gameTime: kickoff, league: 'nfl', homeTeam: 'Old Home', awayTeam: 'Old Away',
+      homeTeamLogo: LOGO, awayTeamLogo: LOGO, seasonType: '3', week: 1,
+      scores: { current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre', startTime: new Date(kickoff).toISOString(), leftover: 'old game' },
+      ...over,
+    });
+  };
+
+  it('a different game starts from fresh scores, and the old game\'s badges, season type and week are cleared', async () => {
+    const kickoff = Date.now() + 48 * HOUR;
+    await seedFeed(GAME, { kickoff, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' }); // no badges, no week
+    await seedLinkedTo();
+    await call({ poolId: POOL, gameId: GAME });
+    const p = await pool();
+    expect(p.gameId).toBe(GAME);
+    expect(p.scores.startTime).toBe(new Date(kickoff).toISOString());
+    expect('leftover' in p.scores).toBe(false);
+    for (const k of ['homeTeamLogo', 'awayTeamLogo', 'seasonType', 'week']) expect(k in p).toBe(false);
+  });
+
+  it('re-linking the SAME game keeps the scores it has', async () => {
+    await seedFeed(OTHER, { kickoff: oldKickoff(), state: 'pre', homeTeam: 'Old Home', awayTeam: 'Old Away' });
+    await seedLinkedTo();
+    await call({ poolId: POOL, gameId: OTHER });
+    expect((await pool()).scores.leftover).toBe('old game');
+  });
+
+  it('a grid whose scores show a game PLAYED cannot be moved to another game; nothing is written', async () => {
+    await seedFeed(GAME, { kickoff: Date.now() + 48 * HOUR, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+    await seedLinkedTo({ scores: { gameStatus: 'post', final: { home: 24, away: 17 }, current: { home: 24, away: 17 } } });
+    await expect(call({ poolId: POOL, gameId: GAME })).rejects.toThrow(/already has scores or winners/);
+    const p = await pool();
+    expect(p.gameId).toBe(OTHER);
+    expect(p.homeTeamLogo).toBe(LOGO);
+    expect(await audits()).toHaveLength(0);
+  });
+
+  it('a grid with a winner on record cannot be moved to another game, even with its scores cleared', async () => {
+    await seedFeed(GAME, { kickoff: Date.now() + 48 * HOUR, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+    await seedPool(); // unlinked, scores show nothing
+    await poolRef().collection('winners').doc('q1').set({ period: 'q1', squareId: 3, owner: 'Ann', amount: 25 });
+    await expect(call({ poolId: POOL, gameId: GAME })).rejects.toThrow(/already has scores or winners/);
+    expect('gameId' in (await pool())).toBe(false);
+  });
+});

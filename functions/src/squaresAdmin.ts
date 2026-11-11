@@ -34,7 +34,7 @@ import { firestoreFixtureReader, lookupSquaresGame, squaresFeedGameHasStarted, t
 import { squaresGameLink } from "./shared/squaresDefaults";
 import { applyWinnerPlan, finalScoresOf, isEventWinnerId, PERIOD_WINNER_IDS, planWinnerWrites, recordedEntry, type StoredWinner } from "./lib/squaresWinners";
 import { writeAdminAudit } from "./lib/adminAudit";
-import { squaresGameHasStarted } from "./lib/squaresGame";
+import { squaresGameHasStarted, squaresScoresShowPlay } from "./lib/squaresGame";
 import { computePeriodPayouts, PERIODS, ROLLOVER, scoreEventStrategy, usesCurrentWinnerRules, type PayoutPool, type Period, type RecordedWinners } from "./shared/squaresPayouts";
 import { WINNERS_HELD_FIELD, assertSquaresWinnersNotPaused } from "./lib/squaresPause";
 
@@ -414,9 +414,42 @@ export const linkSquaresPoolGame = validated(
                 return { pool, linked: false as const, changed: true };
             }
 
-            const patch = squaresGameLink(game, leagueKey, { reminders: pool.reminders, scores: pool.scores });
+            // The kickoff check above ran before this transaction. Kickoff can
+            // pass while it waits, so the clock is asked again here, right before
+            // the write (qodo #765, 8).
+            if (squaresFeedGameHasStarted(game, Date.now())) {
+                throw new HttpsError('failed-precondition', 'That game has just kicked off. Pick a game that has not started.');
+            }
+
+            // A DIFFERENT game starts from nothing (qodo #765, 1). The score sync
+            // keeps a period score it already holds, and its event records and
+            // de-duplication markers are kept per pool, not per game, so a grid
+            // carrying another game's play would be scored partly from that game.
+            // A grid that has PLAYED one (scores show play, or a winner is on
+            // record) cannot be moved to another; that is a new pool. Re-linking
+            // the SAME game keeps what it has.
+            const changingGame = pool.gameId !== game.id;
+            if (changingGame) {
+                const winners = await t.get(poolRef.collection('winners').limit(1));
+                if (squaresScoresShowPlay(pool.scores as Parameters<typeof squaresScoresShowPlay>[0]) || !winners.empty) {
+                    throw new HttpsError('failed-precondition', 'This grid already has scores or winners from a game. Its game cannot be changed — start a new pool for another game.');
+                }
+            }
+            const patch = squaresGameLink(game, leagueKey, {
+                reminders: pool.reminders,
+                scores: changingGame ? undefined : pool.scores,
+            });
             if (!patch) throw new HttpsError('not-found', 'That game cannot be linked. Pick it from the list again.');
-            t.update(poolRef, { ...patch, updatedAt: Timestamp.now() });
+            // Badges, season type and week belong to ONE game. The link writes
+            // the ones the feed gives; any it does not give are cleared, so the
+            // previous game's are not left showing (qodo #765, 9).
+            const staleGameFields = {
+                homeTeamLogo: FieldValue.delete(),
+                awayTeamLogo: FieldValue.delete(),
+                seasonType: FieldValue.delete(),
+                week: FieldValue.delete(),
+            };
+            t.update(poolRef, { ...staleGameFields, ...patch, updatedAt: Timestamp.now() });
             await writeAuditEvent({
                 poolId, type: 'POOL_GAME_LINKED', severity: 'INFO',
                 message: `Linked to ${game.awayTeam} @ ${game.homeTeam}`,
