@@ -8,6 +8,8 @@ Rounds of review on `PLAN-SQUARES-SERVER-FIELDS.md` and its PR. Newest last.
 | M1 | mutation testing | 49 mutants, 48 red | — | 1 survivor (equivalent — see below) |
 | X1 | codex (`gpt-5.6-terra`), first round, at `3b929a6b` against #761 | 1 | 1 | — |
 | X2 | codex, second round, at `09553dbd` | 1 | 1 | — |
+| X3 | codex, third round, at `bae951a6` | 1 | 1 | — |
+| X4 | codex, fourth round, at `bab9a42d` | 0 | — | — |
 | Q1 | qodo, first review of #765 (at `448a5aed`) | 10 | 8 (2 of them on #761) | 2 rejected (4, 6) |
 | SW | sweeps (`PLAN-SQUARES-SERVER-FIELDS-SWEEPS.md`) | 0 | — | — |
 | Q2 | qodo, re-review of #765 (at `cace846f`, after the draft/ready toggle) | 1 | 1 | — |
@@ -111,3 +113,5 @@ replaced here by the callable.
 | # | codex's finding | Verdict | What changed |
 |---|---|---|---|
 | 1 | P1: `createPool` checks kickoff against `now`, read at the top of the call, before billing, config and the feed request (with its retry). A game that kicks off during those steps is still linked | **Accepted — real, narrow** (a window of seconds) | The check after the lookup reads the clock then (`Date.now()`), and the creation transaction looks once more before it writes a linked squares pool. **Not covered by a test**, like round Q1's finding 8: the gap is between clock reads inside one call. Both checks are the same comparison the tested one makes |
+
+**Round X4 — codex, fourth round, at `bab9a42d`:** "No discrete correctness issues were identified." codex has converged on this PR (4 rounds: 3 findings, all real, all fixed). Gates on this tree: root 3893, functions 2534, emulator 982 (2 expected fail, 10 skipped), rules 15/15 (48 squares assertions), tsc + build, functions typecheck + build, lint 1841.
