@@ -94,19 +94,26 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
      `gcloud storage buckets create` command, with the expected output and
      what to do if the name is taken). Then:
      `gcloud firestore export gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11 --project gridiron-gamble-uzuqo`
-     → expect a line beginning `name: projects/gridiron-gamble-uzuqo/databases/(default)/operations/`.
-     The export runs in the background, so that line means it STARTED.
-     **What shows it worked is the files** — the check `PLAN-BACKUPS-PHASE3.md`
-     Step 4 uses, and for the same reason:
+     The export runs in the background: the command returning means it
+     STARTED. **What shows it worked is the files:**
      `gcloud storage ls --recursive gs://$BACKUP_BUCKET/pre-squares-reopen-2026-11`
-     → expect a `.overall_export_metadata` file and one directory per
-     collection (`all_namespaces/kind_pools/…`), with sizes that are not zero.
      If the listing is empty it is still running or it failed:
-     `gcloud firestore operations list --project gridiron-gamble-uzuqo` and
-     read the newest entry's `done` and `error`.
-     *(Corrected in round Q7. This step first said to look for
-     `state: SUCCESSFUL`, a field name written from memory that the export's
-     output does not have; qodo caught it.)*
+     `gcloud firestore operations list --project gridiron-gamble-uzuqo`.
+
+     **UNVERIFIED — what those commands print.** None of the three was run
+     for this plan; there are no credentials for the project here. What to
+     expect is quoted from `PLAN-BACKUPS-PHASE3.md` Step 4, which is this
+     repo's record of the same export, and is no better than that record:
+     the export prints a line beginning
+     `name: projects/gridiron-gamble-uzuqo/databases/(default)/operations/`;
+     the listing shows a `.overall_export_metadata` file and one directory
+     per collection (`all_namespaces/kind_pools/…`) with sizes that are not
+     zero; the operations list has `done` and `error` on each entry. **If
+     what you see differs, trust the screen, not this page** — a listing with
+     real files in it is the proof, whatever they are called — and write
+     down what it actually printed next to "Export taken" below.
+     *(Round Q7 corrected a field name here that had been written from
+     memory; round Q8 marks the rest for what it is.)*
 
    **Going ahead on PITR alone is not a choice this plan makes.** The
    instruction this work was given is "a full backup is in place". Only Kevin
@@ -200,7 +207,7 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 | D15 | **The random draw for an unclaimed final prize is made once, by the server, among SOLD squares.** New callable `drawSquaresFinalPrize`. | K3, built rather than deferred. The old draw ran `Math.random()` in the commissioner's browser over all 100 squares, empty ones included, with a "reset" link beside the result. |
 | D16 | **Winner records are reconciled on every score pass, not written once.** What the rules call for is compared with what is stored; only differences are written. "Paid" survives while the winner is unchanged and is cleared — with a CRITICAL audit line — if a corrected score moves the win. | M6, M12, M13 in one mechanism, with no marker to go stale. `recomputeSquaresWinners` runs the same reconcile for hand-entered scores (M9). |
 | D17 | **A draw that has been made stands, whatever the unclaimed-prize rule is set to afterwards.** | qodo round 3 on #759. The rule decides who gets a prize that has NOT been awarded. With the draw honoured only while the rule still said "random", switching the rule moved a drawn — and possibly paid — prize to the last winner, and switching it back returned it to the drawn winner as unpaid. |
-| D19 | **The prize pot keeps its cents; only the charity share is floored to a whole dollar.** `squaresPot` returns `net = gross − charity` to the cent. qodo asked twice (rounds Q6 and Q7) for `floor(gross − charity)`, the formula the domain reference gave before this plan — which described `statsTrigger.ts`'s site-wide display total, not what winners are paid. A fee may carry cents (the create contract allows it) and prizes are paid to the cent, so a floored pot would strand up to 99 cents that players paid in and nobody is paid out. PR-D rewrites the reference's squares section to say so. **This is Kevin's to confirm** — it is a money rule and qodo is right that it should not change on a code comment alone. | qodo, PR #761 finding 5 and PR #760 re-review finding 4. *Recommendation: confirm. On "floor it instead": one line in `squaresPot`, three tests updated, and a full pool with a $2.50 fee and 10% to charity pays out $218 of a $218.50 pot.* |
+| D23 | **The prize pot keeps its cents; only the charity share is floored to a whole dollar.** `squaresPot` returns `net = gross − charity` to the cent. qodo asked twice (rounds Q6 and Q7) for `floor(gross − charity)`, the formula the domain reference gave before this plan — which described `statsTrigger.ts`'s site-wide display total, not what winners are paid. A fee may carry cents (the create contract allows it) and prizes are paid to the cent, so a floored pot would strand up to 99 cents that players paid in and nobody is paid out. PR-D rewrites the reference's squares section to say so. **This is Kevin's to confirm** — it is a money rule and qodo is right that it should not change on a code comment alone. *(Labelled D19 for one commit, which was already taken — round Q8.)* | qodo, PR #761 finding 5 and PR #760 re-review finding 4. *Recommendation: confirm. The worked case, which is a test (`tests/squares-payouts.test.ts`, "keeps the cents of a fee that has them"): 97 squares sold at $2.50 is a pot of $242.50; 10% to charity is $24.25, floored to $24; that leaves $218.50 for prizes. On "floor it instead" — one line in `squaresPot` and three tests updated — the same pool pays out $218 and 50 cents goes to nobody.* |
 | D18 | **A pause switch for winner recording: `system/config.squaresWinners.paused`.** While set, scores are still kept; no quarter winner is recorded or changed and no prize amount is set; "Record winners" and the draw are refused in words. An Every-Score-Pays pool still notes each scoring event as it happens (at $0), because an event not noted then cannot be rebuilt. **Read inside the transaction that writes the winners** (round Q4), so every caller of the writer passes it and a pause set mid-run is seen. **A pool whose winners were held is marked (`squaresWinnersHeld`) and is recorded by the next sync run after the switch clears, however long it was set** (round Q4) — except a held pool since put on Manual Score Override, which waits for "Record winners" like every hand-typed score (review round Q2, finding 3). If the config cannot be read, nothing is written for that pool and the next pass retries: it neither fails open nor latches shut. | qodo rounds 3 and 4 on #759, and house rule 1 (`mmp-change-control`): a job that writes on a schedule needs a way to be stopped without a deploy. |
 | D19 | **Every Score Pays cannot be chosen on a pool with no linked game.** It can always be switched off. | Each scoring event is recorded from the live feed as it happens; a hand-scored game has none, so that pool would end with nobody paid. Entering every score of a game by hand is K9(b). |
 | D20 | **An old pool's finished quarter with no winner record is shown from the score, labelled as not recorded** — the owner of the square the score lands on, and that quarter's plain share. No reverse split, rollover or unclaimed-prize award is applied to it. | qodo round 3 on #759. A hand-scored pool recorded no winners before 2026-11, so there is no history to show; a blank card would be a worse account of that game than a labelled one, and today's rules were not its rules. |
