@@ -81,7 +81,16 @@ range; the size ladder above it is not how this product is sold.
 
 ## 4. Recommendation
 
-**For Thanksgiving (now): Option A, said honestly — no code change.**
+**For Thanksgiving (now): Option A, said honestly — no code change beyond the reopen.**
+
+⚠️ **Nothing here works until the reopen is live** (codex, round 1). On `main`
+squares is closed in code: `HARD_CLOSED_POOL_TYPES = ['SQUARES']` makes
+`assertPoolCreationAllowed` refuse every squares pool and
+`assertPoolTypePurchasable` refuse checkout and credit redemption, whatever the
+Monetization config says. #761 empties that list. So every step below is
+**after** #761 is merged, functions are deployed and `www` is rebuilt — not
+before.
+
 Squares launches free in practice anyway. Your own Thanksgiving pools are
 unaffected either way. What to do is make sure nobody is *told* something
 false: the launch step already hides the "player 11 cannot join" notice for
@@ -97,7 +106,13 @@ this pool format" (`quoteEngine.ts` throws `PRICING_NOT_CONFIGURED`).
   schema accepts a single band and decimal prices (`billingConfig.ts`
   `pricingTierSchema`, `pricingTiersSchema`). Add a `CREDIT_BUNDLE` package
   (`packagesList`): 3 squares pools for $19.99 — the Thanksgiving triple-header
-  and NFL playoff weekends are the obvious buyers.
+  and NFL playoff weekends are the obvious buyers. **Set the bundle's pool type
+  to `SQUARES` and its player limit to `100`** (codex, round 1). The
+  Super-Admin bundle form starts at `ALL` / `50`
+  (`SuperAdminBillingPanel.tsx:121-122`), and the launch step skips a credit
+  whose limit is below the commissioner's estimate (`LaunchStep.tsx`,
+  `creditSatisfiesPool`). Left at 50, the bundle could not be used for a grid
+  sold to 51–100 buyers, which is exactly the grid it is for.
 - **Enforcement — code, plan-gated (money + authorization).** Count **distinct
   buyers** (account or guest identity — the same identity `reserveSquares`
   uses for the per-player cap once #758 is merged, plan D2) and refuse the 11th buyer on a
