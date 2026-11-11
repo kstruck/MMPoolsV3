@@ -320,6 +320,19 @@ Line references are to that commit. "NEW" = not in either backlog doc.
   `linkSquaresGame` callable that looks the game up in the score feed and
   stores what the feed says; use it from the wizard and the manage page; and
   make the link fields server-only in `firestore.rules`.*
+- **K12 — two cases where guest squares are moved to an account late.** Found
+  by qodo (review log, round Q12, findings 1 and 2), in the fifth round of
+  review on the same mechanism: the step that moves a guest's squares onto
+  their account when they sign in. The four rounds before it each fixed what
+  was reported and drew the neighbouring case, so this one was **not fixed**
+  and is put here instead. Both cases need this browser to reserve squares as
+  a guest *while it is signed in*, inside the one round trip to the server
+  that a merge takes; sign-in is shared by every tab of a browser, so no
+  ordinary path through the app was found that gets there. If one were
+  reached nothing is lost: the squares stay reserved as they were and move to
+  the account on the next change to the grid or the next page load.
+  *Recommendation: leave it. The alternatives are one more change of about ten
+  lines and their tests, or a button in place of the automatic move.*
 - **K10 — check that squares has pricing tiers before the first paid pool.**
   Found by the browser walk-through (review log, round W1). The launch step
   prices a pool from `settings/billing_config`. At ten players or fewer a pool

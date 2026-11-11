@@ -28,6 +28,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q9 | qodo | #762 @ `d7e3bd11` (first review of the K7 PR) | 1 | 1 | 0 |
 | Q10 | qodo | #758 @ `ed3af116`, #760 @ `c9191f58` (#759, #761, #762: nothing new) | 7 | 6 | 1 that is Kevin's (K11) |
 | Q11 | qodo | all five, at the heads of round Q10 (`542b1313`, `b63403d8`, `3ec26e4b`, `5bf4640a`, `2a6232f1`) | 4 (raised 8 times across the five PRs) | 3 | 1 that is Kevin's (K11) |
+| Q12 | qodo | all five, at the heads of round Q11 (`2776f1ef`, `ff34bd2c`, `7eb7b825`, `b1919e2d`, `b23d25fc`) | 3 (raised 4 times) | 1 | 2 — **not fixed, put to Kevin** |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -878,8 +879,13 @@ storage; a test for the storage-blocked case was added and the mutant is red.
 
 **Surfaces.** On all five PRs: the issue comments (the report, and the
 "updated up to" note naming the head reviewed — each names the head pushed in
-round Q10), and the inline review threads. The reviews list was not pulled
-again this round; in round Q10 it held nothing but empty review containers.
+round Q10), and the inline review threads. **The reviews list was NOT read
+before this round's verdicts and fixes were written** — it was skipped on the
+strength of round Q10, where it held nothing but empty review containers.
+That is a skipped surface, and qodo said so (round Q12, finding 3). It was
+read afterwards, for all five PRs, in round Q12: still nothing but empty
+containers, so no finding was missed — but that was not known when this
+round's work was done.
 
 **Round Q10 said the guest merge had been "rebuilt rather than patched a
 fourth time". It drew three more findings, and they are the same mistake.**
@@ -942,3 +948,63 @@ retried by a re-render that changed nothing. 38 of 38 are red now.
 **If this draws a fifth round on the same mechanism, it goes to Kevin as a
 question — whether guest squares should move to an account automatically at
 all, or only when the player asks — and not into a fifth fix.**
+
+## Round Q12 — qodo at the heads of round Q11 (2026-11-11T01:38Z – 01:39Z)
+
+**How a report was waited for.** The `mmp-qodo-cycle` watcher is a script
+around `gh`, and `gh` is not available where this work is being done. What
+stood in for it in every round of this log: a subscription to each PR's
+activity, a draft → ready toggle after each push to ask for a review, and a
+read of the surfaces through the GitHub API tool — a report being read only
+once its "updated up to" note named the head that had been pushed. In this
+round qodo also updated its reports within a minute of the push, marking
+findings resolved; those updates were NOT taken as a review of the new heads,
+because the notes still named the old ones. The toggle was made ten minutes
+later and the notes then named the new heads.
+
+**Surfaces — all three, on all five PRs, read before the verdicts below.**
+The issue comments; the inline review threads; and the reviews list, read to
+its last entry on each PR (each came back whole, in one page). Every entry on
+the reviews list is a `COMMENTED` container with no text of its own — qodo's,
+one per pass, and one for each reply made in these rounds. Nothing on it that
+is not also an inline thread.
+
+Four threads, three findings:
+
+| # | Raised on | Finding | Verdict |
+|---|---|---|---|
+| 1 | #762 | A claim that MOVED squares drops a question that arrived while it was in flight. If this browser reserves more squares as a guest after the server has committed and before its answer lands, they are not moved until the grid next changes or the page is reloaded | **Not fixed — put to Kevin.** See below |
+| 2 | #760 | An answer that lands late can be kept for a NEW reservation of the same squares: the claim moves nothing, and before its answer arrives this browser's squares are given up and reserved again in the same positions | **Not fixed — put to Kevin.** See below |
+| 3 | #758, #760 | Round Q11 did not read the reviews list, and no round says how a report was waited for; the PR description says all three surfaces are read each time | **Accepted.** Round Q11's paragraph now says what was skipped and when it was read; this round records the method; #758's description is corrected |
+
+**Findings 1 and 2 — why they are not fixed.** Round Q11 ended: "If this
+draws a fifth round on the same mechanism, it goes to Kevin as a question …
+and not into a fifth fix." This is the fifth round. Each of the four before
+it closed what was reported and the next review found the neighbouring case;
+a fix written at this point would be the least reviewed code in the stack.
+
+What was traced, so the decision is made on the mechanism and not on the
+label (both are marked High / Medium):
+
+- **Both need a second thing to happen inside one round trip to the
+  server** — between the server committing the merge and the page hearing
+  about it.
+- **Both need this browser to reserve as a GUEST while it is signed in.**
+  The merge only runs for a signed-in player, and a signed-in player's
+  reservation goes on their account, not under the browser's key. The app
+  does not set a sign-in persistence, so it uses Firebase's default, which
+  is shared by every tab of the browser — a second tab is signed in too.
+  (Checked: no `setPersistence` / `initializeAuth` in `src/`.) No ordinary
+  path through the app was found that reaches either case.
+- **If one were reached, nothing is lost.** The squares stay reserved, under
+  the browser's key, exactly as they were before the player signed in. They
+  move to the account on the next change to the grid by anyone, or on the
+  next page load. No money is involved and no square changes hands.
+
+**What Kevin is asked (plan K12):** leave it as it is (recommended); or one
+more change — ask again when the grid has moved on by the time an answer
+lands, and number each stretch in which the browser holds squares so a late
+answer cannot be kept for a later one, about ten lines and their tests; or
+stop moving guest squares automatically and give the player a button.
+
+Nothing in the code changed in this round. Both threads are left open.
