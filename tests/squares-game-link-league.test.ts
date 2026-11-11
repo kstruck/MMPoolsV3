@@ -24,11 +24,15 @@ describe('the game pickers link game.league', () => {
   });
 
   it('the manage page', () => {
+    // The link itself moved to `linkSquaresGame`, where what it writes is
+    // tested as behaviour (src/utils/linkSquaresGame.test.ts). This holds the
+    // page to going through it, and the picker to passing the game alone.
     const panel = read('src/components/AdminPanel.tsx');
-    expect(panel).toContain('squaresGameLink(game, game.league,');
+    expect(panel).toContain('await linkSquaresGame({');
+    expect(panel).not.toContain('squaresGameLink(');
     const matchup = read('src/components/admin/WizardStepMatchup.tsx');
-    expect(matchup).toContain('onLinkGame(game);');
-    expect(matchup).not.toContain('onLinkGame(game, search.league)');
+    expect(matchup).toContain('await onLinkGame(game)');
+    expect(matchup).not.toContain('search.league)');
   });
 });
 
@@ -57,3 +61,17 @@ describe('the game pickers judge kickoff by the hook\'s clock', () => {
   });
 });
 
+/**
+ * THE PICKER CLOSES ONLY ONCE THE LINK IS SAVED (qodo, PR #762). It used to
+ * call the link, clear the results and close in one click handler, whatever
+ * became of the save. What the link reports is tested as behaviour; this
+ * holds the picker to waiting for it.
+ */
+describe('the manage page picker waits for the save', () => {
+  it('closes inside the "it was saved" branch, and nowhere else', () => {
+    const matchup = read('src/components/admin/WizardStepMatchup.tsx');
+    expect(matchup).toContain('if (await onLinkGame(game)) { search.clear(); setShowSchedule(false); }');
+    expect(matchup.match(/setShowSchedule\(false\)/g)).toHaveLength(1);
+    expect(matchup).not.toMatch(/onClick=\{\(\) => \{ onLinkGame\(game\)/);
+  });
+});

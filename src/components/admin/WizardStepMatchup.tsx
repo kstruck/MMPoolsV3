@@ -10,7 +10,8 @@ interface WizardStepMatchupProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
     /** Link the pool to the game picked from the schedule. */
-    onLinkGame: (game: ScheduleGame) => void;
+    /** Resolves `true` once the pool is saved with the link, `false` if it was not. */
+    onLinkGame: (game: ScheduleGame) => Promise<boolean>;
 }
 
 const kickoffText = (ms: number): string =>
@@ -35,6 +36,19 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState,
     const awayLogo = gameState.awayTeamLogo || getTeamLogo(gameState.awayTeam, gameState.league === 'college' ? 'ncaa' : (gameState.league as 'nfl' | 'ncaa' | undefined));
 
     const [showSchedule, setShowSchedule] = React.useState(false);
+    // The game being linked, while its save is on its way — one at a time.
+    const [linking, setLinking] = React.useState<string | null>(null);
+    // The picker closes only once the link is SAVED. Closing it on the click
+    // left nothing on screen to show that a refused save had changed nothing.
+    const link = async (game: ScheduleGame) => {
+        if (linking) return;
+        setLinking(game.id);
+        try {
+            if (await onLinkGame(game)) { search.clear(); setShowSchedule(false); }
+        } finally {
+            setLinking(null);
+        }
+    };
     const search = useScheduleSearch(gameState.league === 'college' || gameState.league === 'ncaa' ? 'college' : 'nfl');
     const selectCls = 'rounded-md border-[1.5px] border-line bg-page px-2 py-1 text-[color:var(--text)] text-sm outline-none cursor-pointer focus:border-navy-600';
 
@@ -86,8 +100,9 @@ export const WizardStepMatchup: React.FC<WizardStepMatchupProps> = ({ gameState,
                                     <button
                                         type="button"
                                         key={game.id}
-                                        disabled={started}
-                                        onClick={() => { onLinkGame(game); search.clear(); setShowSchedule(false); }}
+                                        disabled={started || linking !== null}
+                                        aria-busy={linking === game.id}
+                                        onClick={() => { void link(game); }}
                                         className="flex w-full items-center justify-between p-2 rounded hover:bg-surface border border-transparent hover:border-navy-600/30 group transition-ui text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-transparent"
                                     >
                                         <span className="flex items-center gap-3">
