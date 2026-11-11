@@ -24,6 +24,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q6 | qodo | #761 @ `04996b6b` | 13 | 8 | 3, and 2 that are Kevin's |
 | Q7 | qodo | #758 @ `0ac1bdb6`, #759 @ `085a0d07`, #760 @ `e4a06808`, #761 @ `c7af924f` | 8 | 7 | 1 kept as built, for Kevin to confirm |
 | Q8 | qodo | #758 @ `74e37a35`, #761 @ `d9d81fe6` (#759 and #760: nothing new) | 6 | 5 | 1 kept as built, for Kevin to confirm |
+| Q9 | qodo | #762 @ `d7e3bd11` (first review of the K7 PR) | 1 | 1 | 0 |
 | — | codex | — | **OWED** | — | — |
 
 ---
@@ -748,4 +749,20 @@ to confirm**, with the pot decision (D23).
 **Three of these six are the same mistake**: something written into a
 document from memory instead of from a command or a file — a field name
 (round Q7), a label, an example's arithmetic. Each took a reviewer to find.
+
+## Round Q9 — qodo's first review of #762, the K7 PR (2026-11-11T00:02Z)
+
+One finding, and **none about what #762 itself changes**: nothing on the
+`reminders.ts` edit, the removed copy, or the lock lead.
+
+| # | Finding | Verdict |
+|---|---|---|
+| 1 | Commissioners see a false game link | **Accepted** — fixed in #760, whose code it is |
+
+The manage page called its update and showed "Linked to …" on the next
+line, then closed the picker. The update is a write that can be refused, so
+the page could say a game was linked while the pool had not changed. The
+link is now `linkSquaresGame`: it awaits the save and reports what happened;
+the page toasts on that, and the picker closes only once the link is saved.
+10 tests on the link, 1 call-site, 9 mutants, all red.
 
