@@ -25,6 +25,8 @@ import { hasStarted, type ScheduleGame } from '../services/espnSchedule';
  *                   has. Refusing it on the server as well is plan K11.
  *   - `played`    — the pool already played ANOTHER game (winner records, a
  *                   score history, or scores showing play). Nothing was written.
+ *   - `not-ready` — a change of game, but the winner records are not known
+ *                   yet. Nothing was written.
  *   - `not-a-game`— the game could not be turned into a link (no id, no
  *                   kickoff). Nothing was written.
  *   - `not-saved` — the write was refused or failed. Nothing changed.
@@ -33,6 +35,7 @@ export type LinkOutcome =
   | { status: 'linked'; name: string | null }
   | { status: 'started' }
   | { status: 'played' }
+  | { status: 'not-ready' }
   | { status: 'not-a-game' }
   | { status: 'not-saved' };
 
@@ -69,8 +72,13 @@ export function squaresGridHasPlayed(pool: LinkablePool, winnerCount: number): b
 export async function linkSquaresGame(input: {
   game: ScheduleGame;
   pool: LinkablePool;
-  /** How many winner records the pool has. Any at all means the grid has been played. */
-  winnerCount?: number;
+  /**
+   * How many winner records the pool has. Any at all means the grid has been
+   * played. `null` means NOT KNOWN — the records have not loaded, or could not
+   * be read — and a change of game is then refused as `not-ready` rather than
+   * read as "none" (qodo, PR #760).
+   */
+  winnerCount?: number | null;
   /** Is this pool name free? Asked only when the pool has no name of its own. */
   nameIsFree: (name: string) => boolean;
   /** The pool write. May return a promise; a rejection means nothing was saved. */
@@ -81,7 +89,10 @@ export async function linkSquaresGame(input: {
   const { game, pool } = input;
   if (hasStarted(game, input.nowMs())) return { status: 'started' };
   // Another game on a grid that has already played one: refused, nothing written.
-  if (pool.gameId !== game.id && squaresGridHasPlayed(pool, input.winnerCount ?? 0)) return { status: 'played' };
+  if (pool.gameId !== game.id) {
+    if (input.winnerCount === null) return { status: 'not-ready' };
+    if (squaresGridHasPlayed(pool, input.winnerCount ?? 0)) return { status: 'played' };
+  }
   // The league the game was found in travels with it (see useScheduleSearch).
   const patch = squaresGameLink(game, game.league, { reminders: pool.reminders, scores: pool.scores, gameId: pool.gameId });
   if (!patch) return { status: 'not-a-game' };

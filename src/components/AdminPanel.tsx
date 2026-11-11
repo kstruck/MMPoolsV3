@@ -239,9 +239,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // The recorded winners (pools/{id}/winners) — what a commissioner pays from.
   const [winnerRecords, setWinnerRecords] = useState<Winner[]>([]);
+  // Whether the list above is REAL: false until the first snapshot arrives, and
+  // false again if the subscription fails. An empty list is not proof that
+  // there are no winners, and the game link decides on it (qodo, PR #760).
+  // Kept as the pool id the records were loaded FOR, so a different pool (or
+  // an error, which clears it) reads as not loaded without resetting state
+  // inside the effect.
+  const [winnersLoadedFor, setWinnersLoadedFor] = useState<string | null>(null);
+  const winnersLoaded = winnersLoadedFor === gameState.id;
   useEffect(() => {
     if (!gameState.id) return;
-    return dbService.subscribeToWinners(gameState.id, setWinnerRecords, () => setWinnerRecords([]));
+    const poolId = gameState.id;
+    return dbService.subscribeToWinners(
+      poolId,
+      (records) => { setWinnerRecords(records); setWinnersLoadedFor(poolId); },
+      () => { setWinnerRecords([]); setWinnersLoadedFor(null); },
+    );
   }, [gameState.id]);
 
   // RECORDING WINNERS IS AN EXPLICIT ACT. Scores typed in by hand are written
@@ -427,7 +440,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const outcome = await linkSquaresGame({
       game,
       pool: gameState,
-      winnerCount: winnerRecords.length,
+      // null = not known yet (or unreadable): the link will not decide on it.
+      winnerCount: winnersLoaded ? winnerRecords.length : null,
       nameIsFree: checkNameAvailable,
       save: (patch) => updateConfig(patch as Partial<GameState>),
       nowMs: serverNow,
@@ -439,6 +453,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     toast.error(
       outcome.status === 'started' ? 'That game has already kicked off, so it cannot be linked. Nothing has changed.'
         : outcome.status === 'played' ? 'This grid has already been played: its scores and winners belong to that game. Start a new pool for another game. Nothing has changed.'
+        : outcome.status === 'not-ready' ? 'This pool\'s winner records have not loaded yet, so its game cannot be changed. Nothing has changed — try again in a moment.'
         : outcome.status === 'not-a-game' ? 'That game could not be linked. Pick it from the schedule again.'
           : 'The game was NOT linked — the pool could not be saved, and nothing has changed. Try again in a moment.',
     );
