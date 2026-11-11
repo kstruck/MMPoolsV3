@@ -29,15 +29,42 @@ describe('linkSquaresGame — "linked" is said only once the pool is saved', () 
 
   // codex, PR #760: "Change Game" carried the old game's scores onto the new one.
   it('changing the game starts from fresh scores; re-linking the same game keeps them', async () => {
-    const played = { current: { home: 24, away: 17 }, q1: null, half: null, q3: null, final: { home: 24, away: 17 }, gameStatus: 'post' };
+    // Not yet played: the old game's kickoff and a stray field, nothing scored.
+    const unplayed = { current: null, q1: null, half: null, q3: null, final: null, gameStatus: 'pre', startTime: '2026-11-20T18:00:00.000Z', leftover: 'old game' };
     const other = savesOk();
-    await linkSquaresGame({ game: game(), pool: { ...named, scores: played, gameId: '401770000' }, nameIsFree: free, save: other, nowMs: before });
+    await linkSquaresGame({ game: game(), pool: { ...named, scores: unplayed, gameId: '401770000' }, nameIsFree: free, save: other, nowMs: before });
     const fresh = (other.mock.calls[0][0] as { scores: Record<string, unknown> }).scores;
-    expect(fresh.gameStatus).not.toBe('post');
-    expect(fresh.final).toBeNull();
+    expect('leftover' in fresh).toBe(false);
+    expect(fresh.startTime).toBe(new Date(KICKOFF).toISOString());
+    // The SAME game keeps its scores, played or not.
+    const played = { current: { home: 24, away: 17 }, q1: null, half: null, q3: null, final: { home: 24, away: 17 }, gameStatus: 'post' };
     const same = savesOk();
     await linkSquaresGame({ game: game(), pool: { ...named, scores: played, gameId: '401772510' }, nameIsFree: free, save: same, nowMs: before });
     expect((same.mock.calls[0][0] as { scores: Record<string, unknown> }).scores.final).toEqual({ home: 24, away: 17 });
+  });
+
+  // qodo, PR #760 (re-review): a game change kept the old game's winner
+  // records, any final-prize draw and the sync's per-pool score markers.
+  describe('a grid that has PLAYED a game cannot be moved to another', () => {
+    const OTHER = '401770000';
+    const cases: Array<[string, Record<string, unknown>, number]> = [
+      ['winner records exist', { gameId: OTHER }, 2],
+      ['the sync kept a score history', { gameId: OTHER, scoreEvents: [{ home: 7, away: 0 }] }, 0],
+      ['the scores show the game over', { gameId: OTHER, scores: { gameStatus: 'post', final: { home: 24, away: 17 } } }, 0],
+      ['an unlinked pool with hand-typed points', { scores: { current: { home: 3, away: 0 } } }, 0],
+    ];
+    for (const [why, pool, winnerCount] of cases) {
+      it(`refused when ${why} — and nothing is saved`, async () => {
+        const save = savesOk();
+        expect(await linkSquaresGame({ game: game(), pool: { ...named, ...pool }, winnerCount, nameIsFree: free, save, nowMs: before })).toEqual({ status: 'played' });
+        expect(save).not.toHaveBeenCalled();
+      });
+    }
+    it('re-linking the SAME game on a played grid is not a change, and goes through', async () => {
+      const save = savesOk();
+      const out = await linkSquaresGame({ game: game(), pool: { ...named, gameId: '401772510', scoreEvents: [{ home: 7, away: 0 }] }, winnerCount: 2, nameIsFree: free, save, nowMs: before });
+      expect(out.status).toBe('linked');
+    });
   });
 
   it('the league is the one the game was FOUND in', async () => {
