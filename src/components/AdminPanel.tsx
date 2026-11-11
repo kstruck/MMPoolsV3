@@ -427,6 +427,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const outcome = await linkSquaresGame({
       game,
       pool: gameState,
+      winnerCount: winnerRecords.length,
       nameIsFree: checkNameAvailable,
       save: (patch) => updateConfig(patch as Partial<GameState>),
       nowMs: serverNow,
@@ -437,6 +438,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     toast.error(
       outcome.status === 'started' ? 'That game has already kicked off, so it cannot be linked. Nothing has changed.'
+        : outcome.status === 'played' ? 'This grid has already been played: its scores and winners belong to that game. Start a new pool for another game. Nothing has changed.'
         : outcome.status === 'not-a-game' ? 'That game could not be linked. Pick it from the schedule again.'
           : 'The game was NOT linked — the pool could not be saved, and nothing has changed. Try again in a moment.',
     );

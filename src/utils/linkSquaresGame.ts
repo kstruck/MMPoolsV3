@@ -23,6 +23,8 @@ import { hasStarted, type ScheduleGame } from '../services/espnSchedule';
  *                   thing that refused it (qodo, PR #760): a grid linked to
  *                   a game under way locks at once on whatever numbers it
  *                   has. Refusing it on the server as well is plan K11.
+ *   - `played`    — the pool already played ANOTHER game (winner records, a
+ *                   score history, or scores showing play). Nothing was written.
  *   - `not-a-game`— the game could not be turned into a link (no id, no
  *                   kickoff). Nothing was written.
  *   - `not-saved` — the write was refused or failed. Nothing changed.
@@ -30,6 +32,7 @@ import { hasStarted, type ScheduleGame } from '../services/espnSchedule';
 export type LinkOutcome =
   | { status: 'linked'; name: string | null }
   | { status: 'started' }
+  | { status: 'played' }
   | { status: 'not-a-game' }
   | { status: 'not-saved' };
 
@@ -42,11 +45,32 @@ export interface LinkablePool {
   scores?: unknown;
   /** The game the pool is linked to now. A different one starts from fresh scores. */
   gameId?: unknown;
+  /** The score history the sync keeps on the pool — evidence the grid has been played. */
+  scoreEvents?: unknown;
+}
+
+/**
+ * Has this grid PLAYED a game? Winner records, a score history, or scores that
+ * show play (under way, over, a period, points). A grid that has cannot be
+ * moved to another game (qodo, PR #760): its winner records, any final-prize
+ * draw and the sync's per-pool score markers belong to the game it played.
+ * The server refuses the same thing in `linkSquaresPoolGame` (#765).
+ */
+export function squaresGridHasPlayed(pool: LinkablePool, winnerCount: number): boolean {
+  if (winnerCount > 0) return true;
+  if (Array.isArray(pool.scoreEvents) && pool.scoreEvents.length > 0) return true;
+  const s = (pool.scores ?? null) as { gameStatus?: unknown; q1?: unknown; half?: unknown; q3?: unknown; final?: unknown; current?: { home?: unknown; away?: unknown } | null } | null;
+  if (!s) return false;
+  if (s.gameStatus === 'in' || s.gameStatus === 'post') return true;
+  if (s.q1 || s.half || s.q3 || s.final) return true;
+  return (Number(s.current?.home) || 0) > 0 || (Number(s.current?.away) || 0) > 0;
 }
 
 export async function linkSquaresGame(input: {
   game: ScheduleGame;
   pool: LinkablePool;
+  /** How many winner records the pool has. Any at all means the grid has been played. */
+  winnerCount?: number;
   /** Is this pool name free? Asked only when the pool has no name of its own. */
   nameIsFree: (name: string) => boolean;
   /** The pool write. May return a promise; a rejection means nothing was saved. */
@@ -56,6 +80,8 @@ export async function linkSquaresGame(input: {
 }): Promise<LinkOutcome> {
   const { game, pool } = input;
   if (hasStarted(game, input.nowMs())) return { status: 'started' };
+  // Another game on a grid that has already played one: refused, nothing written.
+  if (pool.gameId !== game.id && squaresGridHasPlayed(pool, input.winnerCount ?? 0)) return { status: 'played' };
   // The league the game was found in travels with it (see useScheduleSearch).
   const patch = squaresGameLink(game, game.league, { reminders: pool.reminders, scores: pool.scores, gameId: pool.gameId });
   if (!patch) return { status: 'not-a-game' };

@@ -995,7 +995,7 @@ label (both are marked High / Medium):
   reservation goes on their account, not under the browser's key. The app
   does not set a sign-in persistence, so it uses Firebase's default, which
   is shared by every tab of the browser — a second tab is signed in too.
-  (Checked: no `setPersistence` / `initializeAuth` in `src/`.) No ordinary
+  (Checked: `git grep -n "setPersistence\|initializeAuth" -- src` prints nothing; re-run 2026-11-11 on `claude/squares-wizard`, still nothing.) No ordinary
   path through the app was found that reaches either case.
 - **If one were reached, nothing is lost.** The squares stay reserved, under
   the browser's key, exactly as they were before the player signed in. They
@@ -1024,3 +1024,16 @@ clean checkout of each PR's head.
 | #761 (D) | "consistently reopens Squares … retains server-side runtime enforcement" | — | — | — |
 
 **Round X2 — codex on #760's fix (`3e8a2bd8`):** "No discrete, actionable regression introduced by the diff was identified." The #760 finding is closed.
+
+## Round Q13 — qodo, re-review of #760 after codex round X1 (2026-11-11)
+
+Triggered by the draft/ready toggle at `3e8a2bd8`; 4 new findings.
+
+| # | qodo's finding | Verdict | What changed |
+|---|---|---|---|
+| 1 | A game change resets the scores but keeps the winner records: the old prizes stay on the payouts tab, and a past final-prize draw blocks a new one | **Accepted — real** | A grid that has PLAYED a game can no longer be moved to another (`squaresGridHasPlayed` in `linkSquaresGame.ts`: winner records, a score history, or scores showing play). The page says so; nothing is written. Re-linking the same game is unaffected. The server enforces the same rule in #765 (`linkSquaresPoolGame`), which also reads the sync's server-only markers |
+| 2 | A new game reaching a score the old game reached is deduplicated against the old game's per-pool markers | **Accepted — same root cause, same fix.** The markers exist only once the sync has played the grid, and a played grid can no longer change game. The page cannot read `audit_dedupe` (no client access), so it reads the pool's `scoreEvents`, which the sync appends at the same time; #765's server check reads the markers themselves | as #1 |
+| 8 | The log's `setPersistence` / `initializeAuth` claim cites no command | **Accepted** | The command and a re-run are now on that line |
+| 9 | The rounds lack watcher evidence (`mmp-qodo-cycle`) | **Rejected.** Round Q12 states why the watcher could not run there (`gh` was unavailable) and what replaced it: every surface read by hand, every round. A record cannot be backdated for a tool that did not run, and the substitute is written down rather than hidden | — |
+
+Tests: 5 new (four ways a grid shows it has played, plus the same game still linking). Mutant: the check removed fails 4.
