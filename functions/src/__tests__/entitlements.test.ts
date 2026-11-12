@@ -133,6 +133,7 @@ vi.mock('firebase-admin/firestore', () => ({
 }));
 vi.mock('../lib/adminAudit', () => ({ writeAdminAudit: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../adminClaims', () => ({ assertCallerRole: vi.fn().mockResolvedValue({ uid: 'admin1', email: 'a@x.com' }) }));
+import { HARD_CLOSED_POOL_TYPES } from '../lib/featureFlags';
 
 // Import AFTER mocks are set up.
 import {
@@ -237,25 +238,45 @@ describe('redeemPoolCreditForPool — happy path', () => {
    * draft or trial squares pool could still activate it with a bundle credit.
    * Kevin's instruction was "purchased OR setup".
    *
-   * The fixtures above moved off SQUARES for exactly this reason — it can no
-   * longer stand in for "an ordinary pool" — so this is the one test that still
-   * uses it, deliberately.
+   * Squares was the hard-closed type from 2026-08-28 until PLAN-SQUARES-REOPEN
+   * PR-D; the fixtures above moved off it then. The two tests below hold both
+   * halves now: squares is activated like any type, and a type that IS
+   * hard-closed is still refused before a credit is spent.
    */
-  it('refuses a SQUARES pool outright, before spending the credit', async () => {
+  it('a SQUARES pool is activated with a credit again — squares reopened (PLAN-SQUARES-REOPEN PR-D)', async () => {
     await seedGrant({
       ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
       productSnapshot: SNAP, creditsTotal: 2, bundleId: 'b1',
     });
     store.set('pools/p1', { createdByUid: 'u1', type: 'SQUARES', billing: { status: 'trial' } });
 
-    await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' }))
-      .rejects.toThrow(/cannot be purchased or upgraded/);
+    await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' })).resolves.toMatchObject({ bundleId: 'b1' });
+    expect(store.get('pools/p1')!.billing.status).not.toBe('trial');
+    expect(store.get('bundles/b1')!.creditsUsed).toBe(1);
+  });
 
-    // Nothing was spent on the way out: a refusal must never cost the owner a
-    // credit, and must not leave the pool half-activated.
-    expect(store.get('pools/p1')!.billing.status).toBe('trial');
-    expect(store.get('bundles/b1')!.creditsUsed ?? 0).toBe(0);
-    expect(new FakeQuery('bundles/b1/credits', [['status', 'used']])._matchingDocs()).toHaveLength(0);
+  it('a HARD-CLOSED type is refused outright, before spending the credit', async () => {
+    // The list is empty since squares reopened, so the rule is held with a
+    // type planted in the real list (see hardClosedMechanism.test.ts).
+    (HARD_CLOSED_POOL_TYPES as string[]).push('PROPS');
+    try {
+      await seedGrant({
+        ownerId: 'u1', productKind: 'CREDIT_BUNDLE', source: 'PURCHASE',
+        productSnapshot: SNAP, creditsTotal: 2, bundleId: 'b1',
+      });
+      store.set('pools/p1', { createdByUid: 'u1', type: 'PROPS', billing: { status: 'trial' } });
+
+      await expect(redeemPoolCreditForPool({ ownerId: 'u1', poolId: 'p1' }))
+        .rejects.toThrow(/cannot be purchased or upgraded/);
+
+      // Nothing was spent on the way out: a refusal must never cost the owner a
+      // credit, and must not leave the pool half-activated.
+      expect(store.get('pools/p1')!.billing.status).toBe('trial');
+      expect(store.get('bundles/b1')!.creditsUsed ?? 0).toBe(0);
+      expect(new FakeQuery('bundles/b1/credits', [['status', 'used']])._matchingDocs()).toHaveLength(0);
+    } finally {
+      (HARD_CLOSED_POOL_TYPES as string[]).length = 0;
+    }
   });
 
   it('flips the bundle to exhausted when the LAST credit is spent (creditsUsed === creditsTotal)', async () => {

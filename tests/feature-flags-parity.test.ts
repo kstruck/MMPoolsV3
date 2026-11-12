@@ -33,37 +33,72 @@ describe('feature-flag parity (client mirror vs functions source of truth)', () 
  * THE CLOSURE THE CONFIG CANNOT OUT-VOTE (codex r1 P1, 2026-08-28).
  *
  * Hiding the client entry points does not close anything — `createPool` is a
- * callable and reachable from DevTools. And a `false` DEFAULT would not have
- * closed it either: `resolvePoolTypeFlags` merges the stored config ON TOP of
- * the defaults, so a `poolTypeFlags.SQUARES: true` already sitting in
- * `system/config` would have silently reopened it.
+ * callable and reachable from DevTools. And a `false` DEFAULT would not close
+ * a type either: `resolvePoolTypeFlags` merges the stored config ON TOP of the
+ * defaults, so a `poolTypeFlags.X: true` already sitting in `system/config`
+ * would silently reopen it. `HARD_CLOSED_POOL_TYPES` is the list that config
+ * cannot out-vote.
+ *
+ * 🟢 THE LIST IS EMPTY since squares reopened (PLAN-SQUARES-REOPEN PR-D). The
+ * first block pins that. The second keeps the MECHANISM honest by planting a
+ * type in the real list — a rule with nothing in its list is the kind that
+ * rots without anyone seeing it.
  */
-describe('hard-closed pool types', () => {
-  it('SQUARES is refused on both sides, with no config at all', () => {
-    expect(server.isPoolTypeEnabled(null, 'SQUARES')).toBe(false);
-    expect(client.isPoolTypeEnabled(null, 'SQUARES')).toBe(false);
+describe('hard-closed pool types — none, since squares reopened', () => {
+  it('nothing is hard-closed on either side', () => {
+    expect([...server.HARD_CLOSED_POOL_TYPES]).toEqual([]);
+    expect([...client.HARD_CLOSED_POOL_TYPES]).toEqual([]);
   });
 
-  it('...and stays refused when the config explicitly enables it', () => {
-    const on = { poolTypeFlags: { SQUARES: true } };
-    expect(server.isPoolTypeEnabled(on, 'SQUARES')).toBe(false);
-    expect(client.isPoolTypeEnabled({ poolTypeFlags: { SQUARES: true } }, 'SQUARES')).toBe(false);
+  it('SQUARES is open on both sides, with no config at all', () => {
+    expect(server.isPoolTypeEnabled(null, 'SQUARES')).toBe(true);
+    expect(client.isPoolTypeEnabled(null, 'SQUARES')).toBe(true);
   });
 
-  it('closes SQUARES ONLY — the three live NFL types are untouched', () => {
-    // The planted counter-example: a closure that caught the season's own pool
-    // types would have taken creation down on launch week.
-    for (const t of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'] as const) {
+  it('...and follows the config like every other type: false closes it, true opens it', () => {
+    for (const t of client.POOL_TYPES) {
       expect(server.isPoolTypeEnabled(null, t), t).toBe(true);
       expect(client.isPoolTypeEnabled(null, t), t).toBe(true);
-      // ...and an admin can still turn one off through the config.
       expect(server.isPoolTypeEnabled({ poolTypeFlags: { [t]: false } }, t), t).toBe(false);
+      expect(client.isPoolTypeEnabled({ poolTypeFlags: { [t]: false } }, t), t).toBe(false);
+      expect(server.isPoolTypeEnabled({ poolTypeFlags: { [t]: true } }, t), t).toBe(true);
+      expect(client.isPoolTypeEnabled({ poolTypeFlags: { [t]: true } }, t), t).toBe(true);
     }
   });
 
   it('the fail-open defaults are left alone, so a corrupt config cannot brick creation', () => {
     expect(server.DEFAULT_POOL_TYPE_FLAGS.SQUARES).toBe(true);
     expect(server.resolvePoolTypeFlags(undefined).SQUARES).toBe(true);
+  });
+});
+
+describe('the hard-close mechanism, with a type planted in the real list', () => {
+  // The lists are module constants. Planting into them exercises the real
+  // `isPoolTypeEnabled` on each side, not a copy of it.
+  const plant = (list: readonly string[], type: string) => {
+    (list as string[]).push(type);
+    return () => { (list as string[]).length = 0; };
+  };
+
+  it('a listed type is refused on both sides whatever the config says — and only that type', () => {
+    const undo = [plant(server.HARD_CLOSED_POOL_TYPES, 'PROPS'), plant(client.HARD_CLOSED_POOL_TYPES, 'PROPS')];
+    try {
+      for (const cfg of [null, {}, { poolTypeFlags: { PROPS: true } }]) {
+        expect(server.isPoolTypeEnabled(cfg, 'PROPS')).toBe(false);
+        expect(client.isPoolTypeEnabled(cfg, 'PROPS')).toBe(false);
+      }
+      // The planted counter-example: a closure that caught the season's own
+      // pool types would take creation down with it.
+      for (const t of ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN', 'SQUARES'] as const) {
+        expect(server.isPoolTypeEnabled(null, t), t).toBe(true);
+        expect(client.isPoolTypeEnabled(null, t), t).toBe(true);
+      }
+    } finally {
+      undo.forEach((u) => u());
+    }
+    // And the plant is gone: the next test sees the shipped, empty list.
+    expect(server.isPoolTypeEnabled(null, 'PROPS')).toBe(true);
+    expect(client.isPoolTypeEnabled(null, 'PROPS')).toBe(true);
   });
 });
 

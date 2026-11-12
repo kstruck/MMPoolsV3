@@ -23,7 +23,7 @@ import { dbService } from '../../services/dbService';
 import { calculateScenarioWinners, getLastDigit } from '../../services/gameLogic';
 import { shareTrackingService } from '../../services/shareTrackingService';
 import { getTeamLogo } from '../../constants';
-import { calculateQuarterlyPayouts } from '../../utils/payouts';
+import { calculateQuarterlyPayouts, formatPrize, latestPlayerWinner } from '../../utils/payouts';
 import { isSuperAdmin, isPoolManager, isNFLPoolCommissioner } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import { useToast } from '../ui/Toast';
@@ -31,6 +31,10 @@ import { Button, Badge } from '../ui';
 import type { User, Pool, GameState, PropsPool, PlayoffPool, Winner, BillingStatus } from '../../types';
 import { HelpScopeProvider } from '../../help/scope';
 import type { PoolType } from '@shared/poolTypes';
+import { claimRefusalMessage, effectiveSquareCap, isEnteringForSomeoneElse, planClaim, squareCapSentence } from '@shared/squaresClaim';
+import { claimIdentityFor } from '../../utils/guestKey';
+import { squaresPicksCloseMs, withSquaresDefaults } from '@shared/squaresDefaults';
+import { squaresPot, type PayoutPool } from '@shared/squaresPayouts';
 
 interface PoolRouteProps {
     user: User | null;
@@ -420,7 +424,23 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     }
 
     // --- SQUARES LOGIC ---
-    const squaresPool = pool as GameState;
+    // Every nested object the squares page dereferences is present after this,
+    // and a missing value reads the way the server treats it (C0).
+    const squaresPool = withSquaresDefaults(pool as unknown as Record<string, unknown>) as unknown as GameState;
+    // The pot, the charity share and the prize pool — from the function that
+    // pays from them. The page used to work each out inline, and floored the
+    // prize pool on its own, so with a charity share it could read a dollar
+    // short of what the four prizes below it add up to.
+    const pot = squaresPot(squaresPool as unknown as PayoutPool);
+    // WHEN PICKS CLOSE — shown only when the grid really will lock itself. A
+    // player deciding whether to come back later needs to know, and it was
+    // nowhere on the Overview. This is NOT the stored lock time: the lock job
+    // shuts the grid a little ahead of it, and a deadline that the grid does
+    // not keep is worse than none (`squaresPicksCloseMs`).
+    const picksCloseMs = squaresPicksCloseMs(squaresPool);
+    const gridLocksAt = picksCloseMs === null
+        ? null
+        : new Date(picksCloseMs).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
     // Helper Functions
 
@@ -428,26 +448,38 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const handleClaimSquares = async (ids: number[], name: string, details: { email?: string, phone?: string }, guestKey?: string) => {
         if (!ids.length && !name) return { success: false, message: 'Invalid data' };
         if (!name.trim()) return { success: false, message: 'Name is required' };
-        // Validations
         const normalizedName = name.trim();
-        // Check for taking existing
-        if (ids.some(id => squaresPool.squares[id]?.owner && squaresPool.squares[id].owner !== normalizedName)) {
-            return { success: false, message: 'Square already taken.' };
-        }
-        // Max limit
-        const currentOwned = squaresPool.squares.filter((s) => s.owner === normalizedName).length;
-        const limit = Number(squaresPool.maxSquaresPerPlayer) || 10;
-        if (currentOwned + ids.length > limit && squaresPool.ownerId !== user?.id) return { success: false, message: `Limit exceeded. Max ${limit}.` };
+
+        // A PREVIEW of the server's decision, from the same function the
+        // callable runs (`planClaim`) and with the same identity — the account
+        // AND the hash of this browser's key, both, as the server counts them
+        // (`claimIdentityFor`) — so the page and the server cannot disagree
+        // about a limit. It is a preview only: the server decides.
+        const isOwner = !!user?.id && squaresPool.ownerId === user.id;
+        const preview = planClaim({
+            squares: squaresPool.squares,
+            squareIds: ids,
+            identity: await claimIdentityFor(user?.id, squaresPool.id, guestKey),
+            displayName: normalizedName,
+            maxSquaresPerPlayer: squaresPool.maxSquaresPerPlayer,
+            exemptFromCap: isOwner,
+            now: Date.now(),
+        });
+        if (!preview.ok) return { success: false, message: claimRefusalMessage(preview.refusal) };
 
         try {
-            const promises = ids.map(id => dbService.reserveSquare(
+            // ONE call for the whole selection, all or nothing. This used to be
+            // one callable per square in parallel, so a refusal part-way left
+            // the earlier squares reserved and reported the claim as failed.
+            await dbService.reserveSquares(
                 squaresPool.id,
-                id,
+                ids,
                 { ...details, name: normalizedName },
                 guestKey,
-                normalizedName
-            ));
-            await Promise.all(promises);
+                normalizedName,
+                // The same rule the grid shows beside the name field.
+                isEnteringForSomeoneElse({ isOwner, typedName: normalizedName, accountName: user?.name }),
+            );
         } catch (error: unknown) {
             logger.error("Reserve failed", error);
             const msg = error instanceof Error ? error.message : "Reservation failed.";
@@ -499,7 +531,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
     const homePredictions = calculateScenarioWinners(squaresPool, 'home');
     const awayPredictions = calculateScenarioWinners(squaresPool, 'away');
     const squaresRemaining = 100 - (squaresPool.squares?.filter(s => s.owner).length || 0);
-    const latestWinner = winners.length > 0 ? winners[winners.length - 1].owner : null;
+    const latestWinner = latestPlayerWinner(winners);
 
     return withHelp(
         <div
@@ -574,7 +606,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 {statusTab === 'overview' && (
                                     <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-200">
                                         <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Status:</h3>
-                                            {!squaresPool.isLocked ? <div className="flex items-center gap-2"><Badge status="open" /><p className="text-faint text-[10px] font-body">Grid is available to choose squares</p></div>
+                                            {!squaresPool.isLocked ? <div><div className="flex items-center gap-2"><Badge status="open" /><p className="text-faint text-[10px] font-body">Grid is available to choose squares</p></div>{gridLocksAt && <p className="text-[color:var(--text)] text-xs font-body mt-1.5" data-testid="grid-locks-at">Grid locks <span className="font-bold num">{gridLocksAt}</span></p>}</div>
                                                 : squaresPool.scores?.gameStatus === 'post' ? <div className="flex items-center gap-2"><Badge status="locked">Locked - Final</Badge><p className="text-faint text-[10px] font-body">Game has completed</p></div>
                                                     : squaresPool.scores?.gameStatus === 'in' ? <div className="flex items-center gap-2"><Badge status="live">Locked - Live</Badge><p className="text-faint text-[10px] font-body">Game has started</p></div>
                                                         : <div className="flex items-center gap-2"><Badge status="locked"><Lock size={12} /> Locked - Pending</Badge><p className="text-faint text-[10px] font-body">Waiting for kickoff</p></div>
@@ -592,7 +624,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                                 isLocked={squaresPool.isLocked || (squaresRemaining === 0 && !!squaresPool.axisNumbers)}
                                             />
                                         </div>
-                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm font-body">Max <span className="num">{squaresPool.maxSquaresPerPlayer || 'N/A'}</span> squares per player</p></div>
+                                        <div><h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm font-body">{squareCapSentence(squaresPool.maxSquaresPerPlayer)}</p></div>
                                         {/* Simplified Rule Buttons */}
                                         <div>
                                             <h3 className="text-faint font-display font-bold uppercase text-xs tracking-[0.08em] mb-1">Active Rules:</h3>
@@ -669,7 +701,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 <div className="relative z-10">
                                     <div className="flex items-center gap-2 mb-2"><div className="bg-gold-500/20 p-1.5 rounded-lg"><Heart size={18} className="text-gold-600" /></div><h3 className="text-sm font-display font-bold text-[color:var(--text)] uppercase tracking-[0.08em]">Proudly Supporting</h3></div>
                                     <h2 className="text-2xl font-display font-bold uppercase text-gold-600 mb-1 leading-tight">{squaresPool.charity.name}</h2>
-                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (squaresPool.charity.percentage / 100)))).toLocaleString()}</span>
+                                    <span className="text-2xl font-display font-bold text-[color:var(--text)] num" data-testid="charity-amount">{formatPrize(pot.charity)}</span>
                                 </div>
                             </div>
                         )}
@@ -678,14 +710,14 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                         <div className="bg-card rounded-xl border border-line shadow-card flex flex-col overflow-hidden h-full">
                             <div className="flex border-b border-line bg-page px-6 py-4"><h3 className="text-sm font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)]">Payout Structure</h3></div>
                             <div className="p-6 flex-1 flex flex-col justify-center">
-                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num">${(squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare).toLocaleString()}</span></div>
-                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num">${(Math.floor((squaresPool.squares.filter(s => s.owner).length * squaresPool.costPerSquare * (1 - (squaresPool.charity?.enabled ? squaresPool.charity.percentage / 100 : 0))))).toLocaleString()}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2"><span className="text-muted font-body">Total Pot</span><span className="text-[color:var(--text)] font-bold num" data-testid="total-pot">{formatPrize(pot.gross)}</span></div>
+                                <div className="flex justify-between items-center text-sm border-b border-line pb-2 mb-2 mt-2"><span className="text-[color:var(--text)] font-bold font-body">Net Prize Pool</span><span className="text-gold-600 font-display font-bold text-lg num" data-testid="net-prize-pool">{formatPrize(pot.net)}</span></div>
                                 <div className="space-y-1 mt-2">
                                     {quarterlyPayouts.map((card) => {
                                         return (
                                             <div key={card.period} className="flex justify-between items-center text-sm border-b border-line/50 pb-2 last:border-0">
                                                 <span className="text-muted font-bold font-body">{card.label} <span className="text-faint font-normal num">({(squaresPool as GameState).payouts[card.period as keyof typeof squaresPool.payouts]}%)</span></span>
-                                                <div className="flex flex-col items-end"><span className="text-[color:var(--text)] font-bold num">${(card.amount || 0).toLocaleString()}</span></div>
+                                                <div className="flex flex-col items-end"><span className="text-[color:var(--text)] font-bold num">{formatPrize(card.prize)}</span></div>
                                             </div>
                                         );
                                     })}
@@ -805,11 +837,11 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
 
                             <div className="bg-page/50 border border-line rounded-lg p-3 w-full mb-4 grid grid-cols-2 gap-4">
                                 <div className="flex flex-col items-center border-r border-line border-dashed pr-2">
-                                    <span className="text-[10px] font-display font-bold text-brandred-500 uppercase tracking-[0.06em] mb-1">{squaresPool.homeTeam ? "Home Digit" : "Row Digit"}</span>
+                                    <span className="text-[10px] font-display font-bold text-brandred-500 uppercase tracking-[0.06em] mb-1">{squaresPool.homeTeam ? "Home Digit" : "Column Digit"}</span>
                                     <span className="text-2xl font-display font-bold text-[color:var(--text)] num">{homeDigit}</span>
                                 </div>
                                 <div className="flex flex-col items-center pl-2">
-                                    <span className="text-[10px] font-display font-bold text-gold-600 uppercase tracking-[0.06em] mb-1">{squaresPool.awayTeam ? "Away Digit" : "Col Digit"}</span>
+                                    <span className="text-[10px] font-display font-bold text-gold-600 uppercase tracking-[0.06em] mb-1">{squaresPool.awayTeam ? "Away Digit" : "Row Digit"}</span>
                                     <span className="text-2xl font-display font-bold text-[color:var(--text)] num">{awayDigit}</span>
                                 </div>
                             </div>
@@ -821,7 +853,24 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             <div className="mt-auto flex flex-col items-center w-full">
                                 <span className="text-[10px] font-display font-bold text-faint uppercase tracking-[0.16em] mb-2">In The Money:</span>
                                 <div className="text-lg font-bold text-[color:var(--text)] mb-1 truncate w-full px-2 font-body" title={card.winnerName}>{card.winnerName}</div>
-                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">${card.amount}</div>
+                                {card.reverseWinnerName && (
+                                    <div className="text-sm font-bold text-navy-600 dark:text-gold-400 mb-1 truncate w-full px-2 font-body" title={card.reverseWinnerName}>
+                                        <span className="text-[10px] font-display uppercase tracking-[0.08em] text-faint mr-1">and (reverse)</span>{card.reverseWinnerName}
+                                    </div>
+                                )}
+                                <div className="text-3xl font-display font-bold text-gold-600 tracking-tight num">{formatPrize(card.amount)}</div>
+                                {card.reverseWinnerName && <div className="text-[10px] text-faint font-body">each</div>}
+                                {card.isUnrecorded && (
+                                    <div className="text-[10px] font-body text-muted" data-testid="card-unrecorded">No winner was recorded for this quarter. Shown from the score.</div>
+                                )}
+                                {card.rolloverAdded > 0 && !card.isRollover && (
+                                    <div className="text-[10px] font-body font-bold text-gold-700 dark:text-gold-400 num">Includes {formatPrize(card.rolloverAdded)} rolled over</div>
+                                )}
+                                {card.bonusWinnerName && !!card.bonusAmount && (
+                                    <div className="mt-2 text-xs font-body text-muted">
+                                        Unclaimed prize <span className="font-bold num text-gold-700 dark:text-gold-400">{formatPrize(card.bonusAmount)}</span> → <span className="font-bold text-[color:var(--text)]">{card.bonusWinnerName}</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="mt-6">
@@ -905,7 +954,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                                 </div>
                                 <div className="bg-page p-3 rounded-lg border border-line text-center">
                                     <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Max Per Player</div>
-                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{squaresPool.maxSquaresPerPlayer || '∞'}</div>
+                                    <div className="text-xl font-display font-bold text-[color:var(--text)] num">{effectiveSquareCap(squaresPool.maxSquaresPerPlayer) ?? 'No limit'}</div>
                                 </div>
                                 <div className="bg-page p-3 rounded-lg border border-line text-center">
                                     <div className="text-[10px] text-faint uppercase font-display font-bold tracking-[0.08em] mb-1">Number Sets</div>

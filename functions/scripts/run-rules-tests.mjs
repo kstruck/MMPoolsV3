@@ -40,7 +40,8 @@ process.chdir(repoRoot);
 // It had drifted to one BELOW the file count before Phase B — the empty-pass guard
 // only does its job when it tracks the real number.
 // 14 as of PLAN-SPLIT-POT-SETTLEMENT (poolSettlement.rules.test.mjs).
-const MIN_FILES = 14;
+// 15 as of PLAN-SQUARES-SERVER-FIELDS (squaresServerFields.rules.test.mjs).
+const MIN_FILES = 15;
 // Every test file initialises rules-unit-testing with this project id.
 const PROJECT_ID = 'gridiron-gamble-uzuqo';
 const host = process.env.FIRESTORE_EMULATOR_HOST;

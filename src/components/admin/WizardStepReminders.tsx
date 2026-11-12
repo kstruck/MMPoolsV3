@@ -94,16 +94,23 @@ export const WizardStepReminders: React.FC<WizardStepRemindersProps> = ({ gameSt
 
                             {/* Auto-Release Configuration */}
                             <div className="md:col-span-2 pt-4 border-t border-line mt-2">
-                                <label className="flex items-center justify-between cursor-pointer p-2 mb-2">
+                                <label className="flex items-center justify-between p-2 mb-2">
                                     <div>
-                                        <span className="font-display font-bold uppercase text-brandred-600 block flex items-center gap-2">
+                                        <span className="font-display font-bold uppercase text-muted block flex items-center gap-2">
                                             <Trash2 size={14} /> Auto-Release Unpaid Squares
                                         </span>
-                                        <span className="text-xs text-faint">Automatically remove reservation if not paid in time.</span>
+                                        {/* NOT AVAILABLE, and it never was: the job that would do
+                                            this has never released a square, and running it as written
+                                            could release one that was paid for (PLAN-SQUARES-REOPEN K6).
+                                            It can be switched OFF if an older pool has it on, not on. */}
+                                        <span className="text-xs text-faint" data-testid="auto-release-note">
+                                            Not available yet. Unpaid squares are not released automatically — release one yourself on the Players tab.
+                                        </span>
                                     </div>
                                     <input
                                         type="checkbox"
                                         checked={safeReminders.payment.autoRelease}
+                                        disabled={!safeReminders.payment.autoRelease}
                                         onChange={(e) => updateConfig({ reminders: { ...safeReminders, payment: { ...safeReminders.payment, autoRelease: e.target.checked } } })}
                                         className="size-5 rounded-[5px] border-[1.5px] border-line bg-page checked:bg-brandred-600 checked:border-brandred-600 accent-brandred-600 focus:ring-brandred-500"
                                     />

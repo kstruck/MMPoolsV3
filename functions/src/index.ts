@@ -9,10 +9,11 @@ if (!admin.apps.length) {
 
 // Exported Cloud Functions
 export { lockPool } from "./poolParams";
-export { reserveSquare, markSquaresPaid, updatePlayer, releaseSquares } from './squares';
+export { reserveSquare, reserveSquares, markSquaresPaid, updatePlayer, releaseSquares } from './squares';
 export { confirmPayment } from './confirmPayment';
 export { purchasePropCard, gradeProp, updatePropCard } from './propBets';
 export { syncGameStatus, fixPoolScores, simulateGameUpdate } from "./scoreUpdates";
+export { recomputeSquaresWinners, drawSquaresFinalPrize, unlockSquaresPool, linkSquaresPoolGame } from "./squaresAdmin";
 export { onWinnerUpdate, onAIRequest, onWeeklyRecapCreated } from "./aiCommissioner";
 export { onSystemConfigWritten } from "./systemConfigAudit";
 export { onUserCreated, syncAllUsers } from "./userSync";

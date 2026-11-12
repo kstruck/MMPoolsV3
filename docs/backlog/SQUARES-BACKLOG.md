@@ -1,9 +1,18 @@
 # SQUARES — the post-launch fix list
 
-**Status: CREATION IS CLOSED.** `SQUARES_CREATION_OPEN = false`
-(`src/config/season.ts`). Nobody can create or buy a squares pool, super admins
-included. Existing squares pools are untouched — they still open, score and pay
-out.
+**Status: CLOSED OUT — CREATION IS OPEN AGAIN** (PLAN-SQUARES-REOPEN PR-D,
+2026-11). `SQUARES_CREATION_OPEN = true` (`src/config/season.ts`) and
+`HARD_CLOSED_POOL_TYPES` is empty on both sides. Everything on this list is
+fixed or decided; what is left for Kevin is in the plan (K1, K2, K4–K11), not here.
+
+| Item | Outcome |
+|---|---|
+| S1 — a default pool is unplayable by anyone but its commissioner | **Fixed** — plan ticket A1 (`0` means no limit, one reader) |
+| S2 — the limit counts a display name | **Fixed** — plan ticket C3 (counts the account, the guest device, or the name) |
+| S3 — the per-player limit and the price | **Decided** — plan K2, Kevin's |
+| S4 — the guest key on the public pool document | **Fixed** — plan ticket C6 (`SECURITY-CLAIM-SQUARES.md`) |
+
+The text below is the list as written on 2026-08-28 and is kept as the record.
 
 **Kevin, 2026-08-28:** *"If there are issues with the Squares pools, make that a
 priority for post-launch and do not allow any Squares pools from being purchased
@@ -11,9 +20,13 @@ or setup for now. Add a COMING SOON to those. Ensure that any fixes for the
 squares pools are listed somewhere for me to pick up later today or later this
 week. DO NOT FORGET THEM."*
 
-**This file is that list.** Nothing here is fixed. `tests/squares-creation-closed.test.ts`
-holds the closure shut and goes RED the day S1 lands, which is the signal to
-reopen creation rather than leave a "Coming Soon" on a product that works again.
+> `docs/plans/PLAN-SQUARES-REOPEN.md` found a good deal more than this list
+> did — read it rather than this file.
+
+**This file was that list.** As written on 2026-08-28, nothing here was fixed.
+`tests/squares-creation-closed.test.ts` held the closure shut; it is now
+`tests/squares-creation-gate.test.ts` and holds the gate open, the off switch
+working, and S1 fixed.
 
 ---
 

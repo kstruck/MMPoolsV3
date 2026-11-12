@@ -261,9 +261,14 @@ export interface Square {
   // in the restricted /pools/{poolId}/squarePrivate/{squareId} subcollection (audit H1).
   isPaid?: boolean;
   pickedAsName?: string;
+  /** LEGACY: the raw guest device key. No longer written; nothing honours it. */
   guestDeviceKey?: string | null;
+  /** Hash of the guest's device key (server-computed). Never the key itself. */
+  guestKeyHash?: string | null;
   guestClaimId?: string | null;
   reservedAt?: number | null;
+  /** When the square was claimed. NOT `reservedAt` — see `planClaim` in shared/squaresClaim.ts. */
+  claimedAt?: number | null;
   paidAt?: number | null;
   reservedByUid?: string | null;
   paidByUid?: string | null;
@@ -636,6 +641,16 @@ export interface Winner {
    */
   paidAt?: number | FirestoreTimestampLike | null;
   paidByUid?: string; // Who marked it paid
+  /** Set on `final_rollover` once the server's one-time random draw has been made. */
+  drawnAt?: number | FirestoreTimestampLike | null;
+  drawnByUid?: string;
+  /** How many sold squares the draw chose from. */
+  drawnFrom?: number;
+  /** What the draw chose — kept apart from `owner` / `squareId`, which follow the rules. */
+  drawnOwner?: string;
+  drawnSquareId?: number;
+  /** What the prize was when it was marked paid. The prize itself can change afterwards. */
+  paidAmount?: number | null;
 }
 
 // --- AUDIT LOG ---
@@ -643,6 +658,7 @@ export type AuditEventType =
   | 'POOL_CREATED'
   | 'POOL_LOCKED'
   | 'POOL_UNLOCKED'
+  | 'POOL_GAME_LINKED'
   | 'POOL_STATUS_CHANGED'
   | 'DIGITS_GENERATED' // payload: { period, commitHash }
   | 'SCORE_FINALIZED'  // payload: { period, home, away, eventId, sourceHash }
@@ -1002,6 +1018,13 @@ export interface SystemSettings {
   autoClose?: { enabled?: boolean; dryRun?: boolean };
   // Live-score ticker scroll duration in seconds (higher = slower). Default 60.
   tickerDurationSec?: number;
+  // EMERGENCY STOP for squares winner records. `paused: true` stops every
+  // path that writes them; absent or false means running. It is read by the
+  // server only, inside the transaction that would write
+  // (functions/src/lib/squaresPause.ts) — declared here so the shape of this
+  // document says it exists. Nothing on the client reads or writes it: the
+  // settings page saves field by field (`updateDoc`), so it cannot drop it.
+  squaresWinners?: { paused?: boolean };
 }
 
 

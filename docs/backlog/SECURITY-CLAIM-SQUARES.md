@@ -1,6 +1,15 @@
 # Security: `guestDeviceKey` is a bearer token stored in a public document
 
-**Status: open, unfixed. Not preseason-blocking** — this is the Squares path,
+> **2026-11-10 — FIXED by PR-A of `docs/plans/PLAN-SQUARES-REOPEN.md`.** The
+> pool document now carries only a hash of the key and every claim path compares
+> hashes. Two things differ from the fix recommended below, both on purpose and
+> both argued in that plan (§2 D3, D4): **no pepper** (the key is 122 random
+> bits and the server refuses anything shorter), and **no backfill** (every key
+> minted before the fix is treated as compromised and ignored, which needs no
+> production write). The text below is the finding as written and is kept as
+> the record.
+
+**Status when written: open, unfixed. Not preseason-blocking** — this is the Squares path,
 not the NFL pilot. It should be fixed before Squares pools carry real entry
 money again, which in practice means before the football season proper.
 

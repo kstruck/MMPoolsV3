@@ -33,6 +33,18 @@ describe("toggleWinnerPaidSchema", () => {
         expect(okToggle({ winnerId: "final" })).toBe(false);
         expect(okToggle({ poolId: "p1", winnerId: "final", extra: true })).toBe(false);
     });
+
+    it("accepts the winner the commissioner was looking at, and still accepts a call without it", () => {
+        expect(okToggle({ poolId: "p1", winnerId: "q1", expectedOwner: "Alice", expectedSquareId: 37 })).toBe(true);
+        expect(okToggle({ poolId: "p1", winnerId: "q1", expectedOwner: "Alice" })).toBe(true);
+        expect(okToggle({ poolId: "p1", winnerId: "q1" })).toBe(true);
+    });
+
+    it("rejects an expected square that is not a square", () => {
+        expect(okToggle({ poolId: "p1", winnerId: "q1", expectedSquareId: 100 })).toBe(false);
+        expect(okToggle({ poolId: "p1", winnerId: "q1", expectedSquareId: 3.5 })).toBe(false);
+        expect(okToggle({ poolId: "p1", winnerId: "q1", expectedOwner: 7 })).toBe(false);
+    });
 });
 
 describe("fixParticipantIdsSchema", () => {

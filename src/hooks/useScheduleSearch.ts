@@ -1,0 +1,103 @@
+import { useCallback, useRef, useState } from 'react';
+import { fetchGamesOn, hasStarted as gameHasStarted, type ScheduleGame, type ScheduleLeague } from '../services/espnSchedule';
+import { now as serverNow } from '../utils/serverClock';
+
+/**
+ * "Find the games on a day" — the state behind a game picker.
+ *
+ * Two screens offer one: the squares create wizard's matchup step and the
+ * matchup step on the squares manage page. They look nothing alike, so each
+ * draws its own controls; this is the part they must not each reinvent. The
+ * manage page's own search asked for a season type and a week and offered only
+ * the postseason, so a regular-season game could not be linked there at all.
+ *
+ * THE LIST ON SCREEN IS ALWAYS THE ANSWER TO THE QUESTION ON SCREEN (qodo, PR
+ * #760). Two ways it was not: changing the league or the date left the old
+ * results showing under the new controls, and a slow search that finished
+ * after a newer one replaced the newer one's results. Either way a
+ * commissioner could click an NFL game while the dropdown read "College" and
+ * link an NFL game id as a college game — a pool the score feed can never
+ * find. So: changing either input clears the list, an answer to a question
+ * that is no longer being asked is dropped, and every game carries the league
+ * it was found in (`ScheduleGame.league`), which is the one a picker links.
+ *
+ * AND "HAS IT KICKED OFF?" IS ASKED OF THE SERVER'S CLOCK (qodo, PR #761). A
+ * picker greys out a game that has started, because the server refuses to
+ * link one. Both pickers asked the device's clock: fast, and a game that had
+ * not started could not be chosen; slow, and one that had could be, to be
+ * refused only at the last step. `hasStarted` here uses the corrected clock
+ * every other deadline on the site is shown from.
+ */
+
+export const todayIso = (): string => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+export interface ScheduleSearch {
+  league: ScheduleLeague;
+  setLeague: (league: ScheduleLeague) => void;
+  /** `YYYY-MM-DD`, as a date input holds it. */
+  date: string;
+  setDate: (date: string) => void;
+  /** `null` until a search has run; an empty array is "none that day". */
+  games: ScheduleGame[] | null;
+  loading: boolean;
+  error: string | null;
+  find: () => Promise<void>;
+  /** Forget the last result (after a game is picked). */
+  clear: () => void;
+  /** Kicked off — by the feed's state, or by the SERVER's clock. Such a game cannot be linked. */
+  hasStarted: (game: Pick<ScheduleGame, 'state' | 'kickoff'>) => boolean;
+}
+
+export function useScheduleSearch(
+  initialLeague: ScheduleLeague = 'nfl',
+  /** The clock to judge kickoff by. The server-corrected one; a test passes its own. */
+  nowMs: () => number = serverNow,
+): ScheduleSearch {
+  const [league, setLeagueState] = useState<ScheduleLeague>(initialLeague);
+  const [date, setDateState] = useState(todayIso);
+  const [games, setGames] = useState<ScheduleGame[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Which question is current. Every change of input and every new search
+  // takes the next number; an answer is used only if its number still is.
+  const asked = useRef(0);
+
+  const forget = useCallback(() => {
+    asked.current += 1;
+    setGames(null);
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  const setLeague = useCallback((next: ScheduleLeague) => { setLeagueState(next); forget(); }, [forget]);
+  const setDate = useCallback((next: string) => { setDateState(next); forget(); }, [forget]);
+
+  const find = useCallback(async () => {
+    const mine = ++asked.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const found = await fetchGamesOn(league, date);
+      if (asked.current !== mine) return;
+      setGames(found);
+    } catch (e) {
+      if (asked.current !== mine) return;
+      setGames(null);
+      setError(e instanceof Error && e.message ? e.message : 'The schedule could not be loaded. Try again in a moment.');
+    } finally {
+      if (asked.current === mine) setLoading(false);
+    }
+  }, [league, date]);
+
+  const hasStarted = useCallback(
+    (game: Pick<ScheduleGame, 'state' | 'kickoff'>) => gameHasStarted(game, nowMs()),
+    [nowMs],
+  );
+
+  return { league, setLeague, date, setDate, games, loading, error, find, clear: forget, hasStarted };
+}
