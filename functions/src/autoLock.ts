@@ -51,31 +51,20 @@ async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<n
 
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---
 /**
- * How far ahead of its lock time a grid on the reminders path is locked.
+ * How far ahead of its lock time a grid is locked: 30 seconds, for every pool
+ * type this job handles.
  *
- * This job runs every minute. With a 30-second lead it reaches a given grid
- * anywhere from 30 seconds BEFORE its lock time to 30 seconds AFTER — and in
- * that second half another job can get there first: `runReminders`
- * (`reminders.ts`) also locks a squares grid whose time has passed, and draws
- * its numbers with a biased `Math.random` sort (plan K7; that file sends the
- * NFL reminders and is not this plan's to change).
+ * For a squares grid this was raised to 90 seconds for a while, so that this
+ * job always reached a grid before `runReminders` did — that job had its own
+ * auto-lock, which drew the numbers with a biased shuffle. That copy is gone
+ * (plan K7): `reminders.ts` calls `executeAutoLock` below, so it no longer
+ * matters which job gets there first and there is nothing to win a race
+ * against. 90 seconds cost players a minute of picking for no reason.
  *
- * For a SQUARES grid the lead is 90 seconds, so this job has always run once
- * before the lock time arrives and the other finds the grid locked. A squares
- * grid therefore locks between 90 and 30 seconds early. Every other pool type
- * keeps 30 seconds, exactly as before.
- *
- * This closes the race while this job is healthy. If it is down at that
- * minute the other job still decides the grid — which is why K7 is first on
- * the list for Kevin.
- *
- * The number itself is in `shared/squaresDefaults.ts`, because the pool page
- * shows players when picks close and has to be working from the same one.
+ * The number is in `shared/squaresDefaults.ts`, because the pool page shows
+ * players when picks close and has to be working from the same one.
  */
 export { SQUARES_LOCK_LEAD_MS };
-const DEFAULT_LOCK_LEAD_MS = 30_000;
-export const squaresLockLeadMs = (pool: { type?: string }): number =>
-    !pool.type || pool.type === 'SQUARES' ? SQUARES_LOCK_LEAD_MS : DEFAULT_LOCK_LEAD_MS;
 
 export const autoLockPools = functions.scheduler.onSchedule(
     { schedule: "every 1 minutes", timeoutSeconds: 300, memory: "512MiB" },
@@ -118,7 +107,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
                 console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, raw);
                 continue;
             }
-            if (lockAtNum - now <= squaresLockLeadMs(pool)) duePools.push(pool);
+            if (lockAtNum - now <= SQUARES_LOCK_LEAD_MS) duePools.push(pool);
         }
 
         for (const doc of bracketSnapshot.docs) {
@@ -131,7 +120,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
                 console.warn(`[AutoLock] Invalid lockAt for BRACKET pool ${pool.id}:`, raw);
                 continue;
             }
-            if (lockAtNum - now <= 30000) duePools.push(pool);
+            if (lockAtNum - now <= SQUARES_LOCK_LEAD_MS) duePools.push(pool);
         }
 
         console.log(`[AutoLock] Locking ${duePools.length} due pool(s) with bounded concurrency`);
@@ -153,8 +142,15 @@ export const autoLockPools = functions.scheduler.onSchedule(
 
 
 // --- EXECUTE AUTO LOCK ---
-/** True when the pool was locked; false when the transaction failed. */
-async function executeAutoLock(pool: GameState): Promise<boolean> {
+/**
+ * True when the pool was locked; false when the transaction failed.
+ *
+ * THE ONE AUTO-LOCK. Exported because the reminders job calls it too (plan
+ * K7): a squares grid whose time has passed is locked by this function
+ * whichever job notices first. It is a transaction that re-reads the pool and
+ * does nothing if the grid is already locked, so two callers cannot both draw.
+ */
+export async function executeAutoLock(pool: GameState): Promise<boolean> {
     const poolRef = db.collection('pools').doc(pool.id);
 
     try {
