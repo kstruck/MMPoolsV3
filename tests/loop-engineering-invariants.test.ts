@@ -41,6 +41,32 @@ const read = (p: string) => readFileSync(path.join(REPO_ROOT, p), 'utf8');
 const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
 const claudeMd = read('CLAUDE.md');
 
+/** The last cell of a markdown ledger row: the authoritative State column. */
+export function ledgerStateCell(row: string): string {
+    const cells = row.split('|').slice(1, -1).map((c) => c.trim());
+    return cells[cells.length - 1] ?? '';
+}
+
+/**
+ * The State a ledger row declares, or `null` when it declares neither or both.
+ *
+ * ⚠️ READ THE State CELL, AND REQUIRE IT TO NAME A STATE. The first version of
+ * this guard tested the WHOLE ROW for /ACTIVE/ and fell through to PARKED on
+ * anything else, so an emptied, misspelled or garbage State cell read as
+ * "parked" and passed — the ledger could lose its authoritative state with the
+ * guard still green, which is the drift this file exists to catch. A stray
+ * "ACTIVE" in any other cell also decided the answer. Found by codex on the PR
+ * that added this file, which is round 2 of the same hole: see the comment on
+ * `charterState` for round 1.
+ */
+export function ledgerRowState(row: string): 'ACTIVE' | 'PARKED' | null {
+    const cell = ledgerStateCell(row);
+    const saysActive = /\bACTIVE\b/i.test(cell);
+    const saysParked = /\bPARKED\b/i.test(cell);
+    if (saysActive === saysParked) return null;
+    return saysActive ? 'ACTIVE' : 'PARKED';
+}
+
 const SKILLS_DIR = path.join(REPO_ROOT, '.claude', 'skills');
 const loopSkills = readdirSync(SKILLS_DIR).filter((d) => d.startsWith('mmp-loop-'));
 
@@ -196,7 +222,12 @@ describe('loop charter', () => {
             .split('\n')
             .find((l) => l.startsWith('|') && l.includes(skill));
         expect(row, `${skill} must have a row in the charter ledger`).toBeDefined();
-        return /\bACTIVE\b/.test(row!) ? 'ACTIVE' : 'PARKED';
+        const state = ledgerRowState(row!);
+        expect(
+            state,
+            `${skill}'s State cell in the charter ledger must say exactly one of ACTIVE / Parked — got "${ledgerStateCell(row!)}"`,
+        ).not.toBeNull();
+        return state!;
     }
 
     it.each(loopSkills)('%s declares the same state the charter ledger gives it', (skill) => {
@@ -211,6 +242,36 @@ describe('loop charter', () => {
         expect(saysActive ? 'ACTIVE' : 'PARKED', `${skill} contradicts the charter ledger`).toBe(
             charterState(skill),
         );
+    });
+});
+
+describe('charter ledger State cell', () => {
+    const row = (state: string) =>
+        `| 1 | Audit-trail integrity sweep | \`mmp-loop-audit-sweep\` | No | some verifier | Windows box | ${state} |`;
+
+    it('reads the two states the ledger actually uses', () => {
+        expect(ledgerRowState(row('🟢 **ACTIVE 2026-09-19**'))).toBe('ACTIVE');
+        expect(ledgerRowState(row('⚪ Parked'))).toBe('PARKED');
+        expect(ledgerRowState(row('⚪ Parked. Auto-merge is a **second, separate** approval'))).toBe('PARKED');
+    });
+
+    /** The hole: anything unrecognised used to read as PARKED and pass. */
+    it.each(['', '   ', '⚪', 'PARKEDD', 'Paused', 'TBD', '🟢 **ACTIV 2026-09-19**'])(
+        'refuses to guess a state from %p',
+        (state) => {
+            expect(ledgerRowState(row(state))).toBeNull();
+        },
+    );
+
+    it('refuses a cell that claims both states', () => {
+        expect(ledgerRowState(row('ACTIVE, but Parked until approved'))).toBeNull();
+    });
+
+    /** A stray token in another column must not decide the answer. */
+    it('ignores ACTIVE outside the State cell', () => {
+        const misleading =
+            '| 2 | Stale PR pruner | `mmp-loop-pr-pruner` | ACTIVE closes PRs | verifier | Cloud | ⚪ Parked |';
+        expect(ledgerRowState(misleading)).toBe('PARKED');
     });
 });
 
