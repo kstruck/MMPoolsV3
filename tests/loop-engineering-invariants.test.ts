@@ -380,4 +380,48 @@ describe('maker/checker separation', () => {
             expect(tools, `verifier must not hold ${forbidden}`).not.toContain(forbidden);
         }
     });
+
+    /**
+     * ⚠️ WITHHOLDING Edit/Write DOES NOT MAKE THE CHECKER UNABLE TO WRITE. It
+     * holds `Bash`, and a shell writes through `sed -i`, `tee`, `>`,
+     * `git apply`, `patch`. Agent frontmatter has no read-only-filesystem
+     * switch, so the shell half of the boundary is an instruction, and the
+     * assertion above enforces only the named-tool half. That gap is fine; a
+     * DESCRIPTION CLAIMING THE GAP SHUT IS NOT — it is this repo's signature
+     * defect (a guard that looks like it guards) aimed at the one agent whose
+     * verdict people would trust. Found by codex round 2 on this PR.
+     *
+     * So: while the verifier holds a shell, its prompt must ban writing through
+     * it by name, and must not promise it cannot edit at all.
+     */
+    it('does not promise more separation than it enforces', () => {
+        const body = read(AGENT);
+        const frontmatter = body.split('---')[1] ?? '';
+        const tools = (frontmatter.match(/^tools:\s*(.+)$/m)?.[1] ?? '')
+            .split(',')
+            .map((t) => t.trim());
+        if (!tools.includes('Bash')) return; // no shell, no gap to disclose
+
+        // Backticked, as the ban line writes them: a bare 'tee' is satisfied by
+        // "guarantee" and a bare 'patch' by "dispatch", which would make this
+        // assertion the very thing it is here to catch.
+        for (const ban of ['`sed -i`', '`tee`', '`git apply`', '`patch`']) {
+            expect(
+                body,
+                `verifier holds Bash, so its prompt must name ${ban} among the writes it may not run`,
+            ).toContain(ban);
+        }
+
+        // The overclaim the description used to make, in the forms it could take.
+        for (const overclaim of [
+            'cannot edit any file',
+            'can not edit any file',
+            'unable to edit any file',
+        ]) {
+            expect(
+                body.toLowerCase(),
+                `verifier holds Bash, so it must not claim it "${overclaim}"`,
+            ).not.toContain(overclaim);
+        }
+    });
 });
