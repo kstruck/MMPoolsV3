@@ -1116,6 +1116,30 @@ export const dbService = {
         }
     },
 
+    /**
+     * Link a squares pool to a game (or unlink it, `gameId: null`) — the SERVER
+     * looks the game up in the score feed (PLAN-SQUARES-SERVER-FIELDS).
+     * Rejects with the server's own explanation (`failed-precondition`,
+     * `not-found`, `unavailable`), which the caller shows; those are refusals,
+     * not faults, so they are not sent to the error reporter.
+     */
+    linkSquaresPoolGame: async (poolId: string, gameId: string | null, league?: 'nfl' | 'college'): Promise<{ linked: boolean }> => {
+        try {
+            const fn = httpsCallable(functions, 'linkSquaresPoolGame');
+            const result = await fn(withCorrelationId({ poolId, gameId, ...(league ? { league } : {}) }));
+            return result.data as { linked: boolean };
+        } catch (error) {
+            const code = (error as { code?: string } | null)?.code;
+            if (code !== 'functions/failed-precondition' && code !== 'functions/not-found' && code !== 'functions/unavailable') {
+                await errorHandler.handleError(error, {
+                    severity: ErrorSeverity.HIGH,
+                    context: { operation: 'linkSquaresPoolGame', poolId }
+                });
+            }
+            throw error;
+        }
+    },
+
     syncAllUsers: async (): Promise<{ success: boolean; count: number }> => {
         try {
             const syncFn = httpsCallable(functions, 'syncAllUsers');

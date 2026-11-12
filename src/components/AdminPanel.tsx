@@ -47,6 +47,7 @@ const ADMIN_PANEL_TABS = [
 ] as const;
 
 import { Badge, Button, StatTile, Switch } from './ui';
+import { LockedTermsNotice } from './admin/LockedTermsNotice';
 
 
 
@@ -239,22 +240,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // The recorded winners (pools/{id}/winners) — what a commissioner pays from.
   const [winnerRecords, setWinnerRecords] = useState<Winner[]>([]);
-  // Whether the list above is REAL: false until the first snapshot arrives, and
-  // false again if the subscription fails. An empty list is not proof that
-  // there are no winners, and the game link decides on it (qodo, PR #760).
-  // Kept as the pool id the records were loaded FOR, so a different pool (or
-  // an error, which clears it) reads as not loaded without resetting state
-  // inside the effect.
-  const [winnersLoadedFor, setWinnersLoadedFor] = useState<string | null>(null);
-  const winnersLoaded = winnersLoadedFor === gameState.id;
   useEffect(() => {
     if (!gameState.id) return;
-    const poolId = gameState.id;
-    return dbService.subscribeToWinners(
-      poolId,
-      (records) => { setWinnerRecords(records); setWinnersLoadedFor(poolId); },
-      () => { setWinnerRecords([]); setWinnersLoadedFor(null); },
-    );
+    return dbService.subscribeToWinners(gameState.id, setWinnerRecords, () => setWinnerRecords([]));
   }, [gameState.id]);
 
   // RECORDING WINNERS IS AN EXPLICIT ACT. Scores typed in by hand are written
@@ -426,8 +414,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   /**
    * Link this pool to a game picked from the schedule.
    *
-   * Writes what the create wizard's link writes (`squaresGameLink`): the game,
-   * its kickoff, the teams and badges, and THE GRID LOCKING ITSELF AT KICKOFF.
+   * The SERVER writes it (`linkSquaresPoolGame`, PLAN-SQUARES-SERVER-FIELDS),
+   * from the score feed, through the same `squaresGameLink` the create wizard's
+   * link uses: the game, its kickoff, the teams and badges, and THE GRID
+   * LOCKING ITSELF AT KICKOFF.
    * The version this replaces renamed the pool to "Away @ Home" whatever it was
    * called, set the lock to fifteen minutes before kickoff, and on a pool with
    * no reminder settings switched on payment-reminder emails to every player.
@@ -440,10 +430,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const outcome = await linkSquaresGame({
       game,
       pool: gameState,
-      // null = not known yet (or unreadable): the link will not decide on it.
-      winnerCount: winnersLoaded ? winnerRecords.length : null,
       nameIsFree: checkNameAvailable,
-      save: (patch) => updateConfig(patch as Partial<GameState>),
+      link: (gameId, league) => dbService.linkSquaresPoolGame(gameState.id, gameId, league),
+      saveName: (name) => updateConfig({ name }),
       nowMs: serverNow,
     });
     if (outcome.status === 'linked') {
@@ -452,10 +441,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     toast.error(
       outcome.status === 'started' ? 'That game has already kicked off, so it cannot be linked. Nothing has changed.'
-        : outcome.status === 'played' ? 'This grid has already been played: its scores and winners belong to that game. Start a new pool for another game. Nothing has changed.'
-        : outcome.status === 'not-ready' ? 'This pool\'s winner records have not loaded yet, so its game cannot be changed. Nothing has changed — try again in a moment.'
         : outcome.status === 'not-a-game' ? 'That game could not be linked. Pick it from the schedule again.'
-          : 'The game was NOT linked — the pool could not be saved, and nothing has changed. Try again in a moment.',
+          : outcome.message ? `The game was NOT linked: ${outcome.message}`
+            : 'The game was NOT linked, and nothing has changed. Try again in a moment.',
     );
     return false;
   };
@@ -501,6 +489,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     setIsFixing(false);
   };
+
+  // What firestore.rules no longer lets this page write (PLAN-SQUARES-SERVER-FIELDS).
+  // Shown read-only, with the reason, instead of failing on save.
+  //   - once the grid is locked: the prize terms (the payouts step, the price
+  //     and the number sets) and changing the game;
+  //   - once locked on a linked game without Manual Score Override: the scores,
+  //     which then come from the feed on the server.
+  const gridLocked = gameState.isLocked === true;
+  const feedScoresOnly = gridLocked && !!gameState.gameId && !gameState.manualScoreOverride;
 
   const totalPayout = (gameState.payouts.q1 || 0) + (gameState.payouts.half || 0) + (gameState.payouts.q3 || 0) + (gameState.payouts.final || 0);
 
@@ -680,6 +677,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 gameState={gameState}
                 updateConfig={updateConfig}
                 onLinkGame={linkGame}
+                locked={gridLocked}
               />
             )}
             {wizardStep === 2 && (
@@ -693,14 +691,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <WizardStepRules
                 gameState={gameState}
                 updateConfig={updateConfig}
+                locked={gridLocked}
               />
             )}
             {wizardStep === 4 && (
-              <WizardStepPayouts
-                gameState={gameState}
-                updateConfig={updateConfig}
-                totalPayout={totalPayout}
-              />
+              <>
+                {gridLocked && <LockedTermsNotice />}
+                <fieldset disabled={gridLocked} className="m-0 min-w-0 border-0 p-0" data-testid="payouts-step-fieldset">
+                  <WizardStepPayouts
+                    gameState={gameState}
+                    updateConfig={updateConfig}
+                    totalPayout={totalPayout}
+                  />
+                </fieldset>
+              </>
             )}
             {wizardStep === 5 && (
               <WizardStepSideHustle
@@ -1025,13 +1029,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {fetchStatus && (<span className={`text-xs px-2 py-1 rounded font-display font-bold uppercase tracking-[0.05em] ${fetchStatus.type === 'success' ? 'text-[#0F7B4A] bg-[#0F7B4A]/10' : fetchStatus.type === 'error' ? 'text-brandred-600 bg-brandred-600/10' : 'text-muted'}`}>{fetchStatus.msg}</span>)}
               </div>
               <p className="text-muted font-body text-sm mb-6">{gameState.gameId ? `Linked to game ${gameState.gameId}. Scores update automatically about once a minute.` : `No game is linked, so scores do not update on their own. Enter them below, or link a game in Settings.`}</p>
-              <button onClick={handleFetchLiveScores} disabled={isFetchingScores} className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
+              <button onClick={handleFetchLiveScores} disabled={isFetchingScores || feedScoresOnly} title={feedScoresOnly ? 'The grid is locked: scores now come from the feed on the server, about once a minute.' : undefined} className="bg-brandred-600 hover:bg-brandred-500 disabled:opacity-50 disabled:cursor-wait text-white px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 shadow-red-cta transition-ui duration-150 fine:hover:-translate-y-px"><RefreshCw size={18} className={isFetchingScores ? 'animate-spin' : ''} />{isFetchingScores ? 'Fetching Data...' : 'Auto-Update Scores'}</button>
               <button onClick={handleFixSync} disabled={isFixing} className="border border-brandred-600/40 bg-brandred-600/5 hover:bg-brandred-600/10 disabled:opacity-50 disabled:cursor-wait text-brandred-600 px-4 py-2 rounded-lg font-display font-bold uppercase tracking-[0.05em] flex items-center gap-2 transition-ui duration-150 ml-2"><Hammer size={18} className={isFixing ? 'animate-spin' : ''} />{isFixing ? 'Repairing...' : 'Fix Sync'}</button>
             </div>
-            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Quarterly Scores</h3><div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
+            <div className="bg-card p-6 rounded-xl border border-line"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-[color:var(--text)] mb-4">Quarterly Scores</h3>{feedScoresOnly && <LockedTermsNotice>The grid is locked and linked to a game, so these scores come from the score feed. To enter them yourself, turn on Manual Score Override above.</LockedTermsNotice>}<div className="grid gap-4">{(['q1', 'half', 'q3', 'final'] as const).map((period) => {
               const isActive = !!gameState.scores[period];
               const label = period === 'q1' ? '1st Quarter' : period === 'half' ? 'Halftime' : period === 'q3' ? '3rd Quarter' : 'Final Score';
-              return (<div key={period} className={`p-5 rounded-xl border transition-ui ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><Switch checked={isActive} onChange={() => togglePeriodActive(period)} label={`Enable ${label} scoring`} tone="gold" /></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
+              return (<div key={period} className={`p-5 rounded-xl border transition-ui ${isActive ? 'bg-surface border-gold-500/50 shadow-card' : 'bg-card border-line opacity-60'}`}><div className="flex justify-between items-center mb-4"><h3 className="font-display font-bold uppercase tracking-[0.02em] text-lg text-[color:var(--text)]">{label}</h3><Switch checked={isActive} onChange={() => togglePeriodActive(period)} label={`Enable ${label} scoring`} tone="gold" disabled={feedScoresOnly} /></div>{isActive && (<div className="flex items-center gap-4"><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.homeTeam}</label><input type="number" value={gameState.scores[period]?.home || 0} disabled={feedScoresOnly} onChange={(e) => handleScoreChange(period, 'home', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div><div className="text-faint font-bold text-xl mt-4">-</div><div className="flex-1"><label className="block text-xs text-muted mb-1 uppercase font-display font-bold tracking-[0.08em]">{gameState.awayTeam}</label><input type="number" value={gameState.scores[period]?.away || 0} disabled={feedScoresOnly} onChange={(e) => handleScoreChange(period, 'away', e.target.value)} className="w-full bg-surface border border-line rounded-lg px-4 py-3 text-[color:var(--text)] font-display num text-xl text-center focus:ring-2 focus:ring-gold-500 outline-none" /></div></div>)}</div>);
             })}</div></div>
 
             {/* RECORD WINNERS — for scores entered by hand */}

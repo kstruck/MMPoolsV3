@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import * as admin from 'firebase-admin';
 import ftest from 'firebase-functions-test';
 
@@ -6,16 +6,11 @@ import ftest from 'firebase-functions-test';
  * SQUARES — CREATE, KICKOFF LOCK AND THE AFTER-KICKOFF CLAIM, against the
  * emulator (PLAN-SQUARES-REOPEN PR-C).
  *
- * 🛑 SQUARES CREATION IS STILL CLOSED IN THE SHIPPED CODE. `poolCreation.
- * emulator.test.ts` proves the closure at the callable, and that test is
- * untouched. THIS file opens the gate for itself — and only for itself — so the
- * code that runs the moment the gate is lifted is proved before it is lifted,
- * not after. Nothing here changes what production refuses.
+ * Until PR-D this file opened the creation gate for itself with a mock, so the
+ * code that runs the moment the gate is lifted was proved before it was lifted.
+ * The gate is open now and the mock is gone: this runs against the flags as
+ * shipped.
  */
-vi.mock('../../lib/featureFlags', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../lib/featureFlags')>();
-  return { ...actual, HARD_CLOSED_POOL_TYPES: [], isPoolTypeEnabled: () => true };
-});
 
 import { createPool } from '../../poolOps';
 import { autoLockPools, SQUARES_LOCK_LEAD_MS } from '../../autoLock';
@@ -25,6 +20,7 @@ import { withSquaresDefaults } from '../../shared/squaresDefaults';
 import { computePeriodPayouts, squaresPot } from '../../shared/squaresPayouts';
 import { isUsableAxis } from '../../lib/squaresGame';
 import { GUEST_KEY_PREFIX } from '../../shared/squaresClaim';
+import { FEED_FIXTURE_COLLECTION, feedFixtureDocId } from '../../lib/squaresFeedGame';
 
 const test = ftest();
 const db = admin.firestore();
@@ -43,7 +39,35 @@ type Doc = Record<string, any>;
 const key = (tag: string) => `${GUEST_KEY_PREFIX}${tag.padEnd(36, '0')}`;
 const poolDoc = async (id: string): Promise<Doc> => (await db.collection('pools').doc(id).get()).data() as Doc;
 
+/**
+ * The score feed, as the server sees it in the emulator (PLAN-SQUARES-SERVER-FIELDS):
+ * `createPool` looks a linked game up in the feed and stores what the feed says,
+ * and in an emulator run the feed is this fixture.
+ */
+const seededFeed = new Set<string>();
+async function seedFeed(gameId: string, game: Doc): Promise<void> {
+  seededFeed.add(gameId);
+  await db.collection(FEED_FIXTURE_COLLECTION).doc(feedFixtureDocId(gameId)).set(game);
+}
+
+/**
+ * Create a squares pool the way the wizard does. A linked game the test has not
+ * put in the feed itself is put there AS THE WIZARD DESCRIBED IT — the feed and
+ * the picker agree, which is the ordinary case. Tests about the feed disagreeing
+ * seed it first.
+ */
 async function createSquares(over: Doc = {}): Promise<{ id: string; pool: Doc }> {
+  const id = typeof over.gameId === 'string' ? over.gameId : '';
+  if (/^\d{1,15}$/.test(id) && typeof over.gameTime === 'number' && !seededFeed.has(id)) {
+    await seedFeed(id, {
+      kickoff: over.gameTime, state: 'pre',
+      homeTeam: over.homeTeam ?? 'Detroit Lions', awayTeam: over.awayTeam ?? 'Green Bay Packers',
+      ...(over.homeTeamLogo ? { homeLogo: over.homeTeamLogo } : {}),
+      ...(over.awayTeamLogo ? { awayLogo: over.awayTeamLogo } : {}),
+      ...(over.seasonType ? { seasonType: over.seasonType } : {}),
+      ...(over.week ? { week: over.week } : {}),
+    });
+  }
   const res = (await create({
     data: { type: 'SQUARES', name: 'Thanksgiving squares', costPerSquare: 10, ...over },
     auth: owner,
@@ -57,7 +81,8 @@ const guestReserve = (poolId: string, squareIds: number[], name: string) =>
   } as never);
 
 beforeEach(async () => {
-  for (const col of ['pools', 'users', 'pool_access_attempts']) {
+  seededFeed.clear();
+  for (const col of ['pools', 'users', 'pool_access_attempts', FEED_FIXTURE_COLLECTION]) {
     const snap = await db.collection(col).get();
     await Promise.all(snap.docs.map((d) => db.recursiveDelete(d.ref)));
   }
@@ -198,9 +223,53 @@ describe('C1 — a linked game locks itself at kickoff', () => {
     expect('reminders' in pool).toBe(false);
   });
 
-  it('a game with no kickoff time is REFUSED — it would be scored and never locked', async () => {
-    await expect(createSquares({ gameId: '401772510' })).rejects.toThrow(/no kickoff time/);
-    await expect(createSquares({ gameId: '401772510', gameTime: 0 })).rejects.toThrow(/no kickoff time/);
+  // ---- PLAN-SQUARES-SERVER-FIELDS §2c: the game is the FEED's, not the wizard's.
+
+  it('the kickoff, teams and badges stored are the FEED\'s — what the wizard sent is not used', async () => {
+    const feedKickoff = Date.now() + 72 * HOUR;
+    await seedFeed('401772510', {
+      kickoff: feedKickoff, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers',
+      homeLogo: logos.homeTeamLogo, seasonType: '2', week: 13,
+    });
+    const { pool } = await createSquares({
+      gameId: '401772510', gameTime: Date.now() + 2 * HOUR, league: 'nfl', seasonType: '3', week: 1,
+      homeTeam: 'Green Bay Packers', awayTeam: 'Detroit Lions', awayTeamLogo: 'https://a.espncdn.com/i/teamlogos/nfl/500/chi.png',
+    });
+    expect(pool.gameTime).toBe(feedKickoff);
+    expect(pool.reminders.lock.lockAt).toBe(feedKickoff);          // the grid locks at the REAL kickoff
+    expect(pool.scores.startTime).toBe(new Date(feedKickoff).toISOString());
+    expect(pool.homeTeam).toBe('Detroit Lions');                   // not swapped: the score sync reads this order
+    expect(pool.awayTeam).toBe('Green Bay Packers');
+    expect(pool.homeTeamLogo).toBe(logos.homeTeamLogo);
+    expect('awayTeamLogo' in pool).toBe(false);                    // the feed had none; the wizard's is dropped
+    expect(pool.seasonType).toBe('2');
+    expect(pool.week).toBe(13);
+  });
+
+  it('a game id with no kickoff from the wizard is linked with the feed\'s kickoff', async () => {
+    const feedKickoff = Date.now() + 48 * HOUR;
+    await seedFeed('401772510', { kickoff: feedKickoff, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+    const { pool } = await createSquares({ gameId: '401772510' });
+    expect(pool.gameTime).toBe(feedKickoff);
+    expect(pool.reminders.lock).toMatchObject({ enabled: true, lockAt: feedKickoff });
+  });
+
+  it('a game the FEED says is under way is REFUSED, however far off the wizard said it was', async () => {
+    await seedFeed('401772510', { kickoff: Date.now() + 48 * HOUR, state: 'in', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+    await expect(createSquares({ gameId: '401772510', gameTime: Date.now() + 48 * HOUR })).rejects.toThrow(/already kicked off/);
+    expect((await db.collection('pools').get()).size).toBe(0);
+  });
+
+  it('a game whose FEED kickoff has passed is REFUSED, whatever kickoff the wizard sent', async () => {
+    await seedFeed('401772510', { kickoff: Date.now() - 60_000, state: 'pre', homeTeam: 'Detroit Lions', awayTeam: 'Green Bay Packers' });
+    await expect(createSquares({ gameId: '401772510', gameTime: Date.now() + 48 * HOUR })).rejects.toThrow(/already kicked off/);
+    expect((await db.collection('pools').get()).size).toBe(0);
+  });
+
+  it('a game the feed does not have is REFUSED, and no pool is written', async () => {
+    // A fixture the feed cannot make a game of stands in for "the feed answered, not with that game".
+    await seedFeed('401772599', { kickoff: Date.now() + 48 * HOUR, state: 'pre', homeTeam: '', awayTeam: '' });
+    await expect(createSquares({ gameId: '401772599', gameTime: Date.now() + 48 * HOUR })).rejects.toThrow(/not found on the schedule/);
     expect((await db.collection('pools').get()).size).toBe(0);
   });
 

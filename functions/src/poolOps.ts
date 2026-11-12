@@ -7,7 +7,8 @@ import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema, clearLegacyCoManagersSchema } from "./schemas/poolOps";
 import { writeAdminAudit } from "./lib/adminAudit";
-import { squaresCreateDefaults, SQUARES_DEFAULT_PAYOUTS } from "./shared/squaresDefaults";
+import { isFeedLogoUrl, squaresCreateDefaults, SQUARES_DEFAULT_PAYOUTS } from "./shared/squaresDefaults";
+import { firestoreFixtureReader, lookupSquaresGame, squaresFeedGameHasStarted } from "./lib/squaresFeedGame";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
@@ -430,15 +431,46 @@ export const createPool = validated(
             // while the game is played — so it is refused rather than stored.
             // So is a game that has already kicked off: nobody could claim a
             // square on it, and the grid would lock empty within the minute.
+            //
+            // THE GAME IS THE FEED'S, NOT THE WIZARD'S (PLAN-SQUARES-SERVER-FIELDS
+            // §2c; plan K11). The wizard's id is looked up in the score feed and
+            // the pool stores what the feed says — kickoff, teams, badges, season
+            // type, week. The kickoff the wizard sent is not used: a crafted
+            // request could otherwise pair one game's scores with another game's
+            // teams and kickoff, or pass off a started game as not started.
             const wantsLink = typeof data.gameId === 'string' && data.gameId.trim() !== '';
             if (wantsLink) {
-                const kickoff = typeof data.gameTime === 'number' && Number.isFinite(data.gameTime) ? data.gameTime : null;
-                if (kickoff === null || kickoff <= 0) {
-                    throw new HttpsError('invalid-argument', 'That game has no kickoff time. Pick it from the schedule again.');
+                const league = data.league === 'college' ? 'college' : 'nfl';
+                const found = await lookupSquaresGame(data.gameId.trim(), league, { readFixture: firestoreFixtureReader });
+                if (found === 'unreachable') {
+                    throw new HttpsError('unavailable', 'Could not reach the schedule to check that game. Try again, or create the pool without a game and link it later.');
                 }
-                if (kickoff <= now.toMillis()) {
+                if (found === 'not-found') {
+                    throw new HttpsError('invalid-argument', 'That game was not found on the schedule. Pick it from the schedule again.');
+                }
+                // The clock is read NOW, not at the top of the call: billing,
+                // config and the feed request (with its retry) all ran since
+                // (codex, PR #765 round 3). It is read again before the write.
+                if (squaresFeedGameHasStarted(found, Date.now())) {
                     throw new HttpsError('failed-precondition', 'That game has already kicked off. Pick a game that has not started.');
                 }
+                for (const key of ['homeTeamLogo', 'awayTeamLogo', 'seasonType', 'week'] as const) {
+                    delete newPool[key];
+                    delete data[key];
+                }
+                const feedFields: Record<string, unknown> = {
+                    gameId: found.id,
+                    gameTime: found.kickoff,
+                    league,
+                    homeTeam: found.homeTeam,
+                    awayTeam: found.awayTeam,
+                };
+                if (isFeedLogoUrl(found.homeLogo)) feedFields.homeTeamLogo = found.homeLogo;
+                if (isFeedLogoUrl(found.awayLogo)) feedFields.awayTeamLogo = found.awayLogo;
+                if (found.seasonType) feedFields.seasonType = found.seasonType;
+                if (found.week) feedFields.week = found.week;
+                Object.assign(newPool, feedFields);
+                Object.assign(data, feedFields);
             } else {
                 // Not linked: nothing half-linked is left on the document.
                 delete newPool.gameId;
@@ -478,6 +510,12 @@ export const createPool = validated(
             const currentRole = userDoc.data()?.role as string | undefined;
             assertNotBanned(claimRole, currentRole);
 
+            // Last look at the clock before a squares pool linked to a game is
+            // written: kickoff can pass while the steps above run.
+            if (isSquaresPool && typeof newPool.gameId === 'string'
+                && typeof newPool.gameTime === 'number' && newPool.gameTime <= Date.now()) {
+                throw new HttpsError('failed-precondition', 'That game has just kicked off. Pick a game that has not started.');
+            }
             t.set(poolRef, newPool);
 
             writePoolCreationSideEffects(t, {
@@ -930,13 +968,19 @@ export const fixParticipantIds = validated(
 
         // 1. Squares pools are DELIBERATELY not scanned here.
         //
-        // Square ownership is not a membership signal. `claimMySquares` sets
-        // `reservedByUid` on proof of a `guestDeviceKey` that is readable from
-        // the world-readable pool document (`firestore.rules` `allow get: if
-        // true`) - the known, accepted-through-the-pilot finding in
-        // SECURITY-CLAIM-SQUARES.md. Unioning it into `participantIds` turned
-        // this repair job into a privilege escalation: the claimant lands in the
-        // array that `setPaidStatus` and reminder targeting treat as membership.
+        // Square ownership ON AN OLD POOL is not a membership signal. Until
+        // PLAN-SQUARES-REOPEN PR-A (2026-11), `claimMySquares` set
+        // `reservedByUid` on proof of a `guestDeviceKey` that was readable from
+        // the world-readable pool document (SECURITY-CLAIM-SQUARES.md). A
+        // `reservedByUid` stamped before that fix may be such a claim, and
+        // nothing on the square says which. Unioning it into `participantIds`
+        // turned this repair job into a privilege escalation: the claimant
+        // lands in the array that `setPaidStatus` and reminder targeting treat
+        // as membership.
+        //
+        // The claim path now proves ownership and adds the claimant to
+        // `participantIds` itself, at claim time — so this job still has
+        // nothing legitimate to add, for old pools or new ones.
         //
         // Removing it costs nothing legitimate. `reserveSquare` already adds an
         // authenticated reserver to `participantIds` at reserve time, so the only

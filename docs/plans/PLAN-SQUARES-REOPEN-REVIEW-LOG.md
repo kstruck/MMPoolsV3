@@ -21,6 +21,7 @@ evidence. A rejection is recorded with its reasoning, the same as an acceptance.
 | Q3 | qodo (re-review) | PR-B @ `652fe64c` | 9 | 8 | 1 |
 | W1 | browser walk-through | A + B + C + the reopen flip, on emulators | 9 | 9 | 0 |
 | Q4 | qodo | #758 @ `d8978a82`, #759 @ `10d65cce` | 4 | 4 | 0 |
+| W2 | the end-to-end test, and the gates | C + D | 3 | 3 | 0 |
 | Q5 | qodo | #758 @ `77418e03`, #760 @ `3619b6cb` | 7 | 5 | 2 |
 | Q6 | qodo | #761 @ `04996b6b` | 13 | 8 | 3, and 2 that are Kevin's |
 | Q7 | qodo | #758 @ `0ac1bdb6`, #759 @ `085a0d07`, #760 @ `e4a06808`, #761 @ `c7af924f` | 8 | 7 | 1 kept as built, for Kevin to confirm |
@@ -485,6 +486,58 @@ the catch-up; and the catch-up not opening pools at all while paused. Each is
 now written and its mutant fails. The first run of the suite had been green
 with all five holes in it.
 
+## Round W2 — what the end-to-end test and the gates found (2026-11-10)
+
+Round W1's walk-through was turned into a test for PR-D
+(`tests/e2e/squares-pool.spec.ts`) so that it runs every time and asserts what
+was written to the database, not what the page showed. Written, it found two
+defects on its first two runs. A third came from running the full gate set on
+the PR-C branch for the first time. All three are fixed in PR-C (#760).
+
+1. **(High) A name typed for someone else was silently replaced by the
+   organizer's own before they pressed Reserve.** The grid pre-filled the name
+   field with `useEffect(..., [currentUser])`. The app hands down a fresh copy
+   of the user object whenever anything on the user's document changes; each
+   one put the account's name back into the field. An organizer entering
+   squares for "Uncle Ray" straight after taking a square of their own had
+   their own name restored between typing and pressing the button, and the
+   squares were recorded for the organizer, on the organizer's account.
+   **The hand-driven walk-through (W1) had paused two and a half seconds
+   between those steps, which was long enough to miss it.** The test does not
+   pause. Fixed with `useAccountPrefill`: fill when someone signs in, and
+   again only if that account's own name or email changes. 9 tests on the
+   rendered hook; 7 mutants, the first of which is the original code.
+
+2. **(Medium) "Record winners", pressed straight after typing a score, was
+   refused with a red error.** The server refuses to record when the scores
+   the page shows are not the ones stored yet (round Q3, finding 7) — rightly.
+   But in the ordinary flow — type the score, press the button — the save had
+   usually not landed, and the commissioner was told "…press Record winners
+   again". The test was refused two runs in three. The page now waits out
+   that one refusal for up to about three seconds, sending the same scores
+   each time; every other refusal is reported at once. The server's guard is
+   unchanged. 11 tests; 9 mutants, 8 red, and the ninth showed a redundant
+   clamp that was removed.
+
+3. **(Medium) The wizard previewed brand colours the squares page does not
+   use.** PR-C's first commit switched the squares wizard to the NFL wizards'
+   themed branding step. `tests/branding-renders.test.ts` already pins that
+   only the NFL dashboards paint with those colours, and it was red — on a
+   branch whose full gate set had not been run before its first push.
+   Reverted to the plain step.
+
+**What it says.** Finding 1 is the third time in this plan that a check was
+green because of how it was run rather than because the code was right: the
+emulator tests that passed a token the app does not send (W1), the walk-through
+that paused where a person would not, and — finding 3 — a branch pushed before
+its gates. Each was caught by the next, more literal check. That is the
+argument for keeping the end-to-end test, and for the `codex` round that is
+still owed on all four PRs.
+
+**Not changed.** `create-pool.spec.ts` takes 7.7 minutes for seven wizards,
+most of it in a helper that waits for a SUPER_ADMIN role the wizards no longer
+need now that pool creation is open to members. It is slow, not wrong, and it
+is shared by the NFL wizard tests — left alone.
 ## Round Q5 — qodo on #758 (third re-review) and #760 (first review) (2026-11-10)
 
 All three surfaces read on each. #759's re-review of `fde71552` came back
@@ -969,6 +1022,8 @@ clean checkout of each PR's head.
 | #760 (C) | 1 finding, P1 | "Change Game" on the manage page carried the old game's scores, including its final and a `post` status. The score sync skips `post` pools, so the new game would never be scored, and the claim check would call it started | **Accepted — real** | `squaresGameLink` keeps the scores only when the SAME game is re-linked (`existing.gameId === id`); any other game, or a pool that had none, starts from fresh scores. The manage page passes the pool's current `gameId`. 2 tests; 2 mutants (always carry; drop the `gameId` pass-through), 2 red. #765's server path already did this |
 | #762 (K7) | "No discrete regressions" | — | — | — |
 | #761 (D) | "consistently reopens Squares … retains server-side runtime enforcement" | — | — | — |
+
+**Round X2 — codex on #760's fix (`3e8a2bd8`):** "No discrete, actionable regression introduced by the diff was identified." The #760 finding is closed.
 
 ## Round Q13 — qodo, re-review of #760 after codex round X1 (2026-11-11)
 

@@ -29,26 +29,29 @@ export const DEFAULT_POOL_TYPE_FLAGS: Record<PoolType, boolean> = {
 };
 
 /**
- * 🛑 POOL TYPES CLOSED IN CODE, WHICH `system/config.poolTypeFlags` CANNOT REOPEN.
+ * POOL TYPES CLOSED IN CODE, WHICH `system/config.poolTypeFlags` CANNOT REOPEN.
  *
- * Kevin, 2026-08-28: *"do not allow any Squares pools from being purchased or
- * setup for now."* The client switch (`src/config/season.ts`) hides the entry
- * points; THIS is the boundary that actually holds, because a callable is
- * reachable from DevTools or any custom client (codex r1 P1 on the closure PR).
+ * 🟢 EMPTY SINCE PLAN-SQUARES-REOPEN PR-D (2026-11). It held 'SQUARES' from
+ * 2026-08-28 (Kevin: *"do not allow any Squares pools from being purchased or
+ * setup for now"*) until the defects behind that closure were fixed.
  *
- * It is checked BEFORE `poolTypeFlags` and ignores it, deliberately. A stored
- * `poolTypeFlags.SQUARES: true` would otherwise override a `false` default and
- * silently reopen the very thing this closes — the merge in
- * `resolvePoolTypeFlags` puts the config on top. "Do not allow any" is not a
- * default anyone should be able to out-vote from a Firestore doc.
+ * The MECHANISM stays, and is tested with a planted type
+ * (`hardClosedMechanism.test.ts`), because it is the one closure that holds
+ * against everything: it is checked BEFORE `poolTypeFlags` and ignores it, it
+ * is not crossed by the simulator's bypass, and it also refuses purchase and
+ * activation of a pool of that type. A stored `poolTypeFlags.X: true` cannot
+ * out-vote it.
  *
- * The fail-open defaults below are untouched, so a missing or corrupt config
- * still cannot brick creation for every other type.
+ * To close a type for good, list it here AND in the other copy (the client's
+ * `src/utils/featureFlags.ts` / the server's `functions/src/lib/
+ * featureFlags.ts` — `tests/feature-flags-parity.test.ts` fails if they
+ * differ), then `npx firebase deploy` and rebuild `www`. To close one quickly
+ * and without a deploy, use `poolTypeFlags` instead.
  *
- * Reopening is one line here plus `npx firebase deploy`, alongside the client
- * flip. Reason and fix list: `SQUARES-BACKLOG.md`.
+ * The fail-open defaults are untouched, so a missing or corrupt config still
+ * cannot brick creation for any type.
  */
-export const HARD_CLOSED_POOL_TYPES: readonly PoolType[] = ['SQUARES'];
+export const HARD_CLOSED_POOL_TYPES: readonly PoolType[] = [];
 
 export const DEFAULT_MAINTENANCE_MODE = false;
 

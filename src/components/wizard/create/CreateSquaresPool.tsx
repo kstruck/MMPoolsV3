@@ -8,6 +8,7 @@ import { StepSquaresGame } from './StepSquaresGame';
 import { StepSquaresPayouts } from './StepSquaresPayouts';
 import { prefillFromUser } from './profilePrefill';
 import { buildSquaresPayload } from './buildSquaresPayload';
+import { PoolTypeGate } from '../../PoolTypeGate';
 
 // Creates the SQUARES pool and RESOLVES its poolId (no navigation) for LaunchStep.
 async function createSquaresPool(values: Record<string, unknown>): Promise<string> {
@@ -74,7 +75,11 @@ export function CreateSquaresPool(props: { user: User; onComplete: (poolId: stri
     },
   ], [user, onComplete]);
 
+  // THE OFF SWITCH THAT NEEDS NO DEPLOY (`system/config.poolTypeFlags.SQUARES`).
+  // The callable is what actually refuses a closed type; without this gate a
+  // commissioner would fill in all six steps and be refused on the last one.
   return (
+    <PoolTypeGate type="SQUARES">
     <div className="min-h-screen bg-slate-950 px-4 py-10">
       <div className="mx-auto mb-6 max-w-2xl">
         <h1 className="text-2xl font-bold text-white">Create a Squares pool</h1>
@@ -93,5 +98,6 @@ export function CreateSquaresPool(props: { user: User; onComplete: (poolId: stri
         onCancel={onCancel}
       />
     </div>
+    </PoolTypeGate>
   );
 }

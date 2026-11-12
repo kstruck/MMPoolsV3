@@ -38,6 +38,20 @@ export const drawSquaresFinalPrizeSchema = z.strictObject({ poolId });
 /** unlockSquaresPool — { poolId }. */
 export const unlockSquaresPoolSchema = z.strictObject({ poolId });
 
+/**
+ * linkSquaresPoolGame — { poolId, gameId, league? }.
+ *
+ * `gameId` is the score feed's event id (digits), or `null` to unlink. Nothing
+ * else about the game is accepted: the server looks it up in the feed and
+ * stores what the feed says (PLAN-SQUARES-SERVER-FIELDS §2b).
+ */
+export const linkSquaresPoolGameSchema = z.strictObject({
+    poolId,
+    gameId: z.string().trim().regex(/^\d{1,15}$/).nullable(),
+    league: z.enum(['nfl', 'college']).optional(),
+});
+
 export type RecomputeSquaresWinnersInput = z.infer<typeof recomputeSquaresWinnersSchema>;
 export type DrawSquaresFinalPrizeInput = z.infer<typeof drawSquaresFinalPrizeSchema>;
 export type UnlockSquaresPoolInput = z.infer<typeof unlockSquaresPoolSchema>;
+export type LinkSquaresPoolGameInput = z.infer<typeof linkSquaresPoolGameSchema>;

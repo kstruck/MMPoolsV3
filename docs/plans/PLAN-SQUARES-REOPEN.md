@@ -1,6 +1,9 @@
 # PLAN — reopen Squares: playable, fair, correctly paid, and consistent with the NFL wizards
 
-> **STATUS: IN PROGRESS under delegated authority (Kevin, 2026-11-10).**
+> **STATUS: BUILT — four PRs open (#758 A, #759 B, #760 C, #761 D — the reopen),
+> under delegated authority (Kevin, 2026-11-10). NOT MERGED, NOT DEPLOYED.**
+> Squares stays closed in production until all four are merged, functions are
+> deployed and `www` is rebuilt — in that order, by Kevin.
 >
 > Kevin, 2026-11-10: *"Let's get this working fully. We have time. I want
 > everything fixed and working properly and gaps identified and filled. Since I
@@ -57,8 +60,11 @@ none — they are scored by `nflAutoScoreJob`, which this plan does not touch.
    flag is what closes squares creation again, immediately.
    - **To stop winner records being written** (a payout looks wrong on a live
      game): set `system/config.squaresWinners.paused = true` in the Firebase
-     console. Scores keep syncing; nothing is recorded, changed or drawn until
-     it is cleared. Clear it (`false`) and the next sync run — within a
+     console. Scores keep syncing; no quarter winner is recorded or changed,
+     no prize amount is set and nothing is drawn until it is cleared. One
+     thing is still recorded, on purpose: an Every-Score-Pays pool notes each
+     scoring event at $0 as it happens, because an event not noted then
+     cannot be rebuilt later (D18). Clear it (`false`) and the next sync run — within a
      minute — records everything that was held, including a game that
      finished days earlier. It applies to every road to the winner records:
      the scheduled sync, the simulator, "Fix Sync" and the commissioner's
@@ -436,6 +442,25 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 
 Flip `SQUARES_CREATION_OPEN` and `HARD_CLOSED_POOL_TYPES`; invert
 `tests/squares-creation-closed.test.ts`; close the two backlog docs; HANDOFF.
+
+**As built.**
+- The three flags are flipped. The hard-close MECHANISM is kept and is tested
+  with a type planted in the real list (`hardClosedMechanism.test.ts`,
+  `feature-flags-parity.test.ts`): with the list empty, every test that
+  looped over it had become a loop over nothing.
+- **The off switch that needs no deploy is made usable.** The callable has
+  always refused a type whose `poolTypeFlags` entry is `false`; the squares
+  wizard now refuses on arrival too (`PoolTypeGate`), instead of letting a
+  commissioner fill in six steps and be refused on the last.
+- `tests/squares-creation-gate.test.ts` (renamed from `-closed`) pins the gate
+  open on both sides, the off switch, and the original defect fixed.
+- **The walk-through is a permanent end-to-end test**
+  (`tests/e2e/squares-pool.spec.ts`): the wizard with a linked game, three
+  kinds of claim, lock, hand scoring, recording, paying — asserting what was
+  written, not only what the page showed. On its first two runs it found two
+  defects (review log, round W2); both are fixed in PR-C.
+- **Deploy check added to the runbook:** `system/config.poolTypeFlags.SQUARES`
+  in production must not be `false`. Nobody here can read it.
 
 ---
 

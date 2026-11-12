@@ -1,18 +1,26 @@
 import React from 'react';
 import { DollarSign, Shield, Sparkles } from 'lucide-react';
 import type { GameState } from '../../types';
+import { LockedTermsNotice } from './LockedTermsNotice';
 
 interface WizardStepRulesProps {
     gameState: GameState;
     updateConfig: (updates: Partial<GameState>) => void;
+    /**
+     * The grid is locked: the price and the number sets are fixed
+     * (PLAN-SQUARES-SERVER-FIELDS). The square limit and "show paid" stay
+     * editable — they decide nothing about what a square pays.
+     */
+    locked?: boolean;
 }
 
-export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, updateConfig }) => {
+export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, updateConfig, locked = false }) => {
     return (
         <div className="space-y-6 animate-in slide-in-from-right duration-200">
             <div className="bg-surface border border-line rounded-xl p-6">
                 <h3 className="font-display font-bold uppercase text-xl text-[color:var(--text)] mb-2">Grid Rules</h3>
                 <p className="text-muted text-sm mb-6">Set the pricing and limitations for your players.</p>
+                {locked && <LockedTermsNotice>The grid is locked, so the price per square and the number sets are fixed: players bought their squares on them. To change them, reopen the grid first — that discards the drawn numbers.</LockedTermsNotice>}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-card p-4 rounded-lg border border-line">
                         <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-2">Cost Per Square</label>
@@ -23,8 +31,9 @@ export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, upd
                             <input
                                 type="number"
                                 value={gameState.costPerSquare}
+                                disabled={locked}
                                 onChange={(e) => updateConfig({ costPerSquare: parseInt(e.target.value) || 0 })}
-                                className="num bg-transparent border-b border-line text-2xl font-bold text-gold-700 dark:text-gold-400 w-full outline-none focus:border-navy-600 py-1"
+                                className="disabled:opacity-60 disabled:cursor-not-allowed num bg-transparent border-b border-line text-2xl font-bold text-gold-700 dark:text-gold-400 w-full outline-none focus:border-navy-600 py-1"
                             />
                         </div>
                     </div>
@@ -46,8 +55,9 @@ export const WizardStepRules: React.FC<WizardStepRulesProps> = ({ gameState, upd
                         <label className="block font-display font-bold uppercase text-[12px] tracking-[0.08em] text-[color:var(--text)] mb-1.5">Number Sets</label>
                         <select
                             value={gameState.numberSets}
+                            disabled={locked}
                             onChange={(e) => updateConfig({ numberSets: parseInt(e.target.value) || 1 })}
-                            className="w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
+                            className="disabled:opacity-60 disabled:cursor-not-allowed w-full rounded-md border-[1.5px] border-line bg-page px-3.5 py-3 font-body text-[15px] text-[color:var(--text)] cursor-pointer transition-colors focus:border-navy-600 focus:bg-surface focus:outline-none"
                         >
                             <option value="1">Single Set (Same numbers all game)</option>
                             <option value="4">4 Sets (New numbers every quarter)</option>
