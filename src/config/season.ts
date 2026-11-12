@@ -6,28 +6,32 @@
 export const POOLS_OPEN = true;
 
 /**
- * 🛑 SQUARES POOL CREATION IS CLOSED (Kevin, 2026-08-28).
+ * 🟢 SQUARES POOL CREATION IS OPEN AGAIN (PLAN-SQUARES-REOPEN PR-D, 2026-11).
  *
- * *"If there are issues with the Squares pools, make that a priority for
- * post-launch and do not allow any Squares pools from being purchased or setup
- * for now. Add a COMING SOON to those."*
+ * It was closed on 2026-08-28 (Kevin: *"do not allow any Squares pools from
+ * being purchased or setup for now. Add a COMING SOON to those."*) because a
+ * pool left on the wizard's default refused every non-owner's first square.
+ * `docs/plans/PLAN-SQUARES-REOPEN.md` fixed that and what the audit behind it
+ * found — the claim path, winner amounts, lock integrity, and a wizard that
+ * links the pool to its game — in PRs A, B and C. This flip is PR-D.
  *
- * The reason, verified: `CreateSquaresPool.tsx` defaults `maxSquaresPerPlayer`
- * to `0` and labels it "(0 = no limit)", but `functions/src/squares.ts:93`
- * refuses a claim whenever `mySquares >= pool.maxSquaresPerPlayer` — so at 0 a
- * non-owner is refused their FIRST square and the pool is unplayable by anyone
- * except the commissioner. Selling that is worse than not selling it.
+ * TO CLOSE SQUARES AGAIN, fastest first:
+ *   1. No deploy: Super-Admin → System → pool types, switch SQUARES off
+ *      (`system/config.poolTypeFlags.SQUARES = false`). The callable refuses
+ *      the type at once and the wizard shows "temporarily unavailable".
+ *   2. In code: set this back to `false` AND put 'SQUARES' back in
+ *      `HARD_CLOSED_POOL_TYPES` (both copies), deploy functions, rebuild `www`.
+ *      That is the closure no config document can out-vote.
  *
- * THIS SWITCH DOES NOT EXEMPT SUPER ADMINS, deliberately. "Do not allow any"
- * is unconditional, and a bypass is exactly how a broken pool gets created by
- * the one account that never sees the failure (the owner is the only player the
- * `!== userId` clause lets through). Flipping it back to `true` is one commit
- * and one Coolify rebuild.
+ * It is still its OWN switch, apart from `POOLS_OPEN`: closing it does not
+ * touch any other pool type. While `false` it exempts nobody, super admins
+ * included — the owner is the one player a broken claim path lets through, so
+ * a bypass is exactly how a broken pool gets created by the one account that
+ * never sees the failure.
  *
- * EXISTING squares pools are untouched — they still open, score and pay out.
- * This closes CREATION only. The fix list lives in `SQUARES-BACKLOG.md`.
+ * This is a BUILD-TIME constant: a change needs a Coolify `www` rebuild.
  */
-export const SQUARES_CREATION_OPEN = false;
+export const SQUARES_CREATION_OPEN = true;
 
 /**
  * 🛑 THE SEASON'S MILESTONE DATES — ONE SOURCE, BECAUSE FIVE COPIES DISAGREED.

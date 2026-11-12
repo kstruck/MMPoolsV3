@@ -1,4 +1,5 @@
 import React from 'react';
+import { squareCapLabel } from '@shared/squaresClaim';
 import {
     Trophy, Users, DollarSign, Calendar, Shield, Bell,
     CheckCircle, AlertCircle, Zap, Palette, Edit3, ShieldCheck
@@ -118,7 +119,7 @@ export const WizardStepSummary: React.FC<WizardStepSummaryProps> = ({
                 {/* Grid Rules */}
                 <SummaryCard title="Grid Rules" icon={DollarSign} step={3} color="emerald" onEditStep={onEditStep}>
                     <InfoRow label="Cost Per Square" value={`$${gameState.costPerSquare}`} highlight />
-                    <InfoRow label="Max Per Player" value={gameState.maxSquaresPerPlayer} />
+                    <InfoRow label="Max Per Player" value={squareCapLabel(gameState.maxSquaresPerPlayer)} />
                     <InfoRow label="Number Sets" value={gameState.numberSets === 4 ? '4 Sets (Quarterly)' : 'Single Set'} />
                     <InfoRow label="Show Paid Status" value={gameState.showPaid ? 'Yes' : 'No'} />
                 </SummaryCard>

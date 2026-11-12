@@ -32,8 +32,8 @@ export const CreatePoolSelection: React.FC<CreatePoolSelectionProps> = ({
 }) => {
     const navigate = useNavigate();
     const canCreate = canAccessPoolCreation(user);
-    // Squares is closed on its own switch while the claim-limit defect is fixed
-    // (config/season.ts). Everything else follows the master switch.
+    // Squares has its own switch (config/season.ts), so it can be closed
+    // without closing the rest. Everything else follows the master switch.
     const canCreateSquares = canAccessSquaresCreation(user);
 
     // Prevent unused variable TS errors for offseason options

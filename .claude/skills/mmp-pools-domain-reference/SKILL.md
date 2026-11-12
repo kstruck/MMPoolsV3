@@ -370,56 +370,98 @@ week 1 (`docs/NFL_POOLS_README.md:92-98`).
 
 # 3. Squares (Gameday Squares)
 
+> **Rewritten 2026-11-10 for PLAN-SQUARES-REOPEN (PRs #758, #759, #760 and the
+> reopen).** If those are not on the branch you are reading, this section
+> describes code you do not have — check with
+> `git log --oneline -1 -- shared/squaresPayouts.ts`.
+
 10×10 = 100-square grid on `pools/{poolId}` (`squares` array, index =
-`row*10 + col`). Score sync: `syncGameStatus` scheduled every 1 min
-(`functions/src/scoreUpdates.ts:1081`), per-pool Firestore transaction.
+`row*10 + col`). Winner records are `pools/{poolId}/winners/{docId}` —
+`q1`, `q1_reverse`, `half`, …, `final_rollover`, `event_{home}_{away}` —
+written by Cloud Functions only. Score sync: `syncGameStatus`, scheduled every
+minute (`functions/src/scoreUpdates.ts`), one Firestore transaction per pool.
+It reaches only pools that carry a `gameId`, and skips a pool on Manual Score
+Override.
 
 ## 3.1 Axis numbers (the fairness-critical part)
 
-- Generated SERVER-SIDE only, at lock time, by `lockPool` (callable,
-  `functions/src/poolParams.ts:47-81`) or `autoLockPools` (every-1-min
-  scheduler, `functions/src/autoLock.ts:125-152`). Firestore rules block any
-  client write to `axisNumbers` or `isLocked`.
-- Algorithm: Fisher-Yates shuffle of 0-9 using **`Math.random()`** — a uniform
-  permutation but NOT a CSPRNG (`autoLock.ts:14-21`, `poolParams.ts:59-67`,
-  `scoreUpdates.ts:9-16`). If any doc claims "CSPRNG", that is aspirational;
-  the trust mechanism is server-side generation + an append-only
-  `DIGITS_GENERATED` audit event carrying a SHA-256 commit hash of the digits
-  (`computeDigitsHash`, `functions/src/audit.ts:80`).
-- Test mode: `lockPool({ forceAxis: true })` writes fixed `[0..9]/[0..9]`
-  axes (`poolParams.ts:50-56`).
-- Winner mapping per period: home-score last digit indexes the HOME axis →
-  column; away-score last digit indexes the AWAY axis → row; winning square =
-  `row*10 + col` (`scoreUpdates.ts:866-872`). `reverseWinners` rule variation
-  additionally pays the digit-swapped square when it differs.
+- Drawn SERVER-SIDE, at lock time, ONCE. `lockPool` (callable,
+  `functions/src/poolParams.ts`) and `autoLockPools` (every-minute scheduler,
+  `functions/src/autoLock.ts`) draw numbers only for a grid that has none and
+  keep the ones it has. Reopening a grid (`unlockSquaresPool`, before kickoff
+  only) discards them, and the next lock draws new ones.
+- Algorithm: Fisher-Yates over **`crypto.randomInt`** in `lockPool`,
+  `autoLock.ts` and the four-set quarter draws in `scoreUpdates.ts`. One
+  exception is still open: a second auto-lock in `functions/src/reminders.ts`
+  uses a biased `Math.random` sort (plan K7 — that file is shared with running
+  pools). Each draw writes an append-only `DIGITS_GENERATED` audit event with
+  a SHA-256 commit hash (`computeDigitsHash`, `functions/src/audit.ts`).
+- ⚠️ `firestore.rules` does NOT stop a commissioner writing `isLocked`,
+  `scores`, `payouts` or `randomWinner` from the client (plan K4, Kevin's).
+  The callables are the supported path; the rules are not yet the guard.
+- Test mode: `lockPool({ forceAxis: true })` writes `[0..9]/[0..9]` — for a
+  confirmed SUPER_ADMIN only.
+- Winner mapping per period: the home score's last digit is looked up on the
+  HOME axis → column (across the top); the away score's last digit on the AWAY
+  axis → row (down the side); winning square = `row*10 + col`
+  (`winningSquare`, `shared/squaresPayouts.ts`).
 
 **Worked example:** home axis `[3,7,1,0,9,5,8,2,6,4]`, away axis
 `[5,2,8,1,7,0,9,4,3,6]`. Q1 ends Home 17 – Away 14: home digit 7 → column 1;
 away digit 4 → row 7; winner = square index 7×10+1 = **71**.
 
-## 3.2 Periods, 4-Sets, payouts, charity
+## 3.2 Periods, payouts, and who is paid what
 
-- Periods: `q1`, `half`, `q3`, `final`; payout percentages in
-  `payouts: {q1, half, q3, final}` (`functions/src/types.ts:54-59`). Winners
-  computed once per period on finalization (guarded by "was this period
-  already in freshPool.scores" — re-sync safe, `scoreUpdates.ts:938-972`).
-- **4-Sets mode** (`numberSets === 4`): q1 axes generated at lock; fresh q2/q3/q4
-  axes generated server-side the moment the prior period finalizes, each with
-  its own DIGITS_GENERATED audit + hash (`scoreUpdates.ts:899-931`). The live
-  `axisNumbers` field is swapped to the current quarter's set.
-- Rule variations (`types.ts:181-190`): `reverseWinners`, `quarterlyRollover`
-  (unsold-square money rolls forward), `scoreChangePayout` ("Every Score
-  Pays": fixed $ per scoring event, strategies `equal_split`/`hybrid`,
-  unsold handling `rollover_next`/`house`), `includeOvertime`.
-- **Final Prize Randomizer**: client-side manual button in the commissioner
-  AdminPanel, enabled only when the game is over AND the final-score square
-  is unsold; picks a random square (`randomWinner`) to receive the rollover
-  pot (`src/components/AdminPanel.tsx:758-804`; configured in
-  `WizardStepPayouts.tsx`). It is NOT a Cloud Function.
-- **Charity off-the-top**: `charity: {enabled, name, percentage 0-100}`;
-  `charityAmount = grossPot × pct/100`, `prizePot = grossPot − charityAmount`,
-  both floored (`functions/src/statsTrigger.ts:34-44`). Charity totals feed
-  the public global stats (`totalDonated`).
+**One engine:** `shared/squaresPayouts.ts` (pure). The server records winners
+with it and the pool page displays with it. Amounts are to the cent; splits
+never create or lose a cent.
+
+- Periods: `q1`, `half`, `q3`, `final`; shares in `payouts: {q1, half, q3,
+  final}` (percent, total 100).
+- **The pot** (`squaresPot`): sold squares × cost per square, less the charity
+  share. Prize percentages apply to the pot AFTER charity.
+- **Winner records are reconciled, not written once.** On every score pass
+  `planWinnerWrites` (`shared/squaresWinnerPlan.ts`) compares what the rules
+  call for with what is stored and writes only the differences. "Paid" is kept
+  while the winner is unchanged and cleared, with a CRITICAL audit line, if a
+  corrected score moves the win.
+- **Reverse winners:** the winning square and the digit-swapped square each
+  claim half. When they are the same square (14–24) it takes the whole prize.
+  A half whose square is unsold follows the unsold rule.
+- **Unsold:** with `quarterlyRollover` on, the prize moves to the next period;
+  an unsold FINAL goes to the last paid winner (`last_winner`) or to a draw
+  (`random`). With rollover off it is recorded `Unsold`.
+- **The draw** for an unclaimed final prize is `drawSquaresFinalPrize`: once,
+  on the server, `crypto.randomInt`, among SOLD squares. A draw that has been
+  made stands whatever the rule is set to afterwards.
+- **Every Score Pays** (`scoreChangePayout`): each scoring event is recorded
+  from the live feed as it happens — it needs a linked game, and cannot be
+  rebuilt from quarter-end scores. Strategies `equal_split` / `hybrid`; unsold
+  handling `rollover_next` / `split_winners` / `house`.
+- **4-Sets mode** (`numberSets === 4`): q1 axes at lock; each later set is
+  drawn server-side when the prior period goes final, with its own audit hash.
+- **Old pools.** A squares pool created before 2026-11-10
+  (`SQUARES_RULES_SINCE_MS`) keeps its winner records exactly as recorded; none
+  of the above is applied to it.
+- **Hand-entered scores** record nothing by themselves. The commissioner's
+  manage page shows what recording would add, change and remove, and "Record
+  winners" (`recomputeSquaresWinners`) does it.
+- **Pause switch:** `system/config.squaresWinners.paused = true` stops winner
+  records being written, on every path, without a deploy
+  (`functions/src/lib/squaresPause.ts`). Pools it holds are marked and recorded
+  when it clears.
+- **Charity in the site-wide public stats** (`totalDonated`) is computed
+  separately in `functions/src/statsTrigger.ts`, with both amounts floored to
+  whole dollars. That is a display total, not what winners are paid.
+
+## 3.3 Who owns a square
+
+`shared/squaresClaim.ts` (pure): `planClaim` decides a whole selection
+all-or-nothing. `maxSquaresPerPlayer: 0` means NO LIMIT. The limit counts
+squares held by the same account, the same guest device, or under the same
+name. A guest's proof of ownership is stored as `sha256(poolId:key)`; the key
+itself is never on the pool document. A square the organizer enters under
+someone else's name carries that name and no account.
 
 ---
 
@@ -546,8 +588,8 @@ Select-String -Path functions\src\nflPools.ts -Pattern "SPREADS_NOT_LOCKED"; Sel
 # Playoff multiplier defaults (3-way divergence)
 Select-String -Path functions\src\playoffPools.ts,src\components\wizard\create\CreatePlayoffPool.tsx,src\components\PlayoffPool\PlayoffDashboard.tsx -Pattern "WILD_CARD.{0,30}(10|1)"
 
-# Squares RNG mechanism (Math.random vs crypto)
-Select-String -Path functions\src\autoLock.ts,functions\src\poolParams.ts,functions\src\scoreUpdates.ts -Pattern "Math.random"
+# Squares RNG mechanism — expect crypto.randomInt in the first three, Math.random only in reminders.ts (plan K7)
+Select-String -Path functions\src\autoLock.ts,functions\src\poolParams.ts,functions\src\scoreUpdates.ts,functions\src\reminders.ts -Pattern "randomInt|Math.random"
 
 # Charity off-the-top math
 Select-String -Path functions\src\statsTrigger.ts -Pattern "charity" -Context 0,2

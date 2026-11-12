@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
     reserveSquareSchema,
+    reserveSquaresSchema,
     markSquaresPaidSchema,
     purchasePropCardSchema,
 } from "../schemas/squaresProps";
@@ -31,6 +32,37 @@ describe("reserveSquareSchema", () => {
         expect(reserveSquareSchema.safeParse({ poolId: "p1" }).success).toBe(false);
         expect(reserveSquareSchema.safeParse({ poolId: "p1", squareId: 4.5 }).success).toBe(false);
         expect(reserveSquareSchema.safeParse({ poolId: "p1", squareId: "42" }).success).toBe(false);
+    });
+});
+
+describe("reserveSquaresSchema — a whole selection", () => {
+    const base = { poolId: "p1", squareIds: [1, 2, 3], customerDetails: { name: "Carol" }, pickedAsName: "Carol" };
+    it("accepts a selection, with or without a device key", () => {
+        expect(reserveSquaresSchema.safeParse(base).success).toBe(true);
+        expect(reserveSquaresSchema.safeParse({ ...base, guestDeviceKey: "g2_" + "a".repeat(36) }).success).toBe(true);
+        expect(reserveSquaresSchema.safeParse({ ...base, guestDeviceKey: null }).success).toBe(true);
+    });
+    it("accepts an old or malformed key — whether it is HONOURED is not the schema's call", () => {
+        // A tab open across the deploy still sends the pre-prefix key. Refusing
+        // it here would refuse the reservation; the server reserves the square
+        // and simply gives that key no identity.
+        expect(reserveSquaresSchema.safeParse({ ...base, guestDeviceKey: "dev-1" }).success).toBe(true);
+    });
+    it("bounds the selection to the 10x10 grid", () => {
+        expect(reserveSquaresSchema.safeParse({ ...base, squareIds: [] }).success).toBe(false);
+        expect(reserveSquaresSchema.safeParse({ ...base, squareIds: [100] }).success).toBe(false);
+        expect(reserveSquaresSchema.safeParse({ ...base, squareIds: [-1] }).success).toBe(false);
+        expect(reserveSquaresSchema.safeParse({ ...base, squareIds: [1.5] }).success).toBe(false);
+        expect(reserveSquaresSchema.safeParse({ ...base, squareIds: Array.from({ length: 100 }, (_, i) => i) }).success).toBe(true);
+    });
+    it("rejects duplicate ids", () => {
+        expect(reserveSquaresSchema.safeParse({ ...base, squareIds: [4, 4] }).success).toBe(false);
+    });
+    it("rejects unknown top-level keys and strips unknown customerDetails keys", () => {
+        expect(reserveSquaresSchema.safeParse({ ...base, reservedByUid: "someone-else" }).success).toBe(false);
+        const r = reserveSquaresSchema.safeParse({ ...base, customerDetails: { name: "C", ssn: "x" } });
+        expect(r.success).toBe(true);
+        if (r.success) expect("ssn" in (r.data.customerDetails as object)).toBe(false);
     });
 });
 

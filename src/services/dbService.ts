@@ -1048,16 +1048,94 @@ export const dbService = {
     },
 
     // --- CLOUD FUNCTIONS ---
-    toggleWinnerPaid: async (poolId: string, winnerId: string): Promise<{ success: boolean; isPaid: boolean }> => {
+    /**
+     * `expected` is the winner the commissioner was looking at. The server
+     * refuses if the record now names someone else, so a click meant for a
+     * winner that has since changed cannot mark the new one paid.
+     */
+    toggleWinnerPaid: async (
+        poolId: string,
+        winnerId: string,
+        expected?: { owner: string; squareId: number; /** What is being asked for: paid, or not paid. */ paid?: boolean },
+    ): Promise<{ success: boolean; isPaid: boolean; unchanged?: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'toggleWinnerPaid');
-            const result = await fn(withCorrelationId({ poolId, winnerId }));
-            return result.data as { success: boolean; isPaid: boolean };
+            const result = await fn(withCorrelationId({
+                poolId, winnerId,
+                ...(expected ? { expectedOwner: expected.owner, expectedSquareId: expected.squareId } : {}),
+                ...(typeof expected?.paid === 'boolean' ? { paid: expected.paid } : {}),
+            }));
+            return result.data as { success: boolean; isPaid: boolean; unchanged?: boolean };
         } catch (error) {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
                 context: { operation: 'toggleWinnerPaid', poolId, winnerId }
             });
+            throw error;
+        }
+    },
+
+    /** Squares: bring the winner records in line with the scores on the pool. */
+    recomputeSquaresWinners: async (
+        poolId: string,
+        /** The quarter scores the commissioner is looking at; the server refuses if the stored ones differ. */
+        expectedScores?: Record<'q1' | 'half' | 'q3' | 'final', { home: number; away: number } | null>,
+    ): Promise<{ success: boolean; changed: number; eventsNotRecorded?: boolean }> => {
+        const fn = httpsCallable(functions, 'recomputeSquaresWinners');
+        const result = await fn(withCorrelationId({ poolId, ...(expectedScores ? { expectedScores } : {}) }));
+        return result.data as { success: boolean; changed: number; eventsNotRecorded?: boolean };
+    },
+
+    /** Squares: the one-time server-side random draw for an unclaimed final prize. */
+    drawSquaresFinalPrize: async (poolId: string): Promise<{ success: boolean; squareId: number; owner: string; amount: number }> => {
+        try {
+            const fn = httpsCallable(functions, 'drawSquaresFinalPrize');
+            const result = await fn(withCorrelationId({ poolId }));
+            return result.data as { success: boolean; squareId: number; owner: string; amount: number };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'drawSquaresFinalPrize', poolId }
+            });
+            throw error;
+        }
+    },
+
+    /** Squares: reopen the grid for sales before kickoff. Discards the drawn numbers. */
+    unlockSquaresPool: async (poolId: string): Promise<{ success: boolean; numbersDiscarded: boolean }> => {
+        try {
+            const fn = httpsCallable(functions, 'unlockSquaresPool');
+            const result = await fn(withCorrelationId({ poolId }));
+            return result.data as { success: boolean; numbersDiscarded: boolean };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.HIGH,
+                context: { operation: 'unlockSquaresPool', poolId }
+            });
+            throw error;
+        }
+    },
+
+    /**
+     * Link a squares pool to a game (or unlink it, `gameId: null`) — the SERVER
+     * looks the game up in the score feed (PLAN-SQUARES-SERVER-FIELDS).
+     * Rejects with the server's own explanation (`failed-precondition`,
+     * `not-found`, `unavailable`), which the caller shows; those are refusals,
+     * not faults, so they are not sent to the error reporter.
+     */
+    linkSquaresPoolGame: async (poolId: string, gameId: string | null, league?: 'nfl' | 'college'): Promise<{ linked: boolean }> => {
+        try {
+            const fn = httpsCallable(functions, 'linkSquaresPoolGame');
+            const result = await fn(withCorrelationId({ poolId, gameId, ...(league ? { league } : {}) }));
+            return result.data as { linked: boolean };
+        } catch (error) {
+            const code = (error as { code?: string } | null)?.code;
+            if (code !== 'functions/failed-precondition' && code !== 'functions/not-found' && code !== 'functions/unavailable') {
+                await errorHandler.handleError(error, {
+                    severity: ErrorSeverity.HIGH,
+                    context: { operation: 'linkSquaresPoolGame', poolId }
+                });
+            }
             throw error;
         }
     },
@@ -1136,6 +1214,30 @@ export const dbService = {
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
                 context: { operation: 'reserveSquare', poolId, squareId }
+            });
+            throw error;
+        }
+    },
+
+    /**
+     * Reserve a whole selection in ONE call, all or nothing. Replaces a
+     * `reserveSquare` per square: a refusal part-way through that left the
+     * earlier squares reserved while reporting the claim as failed.
+     */
+    reserveSquares: async (
+        poolId: string, squareIds: number[], customerDetails?: PlayerDetails, guestDeviceKey?: string, pickedAsName?: string,
+        /** The organizer entering squares for somebody else — see `isEnteringForSomeoneElse`. */
+        onBehalf?: boolean,
+    ): Promise<{ reserved: number[]; alreadyHeld: number[] }> => {
+        try {
+            const fn = httpsCallable(functions, 'reserveSquares');
+            const result = await fn(withCorrelationId({ poolId, squareIds, customerDetails, guestDeviceKey, pickedAsName, ...(onBehalf ? { onBehalf: true } : {}) }));
+            const data = (result.data ?? {}) as { reserved?: number[]; alreadyHeld?: number[] };
+            return { reserved: data.reserved ?? [], alreadyHeld: data.alreadyHeld ?? [] };
+        } catch (error) {
+            await errorHandler.handleError(error, {
+                severity: ErrorSeverity.MEDIUM,
+                context: { operation: 'reserveSquares', poolId, squareIds }
             });
             throw error;
         }
@@ -1252,12 +1354,25 @@ export const dbService = {
         }
     },
 
-    claimMySquares: async (poolId: string, guestDeviceKey: string): Promise<{ success: boolean; warnings: string[] }> => {
+    /**
+     * Take this browser's guest squares into the signed-in account.
+     *
+     * `quiet` is for the pool page's speculative call on load: most visitors
+     * hold no guest squares, so a failure there is not something to tell them.
+     */
+    claimMySquares: async (poolId: string, guestDeviceKey: string, opts?: { quiet?: boolean }): Promise<{ success: boolean; claimed: number[]; warnings: string[]; overLimit: boolean }> => {
         try {
             const fn = httpsCallable(functions, 'claimMySquares');
             const result = await fn(withCorrelationId({ poolId, guestDeviceKey }));
-            return result.data as { success: boolean; warnings: string[] };
+            const data = (result.data ?? {}) as { success?: boolean; claimed?: number[]; warnings?: string[]; overLimit?: boolean };
+            // `overLimit`: the call worked and moved NOTHING, because the squares
+            // would have put the account past the pool's limit.
+            return { success: data.success !== false, claimed: data.claimed ?? [], warnings: data.warnings ?? [], overLimit: data.overLimit === true };
         } catch (error) {
+            if (opts?.quiet) {
+                logger.warn('[claimMySquares] speculative claim failed', error);
+                return { success: false, claimed: [], warnings: [], overLimit: false };
+            }
             await errorHandler.handleError(error, {
                 severity: ErrorSeverity.MEDIUM,
                 context: { operation: 'claimMySquares', poolId }

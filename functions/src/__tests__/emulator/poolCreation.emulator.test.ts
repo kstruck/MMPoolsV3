@@ -36,29 +36,69 @@ afterAll(() => test.cleanup());
 
 describe('createPool side-effect bundle (emulator)', () => {
   /**
-   * 🛑 SQUARES CREATION IS CLOSED (Kevin, 2026-08-28) — see
-   * `HARD_CLOSED_POOL_TYPES` in `lib/featureFlags.ts` and `SQUARES-BACKLOG.md`.
-   *
-   * This test used to prove the side-effect bundle THROUGH a squares pool. The
-   * bundle is type-agnostic (`createPool` writes it for whatever type it
-   * builds), so the coverage moves to PROPS — the other type this same callable
-   * creates — and the squares case becomes the closure's proof at the real
-   * boundary, which is the only boundary that counts: hiding the client entry
-   * points does not stop a callable being invoked from DevTools.
+   * SQUARES IS CREATED AGAIN (PLAN-SQUARES-REOPEN PR-D). From 2026-08-28 until
+   * that plan landed, this test proved the callable REFUSED the type. It now
+   * proves the side-effect bundle through a squares pool, as it did before the
+   * closure — and the test after it proves the off switch that needs no
+   * deploy, at the real boundary: the callable, not the page.
    */
-  it('SQUARES: the callable REFUSES it, whatever the client shows', async () => {
+  it('SQUARES: pool + managedPools + POOL_CREATED activity + free billing + role upgrade; no participations', async () => {
     await seedUser('u1', 'PARTICIPANT');
-    await expect(
-      wrappedCreatePool({ data: { name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never),
-    ).rejects.toThrow(/SQUARES pools are temporarily disabled/);
+    const res = (await wrappedCreatePool({ data: { name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never)) as { poolId: string };
+    expect(res.poolId).toBeTruthy();
 
-    // Nothing was written on the way to the refusal.
-    expect((await db.collection('pools').get()).size).toBe(0);
-    expect((await db.collection('users').doc('u1').collection('managedPools').get()).size).toBe(0);
-    const acts = await db.collection('users').doc('u1').collection('activity').where('type', '==', 'POOL_CREATED').get();
-    expect(acts.size).toBe(0);
-    // ...and the refusal did not promote the user to commissioner.
-    expect(((await db.collection('users').doc('u1').get()).data() as Record<string, unknown>).role).toBe('PARTICIPANT');
+    const pool = (await db.collection('pools').doc(res.poolId).get()).data() as {
+      type?: string; squares: unknown[]; billing: { status: string }; ownerId: string; isLocked: boolean;
+    };
+    // A create with no `type` is a squares pool — that is what the wizard's
+    // predecessor sent, and what an old client still sends.
+    expect(pool.type ?? 'SQUARES').toBe('SQUARES');
+    expect(pool.squares).toHaveLength(100);
+    expect(pool.billing.status).toBe('free');
+    expect(pool.ownerId).toBe('u1');
+    expect(pool.isLocked).toBe(false);
+
+    const mp = await db.collection('users').doc('u1').collection('managedPools').doc(res.poolId).get();
+    expect(mp.exists).toBe(true);
+
+    const activity = await db.collection('users').doc('u1').collection('activity').where('type', '==', 'POOL_CREATED').get();
+    expect(activity.size).toBe(1);
+    expect(activity.docs[0].data().poolId).toBe(res.poolId);
+
+    const participations = await db.collection('users').doc('u1').collection('participations').get();
+    expect(participations.size).toBe(0);
+
+    const user = (await db.collection('users').doc('u1').get()).data() as { role: string };
+    expect(user.role).toBe('COMMISSIONER');
+  });
+
+  it('SQUARES: with the runtime flag off the callable REFUSES it and writes nothing — and other types are still created', async () => {
+    await seedUser('u1', 'PARTICIPANT');
+    const config = db.collection('system').doc('config');
+    await config.set({ poolTypeFlags: { SQUARES: false } });
+    try {
+      await expect(
+        wrappedCreatePool({ data: { type: 'SQUARES', name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never),
+      ).rejects.toThrow(/SQUARES pools are temporarily disabled/);
+      // ...the same for a create that names no type, which is a squares pool.
+      await expect(
+        wrappedCreatePool({ data: { name: 'Test Squares', costPerSquare: 10 }, auth: { uid: 'u1', token: {} } } as never),
+      ).rejects.toThrow(/SQUARES pools are temporarily disabled/);
+
+      // Nothing was written on the way to the refusal.
+      expect((await db.collection('pools').get()).size).toBe(0);
+      expect((await db.collection('users').doc('u1').collection('managedPools').get()).size).toBe(0);
+      const acts = await db.collection('users').doc('u1').collection('activity').where('type', '==', 'POOL_CREATED').get();
+      expect(acts.size).toBe(0);
+      // ...and the refusal did not promote the user to commissioner.
+      expect(((await db.collection('users').doc('u1').get()).data() as Record<string, unknown>).role).toBe('PARTICIPANT');
+
+      // The flag closes squares only.
+      const props = (await wrappedCreatePool({ data: { type: 'PROPS', name: 'Test Props', props: { cost: 5, maxCards: 1, questions: [] } }, auth: { uid: 'u1', token: {} } } as never)) as { poolId: string };
+      expect(props.poolId).toBeTruthy();
+    } finally {
+      await config.delete();
+    }
   });
 
   it('PROPS: pool + managedPools + POOL_CREATED activity + free billing + role upgrade; no participations', async () => {

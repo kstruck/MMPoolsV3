@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { squareCapSentence } from '@shared/squaresClaim';
 import type { GameState } from '../types';
 import { PoolTimer } from './PoolTimer';
 import { Lock, Trophy, Zap, HelpCircle, ExternalLink, Check, Copy, Shuffle } from 'lucide-react';
@@ -104,7 +105,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                             />
                         </div>
 
-                        <div><h3 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-xs mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm num">{mode === 'props' ? `Max ${gameState.props?.maxCards || 1} cards per player` : `Max ${gameState.maxSquaresPerPlayer || 'N/A'} squares per player`}</p></div>
+                        <div><h3 className="text-muted font-display font-bold uppercase tracking-[0.08em] text-xs mb-1">Limits:</h3><p className="text-[color:var(--text)] font-medium text-sm num">{mode === 'props' ? `Max ${gameState.props?.maxCards || 1} cards per player` : squareCapSentence(gameState.maxSquaresPerPlayer)}</p></div>
 
                         {mode === 'props' && (
                             <>
@@ -138,10 +139,11 @@ export const StatusCard: React.FC<StatusCardProps> = ({ gameState, onOpenRules, 
                                             This pool pays out whenever the score changes.
                                             {gameState.ruleVariations.scoreChangePayoutStrategy === 'equal_split' ? (
                                                 <span> <strong>Equal Split:</strong> The total prize pot is divided equally among all scoring events.</span>
-                                            ) : gameState.ruleVariations.scoreChangePayoutStrategy === 'hybrid' ? (
-                                                <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
                                             ) : (
-                                                <span> A fixed amount of <strong>${gameState.scoreChangePayoutAmount}</strong> is deducted from the pot for each score.</span>
+                                                // Hybrid — which is also how a pool with no strategy set is
+                                                // paid (`scoreEventStrategy`). This used to describe a third,
+                                                // "fixed amount per score" mode that no code has paid by.
+                                                <span> <strong>Hybrid Split:</strong> Weighted payouts for Final/Halftime, with the remainder split among all other scores.</span>
                                             )}
                                             <br />
                                             <span className="text-faint italic mt-1 block">

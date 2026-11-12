@@ -33,6 +33,32 @@ export const reserveSquareSchema = z.strictObject({
     customerDetails: nullish(customerDetails),
     guestDeviceKey: nullish(z.string().max(200)),
     pickedAsName: nullish(z.string().max(200)),
+    // The organizer entering squares for somebody else (see
+    // `isEnteringForSomeoneElse`). Honoured for the pool's owner only.
+    onBehalf: nullish(z.boolean()),
+});
+
+/**
+ * reserveSquares — PUBLIC: a whole selection in one call, all or nothing.
+ *
+ * `squareIds` is 1–100 distinct ids on the 10x10 grid. `guestDeviceKey` is the
+ * same loosely-bounded string as on `reserveSquare`: whether a key is one the
+ * server will HONOUR is decided by `isCurrentGuestKey`, not here — an old or
+ * malformed key must still reserve the square, it just carries no identity.
+ */
+export const reserveSquaresSchema = z.strictObject({
+    poolId,
+    squareIds: z
+        .array(z.number().int().min(0).max(99))
+        .min(1)
+        .max(100)
+        .refine((ids) => new Set(ids).size === ids.length, { message: "duplicate square ids" }),
+    customerDetails: nullish(customerDetails),
+    guestDeviceKey: nullish(z.string().max(200)),
+    pickedAsName: nullish(z.string().max(200)),
+    // The organizer entering squares for somebody else (see
+    // `isEnteringForSomeoneElse`). Honoured for the pool's owner only.
+    onBehalf: nullish(z.boolean()),
 });
 
 /** markSquaresPaid — { poolId, squareIds (<=100: full 10x10 board), isPaid }. */
@@ -55,5 +81,6 @@ export const purchasePropCardSchema = z.strictObject({
 });
 
 export type ReserveSquareInput = z.infer<typeof reserveSquareSchema>;
+export type ReserveSquaresInput = z.infer<typeof reserveSquaresSchema>;
 export type MarkSquaresPaidInput = z.infer<typeof markSquaresPaidSchema>;
 export type PurchasePropCardInput = z.infer<typeof purchasePropCardSchema>;
