@@ -91,11 +91,14 @@ export const canAccessPoolCreation = (user: User | null | undefined): boolean =>
 };
 
 /**
- * Whether SQUARES creation may be reached. Closed for everyone while
- * `SQUARES_CREATION_OPEN` is false — including super admins, which is the one
- * way this differs from `canAccessPoolCreation` and is deliberate
- * (see `config/season.ts`). Takes the user so every call site reads the same
- * whether or not the switch ever grows a per-user exemption.
+ * Whether SQUARES creation may be reached. Open since PLAN-SQUARES-REOPEN PR-D:
+ * anyone who can create a pool can create a squares pool.
+ *
+ * It keeps its own switch (`SQUARES_CREATION_OPEN`, `config/season.ts`) so
+ * squares can be closed again without touching any other type — and while that
+ * switch is `false` it is closed for everyone, super admins included. Takes the
+ * user so every call site reads the same whether or not the switch ever grows
+ * a per-user exemption.
  */
 export const canAccessSquaresCreation = (user: User | null | undefined): boolean => {
     return SQUARES_CREATION_OPEN && canAccessPoolCreation(user);

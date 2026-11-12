@@ -6,6 +6,9 @@ import { GameState } from "./types";
 import { writeAuditEvent, computeDigitsHash } from "./audit";
 import { withHeartbeat } from "./lib/heartbeat";
 import { autoLockVerdict } from "./lib/heartbeatVerdicts";
+import { isUsableAxis } from "./lib/squaresGame";
+import { randomInt } from "crypto";
+import { SQUARES_LOCK_LEAD_MS } from "./shared/squaresDefaults";
 
 const db = admin.firestore();
 
@@ -13,10 +16,13 @@ const db = admin.firestore();
 // Fisher-Yates shuffle — produces a uniform permutation of 0-9. A
 // `.sort(() => Math.random() - 0.5)` shuffle is biased, which is unacceptable
 // for axis numbers that determine real-money payouts.
+//
+// Over `crypto.randomInt`, as `lockPool` and the quarter draws in
+// scoreUpdates.ts are: these numbers decide who is paid (sweep SW2).
 function generateDigits(): number[] {
     const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     for (let i = nums.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = randomInt(i + 1);
         [nums[i], nums[j]] = [nums[j], nums[i]];
     }
     return nums;
@@ -44,6 +50,33 @@ async function lockAllWithConcurrency(pools: GameState[], limit = 15): Promise<n
 }
 
 // --- DEDICATED AUTO-LOCK SCHEDULER (Runs Every 1 Minute) ---
+/**
+ * How far ahead of its lock time a grid on the reminders path is locked.
+ *
+ * This job runs every minute. With a 30-second lead it reaches a given grid
+ * anywhere from 30 seconds BEFORE its lock time to 30 seconds AFTER — and in
+ * that second half another job can get there first: `runReminders`
+ * (`reminders.ts`) also locks a squares grid whose time has passed, and draws
+ * its numbers with a biased `Math.random` sort (plan K7; that file sends the
+ * NFL reminders and is not this plan's to change).
+ *
+ * For a SQUARES grid the lead is 90 seconds, so this job has always run once
+ * before the lock time arrives and the other finds the grid locked. A squares
+ * grid therefore locks between 90 and 30 seconds early. Every other pool type
+ * keeps 30 seconds, exactly as before.
+ *
+ * This closes the race while this job is healthy. If it is down at that
+ * minute the other job still decides the grid — which is why K7 is first on
+ * the list for Kevin.
+ *
+ * The number itself is in `shared/squaresDefaults.ts`, because the pool page
+ * shows players when picks close and has to be working from the same one.
+ */
+export { SQUARES_LOCK_LEAD_MS };
+const DEFAULT_LOCK_LEAD_MS = 30_000;
+export const squaresLockLeadMs = (pool: { type?: string }): number =>
+    !pool.type || pool.type === 'SQUARES' ? SQUARES_LOCK_LEAD_MS : DEFAULT_LOCK_LEAD_MS;
+
 export const autoLockPools = functions.scheduler.onSchedule(
     { schedule: "every 1 minutes", timeoutSeconds: 300, memory: "512MiB" },
     withHeartbeat('autoLockPools', async () => {
@@ -85,7 +118,7 @@ export const autoLockPools = functions.scheduler.onSchedule(
                 console.warn(`[AutoLock] Invalid lockAt for pool ${pool.id}:`, raw);
                 continue;
             }
-            if (lockAtNum - now <= 30000) duePools.push(pool);
+            if (lockAtNum - now <= squaresLockLeadMs(pool)) duePools.push(pool);
         }
 
         for (const doc of bracketSnapshot.docs) {
@@ -146,31 +179,38 @@ async function executeAutoLock(pool: GameState): Promise<boolean> {
             if (type === 'SQUARES') {
                 updates.lockGrid = true; // Legacy/UI sync
 
-                // Generate Digits
-                const axisNumbers = {
-                    home: generateDigits(),
-                    away: generateDigits(),
-                };
-                updates.axisNumbers = axisNumbers;
-
-                // Handle 4-Set initialization
-                if (currentPool.numberSets === 4) {
-                    updates.quarterlyNumbers = {
-                        q1: axisNumbers
+                // THE NUMBERS ARE DRAWN ONCE (PLAN-SQUARES-REOPEN D9; sweep SW2).
+                // This used to draw a fresh set on every auto-lock, so a grid
+                // that had been locked by hand and then unlocked by an old
+                // browser bundle (which leaves the numbers in place) was
+                // re-rolled at kickoff. `lockPool` keeps a grid's numbers; so
+                // does this. `unlockSquaresPool` is the one way to discard them.
+                if (!isUsableAxis(currentPool.axisNumbers)) {
+                    const axisNumbers = {
+                        home: generateDigits(),
+                        away: generateDigits(),
                     };
-                }
+                    updates.axisNumbers = axisNumbers;
 
-                // Log Digits Generation
-                const digitsHash = computeDigitsHash({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
-                await writeAuditEvent({
-                    poolId: pool.id,
-                    type: 'DIGITS_GENERATED',
-                    message: 'Auto-Generated Axis Numbers upon Auto-Lock',
-                    severity: 'INFO',
-                    actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
-                    payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets }
-                    // NO dedupeKey - prevent read-after-write error
-                }, t);
+                    // Handle 4-Set initialization
+                    if (currentPool.numberSets === 4) {
+                        updates.quarterlyNumbers = {
+                            q1: axisNumbers
+                        };
+                    }
+
+                    // Log Digits Generation
+                    const digitsHash = computeDigitsHash({ home: axisNumbers.home, away: axisNumbers.away, poolId: pool.id, period: 'q1' });
+                    await writeAuditEvent({
+                        poolId: pool.id,
+                        type: 'DIGITS_GENERATED',
+                        message: 'Auto-Generated Axis Numbers upon Auto-Lock',
+                        severity: 'INFO',
+                        actor: { uid: 'system', role: 'SYSTEM', label: 'AutoLock' },
+                        payload: { period: 'initial', commitHash: digitsHash, numberSets: currentPool.numberSets }
+                        // NO dedupeKey - prevent read-after-write error
+                    }, t);
+                }
             } else if (type === 'BRACKET') {
                 updates.status = 'LOCKED';
                 updates.lockAt = Timestamp.now(); // Ensure sync

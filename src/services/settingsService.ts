@@ -23,6 +23,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
     autoClose: { enabled: false, dryRun: true },
     // Live-score ticker scroll duration (seconds; higher = slower).
     tickerDurationSec: 60,
+    // Squares winner records: RUNNING. `paused: true` is the emergency stop,
+    // and absent means the same as false — the server reads it that way
+    // (functions/src/lib/squaresPause.ts). Nothing on the client reads this;
+    // it is here so the defaults name every switch the document can carry.
+    squaresWinners: { paused: false },
 };
 
 export const settingsService = {

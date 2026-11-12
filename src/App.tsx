@@ -350,9 +350,9 @@ const App: React.FC = () => {
               </div>
             ) : <Navigate to="/" replace />
           } />
-          {/* SQUARES CREATION IS CLOSED (config/season.ts). The route bounces
-              rather than 404s, so a bookmarked or emailed wizard link lands
-              somewhere useful instead of nowhere. */}
+          {/* Squares has its own creation switch (config/season.ts). When it
+              is off the route bounces rather than 404s, so a bookmarked or
+              emailed wizard link lands somewhere useful instead of nowhere. */}
           <Route path="/create/squares" element={
             user && canAccessSquaresCreation(user) ? (
               <div className="min-h-screen bg-page text-[color:var(--text)] flex flex-col">

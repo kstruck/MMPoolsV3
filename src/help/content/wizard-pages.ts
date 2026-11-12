@@ -93,8 +93,8 @@ export const WIZARDS: readonly WizardDef[] = [
     title: 'Create a squares pool',
     shortName: 'Squares wizard',
     summary:
-      'Set up a hundred-square grid on one game. Five steps: the basics, the matchup and grid rules, what a square costs, your branding, and launch.',
-    steps: ['basics', 'grid', 'fee', 'branding', 'launch'],
+      'Set up a hundred-square grid on one game. Six steps: the basics, the game and grid rules, what a square costs, the prize split, your branding, and launch.',
+    steps: ['basics', 'grid', 'fee', 'payouts', 'branding', 'launch'],
   },
   {
     id: 'wizard.props',
@@ -174,12 +174,25 @@ const RULES_STEP_COPY: Readonly<Record<string, { title: string; summary: string 
   'wizard.squares': {
     title: 'Matchup & grid',
     summary:
-      'Which game the grid covers, how many squares one person may take, and whether the numbers are drawn once or again each quarter.',
+      'Which game the grid covers, how many squares one person may take, and whether the numbers are drawn once or again each quarter. Pick the game from the schedule and the pool scores and locks itself.',
   },
   'wizard.props': {
     title: 'Questions',
     summary:
       'Write the questions players answer and the choices for each one. Everyone answers the same card, and the card is graded after the game.',
+  },
+};
+
+/**
+ * A shared step whose copy is wrong for ONE wizard. The shared payouts page
+ * talks about finishing places; a squares pool has none — it pays four
+ * quarters — so its payouts step says so rather than borrowing that sentence.
+ */
+const STEP_COPY_OVERRIDES: Readonly<Record<string, { title: string; summary: string }>> = {
+  'wizard.squares.payouts': {
+    title: 'Payouts',
+    summary:
+      'Decide how the pot is split between the four quarters, whether a share goes to charity, and what happens to a prize when nobody owns the winning square.',
   },
 };
 
@@ -196,6 +209,8 @@ export const RULES_STEP: Readonly<Record<string, string>> = {
 
 function stepCopy(wizardId: string, step: string): { title: string; summary: string } {
   if (RULES_STEP[wizardId] === step) return RULES_STEP_COPY[wizardId];
+  const override = STEP_COPY_OVERRIDES[`${wizardId}.${step}`];
+  if (override) return override;
   const shared = SHARED_STEP_COPY[step];
   if (!shared) {
     throw new Error(`help: wizard step "${step}" of ${wizardId} has no page copy`);

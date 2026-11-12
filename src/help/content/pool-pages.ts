@@ -391,7 +391,7 @@ const SQUARES_POOL_PAGES = poolPages({
   poolTypes: ['SQUARES'],
   rootTitle: 'Squares pool',
   rootSummary:
-    'Your squares grid. Claim squares before kickoff; the row and column numbers are drawn once the grid is full or the commissioner locks it. Prizes follow the score at the end of each quarter.',
+    'Your squares grid. Claim squares before kickoff; the row and column numbers are drawn when the grid locks, at kickoff or sooner if the commissioner locks it. Prizes follow the score at the end of each quarter.',
   tabs: [],
 });
 

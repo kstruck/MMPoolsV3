@@ -7,6 +7,8 @@ import { validated } from "./lib/validated";
 import { createPoolPermissiveSchema, updatePoolSettingsSchema } from "./schemas/poolCore";
 import { recalculatePoolWinnersSchema, toggleWinnerPaidSchema, fixParticipantIdsSchema, clearLegacyCoManagersSchema } from "./schemas/poolOps";
 import { writeAdminAudit } from "./lib/adminAudit";
+import { isFeedLogoUrl, squaresCreateDefaults, SQUARES_DEFAULT_PAYOUTS } from "./shared/squaresDefaults";
+import { firestoreFixtureReader, lookupSquaresGame, squaresFeedGameHasStarted } from "./lib/squaresFeedGame";
 import { assertPoolCreationAllowed } from './lib/systemGuards';
 import { isPoolType, type PoolType } from './shared/poolTypes';
 import { ADDON_KEYS, isIncludedAddon } from './shared/schemas/quote';
@@ -101,7 +103,7 @@ export const assertPoolOwnerOrManagerNoCo = (pool: any, uid: string, userRole?: 
 
 // Default per-period payout split for a new SQUARES pool (percent of pot).
 // Matches the legacy SetupWizard default; must sum to 100.
-export const DEFAULT_SQUARES_PAYOUTS = { q1: 25, half: 25, q3: 25, final: 25 } as const;
+export const DEFAULT_SQUARES_PAYOUTS = SQUARES_DEFAULT_PAYOUTS;
 
 // Server-controlled / privileged fields a client must never set on pool creation.
 // Billing, lifecycle, membership, and scoring state are set by the server only.
@@ -413,22 +415,84 @@ export const createPool = validated(
         // Initialize Squares-specific data
         if (isSquaresPool) {
             newPool.squares = Array(100).fill(null).map((_, i) => ({ id: i, owner: null }));
-            newPool.scores = {
-                current: null,
-                q1: null,
-                half: null,
-                q3: null,
-                final: null,
-                gameStatus: 'pre'
-            };
-            // Quarterly payout percentages. `payouts` is a privileged field
-            // (stripped from every client payload above), and the old
-            // SetupWizard that used to seed 25/25/25/25 is gone — without this
-            // default every new squares pool paid $0 per period
-            // (scoreUpdates.ts getSafePayout returns 0 for a missing map).
-            // Commissioners still tune these post-create in the AdminPanel
-            // Payouts tab.
-            newPool.payouts = { ...DEFAULT_SQUARES_PAYOUTS };
+            // A COMPLETE squares document (shared/squaresDefaults.ts). The squares
+            // pages read `ruleVariations`, `charity`, `payouts` and `scores` with
+            // no guard; a pool created with only a grid threw on its own page.
+            //
+            // `payouts` is a privileged field, stripped from every client payload
+            // above, so the wizard's split arrives as `squaresPayouts` and is
+            // copied in only once `validateCreateInput` has accepted it (four
+            // percentages that add up to 100). With none sent, the even split.
+            //
+            // A linked game also sets the grid to lock itself at kickoff.
+            //
+            // A LINK IS ALL OF IT OR NONE OF IT. A `gameId` with no kickoff
+            // would be scored from the feed and never locked — squares on sale
+            // while the game is played — so it is refused rather than stored.
+            // So is a game that has already kicked off: nobody could claim a
+            // square on it, and the grid would lock empty within the minute.
+            //
+            // THE GAME IS THE FEED'S, NOT THE WIZARD'S (PLAN-SQUARES-SERVER-FIELDS
+            // §2c; plan K11). The wizard's id is looked up in the score feed and
+            // the pool stores what the feed says — kickoff, teams, badges, season
+            // type, week. The kickoff the wizard sent is not used: a crafted
+            // request could otherwise pair one game's scores with another game's
+            // teams and kickoff, or pass off a started game as not started.
+            const wantsLink = typeof data.gameId === 'string' && data.gameId.trim() !== '';
+            if (wantsLink) {
+                const league = data.league === 'college' ? 'college' : 'nfl';
+                const found = await lookupSquaresGame(data.gameId.trim(), league, { readFixture: firestoreFixtureReader });
+                if (found === 'unreachable') {
+                    throw new HttpsError('unavailable', 'Could not reach the schedule to check that game. Try again, or create the pool without a game and link it later.');
+                }
+                if (found === 'not-found') {
+                    throw new HttpsError('invalid-argument', 'That game was not found on the schedule. Pick it from the schedule again.');
+                }
+                // The clock is read NOW, not at the top of the call: billing,
+                // config and the feed request (with its retry) all ran since
+                // (codex, PR #765 round 3). It is read again before the write.
+                if (squaresFeedGameHasStarted(found, Date.now())) {
+                    throw new HttpsError('failed-precondition', 'That game has already kicked off. Pick a game that has not started.');
+                }
+                for (const key of ['homeTeamLogo', 'awayTeamLogo', 'seasonType', 'week'] as const) {
+                    delete newPool[key];
+                    delete data[key];
+                }
+                const feedFields: Record<string, unknown> = {
+                    gameId: found.id,
+                    gameTime: found.kickoff,
+                    league,
+                    homeTeam: found.homeTeam,
+                    awayTeam: found.awayTeam,
+                };
+                if (isFeedLogoUrl(found.homeLogo)) feedFields.homeTeamLogo = found.homeLogo;
+                if (isFeedLogoUrl(found.awayLogo)) feedFields.awayTeamLogo = found.awayLogo;
+                if (found.seasonType) feedFields.seasonType = found.seasonType;
+                if (found.week) feedFields.week = found.week;
+                Object.assign(newPool, feedFields);
+                Object.assign(data, feedFields);
+            } else {
+                // Not linked: nothing half-linked is left on the document.
+                delete newPool.gameId;
+                delete newPool.gameTime;
+            }
+            const seeded = squaresCreateDefaults({
+                requestedPayouts: data.squaresPayouts,
+                ruleVariations: data.ruleVariations,
+                charity: data.charity,
+                reminders: data.reminders,
+                gameId: data.gameId,
+                gameTime: data.gameTime,
+                numberSets: data.numberSets,
+            });
+            newPool.payouts = seeded.payouts;
+            newPool.ruleVariations = seeded.ruleVariations;
+            newPool.charity = seeded.charity;
+            newPool.scoreEvents = seeded.scoreEvents;
+            newPool.numberSets = seeded.numberSets;
+            newPool.scores = seeded.scores;
+            if (seeded.reminders) newPool.reminders = seeded.reminders;
+            delete newPool.squaresPayouts;
         }
 
         // Explicitly remove undefined for safety (though JSON.parse above handles most)
@@ -446,6 +510,12 @@ export const createPool = validated(
             const currentRole = userDoc.data()?.role as string | undefined;
             assertNotBanned(claimRole, currentRole);
 
+            // Last look at the clock before a squares pool linked to a game is
+            // written: kickoff can pass while the steps above run.
+            if (isSquaresPool && typeof newPool.gameId === 'string'
+                && typeof newPool.gameTime === 'number' && newPool.gameTime <= Date.now()) {
+                throw new HttpsError('failed-precondition', 'That game has just kicked off. Pick a game that has not started.');
+            }
             t.set(poolRef, newPool);
 
             writePoolCreationSideEffects(t, {
@@ -779,7 +849,7 @@ export const toggleWinnerPaid = validated(
     // owner/SUPER_ADMIN check happens in-handler (assertPoolOwnerOrSuperAdmin
     // needs the pool doc's owner fields, unavailable at the role-gate stage).
     { schema: toggleWinnerPaidSchema, label: "toggleWinnerPaid", appCheck: "monitor" },
-    async ({ poolId, winnerId }, request) => {
+    async ({ poolId, winnerId, expectedOwner, expectedSquareId, paid }, request) => {
     // winnerId is the doc ID (e.g. 'q1', 'final')
     const db = admin.firestore();
     const uid = request.auth!.uid;
@@ -803,18 +873,50 @@ export const toggleWinnerPaid = validated(
     assertPoolOwnerOrSuperAdmin(pool, uid, userRole);
 
     const winnerRef = poolRef.collection('winners').doc(winnerId);
-    const winnerSnap = await winnerRef.get();
 
-    if (!winnerSnap.exists) throw new HttpsError('not-found', 'Winner not found');
+    // IN A TRANSACTION, AGAINST THE WINNER THE COMMISSIONER WAS LOOKING AT.
+    // The winner records now follow the scores: a corrected score can move a
+    // prize to a different square and clear "paid". This used to read the record
+    // and write it back in two steps, so a click meant for the OLD winner could
+    // land after that change and mark the NEW one paid (qodo, PR #759).
+    const { isNowPaid, amount, unchanged } = await db.runTransaction(async (t) => {
+        const winnerSnap = await t.get(winnerRef);
+        if (!winnerSnap.exists) throw new HttpsError('not-found', 'Winner not found');
+        const winnerData = winnerSnap.data() as Record<string, unknown>;
 
-    const winnerData = winnerSnap.data();
-    const isNowPaid = !winnerData?.isPaid;
+        const ownerMoved = expectedOwner !== undefined && winnerData.owner !== expectedOwner;
+        const squareMoved = expectedSquareId !== undefined && winnerData.squareId !== expectedSquareId;
+        if (ownerMoved || squareMoved) {
+            throw new HttpsError('failed-precondition', 'This prize has changed since the page loaded. Check the winner shown now and try again.');
+        }
 
-    await winnerRef.update({
-        isPaid: isNowPaid,
-        paidAt: isNowPaid ? FieldValue.serverTimestamp() : null,
-        paidByUid: isNowPaid ? uid : null
+        // SET, NOT FLIP, when the page says which it wants. "Mark paid" on a
+        // prize that is already paid is not a request to un-pay it: two clicks,
+        // two tabs or two managers used to cancel each other out, and the
+        // record then showed a handed-over prize as still owed (qodo, PR #759).
+        // A bundle from before this change sends no `paid` and still toggles.
+        const wasPaid = winnerData.isPaid === true;
+        const next = paid === undefined ? !wasPaid : paid;
+        const prize = typeof winnerData.amount === 'number' ? winnerData.amount : 0;
+        if (next === wasPaid) {
+            // Already so. Nothing is written — in particular `paidAt` and
+            // `paidAmount` keep saying when, and how much, the FIRST time.
+            return { isNowPaid: wasPaid, amount: prize, unchanged: true };
+        }
+        t.update(winnerRef, {
+            isPaid: next,
+            paidAt: next ? FieldValue.serverTimestamp() : null,
+            paidByUid: next ? uid : null,
+            // What the prize WAS when it was marked paid. The prize can change
+            // afterwards (a square sold late, a rule changed); "Paid Out" must
+            // total what was handed over, not what the prize has become.
+            paidAmount: next ? prize : null,
+        });
+        return { isNowPaid: next, amount: prize, unchanged: false };
     });
+
+    // Nothing changed, so there is nothing to put in the audit trail.
+    if (unchanged) return { success: true, isPaid: isNowPaid, winnerId, unchanged: true };
 
     // Audit
     await writeAuditEvent({
@@ -823,7 +925,7 @@ export const toggleWinnerPaid = validated(
         message: `Winner ${winnerId} marked as ${isNowPaid ? 'PAID' : 'UNPAID'} by ${uid}`,
         severity: 'INFO',
         actor: { uid, role: 'ADMIN', label: 'Host' },
-        payload: { winnerId, isPaid: isNowPaid }
+        payload: { winnerId, isPaid: isNowPaid, amount }
     });
 
     return { success: true, isPaid: isNowPaid, winnerId };
@@ -866,13 +968,19 @@ export const fixParticipantIds = validated(
 
         // 1. Squares pools are DELIBERATELY not scanned here.
         //
-        // Square ownership is not a membership signal. `claimMySquares` sets
-        // `reservedByUid` on proof of a `guestDeviceKey` that is readable from
-        // the world-readable pool document (`firestore.rules` `allow get: if
-        // true`) - the known, accepted-through-the-pilot finding in
-        // SECURITY-CLAIM-SQUARES.md. Unioning it into `participantIds` turned
-        // this repair job into a privilege escalation: the claimant lands in the
-        // array that `setPaidStatus` and reminder targeting treat as membership.
+        // Square ownership ON AN OLD POOL is not a membership signal. Until
+        // PLAN-SQUARES-REOPEN PR-A (2026-11), `claimMySquares` set
+        // `reservedByUid` on proof of a `guestDeviceKey` that was readable from
+        // the world-readable pool document (SECURITY-CLAIM-SQUARES.md). A
+        // `reservedByUid` stamped before that fix may be such a claim, and
+        // nothing on the square says which. Unioning it into `participantIds`
+        // turned this repair job into a privilege escalation: the claimant
+        // lands in the array that `setPaidStatus` and reminder targeting treat
+        // as membership.
+        //
+        // The claim path now proves ownership and adds the claimant to
+        // `participantIds` itself, at claim time — so this job still has
+        // nothing legitimate to add, for old pools or new ones.
         //
         // Removing it costs nothing legitimate. `reserveSquare` already adds an
         // authenticated reserver to `participantIds` at reserve time, so the only

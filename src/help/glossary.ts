@@ -38,6 +38,7 @@ export const GLOSSARY_ALLOWLIST: Readonly<Record<string, string>> = Object.freez
   'Golden Scenario': 'Simulation fixture vocabulary; engineering only.',
   'Scenario Oracle': 'Simulation fixture vocabulary; engineering only.',
   'Health Snapshot': 'Operations probe result, read only on the admin Overview tab.',
+  'Squares Game Link': 'Engineering rule behind the game picker. A commissioner meets it as the picker\'s own message when a played grid cannot change game, not as a term.',
   'Member Record': 'The storage shape behind the Roster. Readers meet it as the Roster, which is mirrored.',
   'Pool Homepage (Overview)': 'Duplicate CONTEXT.md heading for the same concept as "Pool Homepage", which is mirrored as pool-homepage.',
   'Profile Subject': 'Internal modeling term covering both a player and an Expert; readers meet each separately.',
@@ -333,6 +334,15 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
     contextHeading: 'Payout Record',
     audience: ['member', 'commissioner', 'admin'],
     related: ['weekly-prize', 'season-prize', 'profit'],
+  },
+  {
+    id: 'squares-winner',
+    term: 'Squares winner',
+    short: 'The square that won a quarter, who holds it, and the prize it is owed. It is what your commissioner pays from.',
+    long: 'Each time a quarter ends, the square whose two digits match the score is recorded as that quarter’s winner, with its prize beside it.\n\nIf your pool gives part of the pot to charity, that comes off first and each prize is a share of what is left. With reverse winners on, the square with the two digits swapped shares the prize, half each.\n\nA winning square nobody bought is either kept by the organizer or rolled into the next quarter, whichever your commissioner chose when setting up the pool.\n\nPaid, next to a winner, means the prize has been handed over. It is separate from whether that player has paid for their squares.',
+    contextHeading: 'Squares Winner Record',
+    audience: ['member', 'commissioner', 'admin'],
+    related: ['payout-record'],
   },
   {
     id: 'weekly-prize',
