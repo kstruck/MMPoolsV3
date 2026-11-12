@@ -13,6 +13,7 @@
     "prerender": "tsx scripts/prerender.ts",
     "build:static": "npm run build && npm run prerender",
     "lint": "eslint .",
+    "lint:ratchet": "eslint . --max-warnings 1855",
     "preview": "vite preview",
     "test": "node functions/scripts/copy-shared.mjs && vitest run",
     "deploy:backend": "npx firebase deploy --only functions,firestore:rules,firestore:indexes --project gridiron-gamble-uzuqo",
