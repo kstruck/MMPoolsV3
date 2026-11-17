@@ -194,7 +194,7 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 | W3 | No payouts step (every NFL wizard has one); plain `StepBranding` where the NFL wizards use `StepBrandingThemed`. | `CreateSquaresPool.tsx:74-78` |
 | W4 | "Fuzzy matching active" describes the manual button and reads as a statement about live updates. | `AdminPanel.tsx:1003` |
 | W5 | `calculateQuarterlyPayouts` logs at ERROR level on every render. | `payouts.ts:29` |
-| W6 | `gridSize` is written and read by nothing (S2). | SQUARES-BACKLOG S2 |
+| W6 | `gridSize` is written and read by nothing (S2). **Removed 2026-11-17** — types, default and an invariants test. | SQUARES-BACKLOG S2 |
 | W7 | Unfinished design notes left as comments in the ownership code. | `participant.ts:44-66,113-128` |
 
 ---
