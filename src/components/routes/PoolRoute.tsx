@@ -12,7 +12,8 @@ import { AuditLog } from '../AuditLog';
 import { AICommissioner } from '../AICommissioner';
 import { PaymentSuccessBanner } from '../billing/PaymentSuccessBanner';
 import { AddonUpgradeButton } from '../billing/AddonUpgradeButton';
-import { SquaresScoreStrip, SquaresFactChips, FactChip, SquaresInfoTabs, aiCommissionerView } from '../squares/SquaresPageParts';
+import { SquaresScoreStrip, SquaresFactChips, FactChip, SquaresInfoTabs } from '../squares/SquaresPageParts';
+import { aiCommissionerView } from '../squares/squaresPageRules';
 
 
 import { BracketPoolDashboard } from '../BracketPoolDashboard/BracketPoolDashboard';
