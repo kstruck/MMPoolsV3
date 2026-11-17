@@ -50,7 +50,7 @@ grep -n "pickMode\|confidenceMode\|pickLosersMode\|payoutMode\|lockMode\|tournam
 | `functions/src/bracketPools.ts:54-62,83-84` — `isConference = tournamentType !== 'ncaa'`; persists `tournamentType: isConference ? 'conference' : 'ncaa'` and `tournamentId` = `bigeast-{y}` / `big12-{y}` / `{gender}-{y}` | the create-input `bigeast`/`big12` never reaches the pool doc | **source of truth for the conference tag** (read `tournamentId` prefix) — codex r1 #1 |
 | `functions/src/conferenceTournaments.ts:155,335`; `src/components/admin/TournamentManager.tsx:150-151` | `conferenceName` written on tournament docs only | evidence — unaffected |
 | `src/types/index.ts:351` `league`, `:352` `sport?: string` (free text, never read for display) | Squares sport | source of truth (`league`); `sport` unaffected |
-| `src/types/index.ts:357-358` `seasonType`/`week`, `:363` `numberSets`, `:366` `gridSize` | Squares options | unaffected (K6) |
+| `src/types/index.ts:357-358` `seasonType`/`week`, `:363` `numberSets`, `:366` ~~`gridSize`~~ (`gridSize` removed 2026-11-17, SQUARES-BACKLOG S2) | Squares options | unaffected (K6) |
 | `src/types/index.ts:57` `league: 'NFL'` (Playoff) | sport constant | source of truth |
 | `src/types/index.ts:150,153` `gameId`/`seasonType` (Props) | sport-if-linked | source of truth |
 | `src/components/wizard/create/CreateNFLPickemPool.tsx:61-67,81,138,143` | wizard defaults STRAIGHT / confidence false; no ATS×confidence exclusion | evidence only — unaffected |
