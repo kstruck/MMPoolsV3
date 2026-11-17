@@ -85,6 +85,29 @@ describe('computeLaunchMode (launch billing mode selection)', () => {
   });
 });
 
+// PLAN-SQUARES-ZERO-PRICE-FREE: createPool passes `zeroPriced` for squares only.
+describe('computeLaunchMode — the zero-priced option', () => {
+  it('above the threshold, a zero-priced pool launches free', () => {
+    expect(computeLaunchMode({ estimatedPlayers: 40 }, FREE_THRESHOLD, { zeroPriced: () => true })).toBe('free');
+  });
+  it('above the threshold, a priced pool still launches on a trial', () => {
+    expect(computeLaunchMode({ estimatedPlayers: 40 }, FREE_THRESHOLD, { zeroPriced: () => false })).toBe('trial');
+  });
+  it('without the option the rule is unchanged (every other caller)', () => {
+    expect(computeLaunchMode({ estimatedPlayers: 40 }, FREE_THRESHOLD)).toBe('trial');
+  });
+  it('a paid add-on still forces a trial, and the price is not consulted', () => {
+    const zeroPriced = vi.fn(() => true);
+    expect(computeLaunchMode({ estimatedPlayers: 40, aiCommissioner: true }, FREE_THRESHOLD, { zeroPriced })).toBe('trial');
+    expect(zeroPriced).not.toHaveBeenCalled();
+  });
+  it('the estimate it is asked about is the payload\'s', () => {
+    const zeroPriced = vi.fn(() => true);
+    computeLaunchMode({ estimatedPlayers: 40 }, FREE_THRESHOLD, { zeroPriced });
+    expect(zeroPriced).toHaveBeenCalledWith(40);
+  });
+});
+
 describe('payloadHasPaidAddon / estimatedPlayersFromPayload (helpers)', () => {
   it('detects add-ons in a nested addons object and as sibling flags', () => {
     expect(payloadHasPaidAddon({ addons: { aiCommissioner: true } })).toBe(true);
