@@ -9,9 +9,9 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-import type { Scores } from '../../types';
-import { SquaresScoreStrip, SquaresInfoTabs } from './SquaresPageParts';
-import { quarterPoints, gameStatusLabel, shortTeamName, aiCommissionerView } from './squaresPageRules';
+import type { Scores } from '../types';
+import { SquaresScoreStrip, SquaresInfoTabs } from '../components/squares/SquaresPageParts';
+import { quarterPoints, gameStatusLabel, shortTeamName, aiCommissionerView } from '../components/squares/squaresPageRules';
 
 afterEach(cleanup);
 
