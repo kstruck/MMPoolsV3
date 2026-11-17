@@ -419,10 +419,18 @@ export function assertCheckoutOwnership(
  */
 export function checkoutPricingType(storedType: unknown): string {
     // Upper-cased because the pricing page always sent `poolType.toUpperCase()`
-    // and `formatTierMap` is keyed in capitals: a legacy lowercase type
-    // (`billing.ts` still reads `'playoff'`) prices exactly as it did before.
-    return typeof storedType === "string" && storedType.trim() !== "" ? storedType.trim().toUpperCase() : "SQUARES";
+    // and `formatTierMap` is keyed in capitals.
+    if (typeof storedType !== "string" || storedType.trim() === "") return "SQUARES";
+    const upper = storedType.trim().toUpperCase();
+    // A legacy playoff pool is stored as `'playoff'`; the rest of the code treats
+    // it as NFL_PLAYOFFS (`playoffPools.ts`, `billing.ts`, `BillingGate`), and
+    // `formatTierMap` has no `PLAYOFF` key — so it is priced as NFL_PLAYOFFS
+    // (qodo #786 re-review, finding 1).
+    return LEGACY_PRICING_TYPE_ALIASES[upper] ?? upper;
 }
+
+/** Legacy stored types and the type they are priced as. */
+const LEGACY_PRICING_TYPE_ALIASES: Readonly<Record<string, string>> = { PLAYOFF: "NFL_PLAYOFFS" };
 
 export const createCheckoutSession = validated(
     // Union: { bundleType } (bundle purchase) | checkoutPoolInputSchema (pool

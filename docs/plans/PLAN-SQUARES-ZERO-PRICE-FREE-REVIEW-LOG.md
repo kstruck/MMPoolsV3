@@ -27,3 +27,15 @@ Clean.
 ### Round X3 — codex, on `9024eeeb`
 
 Clean. **Self-review found one thing:** the pricing page always sent `poolType.toUpperCase()`, and `formatTierMap` is keyed in capitals, while legacy pools can store a lowercase type (`billing.ts` still reads `'playoff'`). So `checkoutPricingType` now upper-cases the stored type, and such a pool prices exactly as it did before. A test pins it.
+
+### Rounds X4, X5 — codex, on `9024eeeb` / `d305a6f0`
+
+Clean.
+
+### Round Q2 — qodo re-review, on `4b20d5db`
+
+Q1.1–Q1.3 were all marked ✓ Resolved. One new finding:
+
+| # | Finding | Verdict |
+|---|---|---|
+| Q2.1 (High) | A legacy playoff pool is stored as `'playoff'`. `checkoutPricingType` upper-cased it to `PLAYOFF`, which `formatTierMap` does not have, so checkout rejected the quote. | **Valid — fixed.** The rest of the code already treats `'playoff'` as NFL_PLAYOFFS (`playoffPools.ts`, `billing.ts`, `BillingGate`). Checkout now maps `PLAYOFF` to `NFL_PLAYOFFS` (`LEGACY_PRICING_TYPE_ALIASES`). Test: `checkoutPricingType('playoff') === 'NFL_PLAYOFFS'`. |
