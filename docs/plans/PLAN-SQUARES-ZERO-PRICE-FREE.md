@@ -42,6 +42,7 @@ The squares tiers are one band, 11–9999 at $0 (Kevin, 2026-11-17, plan K10
 | D2 | **The price decides, not the total.** Base price $0 and no paid add-on *selected* — read from the selection exactly as `createPool` reads it, whatever the config prices the add-on at (codex X1.1). A coupon that discounts a priced pool to $0 is unchanged: still a trial, still the coupon's own $0 path. | A coupon is a discount on a paid pool, and its reservation is redeemed at activation; launching such a pool free would skip that. |
 | D3 | **A pool launched free stays free** after the prices change (plan K10 option B, after Thanksgiving). | It is what the commissioner was told at launch. `free` has no clock; nothing re-prices a pool after creation. |
 | D4 | **No migration of pools already created as trials.** They now get a working $0 activation: their quote is `free_tier`, so the pricing page offers it and `createCheckoutSession`'s $0 path accepts it — unless the owner already has an active free pool (the existing one-free-pool rule). Otherwise Super-Admin → Extend Trial, as before. | A production write is its own gate, and the pools are few and days old. |
+| D6 | **A hosting checkout is priced as the pool's STORED type**, never the `poolType` the caller sends (`checkoutPricingType`). A pool with no stored type is a legacy squares pool. | qodo #786, finding 1 (High, security). `createCheckoutSession` priced from the caller's `poolType`, so once a $0 squares band is quoted `free_tier`, the owner of an NFL pool could send `"SQUARES"` and take the $0 free path. The same hole let any owner price their pool as the cheapest format, which costs real money once squares has a price. Credit redemption already took the type from the pool. Honest clients are unaffected, except that the pricing page's format tab can no longer re-price a selected pool, which was wrong anyway. |
 | D5 | **A paid add-on still forces a trial**, and the price is not consulted. | Unchanged rule (`payloadHasPaidAddon`): the trial is what unlocks a selected add-on. |
 
 ## 3. What changes
@@ -49,6 +50,7 @@ The squares tiers are one band, 11–9999 at $0 (Kevin, 2026-11-17, plan K10
 - `functions/src/lib/quoteEngine.ts`:
   - New `FREE_CAP_EXEMPT_POOL_TYPES` and `zeroPricedLaunchesFree(config, poolType, estimate, addons)`, which is pure and never throws (an unpriceable config is "not zero-priced").
   - `computeQuote` makes `freeTierEligible` true for a cap-exempt type with base price $0 and no paid add-on selected (one shared `selectsPaidAddon`), as long as the total is also $0.
+- `functions/src/stripe.ts` (D6): `createCheckoutSession` takes its pricing type from the pool read (`checkoutPricingType`), not from the request.
 - `functions/src/poolOps.ts`:
   - `computeLaunchMode` takes an optional `zeroPriced` check, consulted only above the threshold and only when there is no paid add-on.
   - `createPool` passes it for squares only. `createNFLPool` and `createBracketPool` do not pass it, so their rule is unchanged.
@@ -71,6 +73,8 @@ The squares tiers are one band, 11–9999 at $0 (Kevin, 2026-11-17, plan K10
   The first of these fails against `origin/main`'s rule.
 
 ## 5. Deploy and rollback
+
+- **`.github/audit-allowlist.json`** (not part of the plan, ported here): a dated `picomatch` entry. `security-audit` went red on `main` on 2026-11-17 for an advisory with no patched release. See the PR.
 
 - **Deploy:** `git pull` in `D:\march-melee-pools`, then `npm --prefix functions ci`, then `npx firebase deploy --only functions`. Nothing in `www` or rules changes.
 - **Rollback:** revert the PR and redeploy functions. Pools created free in the meantime stay `free` (D3). To charge for squares again, price the band in Super-Admin; no code change is needed.

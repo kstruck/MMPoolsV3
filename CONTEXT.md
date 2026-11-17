@@ -62,6 +62,8 @@ A Member's honor-system self-report that they have sent the Entry Fee (`memberRe
 ### Billing
 The commissioner-side subscription relationship between a Commissioner and the platform for a Pool (trial, tier, price, coupon) or a Bundle. Paid via Stripe. Entirely separate from Entry Fees, which flow between Members and Commissioners.
 
+A Pool launches **free** when its expected players are at or below the free-player threshold with no paid add-on, and otherwise on a **trial** that must be paid before it ends. One exception: a Squares Pool whose configured price is $0, with no paid add-on, launches free at any size (squares has no free-plan participant cap). A hosting checkout is always priced as the Pool's stored type (`PLAN-SQUARES-ZERO-PRICE-FREE`).
+
 ### Bundle
 A prepaid multi-pool purchase made by a Commissioner. Exactly two kinds: a Credit Bundle, which grants a fixed number of Pool Credits, and an Unlimited Pass, which grants unlimited pool activations for a fixed term. Bundle products are defined by a Super Admin in the billing configuration and purchased via Stripe.
 
