@@ -10,6 +10,15 @@ interface BillingGateProps {
   pool: { billing?: PoolBilling; [key: string]: any };
   isCommissioner: boolean;
   children: React.ReactNode;
+  /**
+   * Whether this pool type is held to the free plan's participant cap
+   * (`shared/freePlanCap.ts`). Defaults to true. SQUARES passes false: its
+   * join path never enforces the cap — a deliberate exemption (Kevin,
+   * 2026-11-17, plan K2), because a 100-square grid capped at ten people
+   * could never fill — so a "N/10" or "entries locked" banner there would
+   * state a limit that does not exist.
+   */
+  freePlanCapApplies?: boolean;
 }
 
 /** Computes human-readable "X days" remaining from a timestamp */
@@ -36,6 +45,7 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   pool,
   isCommissioner,
   children,
+  freePlanCapApplies = true,
 }) => {
   const { reduce, tx } = useMotionTransform();
   const billing = pool.billing;
@@ -259,6 +269,11 @@ export const BillingGate: React.FC<BillingGateProps> = ({
   }
 
   // ─── FREE PLAN PARTICIPANT LIMIT BANNER ───────────────────
+  // A pool type the cap does not apply to (SQUARES — plan K2) gets no banner:
+  // the free plan puts no other limit on it that a banner could describe.
+  if (status === 'free' && !freePlanCapApplies) {
+    return <>{children}</>;
+  }
   if (status === 'free') {
     let count = 0;
     const poolType = (pool.type || '').toUpperCase();

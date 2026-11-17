@@ -1,76 +1,57 @@
 # HANDOFF — Session entry point
 
-> ## 🟡 2026-11-10 — **SQUARES REOPEN IS BUILT AND WAITING ON KEVIN: FIVE PRs OPEN, NOTHING MERGED, NOTHING DEPLOYED.**
+> ## 🟢 2026-11-17 — **SQUARES IS REOPENED AND DEPLOYED. EVERY OPEN ITEM IS RULED.**
 >
-> Target is Thanksgiving, 2026-11-26. Plan, review log and sweeps:
-> `docs/plans/PLAN-SQUARES-REOPEN*.md`. Built under Kevin's delegation of
-> 2026-11-10 ("authority to do anything that does not affect current running
-> NFL pools").
+> Target: Thanksgiving, 2026-11-26. Plan, review log and sweeps:
+> `docs/plans/PLAN-SQUARES-REOPEN*.md`, `PLAN-SQUARES-SERVER-FIELDS*.md`,
+> `PLAN-SQUARES-PRICING.md`.
 >
-> | PR | What | Merge order |
-> |---|---|---|
-> | #758 | A — the claim path: `0` means no limit, a square belongs to an identity, the guest key is never published | 1 |
-> | #759 | B — money and lock: one payout engine, winner records that follow the scores, numbers drawn once, a pause switch | 2 |
-> | #760 | C — the wizard: picks the game, sets the payouts, creates a pool its own page can open | 3 |
-> | #762 | **K7 — one auto-lock. NEEDS KEVIN'S YES: it edits `reminders.ts`.** The reminders job locks a squares grid with the dedicated job's function; its own biased copy is deleted | 4, if approved |
-> | #761 | D — the reopen: the three flags, the off switch made usable, the end-to-end test | last |
+> | PR | What |
+> |---|---|
+> | #764 | Dependencies: cleared the `security-audit` gate |
+> | #765 | The reopen — claim path, money and lock, wizard, reopen (#758–#761, closed unmerged; their content is here) plus server-owned numbers, lock, game link and prize terms (K1, K4, K11). **Squash-merged** (`1dbbd787`) |
+> | #762 | K7 — one auto-lock (`2abeead5`) |
+> | #763 | Pricing research (K10), docs only (`877d94a4`) |
 >
-> **Squares is still closed in production** and stays closed until #761 is
-> merged, functions are deployed and `www` is rebuilt, in that order.
-> **#761 is not to be merged until K7 is decided and K1/K4 have been seen** —
-> qodo marked both High on the reopen itself.
+> **Deployed 2026-11-17 by Kevin**, from `877d94a4`, in the plan's order:
+> full export first (`gs://mmpools-firestore-exports/pre-squares-deploy-2026-11-17`,
+> 253,670 documents, `SUCCESSFUL`), then functions, `www`, rules. The
+> functions deploy reported every function "Skipped (No changes detected)" —
+> the deployed source already matched `877d94a4`, so they had gone out in an
+> earlier deploy (inferred from the skip; when is not recorded). Smoke tests,
+> Kevin: "Everything looks good" — a running NFL pool's pages; a squares pool
+> created ("seems to be working"). `system/config`, as Kevin read it in the
+> Firebase console during the deploy (not queried from here):
+> `poolTypeFlags.SQUARES = true`; `squaresWinners` absent (not paused).
 >
-> **Not done, and why.**
-> 1. **`codex exec review` HAS RUN on all five (2026-11-11), plus #763–#765**
->    — in the cloud session, logged in with the environment's
->    `OPENAI_API_KEY`, on `gpt-5.6-terra` (codex's default model is not
->    available to that key). #758, #761, #762 clean in round 1; #760 had one
->    real finding (fixed, round 2 clean); #759's one finding was rejected with
->    reasoning. Verdicts: `PLAN-SQUARES-REOPEN-REVIEW-LOG.md`, round X1.
-> 2. **`security-audit` is red on every PR, and on `main`.** Eight open
->    advisories, and the audit allow-list expired 2026-11-09 (open item 1 in
->    the box below this one said it would). The fixes are dependency upgrades
->    in lockfiles the running NFL pools share, so they were left for Kevin.
-> 3. **No data backup was verified, and BOTH are required before the first
->    deploy:** Firestore PITR confirmed on
->    (`npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`)
->    **and a full export taken**, its `gs://` location written into the plan.
->    PITR alone is not enough; only Kevin can waive the export, in writing, in
->    the plan's rollback section. The commands are there. What they print is
->    marked UNVERIFIED — none was run where this was built.
-> 4. **Ten items are Kevin's to decide** — plan K1, K2 and K4–K11. Each is in a file
->    shared with running pools (`firestore.rules`, `reminders.ts`,
->    `statsTrigger.ts`) or is a setting. Two before Thanksgiving:
->    - **K7 first — and it is built: #762.** `reminders.ts` has a second
->      auto-lock for squares grids that draws numbers with a biased shuffle
->      and replaces numbers a grid already has. #760 makes the dedicated job
->      run 90 seconds ahead so it normally gets there first; if that job is
->      down at kickoff, the biased one decides the grid. #762 deletes the copy
->      and has the reminders job call the dedicated job's function, and puts
->      the lead back to 30 seconds. It was kept out of the stack because it
->      edits a file that also sends the NFL reminders: yes or no is Kevin's.
->    - **K10.** Squares needs pricing tiers in Super-Admin → Monetization
->      before the first pool above ten players.
-> 5. **Two rules in the plan are Kevin's to confirm** (qodo asked that
->    neither rest on a code comment):
->    - **D23 — the prize pot keeps its cents;** only the charity share is
->      floored to a whole dollar. 97 squares at $2.50 with 10% to charity:
->      $242.50, $24 to charity, $218.50 in prizes. Floored instead, $218.
->    - **D18 — winner records are written unless the pause is switched on.**
->      Absent means running. The alternative is a switch that must be armed
->      before any winner is recorded.
+> **Pricing:** squares tiers are one band, 11–9999 at $0 (free for
+> Thanksgiving, K10). The previous squares tiers were deleted in that edit by
+> mistake; their values are in the 2026-11-17 export.
 >
-> **To stop it after it is live, fastest first.**
+> **Ruled 2026-11-17** (plan §2, "Ruled 2026-11-17"): S1–S4 kept; K2 squares
+> exempt from the free-plan cap (this PR removes the false banner); K5, K6,
+> K8, K9 approved as small PRs **after Thanksgiving** (each is in a file the
+> running NFL pools share); K12 left. **After Thanksgiving, approved:**
+> pricing option B (`PLAN-SQUARES-PRICING.md` §5 item 2) — a plan first, then
+> a 10-buyer limit on free squares pools (replacing the K2 exemption) and a
+> $9.99 / 3-for-$19.99 price. **Until then** a squares pool launched for 11+
+> players is on a trial (`computeLaunchMode`, `functions/src/poolOps.ts`), and
+> a bare $0 price cannot activate it (`createCheckoutSession` refuses "No
+> valid free-activation reason", `functions/src/stripe.ts`). The nightly
+> `enforceBillingStatus` moves an expired trial to grace — emailing the
+> commissioner to "complete payment" — and then locks it: 14 + 7 = **21 days
+> by the code defaults** (`shared/schemas/billingConfig.ts`); production's
+> `settings/billing_config` `trialDays` / `gracePeriodDays` were not read —
+> **UNVERIFIED**. Workaround: Super-Admin → billing → Extend Trial
+> (`SuperAdminBillingPanel.tsx`, +14 days a click).
+>
+> **To stop it, fastest first.**
 > 1. Winner records look wrong on a live game: set
 >    `system/config.squaresWinners.paused = true`. Scores keep syncing; no
->    quarter winner is recorded or changed and no prize amount is set. One
->    thing still is, on purpose: an Every-Score-Pays pool notes each scoring
->    event at $0 as it happens, because an event not noted then cannot be
->    rebuilt later (D18). Clear the switch and the next sync run records what
->    was held, and sets those events' prizes.
+>    quarter winner is recorded or changed (D18).
 > 2. Stop new squares pools: Super-Admin → Pool Type Availability → SQUARES off.
-> 3. Code: revert #761, deploy functions, rebuild `www`. The code anchor from
->    before any of this is the branch `backup/pre-squares-reopen-2026-11-10`.
+> 3. Code: the anchor from before all of this is the branch
+>    `backup/pre-squares-reopen-2026-11-10`; data, the export above.
 
 > ## 🟢 2026-10-10 — **PLAN-SPLIT-POT-SETTLEMENT IS SHIPPED — ALL THREE PARTS, PLUS FIVE FOLLOW-UP PRs. EVERYTHING BELOW IS MERGED.**
 >
