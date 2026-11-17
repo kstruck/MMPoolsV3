@@ -20,8 +20,9 @@
 > the deployed source already matched `877d94a4`, so they had gone out in an
 > earlier deploy (inferred from the skip; when is not recorded). Smoke tests,
 > Kevin: "Everything looks good" — a running NFL pool's pages; a squares pool
-> created ("seems to be working"). `system/config`: `poolTypeFlags.SQUARES =
-> true`; `squaresWinners` absent (not paused).
+> created ("seems to be working"). `system/config`, as Kevin read it in the
+> Firebase console during the deploy (not queried from here):
+> `poolTypeFlags.SQUARES = true`; `squaresWinners` absent (not paused).
 >
 > **Pricing:** squares tiers are one band, 11–9999 at $0 (free for
 > Thanksgiving, K10). The previous squares tiers were deleted in that edit by
@@ -34,8 +35,15 @@
 > pricing option B (`PLAN-SQUARES-PRICING.md` §5 item 2) — a plan first, then
 > a 10-buyer limit on free squares pools (replacing the K2 exemption) and a
 > $9.99 / 3-for-$19.99 price. **Until then** a squares pool launched for 11+
-> players is on a trial that cannot be activated at $0 and locks ~21 days
-> after creation; the workaround is Super-Admin → billing → Extend Trial.
+> players is on a trial (`computeLaunchMode`, `functions/src/poolOps.ts`), and
+> a bare $0 price cannot activate it (`createCheckoutSession` refuses "No
+> valid free-activation reason", `functions/src/stripe.ts`). The nightly
+> `enforceBillingStatus` moves an expired trial to grace — emailing the
+> commissioner to "complete payment" — and then locks it: 14 + 7 = **21 days
+> by the code defaults** (`shared/schemas/billingConfig.ts`); production's
+> `settings/billing_config` `trialDays` / `gracePeriodDays` were not read —
+> **UNVERIFIED**. Workaround: Super-Admin → billing → Extend Trial
+> (`SuperAdminBillingPanel.tsx`, +14 days a click).
 >
 > **To stop it, fastest first.**
 > 1. Winner records look wrong on a live game: set
