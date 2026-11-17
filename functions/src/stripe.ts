@@ -429,8 +429,16 @@ export function checkoutPricingType(storedType: unknown): string {
     return LEGACY_PRICING_TYPE_ALIASES[upper] ?? upper;
 }
 
-/** Legacy stored types and the type they are priced as. */
-const LEGACY_PRICING_TYPE_ALIASES: Readonly<Record<string, string>> = { PLAYOFF: "NFL_PLAYOFFS" };
+/**
+ * Legacy stored types and the type they are priced as. `PLAYOFF` (stored
+ * `'playoff'`) is read by `playoffPools.ts` and `billing.ts`. `NFL_PLAYOFF` is
+ * defensive (codex round 7): no code writes it, but test fixtures use it and an
+ * old document could carry it, and mapping it costs nothing.
+ */
+const LEGACY_PRICING_TYPE_ALIASES: Readonly<Record<string, string>> = {
+    PLAYOFF: "NFL_PLAYOFFS",
+    NFL_PLAYOFF: "NFL_PLAYOFFS",
+};
 
 export const createCheckoutSession = validated(
     // Union: { bundleType } (bundle purchase) | checkoutPoolInputSchema (pool

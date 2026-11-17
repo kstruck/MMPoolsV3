@@ -47,3 +47,9 @@ Q1.1–Q1.3 were all marked ✓ Resolved. One new finding:
 | # | Finding | Verdict |
 |---|---|---|
 | X6.1 [P2] | A squares pool that now launches `free` above the threshold would get `onPoolParticipantChange`'s "approaching / reached the Free Plan limit" emails, although squares enforces no cap. | **Rejected, with a test.** For a squares pool the trigger counts `entryCount` (`billing.ts`, the final `else` branch), and no squares path writes one: the only writers are in the NFL, props and bracket code (`git grep -n "entryCount" -- functions/src`). So the count is 0 and neither email can fire. Pinned in `squaresCreate.emulator.test.ts` Z: a free 40-player squares pool with 12 squares reserved through `reserveSquares` has no `entryCount`. |
+
+### Round X7 — codex, on `be475e7c`
+
+| # | Finding | Verdict |
+|---|---|---|
+| X7.1 [P2] | A pool stored as `NFL_PLAYOFF` (no S) would not price. | **Accepted as defensive.** No production code writes or reads `NFL_PLAYOFF` (`git grep`); only two test fixtures use it. An old document could still carry it, and the alias is free, so `NFL_PLAYOFF` now maps to `NFL_PLAYOFFS` too. Unit test added. |

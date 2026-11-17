@@ -38,6 +38,7 @@ describe('checkoutPricingType', () => {
   // formatTierMap knows only NFL_PLAYOFFS — PLAYOFF would fail to price.
   it('prices a legacy "playoff" pool as NFL_PLAYOFFS', () => {
     expect(checkoutPricingType('playoff')).toBe('NFL_PLAYOFFS');
+    expect(checkoutPricingType('NFL_PLAYOFF')).toBe('NFL_PLAYOFFS');
     expect(checkoutPricingType('NFL_PLAYOFFS')).toBe('NFL_PLAYOFFS');
   });
   it('a pool with no stored type is a legacy squares pool (createPool and the rules agree)', () => {
