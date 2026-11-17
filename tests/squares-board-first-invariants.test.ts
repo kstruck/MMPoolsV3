@@ -98,7 +98,7 @@ describe('guest-details modal — the main way in now that the form starts close
 
     it('Continue moves on to confirmation ONLY when the details validate (an invalid email stays put)', () => {
         expect(grid).toMatch(/const handleSetIdentity = \(\): boolean =>/);
-        expect(modal).toMatch(/if \(!handleSetIdentity\(\)\) return;\s*\n\s*setShowGuestModal\(false\)/);
+        expect(modal).toMatch(/if \(!handleSetIdentity\(\)\) return;\s*\n\s*setPhoneAsked\(true\);\s*\n\s*setShowGuestModal\(false\)/);
         // The old shape called it and moved on regardless.
         expect(modal).not.toMatch(/handleSetIdentity\(\);\s*\/\/ Validates and saves\s*\n\s*setShowGuestModal\(false\)/);
     });
@@ -111,8 +111,19 @@ describe('guest-details modal — the main way in now that the form starts close
         expect(modal).toContain("updateDetail('phone', e.target.value)");
     });
 
-    it('Reserve opens the modal while that pool still has no phone for this player', () => {
-        expect(grid).toMatch(/const needsPhone = !!gameState\.collectPhone && !playerInfo\.details\.phone\?\.trim\(\);/);
+    it('Reserve opens the modal while that pool still has no phone — asked once, since it is optional', () => {
+        expect(grid).toMatch(/const needsPhone = !!gameState\.collectPhone && !playerInfo\.details\.phone\?\.trim\(\) && !phoneAsked;/);
+        expect(modal).toMatch(/if \(!handleSetIdentity\(\)\) return;\s*\n\s*setPhoneAsked\(true\);/);
+    });
+
+    it('Continue goes through the same per-player limit check as Reserve (qodo, PR #783)', () => {
+        const helper = grid.slice(grid.indexOf('const proceedToConfirm = ()'));
+        expect(helper.slice(0, 400)).toMatch(/if \(remainingAllowance < 0\)[\s\S]*?return false;[\s\S]*?setIsConfirming\(true\)/);
+        // setIsConfirming(true) is reached ONLY through proceedToConfirm.
+        expect([...grid.matchAll(/setIsConfirming\(true\)/g)].length).toBe(1);
+        expect(modal).toContain('proceedToConfirm();');
+        const checkout = grid.slice(grid.indexOf('const handleInitiateCheckout'), grid.indexOf('const [liabilityAccepted'));
+        expect(checkout).toContain('proceedToConfirm();');
     });
 
     it('a signed-in player cannot change their account email in the modal either', () => {

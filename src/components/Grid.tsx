@@ -321,7 +321,23 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       setIsIdentityOpen(false);
    });
 
-   const needsPhone = !!gameState.collectPhone && !playerInfo.details.phone?.trim();
+   // The phone is OPTIONAL, so ask once per visit: a player who leaves it blank
+   // and continues is not sent back to the modal on every Reserve.
+   const [phoneAsked, setPhoneAsked] = useState(false);
+   const needsPhone = !!gameState.collectPhone && !playerInfo.details.phone?.trim() && !phoneAsked;
+
+   /** The ONE way into the confirmation dialog. Both Reserve and the details
+    *  modal's Continue come through here, so neither can skip the per-player
+    *  limit (qodo, PR #783: Continue used to go straight to confirmation). */
+   const proceedToConfirm = (): boolean => {
+      // Final check on limit before modal
+      if (remainingAllowance < 0) {
+         setErrorMsg(`Limit exceeded. Please deselect ${Math.abs(remainingAllowance)} squares.`);
+         return false;
+      }
+      setIsConfirming(true);
+      return true;
+   };
 
    const handleInitiateCheckout = () => {
       if (selectedSquares.length === 0) return;
@@ -334,13 +350,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          return;
       }
 
-      // Final check on limit before modal
-      if (remainingAllowance < 0) {
-         setErrorMsg(`Limit exceeded. Please deselect ${Math.abs(remainingAllowance)} squares.`);
-         return;
-      }
-
-      setIsConfirming(true);
+      proceedToConfirm();
    };
 
    const [liabilityAccepted, setLiabilityAccepted] = useState(false);
@@ -920,8 +930,11 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               }
                               // Validates and saves; stays on this modal when that fails.
                               if (!handleSetIdentity()) return;
+                              setPhoneAsked(true);
                               setShowGuestModal(false); // Close this modal
-                              setIsConfirming(true); // Open CONFIRMATION modal
+                              // Same limit check as Reserve. On failure the error shows
+                              // on the page, where the player can deselect squares.
+                              proceedToConfirm();
                            }}
                            className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition-ui duration-150"
                         >
