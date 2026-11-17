@@ -110,8 +110,13 @@ describe('committed allow-list — picomatch GHSA-fc5q-39xc-vjpf', () => {
     expect(r.failures.map((f: { name: string }) => f.name)).toEqual(['other-glob']);
   });
 
-  it('fails again once it lapses, so the waiver cannot quietly become permanent', () => {
-    const r = evaluateAudit(report(adv('picomatch', PICO)), allowlist, new Date('2027-01-01T00:00:00Z'));
+  // A date-only expiry is read as 00:00 UTC on that day (the gate's rule for every
+  // entry; its 45-day edge test above depends on it). So this waiver lapses at the
+  // START of 2026-12-31, one second in (codex round 1 on this PR).
+  it('holds on 2026-12-30 and fails from the start of 2026-12-31, so it cannot quietly become permanent', () => {
+    const before = evaluateAudit(report(adv('picomatch', PICO)), allowlist, new Date('2026-12-30T23:59:59Z'));
+    expect(before.failures).toEqual([]);
+    const r = evaluateAudit(report(adv('picomatch', PICO)), allowlist, new Date('2026-12-31T00:00:01Z'));
     expect(r.failures).toHaveLength(1);
     expect(r.failures[0].reason).toMatch(/expired 2026-12-31/);
   });
