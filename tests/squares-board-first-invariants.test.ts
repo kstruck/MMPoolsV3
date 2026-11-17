@@ -1,0 +1,132 @@
+/**
+ * The squares pool page puts the BOARD FIRST (Kevin, 2026-11-16, option B).
+ *
+ * What these pin, read from the source because the page is one large route
+ * component with Firebase subscriptions that a unit test cannot mount cheaply:
+ *
+ * 1. The order: score strip -> fact chips -> board -> Payouts/Rules/Payment
+ *    tabs. The old order put Pool Details, Payout Structure and a full
+ *    scoreboard table above the board.
+ * 2. The AI Commissioner renders only behind `aiCommissionerView`: a pool that
+ *    did not pay shows players nothing.
+ * 3. The player-details form starts CLOSED, so it does not push the board down;
+ *    a guest is still asked for a name by the modal Reserve opens.
+ * 4. The grid's lock time stays on the first screen (`grid-locks-at`), which
+ *    the e2e suite checks right after the page opens.
+ */
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const root = resolve(__dirname, '..');
+const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
+const route = read('src/components/routes/PoolRoute.tsx');
+const grid = read('src/components/Grid.tsx');
+
+// The squares branch only — everything after the SQUARES LOGIC marker.
+const squares = route.slice(route.indexOf('// --- SQUARES LOGIC ---'));
+
+describe('squares page order — board first', () => {
+    it('the squares branch exists where this test expects it', () => {
+        expect(route.indexOf('// --- SQUARES LOGIC ---')).toBeGreaterThan(0);
+    });
+
+    it('score strip and fact chips come BEFORE the board; info tabs come AFTER it', () => {
+        const strip = squares.indexOf('<SquaresScoreStrip');
+        const chips = squares.indexOf('<SquaresFactChips');
+        const board = squares.indexOf('<Grid');
+        const tabs = squares.indexOf('<SquaresInfoTabs');
+        expect(strip).toBeGreaterThan(0);
+        expect(chips).toBeGreaterThan(strip);
+        expect(board).toBeGreaterThan(chips);
+        expect(tabs).toBeGreaterThan(board);
+    });
+
+    it('the old above-the-board blocks are gone', () => {
+        expect(squares).not.toContain('Pool Details</h3>');
+        expect(squares).not.toContain('Game Scoreboard');
+        expect(squares).not.toContain('showPoolInfo');
+    });
+
+    it('the grid lock time is on the first screen, not inside a tab', () => {
+        const locks = squares.indexOf('testId="grid-locks-at"');
+        expect(locks).toBeGreaterThan(0);
+        expect(locks).toBeLessThan(squares.indexOf('<Grid'));
+    });
+
+    it('the payout numbers the other suites read are still rendered', () => {
+        for (const id of ['total-pot', 'net-prize-pool', 'charity-amount']) {
+            expect(squares).toContain(`data-testid="${id}"`);
+        }
+    });
+});
+
+describe('AI Commissioner — only on a pool that paid for it', () => {
+    it('every AICommissioner render sits behind aiView === "show"', () => {
+        const renders = [...squares.matchAll(/<AICommissioner\b/g)];
+        expect(renders.length).toBe(1);
+        const at = renders[0].index ?? 0;
+        expect(squares.slice(Math.max(0, at - 80), at)).toContain("aiView === 'show'");
+    });
+
+    it('the view comes from aiCommissionerView with the strict manager check', () => {
+        expect(squares).toMatch(/aiCommissionerView\([\s\S]{0,160}?\.billing, isManager\)/);
+        expect(squares).toContain("aiView === 'upsell'");
+        expect(squares).toContain('addon="aiCommissioner"');
+    });
+});
+
+describe('player details start closed', () => {
+    it('the identity form is closed on first render', () => {
+        expect(grid).toMatch(/const \[isIdentityOpen, setIsIdentityOpen\] = useState\(false\)/);
+    });
+
+    it('a signed-in account collapses it too', () => {
+        const prefill = grid.slice(grid.indexOf('useAccountPrefill(currentUser'));
+        expect(prefill.slice(0, 600)).toContain('setIsIdentityOpen(false)');
+    });
+
+    it('a guest with no name is still sent to the details modal by Reserve', () => {
+        expect(grid).toMatch(/if \(!isIdentitySet \|\| needsPhone\) \{[\s\S]{0,120}?setShowGuestModal\(true\)/);
+    });
+});
+
+// qodo's re-review of PR #783. All three became reachable once the player form
+// started closed and the guest-details modal became the main way in.
+describe('guest-details modal — the main way in now that the form starts closed', () => {
+    const modal = grid.slice(grid.indexOf('{/* --- GUEST DETAILS MODAL'), grid.indexOf('showWaitlistModal && ('));
+
+    it('Continue moves on to confirmation ONLY when the details validate (an invalid email stays put)', () => {
+        expect(grid).toMatch(/const handleSetIdentity = \(\): boolean =>/);
+        expect(modal).toMatch(/if \(!handleSetIdentity\(\)\) return;\s*\n\s*setPhoneAsked\(true\);\s*\n\s*setShowGuestModal\(false\)/);
+        // The old shape called it and moved on regardless.
+        expect(modal).not.toMatch(/handleSetIdentity\(\);\s*\/\/ Validates and saves\s*\n\s*setShowGuestModal\(false\)/);
+    });
+
+    it('a pool that collects phone numbers asks for one in the modal', () => {
+        expect(modal).toMatch(/gameState\.collectPhone && \([\s\S]{0,600}?data-testid="squares-guest-phone"/);
+        // Optional, as it always was (codex round 3 on #783 asked to require it — a
+        // product change, rejected and put to Kevin). The label must say so.
+        expect(modal).toMatch(/Phone Number <span[^>]*>\(optional\)<\/span>/);
+        expect(modal).toContain("updateDetail('phone', e.target.value)");
+    });
+
+    it('Reserve opens the modal while that pool still has no phone — asked once, since it is optional', () => {
+        expect(grid).toMatch(/const needsPhone = !!gameState\.collectPhone && !playerInfo\.details\.phone\?\.trim\(\) && !phoneAsked;/);
+        expect(modal).toMatch(/if \(!handleSetIdentity\(\)\) return;\s*\n\s*setPhoneAsked\(true\);/);
+    });
+
+    it('Continue goes through the same per-player limit check as Reserve (qodo, PR #783)', () => {
+        const helper = grid.slice(grid.indexOf('const proceedToConfirm = ()'));
+        expect(helper.slice(0, 400)).toMatch(/if \(remainingAllowance < 0\)[\s\S]*?return false;[\s\S]*?setIsConfirming\(true\)/);
+        // setIsConfirming(true) is reached ONLY through proceedToConfirm.
+        expect([...grid.matchAll(/setIsConfirming\(true\)/g)].length).toBe(1);
+        expect(modal).toContain('proceedToConfirm();');
+        const checkout = grid.slice(grid.indexOf('const handleInitiateCheckout'), grid.indexOf('const [liabilityAccepted'));
+        expect(checkout).toContain('proceedToConfirm();');
+    });
+
+    it('a signed-in player cannot change their account email in the modal either', () => {
+        expect(modal).toMatch(/type="email"[\s\S]{0,120}?disabled=\{!!currentUser\}/);
+    });
+});
