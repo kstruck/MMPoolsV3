@@ -39,3 +39,11 @@ Q1.1–Q1.3 were all marked ✓ Resolved. One new finding:
 | # | Finding | Verdict |
 |---|---|---|
 | Q2.1 (High) | A legacy playoff pool is stored as `'playoff'`. `checkoutPricingType` upper-cased it to `PLAYOFF`, which `formatTierMap` does not have, so checkout rejected the quote. | **Valid — fixed.** The rest of the code already treats `'playoff'` as NFL_PLAYOFFS (`playoffPools.ts`, `billing.ts`, `BillingGate`). Checkout now maps `PLAYOFF` to `NFL_PLAYOFFS` (`LEGACY_PRICING_TYPE_ALIASES`). Test: `checkoutPricingType('playoff') === 'NFL_PLAYOFFS'`. |
+
+**Q2.1 follow-up:** qodo asked for a test through the real pricing map and checkout, not only the helper. `checkoutPricingType.emulator.test.ts` now checks out a pool stored as `'playoff'`. It is priced as NFL_PLAYOFFS (the bracket band, $19), and the test fails with the alias removed.
+
+### Round X6 — codex, on `8c2e182f`
+
+| # | Finding | Verdict |
+|---|---|---|
+| X6.1 [P2] | A squares pool that now launches `free` above the threshold would get `onPoolParticipantChange`'s "approaching / reached the Free Plan limit" emails, although squares enforces no cap. | **Rejected, with a test.** For a squares pool the trigger counts `entryCount` (`billing.ts`, the final `else` branch), and no squares path writes one: the only writers are in the NFL, props and bracket code (`git grep -n "entryCount" -- functions/src`). So the count is 0 and neither email can fire. Pinned in `squaresCreate.emulator.test.ts` Z: a free 40-player squares pool with 12 squares reserved through `reserveSquares` has no `entryCount`. |

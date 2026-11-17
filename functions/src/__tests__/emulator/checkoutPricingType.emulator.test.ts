@@ -92,6 +92,18 @@ describe('checkout prices the STORED pool type (qodo #786 finding 1)', () => {
     expect(pool.billing.tier).toBe('free_tier');
   });
 
+  // qodo #786 re-review: a legacy playoff pool is stored as 'playoff'. Through
+  // the real checkout and pricing map it must price as NFL_PLAYOFFS (the
+  // 'bracket' band, $19 here) — not fail on an unmapped PLAYOFF.
+  it('a legacy "playoff" pool is priced as NFL_PLAYOFFS through the real checkout', async () => {
+    await seedPool('po-1', 'playoff');
+    await attempt('po-1', 'SQUARES');
+    const sessions = (await db.collection('checkoutSessions').where('poolId', '==', 'po-1').get()).docs.map((d) => d.data());
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].poolType).toBe('NFL_PLAYOFFS');
+    expect(sessions[0].amount).toBe(19);
+  });
+
   it('a legacy squares pool with no stored type is priced as squares, whatever is sent', async () => {
     await seedPool('legacy-1', undefined);
     await attempt('legacy-1', 'BRACKET');

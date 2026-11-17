@@ -130,6 +130,20 @@ describe('Z — a squares pool priced at $0 launches free at any size', () => {
     expect(typeof pool.billing.trialEndsAt).toBe('number');
   });
 
+  // codex round 6 claimed a free squares pool now draws the free-plan "blocked
+  // at 10" emails. It cannot: `onPoolParticipantChange` (billing.ts) counts a
+  // squares pool by `entryCount`, and no squares path writes one. Pinned here,
+  // through the real reserve path, so a future write of it shows up.
+  it('a free squares pool never gets an entryCount, so the free-plan cap emails never fire', async () => {
+    await BILLING.set(JSON.parse(JSON.stringify(config(0))));
+    const { id, pool } = await createSquares({ estimatedPlayers: 40, maxSquaresPerPlayer: 0 });
+    expect(pool.billing.status).toBe('free');
+    for (let i = 0; i < 12; i++) await guestReserve(id, [i], `Guest${i}`);
+    const after = await poolDoc(id);
+    expect(after.squares.filter((s: Doc) => s.owner).length).toBe(12);
+    expect(after.entryCount).toBeUndefined();
+  });
+
   it('a paid add-on at $0 still starts a trial', async () => {
     await BILLING.set(JSON.parse(JSON.stringify(config(0))));
     const { pool } = await createSquares({ estimatedPlayers: 40, addons: { aiCommissioner: true } });
