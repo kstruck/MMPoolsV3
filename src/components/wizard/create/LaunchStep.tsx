@@ -269,11 +269,12 @@ export function LaunchStep(props: LaunchStepProps) {
     if (quote.addonLines.length > 0) return null;
     // ⚠️ SQUARES DOES NOT ENFORCE THIS CAP (codex r5). `reserveSquare` checks
     // billing access but never the free-plan participant count, unlike the four
-    // gates above — SQUARES-BACKLOG.md S3. Promising "player 11 cannot join" on
-    // a pool where they can is the exact class of false claim this notice was
-    // added to remove. Creation for the type is closed today, so this cannot
-    // render; it is here so reopening creation cannot quietly reintroduce the
-    // lie. Delete it when S3 is fixed, not before.
+    // gates above. Promising "player 11 cannot join" on a pool where they can
+    // is the exact class of false claim this notice was added to remove. Kevin
+    // ruled the exemption deliberate on 2026-11-17 (plan K2, backlog S3), and
+    // the squares pool page's banner follows the same rule (`BillingGate`
+    // `freePlanCapApplies`). Change both together, and only if squares ever
+    // enforces a cap.
     if (String(poolType).toUpperCase() === 'SQUARES') return null;
     // ⚠️ EVERY SENTENCE IN THIS NOTICE ASSUMES THE TWO NUMBERS AGREE (codex r9).
     //

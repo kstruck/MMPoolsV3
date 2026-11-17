@@ -142,6 +142,69 @@ describe('BillingGate — free / active state', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 1a. Free — the participant-cap banner, and the pool type exempt from it
+//     (plan K2, Kevin 2026-11-17: SQUARES is exempt from the free-plan cap)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('BillingGate — free-plan participant cap banner', () => {
+  const freePool = (participants: number) => ({
+    ...createPool({ status: 'free', tier: 'free_tier', pricePaid: 0, maxPlayersAllowed: 10 } as PoolBilling),
+    participantIds: Array.from({ length: participants }, (_, i) => `uid-${i}`),
+  });
+
+  // Pins the behaviour every other pool type keeps: the default is unchanged.
+  it('still shows the cap banner, and "locked" at the cap, when the cap applies (default)', () => {
+    render(
+      <BillingGate pool={freePool(10)} isCommissioner={true}>
+        <TestChild />
+      </BillingGate>
+    );
+    expect(screen.getByTestId('child-content')).toBeTruthy();
+    expect(screen.getByText(/Participant entries locked!/));
+  });
+
+  it('shows no cap banner for a pool type the cap does not apply to, even past ten', () => {
+    for (const isCommissioner of [true, false]) {
+      render(
+        <BillingGate pool={freePool(37)} isCommissioner={isCommissioner} freePlanCapApplies={false}>
+          <TestChild />
+        </BillingGate>
+      );
+      expect(screen.getByTestId('child-content')).toBeTruthy();
+      expect(screen.queryByText(/Free Plan/i)).toBeNull();
+      expect(screen.queryByText(/entries locked/i)).toBeNull();
+      expect(screen.queryByText(/Upgrade to Premium/i)).toBeNull();
+    }
+  });
+
+  // The exemption only removes the free-plan banner. A squares pool that is on
+  // a trial still gets the trial banner like any other pool.
+  it('leaves the other billing states alone when the cap does not apply', () => {
+    render(
+      <BillingGate
+        pool={createPool({ status: 'trial', trialEndsAt: Date.now() + 3 * 86_400_000 } as PoolBilling)}
+        isCommissioner={true}
+        freePlanCapApplies={false}
+      >
+        <TestChild />
+      </BillingGate>
+    );
+    expect(screen.getByText(/trial/i));
+  });
+
+  // The squares pool page is the one caller that opts out. Read from source so
+  // a refactor of Grid.tsx cannot silently drop the prop and bring the false
+  // "N/10" banner back.
+  it('the squares grid opts out', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const src = readFileSync(resolve(__dirname, '../components/Grid.tsx'), 'utf8');
+    const gate = src.slice(src.indexOf('<BillingGate'), src.indexOf('>', src.indexOf('freePlanCapApplies')) + 1);
+    expect(gate).toMatch(/freePlanCapApplies=\{false\}/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 1b. Active — commissioner-only "hosting fees paid" banner
 //
 // `active` was the one status with no banner at all. The rule is deliberately
