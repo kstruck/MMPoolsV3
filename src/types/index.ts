@@ -400,7 +400,6 @@ export interface GameState {
   numberSets: number; // 1 or 4
 
   // Display Settings
-  gridSize: string; // "10x10"
   numberTheSquares: boolean;
   showPaid: boolean;
 
