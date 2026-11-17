@@ -478,7 +478,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
 
    return (
-      <BillingGate pool={gameState as any} isCommissioner={!!currentUser && (currentUser.id === (gameState as any).managerUid || currentUser.id === (gameState as any).ownerId)}>
+      <BillingGate
+         pool={gameState as any}
+         isCommissioner={!!currentUser && (currentUser.id === (gameState as any).managerUid || currentUser.id === (gameState as any).ownerId)}
+         // Squares is exempt from the free plan's participant cap (plan K2):
+         // `reserveSquare` never enforces it, so the banner must not claim it.
+         freePlanCapApplies={false}
+      >
       <div className="flex flex-col items-center w-full mx-auto">
 
          {/* --- ERROR BANNER (Always Visible) --- */}

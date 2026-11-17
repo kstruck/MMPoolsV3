@@ -1,9 +1,11 @@
 # PLAN — reopen Squares: playable, fair, correctly paid, and consistent with the NFL wizards
 
-> **STATUS: BUILT — four PRs open (#758 A, #759 B, #760 C, #761 D — the reopen),
-> under delegated authority (Kevin, 2026-11-10). NOT MERGED, NOT DEPLOYED.**
-> Squares stays closed in production until all four are merged, functions are
-> deployed and `www` is rebuilt — in that order, by Kevin.
+> **STATUS: SHIPPED AND DEPLOYED (2026-11-17).** Merged via #765 (A–D,
+> squash), #762 (K7), #764 (dependencies) and #763 (pricing doc); functions,
+> `www` and rules deployed by Kevin on 2026-11-17 after a full export
+> (`gs://mmpools-firestore-exports/pre-squares-deploy-2026-11-17`, 253,670
+> documents). Every open item below was ruled on 2026-11-17 — see §2,
+> "Ruled 2026-11-17".
 >
 > Kevin, 2026-11-10: *"Let's get this working fully. We have time. I want
 > everything fixed and working properly and gaps identified and filled. Since I
@@ -230,7 +232,24 @@ Line references are to that commit. "NEW" = not in either backlog doc.
 | D11 | **One atomic claim.** A new `reserveSquares` callable takes the whole selection; all or nothing. `reserveSquare` stays for old bundles. | C7. |
 | D12 | **Winner docs follow the scores, and freeze the owner.** Period winners are recomputed from one shared pure function whenever a period is final; a winner's recorded owner changes only if the winning SQUARE changes. | Fixes M1–M3 and M6 in one place, and keeps today's protection against assigning an unsold winning square after the fact. |
 
-### Needs Kevin (work continues without them)
+### Ruled 2026-11-17 (Kevin)
+
+Kevin, 2026-11-17: *"K10 — Go with free for thanksgiving. Go with
+recommendation with the rest."* The items below keep their original text as
+the record; this is what was decided.
+
+| # | Ruling | What follows |
+|---|---|---|
+| S1–S4 (#765) | **Kept** as built: prize terms freeze at lock; Manual Score Override stays available after lock; super-admin browser edits unchanged; a linked pool is refused while the feed is down. | Nothing. |
+| K2 | **Squares is exempt from the free plan's participant cap**, said so in code and on screen. | The squares pool page no longer shows the free plan's "N/10" / "entries locked" banner, which stated a limit that does not exist (`BillingGate` `freePlanCapApplies`, passed `false` by `Grid.tsx`). The launch step already hid its own cap notice for squares. The cap emails never fired for squares (`onPoolParticipantChange` counts `entryCount`, which no squares path writes) and are untouched. **Until Thanksgiving.** K10's option B, approved for after Thanksgiving, replaces this exemption with its free-pool buyer limit. |
+| K10 | **Free for Thanksgiving.** | Done by Kevin in Super-Admin on 2026-11-17: the squares tiers are one band, 11–9999 at $0. (The earlier squares tiers were deleted in the same edit by mistake; their values are in the 2026-11-17 export if ever wanted.) After Thanksgiving: **`PLAN-SQUARES-PRICING.md` §5, item 2 — approved** (Kevin, 2026-11-17, asked again because its buyer limit reverses K2: *"Go with recommendations."*). A `PLAN-SQUARES-BUYER-LIMIT.md` and its review log come first, then the PR; its buyer limit replaces the K2 exemption, and the prices are Kevin's to set in Super-Admin. Until then, a squares pool launched for 11+ players is on a trial that a bare $0 price cannot activate (`stripe.ts`, "No valid free-activation reason"), so it goes to grace and then locks — 21 days after creation by the code defaults (14 + 7, `shared/schemas/billingConfig.ts`); production's `trialDays` / `gracePeriodDays` UNVERIFIED. Super-Admin's "Extend Trial" (+14 days) is the workaround. |
+| K5 | **Approved** — count `isPaid` in the commissioner dashboard's payouts total. | Its own small PR, after Thanksgiving (the file feeds every pool type's dashboard). |
+| K6 | **Approved** — the auto-release job stays dormant and labelled "not available yet" until a small PR re-checks eligibility inside its transaction and reads `claimedAt`. | After Thanksgiving, in one `reminders.ts` PR with K9(a). |
+| K8 | **Approved** — count guest squares by `guestKeyHash` in the roster summary's guest dues. | Its own small PR, after Thanksgiving (the file feeds every pool type). |
+| K9 | **Approved** — (a) skip winner records whose owner is not a player, and announce a random draw; (b) leave hand-scored Every Score Pays as it is. | (a) with K6, after Thanksgiving. |
+| K12 | **Left**, as recommended. | Nothing. |
+
+
 
 - **⛔ K7 IS THE ONE TO DECIDE FIRST** (it is listed in order below, but
   round Q5 changed its weight — read it before the others). **#761, the

@@ -47,13 +47,27 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     const [subscribedPool, setSubscribedPool] = useState<Pool | null>(null);
     const [isFetchingPool, setIsFetchingPool] = useState(false);
 
-    // Subscribe to real-time pool updates (similar to PoolRoute.tsx)
+    // The app-wide pool list, read when the subscription starts and NOT a
+    // dependency of it. It used to be one (`[id, pools]`), and that list gets a
+    // new identity whenever ANY pool the user can see changes — including this
+    // pool, every time the commissioner's own edit saves. Each change re-ran
+    // the effect, which showed "Loading Pool..." and so unmounted the admin
+    // panel; it remounted at step 1 of the setup wizard. Typing on step 2
+    // ("Basics") therefore threw the commissioner back to step 1 a moment
+    // later (Kevin, 2026-11-17). The subscription below already delivers every
+    // change to this pool; the list is only a first paint.
+    const poolsRef = React.useRef(pools);
+    React.useEffect(() => {
+        poolsRef.current = pools;
+    }, [pools]);
+
+    // Subscribe to real-time pool updates — once per pool id.
     React.useEffect(() => {
         if (!id) return;
 
         // Use first from props as optimistic initial value
-        const initial = pools.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
-        if (initial) setSubscribedPool(initial);
+        const initial = poolsRef.current.find(p => p.id === id || (p as any).slug === id || (p as any).urlSlug === id);
+        setSubscribedPool(initial ?? null);
 
         setIsFetchingPool(true);
         const unsubscribe = dbService.subscribeToPool(id, (poolData) => {
@@ -64,7 +78,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
         });
 
         return () => unsubscribe();
-    }, [id, pools]);
+    }, [id]);
 
     // Use subscribed pool as primary, falling back to initial from props list
     const currentPool = subscribedPool;

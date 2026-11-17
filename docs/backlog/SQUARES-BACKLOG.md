@@ -9,7 +9,7 @@ fixed or decided; what is left for Kevin is in the plan (K1, K2, K4–K11), not 
 |---|---|
 | S1 — a default pool is unplayable by anyone but its commissioner | **Fixed** — plan ticket A1 (`0` means no limit, one reader) |
 | S2 — the limit counts a display name | **Fixed** — plan ticket C3 (counts the account, the guest device, or the name) |
-| S3 — the per-player limit and the price | **Decided** — plan K2, Kevin's |
+| S3 — the per-player limit and the price | **Decided 2026-11-17** — exempt (plan K2); the squares page no longer claims a cap. A paid tier after Thanksgiving is plan K10 / `PLAN-SQUARES-PRICING.md` |
 | S4 — the guest key on the public pool document | **Fixed** — plan ticket C6 (`SECURITY-CLAIM-SQUARES.md`) |
 
 The text below is the list as written on 2026-08-28 and is kept as the record.
