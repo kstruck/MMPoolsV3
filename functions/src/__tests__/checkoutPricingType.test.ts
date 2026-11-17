@@ -5,8 +5,9 @@ import { resolve } from 'node:path';
 // stripe.ts touches admin.firestore() at module load — stub the SDK so the pure
 // helper can be imported (same shape as checkoutOwnership.test.ts).
 vi.mock('firebase-admin', () => {
-  const firestore: any = () => ({});
-  firestore.FieldValue = { delete: () => null, serverTimestamp: () => 0, increment: (n: number) => ({ __inc__: n }) };
+  const firestore = Object.assign(() => ({}), {
+    FieldValue: { delete: () => null, serverTimestamp: () => 0, increment: (n: number) => ({ __inc__: n }) },
+  });
   return { default: { firestore, apps: [], initializeApp: () => undefined }, firestore, apps: [], initializeApp: () => undefined };
 });
 vi.mock('firebase-admin/firestore', () => ({ FieldValue: { delete: () => null, serverTimestamp: () => 0, increment: (n: number) => ({ __inc__: n }) } }));
