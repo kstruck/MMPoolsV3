@@ -745,7 +745,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             )}
 
             <div className="flex justify-between pt-6 border-t border-line">
-              <Button onClick={() => setWizardStep(Math.max(1, wizardStep - 1))} disabled={wizardStep === 1} variant="ghost"><ArrowLeft size={18} /> Previous</Button>
+              <Button
+                onClick={() => setWizardStep(Math.max(1, wizardStep - 1))}
+                disabled={wizardStep === 1}
+                variant="ghost"
+                // Greyed out on step 1, not the shared button's cream "disabled"
+                // fill, which reads as a bright white block on this dark page
+                // (Kevin, 2026-11-17). `!` because the shared style is also a
+                // `disabled:` class and `cn` does not merge Tailwind classes.
+                className="disabled:!bg-transparent disabled:opacity-40"
+              ><ArrowLeft size={18} /> Previous</Button>
               {wizardStep < TOTAL_STEPS ? (
                 <Button onClick={() => setWizardStep(Math.min(TOTAL_STEPS, wizardStep + 1))} variant="secondary">Next Step <ArrowRight size={18} /></Button>
               ) : (

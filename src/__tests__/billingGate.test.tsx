@@ -44,6 +44,7 @@ vi.mock('lucide-react', () => ({
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingGate } from '../components/billing/BillingGate';
+import gridSource from '../components/Grid.tsx?raw';
 import type { PoolBilling } from '../types';
 
 let lastMarkup = '';
@@ -195,10 +196,8 @@ describe('BillingGate — free-plan participant cap banner', () => {
   // The squares pool page is the one caller that opts out. Read from source so
   // a refactor of Grid.tsx cannot silently drop the prop and bring the false
   // "N/10" banner back.
-  it('the squares grid opts out', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    const src = readFileSync(resolve(__dirname, '../components/Grid.tsx'), 'utf8');
+  it('the squares grid opts out', () => {
+    const src = gridSource;
     const gate = src.slice(src.indexOf('<BillingGate'), src.indexOf('>', src.indexOf('freePlanCapApplies')) + 1);
     expect(gate).toMatch(/freePlanCapApplies=\{false\}/);
   });
