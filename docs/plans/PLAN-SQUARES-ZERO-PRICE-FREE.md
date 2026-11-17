@@ -39,7 +39,7 @@ The squares tiers are one band, 11–9999 at $0 (Kevin, 2026-11-17, plan K10
 | # | Decision | Why |
 |---|---|---|
 | D1 | **Squares only.** A pool type the free plan's participant cap does not apply to (`FREE_CAP_EXEMPT_POOL_TYPES = ['SQUARES']`, plan K2), priced at $0, launches free at any size. | On every other type `free` brings the 10-participant cap (`shared/freePlanCap.ts`): a $0 band for 11–50 would launch free and then refuse player 11. Squares has no cap, so `free` takes nothing away. |
-| D2 | **The subtotal decides, not the total.** Base price $0 and no priced add-on. A coupon that discounts a priced pool to $0 is unchanged: still a trial, still the coupon's own $0 path. | A coupon is a discount on a paid pool, and its reservation is redeemed at activation; launching such a pool free would skip that. |
+| D2 | **The price decides, not the total.** Base price $0 and no paid add-on *selected* — read from the selection exactly as `createPool` reads it, whatever the config prices the add-on at (codex X1.1). A coupon that discounts a priced pool to $0 is unchanged: still a trial, still the coupon's own $0 path. | A coupon is a discount on a paid pool, and its reservation is redeemed at activation; launching such a pool free would skip that. |
 | D3 | **A pool launched free stays free** after the prices change (plan K10 option B, after Thanksgiving). | It is what the commissioner was told at launch. `free` has no clock; nothing re-prices a pool after creation. |
 | D4 | **No migration of pools already created as trials.** They now get a working $0 activation: their quote is `free_tier`, so the pricing page offers it and `createCheckoutSession`'s $0 path accepts it — unless the owner already has an active free pool (the existing one-free-pool rule). Otherwise Super-Admin → Extend Trial, as before. | A production write is its own gate, and the pools are few and days old. |
 | D5 | **A paid add-on still forces a trial**, and the price is not consulted. | Unchanged rule (`payloadHasPaidAddon`): the trial is what unlocks a selected add-on. |
@@ -48,7 +48,7 @@ The squares tiers are one band, 11–9999 at $0 (Kevin, 2026-11-17, plan K10
 
 - `functions/src/lib/quoteEngine.ts`:
   - New `FREE_CAP_EXEMPT_POOL_TYPES` and `zeroPricedLaunchesFree(config, poolType, estimate, addons)`, which is pure and never throws (an unpriceable config is "not zero-priced").
-  - `computeQuote` makes `freeTierEligible` true for a cap-exempt type with base price $0 and no priced add-on, as long as the total is also $0.
+  - `computeQuote` makes `freeTierEligible` true for a cap-exempt type with base price $0 and no paid add-on selected (one shared `selectsPaidAddon`), as long as the total is also $0.
 - `functions/src/poolOps.ts`:
   - `computeLaunchMode` takes an optional `zeroPriced` check, consulted only above the threshold and only when there is no paid add-on.
   - `createPool` passes it for squares only. `createNFLPool` and `createBracketPool` do not pass it, so their rule is unchanged.

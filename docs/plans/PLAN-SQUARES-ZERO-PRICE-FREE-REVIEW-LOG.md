@@ -29,4 +29,10 @@ git grep -n "computeLaunchMode(" -- functions/src ':!**/__tests__/**'
 
 ## Review rounds
 
-(Filled in as codex and qodo report.)
+### Round X1 — codex (`gpt-5.6-terra`), on `7623bff7`
+
+| # | Finding | Verdict |
+|---|---|---|
+| X1.1 [P2] | An add-on selected but priced $0 by config adds no quote line, so the quote said free; `createPool` still launched a trial (`payloadHasPaidAddon` reads the selection). The wizard and the stored pool disagreed. | **Valid — fixed** in the direction of the existing rule (D5): the zero-priced test now reads the add-on *selection*, exactly as `createPool` does (`selectsPaidAddon`), so the quote says trial too. The other direction (launch free) was rejected: the free path never switches a selected add-on on (`billingForLaunch`), so the commissioner would get a "free" pool without the feature they ticked. Tests: a selected $0 add-on is not free-tier; an included add-on (`customBranding`) still is. |
+
+**Not changed, recorded:** the same selection/price mismatch already exists on `main` for pools AT or below the threshold. `freeTierEligible` uses `total === 0` there, which a selected-but-$0 add-on satisfies, and `createPool` launches a trial. It predates this plan, it is every pool type, and it is reachable only if Super-Admin prices a premium add-on at $0. It is out of scope.

@@ -100,13 +100,27 @@ export function computeBasePrice(
 }
 
 /**
+ * Does the selection include a paid (not included-with-every-pool) add-on —
+ * whatever the config prices it at? The same test `createPool` launches by
+ * (`payloadHasPaidAddon`): a selected add-on starts a TRIAL, because the trial
+ * is what switches it on (`billingForLaunch`), and the free path never does.
+ * The zero-priced rule must read the selection the same way, or the wizard
+ * would say "free" for a pool `createPool` puts on a trial — codex round 1 on
+ * PLAN-SQUARES-ZERO-PRICE-FREE: an add-on the config prices at $0 adds no quote
+ * line but still forces the trial.
+ */
+function selectsPaidAddon(addons: Partial<Record<string, boolean>>): boolean {
+  return ADDON_KEYS.some((k) => addons[k] === true && !isIncludedAddon(k));
+}
+
+/**
  * Pool types the free plan's PARTICIPANT CAP does not apply to. Kevin, 2026-11-17
  * (plan K2): squares is exempt — `reserveSquare` never enforced the cap.
  */
 export const FREE_CAP_EXEMPT_POOL_TYPES: readonly string[] = ['SQUARES'];
 
 /**
- * A pool that is priced at $0 (base price $0, no priced add-on) launches FREE —
+ * A pool that is priced at $0 (base price $0, no paid add-on selected) launches FREE —
  * for a cap-exempt pool type only (PLAN-SQUARES-ZERO-PRICE-FREE).
  *
  * Without this, a squares pool above `freePlayerThreshold` launched on a TRIAL
@@ -135,9 +149,10 @@ export function zeroPricedLaunchesFree(
   addons: Partial<Record<string, boolean>>
 ): boolean {
   if (!FREE_CAP_EXEMPT_POOL_TYPES.includes(poolType)) return false;
+  if (selectsPaidAddon(addons)) return false;
   try {
     const { basePrice } = computeBasePrice(config, poolType, estimatedPlayers);
-    return basePrice === 0 && computeAddonLines(config, addons as AddonSelection).length === 0;
+    return basePrice === 0;
   } catch {
     return false;
   }
@@ -219,7 +234,7 @@ export function computeQuote(args: {
   // `createPool` launches by (zeroPricedLaunchesFree), so the wizard's button
   // and the pool it creates agree.
   const zeroPricedFree =
-    FREE_CAP_EXEMPT_POOL_TYPES.includes(poolType) && basePrice === 0 && addonLines.length === 0;
+    FREE_CAP_EXEMPT_POOL_TYPES.includes(poolType) && basePrice === 0 && !selectsPaidAddon(addons);
   const freeTierEligible = (players <= config.freePlayerThreshold || zeroPricedFree) && total === 0;
 
   // Tier classification: free when eligible; otherwise premium if any add-on is

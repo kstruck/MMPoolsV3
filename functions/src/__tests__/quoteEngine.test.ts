@@ -330,12 +330,36 @@ describe('zero-priced squares launch free (PLAN-SQUARES-ZERO-PRICE-FREE)', () =>
     expect(zeroPricedLaunchesFree(zeroBands('squares'), 'SQUARES', 40, addons)).toBe(false);
   });
 
+  // codex round 1: an add-on the config prices at $0 adds no quote line, but
+  // createPool still puts a pool that selects it on a trial (the trial is what
+  // switches the add-on on). The quote must say "trial" too, not "free".
+  it('a SELECTED add-on that the config prices at $0 still keeps it off the free path', () => {
+    const cfg = BillingConfigSchema.parse({
+      ...zeroBands('squares'),
+      features: { ...CONFIG.features, aiCommissioner: { isPremium: true, addonPrice: 0 } },
+    });
+    const addons = { ...NONE, aiCommissioner: true };
+    const q = computeQuote({ config: cfg, poolType: 'SQUARES', estimatedPlayers: 40, addons });
+    expect(q.addonLines).toHaveLength(0);
+    expect(q.freeTierEligible).toBe(false);
+    expect(zeroPricedLaunchesFree(cfg, 'SQUARES', 40, addons)).toBe(false);
+  });
+
+  // An INCLUDED add-on is never paid and never forces a trial.
+  it('an included add-on does not keep a $0 squares pool off the free path', () => {
+    const addons = { ...NONE, customBranding: true };
+    const q = computeQuote({ config: zeroBands('squares'), poolType: 'SQUARES', estimatedPlayers: 40, addons });
+    expect(q.freeTierEligible).toBe(true);
+    expect(zeroPricedLaunchesFree(zeroBands('squares'), 'SQUARES', 40, addons)).toBe(true);
+  });
+
   // The SUBTOTAL decides, not the total: a coupon that discounts a priced pool
   // to $0 is a paid pool activated with a coupon, not a free one.
   it('a full-discount coupon on a priced squares band is not free-tier eligible', () => {
     const q = computeQuote({
       config: CONFIG, poolType: 'SQUARES', estimatedPlayers: 40, addons: NONE,
-      couponState: { valid: true }, coupon: { code: 'ALL', discountType: 'percentage', discountValue: 100 },
+      couponState: { code: 'ALL', valid: true, discountType: 'percentage', discountValue: 100 },
+      coupon: { code: 'ALL', discountType: 'percentage', discountValue: 100 },
     });
     expect(q.total).toBe(0);
     expect(q.freeTierEligible).toBe(false);
