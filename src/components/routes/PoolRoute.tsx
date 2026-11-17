@@ -547,8 +547,8 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 moved to the tabs BELOW the board; on a phone the old order put the
                 board several screens down. */}
             <div className="max-w-[1100px] mx-auto px-4 pt-4 sm:pt-6 flex flex-col gap-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                         {squaresPool.branding?.logoUrl && (
                             <img src={squaresPool.branding.logoUrl} className="h-10 sm:h-16 w-auto object-contain drop-shadow-lg" alt="Pool Logo" />
                         )}
@@ -559,7 +559,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                             </button>
                         </div>
                     </div>
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex flex-col sm:flex-row gap-2 shrink-0 items-end">
                         {user && (user.id === squaresPool.ownerId || isSuperAdmin(user)) && (
                             <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/${squaresPool.id}`)}>
                                 <Edit2 size={16} /> <span className="hidden sm:inline">Manage Pool</span><span className="sm:hidden">Manage</span>

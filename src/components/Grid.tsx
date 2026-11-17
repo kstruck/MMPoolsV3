@@ -1141,30 +1141,32 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   </div>
 
                   {/* --- ZOOM CONTROLS (Mobile-Friendly) --- */}
-                  <div className="w-full max-w-[80vh] mx-auto flex justify-between items-center px-2 mb-2 md:hidden">
-                     <span className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] num">
+                  <div className="w-full max-w-[80vh] mx-auto flex justify-between items-center px-2 py-1 bg-navy-950 border-x border-[rgba(230,206,150,0.16)] md:hidden">
+                     <span className="text-[10px] text-[#9FB0CC] font-display font-bold uppercase tracking-[0.08em] num">
                         Zoom: {Math.round(zoomLevel * 100)}%
                      </span>
-                     <div className="flex gap-2">
+                     <div className="flex gap-1.5">
                         <button
+                           aria-label="Zoom out"
                            onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
                            disabled={zoomLevel <= 0.5}
-                           className="bg-card hover:bg-page disabled:opacity-40 text-[color:var(--text)] p-2 rounded-lg transition-colors duration-150 border border-line"
+                           className="bg-navy-900 hover:bg-navy-800 disabled:opacity-40 text-white min-w-[36px] min-h-[32px] flex items-center justify-center rounded-lg transition-colors duration-150 border border-navy-800"
                         >
-                           <ZoomOut size={18} />
+                           <ZoomOut size={16} />
                         </button>
                         <button
                            onClick={() => setZoomLevel(1)}
-                           className="bg-card hover:bg-page text-[color:var(--text)] px-3 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 border border-line"
+                           className="bg-navy-900 hover:bg-navy-800 text-white px-2.5 min-h-[32px] rounded-lg text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 border border-navy-800"
                         >
                            Reset
                         </button>
                         <button
+                           aria-label="Zoom in"
                            onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))}
                            disabled={zoomLevel >= 1.5}
-                           className="bg-card hover:bg-page disabled:opacity-40 text-[color:var(--text)] p-2 rounded-lg transition-colors duration-150 border border-line"
+                           className="bg-navy-900 hover:bg-navy-800 disabled:opacity-40 text-white min-w-[36px] min-h-[32px] flex items-center justify-center rounded-lg transition-colors duration-150 border border-navy-800"
                         >
-                           <ZoomIn size={18} />
+                           <ZoomIn size={16} />
                         </button>
                      </div>
                   </div>
