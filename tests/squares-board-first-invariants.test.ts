@@ -104,7 +104,10 @@ describe('guest-details modal — the main way in now that the form starts close
     });
 
     it('a pool that collects phone numbers asks for one in the modal', () => {
-        expect(modal).toMatch(/gameState\.collectPhone && \([\s\S]{0,400}?data-testid="squares-guest-phone"/);
+        expect(modal).toMatch(/gameState\.collectPhone && \([\s\S]{0,600}?data-testid="squares-guest-phone"/);
+        // Optional, as it always was (codex round 3 on #783 asked to require it — a
+        // product change, rejected and put to Kevin). The label must say so.
+        expect(modal).toMatch(/Phone Number <span[^>]*>\(optional\)<\/span>/);
         expect(modal).toContain("updateDetail('phone', e.target.value)");
     });
 

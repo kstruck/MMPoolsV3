@@ -879,9 +879,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                               placeholder="john@example.com"
                            />
                         </div>
+                        {/* OPTIONAL, as it has always been: the pool setting is "collect",
+                            not "require" — the player form never required it and
+                            `reserveSquares` accepts a reservation without one. Making it
+                            required is a product decision this layout change does not make. */}
                         {gameState.collectPhone && (
                            <label htmlFor="squares-guest-phone" className="block">
-                              <span className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Phone Number</span>
+                              <span className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Phone Number <span className="normal-case font-body font-normal tracking-normal">(optional)</span></span>
                               <input
                                  id="squares-guest-phone"
                                  data-testid="squares-guest-phone"
