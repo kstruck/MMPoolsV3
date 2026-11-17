@@ -30,9 +30,12 @@
 > **Ruled 2026-11-17** (plan §2, "Ruled 2026-11-17"): S1–S4 kept; K2 squares
 > exempt from the free-plan cap (this PR removes the false banner); K5, K6,
 > K8, K9 approved as small PRs **after Thanksgiving** (each is in a file the
-> running NFL pools share); K12 left. **Still to confirm with Kevin:** the
-> after-Thanksgiving pricing (`PLAN-SQUARES-PRICING.md` §5 item 2) adds a
-> 10-buyer limit to free squares pools, which reverses K2.
+> running NFL pools share); K12 left. **After Thanksgiving, approved:**
+> pricing option B (`PLAN-SQUARES-PRICING.md` §5 item 2) — a plan first, then
+> a 10-buyer limit on free squares pools (replacing the K2 exemption) and a
+> $9.99 / 3-for-$19.99 price. **Until then** a squares pool launched for 11+
+> players is on a trial that cannot be activated at $0 and locks ~21 days
+> after creation; the workaround is Super-Admin → billing → Extend Trial.
 >
 > **To stop it, fastest first.**
 > 1. Winner records look wrong on a live game: set
