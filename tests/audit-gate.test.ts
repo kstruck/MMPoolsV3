@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 // @ts-expect-error — plain .mjs script, no type declarations
 import { evaluateAudit, collectAdvisories } from '../scripts/auditGate.mjs';
 
@@ -87,5 +89,30 @@ describe('audit gate', () => {
     const r = evaluateAudit(report(), { entries: [entry('GHSA-aaaa-bbbb-cccc')] }, NOW);
     expect(r.unusedEntries).toEqual(['GHSA-aaaa-bbbb-cccc|braces']);
     expect(r.failures).toEqual([]);
+  });
+});
+
+// The committed allow-list itself, not a fixture: Kevin approved the picomatch
+// waiver on 2026-11-17 (GHSA-fc5q-39xc-vjpf, no patched release past 4.0.7,
+// dev/build tooling only). Pin that it is accepted now, covers picomatch only,
+// and lapses on its own date.
+describe('committed allow-list — picomatch GHSA-fc5q-39xc-vjpf', () => {
+  const allowlist = JSON.parse(readFileSync(resolve(__dirname, '../.github/audit-allowlist.json'), 'utf8'));
+  const PICO = 'GHSA-fc5q-39xc-vjpf';
+
+  it('waives the picomatch advisory on the day it was added', () => {
+    const r = evaluateAudit(report(adv('picomatch', PICO)), allowlist, new Date('2026-11-17T23:00:00Z'));
+    expect(r.failures).toEqual([]);
+  });
+
+  it('covers picomatch only: the same advisory on another package still fails', () => {
+    const r = evaluateAudit(report(adv('other-glob', PICO)), allowlist, new Date('2026-11-17T23:00:00Z'));
+    expect(r.failures.map((f: { name: string }) => f.name)).toEqual(['other-glob']);
+  });
+
+  it('fails again once it lapses, so the waiver cannot quietly become permanent', () => {
+    const r = evaluateAudit(report(adv('picomatch', PICO)), allowlist, new Date('2027-01-01T00:00:00Z'));
+    expect(r.failures).toHaveLength(1);
+    expect(r.failures[0].reason).toMatch(/expired 2026-12-31/);
   });
 });

@@ -12,6 +12,12 @@
       "package": "node-forge",
       "reason": "node-forge <=1.4.0. 1.4.0 is the latest release (checked 2026-10-09), so there is nothing to upgrade to. Reaches functions/ through firebase-admin; npm's only 'fix' is firebase-admin 14, a major upgrade.",
       "expires": "2026-11-09"
+    },
+    {
+      "ghsa": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "picomatch <=4.0.7 ReDoS through repeated extglobs (advisory widened 2026-11-17). 4.0.7 is the latest release (checked 2026-11-17), so there is nothing to upgrade to. Dev/build tooling only: `npm ls picomatch --omit=dev` is empty in both the root and functions/ trees. Approved by Kevin 2026-11-17.",
+      "expires": "2026-12-31"
     }
   ]
 }
