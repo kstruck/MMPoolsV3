@@ -27,7 +27,13 @@ describe('checkoutPricingType', () => {
     expect(checkoutPricingType('BRACKET')).toBe('BRACKET');
     expect(checkoutPricingType('SQUARES')).toBe('SQUARES');
   });
-  it('a pool with no stored type is a legacy squares pool (createPool and the rules agree)', () => {
+  // The pricing page always sent `poolType.toUpperCase()`, and formatTierMap is
+  // keyed in capitals, so a legacy lowercase stored type must price the same.
+  it('is upper-cased, as the pricing page always sent it', () => {
+    expect(checkoutPricingType('playoff')).toBe('PLAYOFF');
+    expect(checkoutPricingType(' squares ')).toBe('SQUARES');
+  });
+    it('a pool with no stored type is a legacy squares pool (createPool and the rules agree)', () => {
     for (const t of [undefined, null, '', '  ', 42]) expect(checkoutPricingType(t)).toBe('SQUARES');
   });
 });

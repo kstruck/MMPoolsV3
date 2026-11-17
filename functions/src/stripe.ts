@@ -418,7 +418,10 @@ export function assertCheckoutOwnership(
  * `createPool` (`!data.type || data.type === 'SQUARES'`) and the rules.
  */
 export function checkoutPricingType(storedType: unknown): string {
-    return typeof storedType === "string" && storedType.trim() !== "" ? storedType : "SQUARES";
+    // Upper-cased because the pricing page always sent `poolType.toUpperCase()`
+    // and `formatTierMap` is keyed in capitals: a legacy lowercase type
+    // (`billing.ts` still reads `'playoff'`) prices exactly as it did before.
+    return typeof storedType === "string" && storedType.trim() !== "" ? storedType.trim().toUpperCase() : "SQUARES";
 }
 
 export const createCheckoutSession = validated(
