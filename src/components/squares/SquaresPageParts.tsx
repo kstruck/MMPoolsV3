@@ -83,8 +83,10 @@ export const SquaresScoreStrip: React.FC<{
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[rgba(230,206,150,0.12)]">
-                            {([[awayTeam, away, scores.current?.away ?? 0, 'text-gold-400'], [homeTeam, home, scores.current?.home ?? 0, 'text-brandred-500']] as const).map(([team, pts, total, color]) => (
-                                <tr key={team}>
+                            {/* Keyed by SIDE, never by team name: both names are '' before
+                                the teams are set, which made a duplicate key (qodo, PR #783). */}
+                            {([['away', awayTeam, away, scores.current?.away ?? 0, 'text-gold-400'], ['home', homeTeam, home, scores.current?.home ?? 0, 'text-brandred-500']] as const).map(([side, team, pts, total, color]) => (
+                                <tr key={side}>
                                     <td className="py-2 px-3 font-bold text-white text-left font-body">{team}</td>
                                     {pts.map((p, i) => <td key={i} className="py-2 px-3 num text-[#9FB0CC]">{p}</td>)}
                                     <td className={`py-2 px-3 font-display font-bold text-lg bg-navy-950/50 num ${color}`}>{total}</td>

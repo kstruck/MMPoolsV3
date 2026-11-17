@@ -104,6 +104,20 @@ describe('SquaresScoreStrip — the scoreboard as one line', () => {
         expect(screen.getByRole('button', { expanded: true })).toBeTruthy();
     });
 
+    it('keys the quarter rows by side, so two empty team names do not collide (qodo, PR #783)', () => {
+        const errors: unknown[] = [];
+        const orig = console.error;
+        console.error = (...a: unknown[]) => { errors.push(a); };
+        try {
+            render(<SquaresScoreStrip awayTeam="" homeTeam="" scores={live} />);
+            fireEvent.click(screen.getByRole('button', { expanded: false }));
+            expect(screen.getAllByRole('row').length).toBe(3); // header + away + home
+        } finally {
+            console.error = orig;
+        }
+        expect(errors.filter(e => String(e).includes('same key'))).toEqual([]);
+    });
+
     it('reads PENDING before kickoff and 0 for both sides', () => {
         render(<SquaresScoreStrip awayTeam="Kansas City Chiefs" homeTeam="Buffalo Bills" scores={pre} />);
         const strip = screen.getByTestId('squares-score-strip');

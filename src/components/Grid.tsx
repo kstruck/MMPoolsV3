@@ -246,15 +246,18 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       });
    };
 
-   const handleSetIdentity = () => {
+   /** Validates and saves the player's details. Returns whether it succeeded —
+    *  the guest modal must NOT move on to confirmation when it did not (qodo,
+    *  PR #783: an invalid email used to sail through to the reservation). */
+   const handleSetIdentity = (): boolean => {
       if (!playerInfo.name.trim()) {
          setErrorMsg("Name is required to start picking.");
-         return;
+         return false;
       }
       // Basic email validation if provided
       if (playerInfo.details.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerInfo.details.email || '')) {
          setErrorMsg("Please enter a valid email.");
-         return;
+         return false;
       }
 
       setIsIdentitySet(true);
@@ -263,6 +266,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
       // Save to local storage
       localStorage.setItem('sbSquaresPlayer', JSON.stringify(playerInfo));
+      return true;
    };
 
    const handleJoinWaitlist = async () => {
@@ -317,11 +321,15 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       setIsIdentityOpen(false);
    });
 
+   const needsPhone = !!gameState.collectPhone && !playerInfo.details.phone?.trim();
+
    const handleInitiateCheckout = () => {
       if (selectedSquares.length === 0) return;
 
-      if (!isIdentitySet) {
-         // Replaces scroll-to-top with Modal
+      // The details modal asks for what the closed player bar did not: a name,
+      // and — on a pool that collects phone numbers — a phone (qodo, PR #783:
+      // with the form closed by default, the phone field was never seen).
+      if (!isIdentitySet || needsPhone) {
          setShowGuestModal(true);
          return;
       }
@@ -865,11 +873,26 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            <input
                               type="email"
                               value={playerInfo.details.email}
+                              disabled={!!currentUser}
                               onChange={(e) => updateDetail('email', e.target.value)}
                               className="w-full bg-page border border-line rounded-lg px-4 py-3 font-body text-[color:var(--text)] focus:ring-2 focus:ring-gold-500 outline-none placeholder:text-faint"
                               placeholder="john@example.com"
                            />
                         </div>
+                        {gameState.collectPhone && (
+                           <label htmlFor="squares-guest-phone" className="block">
+                              <span className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Phone Number</span>
+                              <input
+                                 id="squares-guest-phone"
+                                 data-testid="squares-guest-phone"
+                                 type="tel"
+                                 value={playerInfo.details.phone}
+                                 onChange={(e) => updateDetail('phone', e.target.value)}
+                                 className="w-full bg-page border border-line rounded-lg px-4 py-3 font-body text-[color:var(--text)] focus:ring-2 focus:ring-gold-500 outline-none placeholder:text-faint"
+                                 placeholder="(555) 123-4567"
+                              />
+                           </label>
+                        )}
                         {/* Show validation error inside modal if needed */}
                         {errorMsg && (
                            <div className="text-xs text-brandred-600 bg-brandred-600/10 p-2 rounded border border-brandred-600/20 flex items-center gap-2">
@@ -891,7 +914,8 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  setErrorMsg("Name is required.");
                                  return;
                               }
-                              handleSetIdentity(); // Validates and saves
+                              // Validates and saves; stays on this modal when that fails.
+                              if (!handleSetIdentity()) return;
                               setShowGuestModal(false); // Close this modal
                               setIsConfirming(true); // Open CONFIRMATION modal
                            }}

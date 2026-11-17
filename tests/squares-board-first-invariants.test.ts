@@ -87,6 +87,32 @@ describe('player details start closed', () => {
     });
 
     it('a guest with no name is still sent to the details modal by Reserve', () => {
-        expect(grid).toMatch(/if \(!isIdentitySet\) \{[\s\S]{0,120}?setShowGuestModal\(true\)/);
+        expect(grid).toMatch(/if \(!isIdentitySet \|\| needsPhone\) \{[\s\S]{0,120}?setShowGuestModal\(true\)/);
+    });
+});
+
+// qodo's re-review of PR #783. All three became reachable once the player form
+// started closed and the guest-details modal became the main way in.
+describe('guest-details modal — the main way in now that the form starts closed', () => {
+    const modal = grid.slice(grid.indexOf('{/* --- GUEST DETAILS MODAL'), grid.indexOf('showWaitlistModal && ('));
+
+    it('Continue moves on to confirmation ONLY when the details validate (an invalid email stays put)', () => {
+        expect(grid).toMatch(/const handleSetIdentity = \(\): boolean =>/);
+        expect(modal).toMatch(/if \(!handleSetIdentity\(\)\) return;\s*\n\s*setShowGuestModal\(false\)/);
+        // The old shape called it and moved on regardless.
+        expect(modal).not.toMatch(/handleSetIdentity\(\);\s*\/\/ Validates and saves\s*\n\s*setShowGuestModal\(false\)/);
+    });
+
+    it('a pool that collects phone numbers asks for one in the modal', () => {
+        expect(modal).toMatch(/gameState\.collectPhone && \([\s\S]{0,400}?data-testid="squares-guest-phone"/);
+        expect(modal).toContain("updateDetail('phone', e.target.value)");
+    });
+
+    it('Reserve opens the modal while that pool still has no phone for this player', () => {
+        expect(grid).toMatch(/const needsPhone = !!gameState\.collectPhone && !playerInfo\.details\.phone\?\.trim\(\);/);
+    });
+
+    it('a signed-in player cannot change their account email in the modal either', () => {
+        expect(modal).toMatch(/type="email"[\s\S]{0,120}?disabled=\{!!currentUser\}/);
     });
 });
