@@ -20,7 +20,13 @@ invent new machinery. Session-invoked, not scheduled.
    pass.
 5. Record progress (what was done, what verify step confirmed it, what's next) in the
    ticket's own tracking doc or memory — so the next invocation doesn't re-derive
-   context from scratch. Also append one row to `LOOP-LOG.tsv` at the repo root — one tab-separated row per run
+   context from scratch. Also append **one row for this invocation** to `LOOP-LOG.tsv`. Append in the **primary
+   checkout**, then commit and push the row — full rules in
+   `docs/plans/PLAN-LOOPS.md` ("Where the row is written"). **This loop works in
+   an isolated worktree, so "the repo root" means that worktree's root unless
+   you say otherwise: a row appended there is untracked and vanishes with the
+   worktree.** (codex's round-5 finding on #699: the charter's durability rule
+   was applied to three of the five loops and not to this one.) One tab-separated row per run
    (`date loop commit verdict metric idea lesson`, spec in
    `docs/plans/PLAN-LOOPS.md`). Append only; never rewrite an earlier row.
    **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never

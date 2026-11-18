@@ -95,9 +95,23 @@ claims to cover (codex's second P1 on #699).
    checked. Then carry on with the self-consistency checks below, which are
    what this run can actually establish.
 3. Query `admin_audit` (+ scoped audit/activity subcollections) for the same window.
-4. Diff the two sets. A gap is: an admin action with no matching audit entry, or an audit
-   entry that doesn't correspond to any real action (the latter is lower priority but
-   still worth a line).
+4. **Run the self-consistency checks** — these are what step 3's data can
+   actually support, and there is no second set to diff against (step 2):
+   - every row well-formed against the `admin_audit` schema in
+     `mmp-diagnostics-and-tooling`;
+   - every row's target still resolvable (a row naming a pool or user that
+     does not exist is worth a line);
+   - **every destructive action type in the superadmin surface has produced at
+     least one row in a long window.** A type with none is the strongest signal
+     available here that its logging is broken — it is not proof, because
+     nobody may have invoked it, so report it as a `FINDING` to check, never as
+     a confirmed gap.
+
+   ⚠️ This step said "diff the two sets … an admin action with no matching audit
+   entry" until codex's round-5 review of #699. There is no action set to diff
+   (step 2), so that instruction was impossible to carry out and contradicted
+   step 5's always-`INCONCLUSIVE` integrity verdict — an active loop must not
+   carry a step that implies it performed a reconciliation it cannot perform.
 5. **Verify condition.** Two separate verdicts, never merged into one:
    - **Integrity (action → audit row, 1:1):** `INCONCLUSIVE`, always, until the
      instrumentation described above exists. Say which side was missing.

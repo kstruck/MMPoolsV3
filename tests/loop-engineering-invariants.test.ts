@@ -137,7 +137,26 @@ export function parseSteps(job: string): CiStep[] {
  * condition, that is a deliberate change to this test — which is the point.
  */
 export function runnableSteps(all: CiStep[]): CiStep[] {
-    return all.filter((s) => s.cond === '' && s.continueOnError !== 'true');
+    return all.filter((s) => s.cond === '' && !masksFailure(s.continueOnError));
+}
+
+/**
+ * Whether a `continue-on-error:` value can stop the job from failing.
+ *
+ * ⚠️ `!== 'true'` IS NOT ENOUGH. GitHub Actions accepts an expression here, and
+ * `continue-on-error: ${{ true }}` makes the step non-blocking while reading as
+ * anything but the literal string `true`. Found by codex on #699, reviewing the
+ * fix for the `if:`-blindness qodo found — the same hole one syntax layer down.
+ *
+ * Only the two literals that definitely do NOT mask a failure are allowed
+ * through. Anything else — an expression, a YAML-truthy spelling (`yes`, `on`,
+ * `True`), an unknown value — counts as masking, because a value this test
+ * cannot evaluate must not be assumed harmless on a required gate.
+ */
+export function masksFailure(continueOnError: string): boolean {
+    const v = continueOnError.trim();
+    if (v === '') return false;
+    return !['false', 'False'].includes(v);
 }
 
 const SKILLS_DIR = path.join(REPO_ROOT, '.claude', 'skills');
@@ -597,6 +616,25 @@ describe('the guards hold under mutation', () => {
             expect(
                 runnableSteps(parseSteps(job('        continue-on-error: false'))).map((s) => s.run),
             ).toContain('npm run lint:ratchet');
+        });
+
+        /** codex's follow-up: the literal `true` was never the only spelling. */
+        it.each([
+            '        continue-on-error: ${{ true }}',
+            '        continue-on-error: ${{ github.event_name == \'push\' }}',
+            '        continue-on-error: yes',
+            '        continue-on-error: True',
+        ])('drops a step whose failure masking is spelled %p', (masked) => {
+            expect(runnableSteps(parseSteps(job(masked))).map((s) => s.run)).not.toContain(
+                'npm run lint:ratchet',
+            );
+        });
+
+        it('treats only the unambiguous negatives as non-masking', () => {
+            expect(masksFailure('')).toBe(false);
+            expect(masksFailure('false')).toBe(false);
+            expect(masksFailure('true')).toBe(true);
+            expect(masksFailure('${{ inputs.lenient }}')).toBe(true);
         });
     });
 });

@@ -151,7 +151,7 @@
 > of the boundary is an instruction its prompt spells out by name, not a
 > sandbox. (It said "no write tools at all" until 2026-11-18; codex and qodo
 > each flagged the overclaim.) `tests/loop-engineering-invariants.test.ts`
-> (**56 test cases**, measured 2026-11-18) holds all of it together.
+> (**61 test cases**, measured 2026-11-18) holds all of it together.
 >
 > **Every invariant was mutation-tested** — broken on purpose, confirmed to
 > fail, restored. That pass found three guards that did NOT bite: the lint-job
