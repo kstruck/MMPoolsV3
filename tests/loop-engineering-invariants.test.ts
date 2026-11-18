@@ -204,10 +204,6 @@ describe('CI wiring', () => {
      * file whose entire purpose is stopping that. Caught by self-review of this
      * diff, which is what CLAUDE.md §2c says self-review is for.
      */
-    function steps(job: string): CiStep[] {
-        return parseSteps(job);
-    }
-
     /**
      * A required command only gates if the step carrying it CAN RUN.
      * `runnableSteps` drops the ones that cannot; the assertions below look for

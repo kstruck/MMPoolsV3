@@ -181,9 +181,10 @@ from 2026-09-01** (dormant 2026-07-25 → 2026-07-30 and 2026-08-19 → 2026-09-
 
 ## 2c. Cross-model review is REQUIRED before opening a PR
 
-`codex` (OpenAI) is installed and on PATH — `codex-cli 0.155.1`, re-measured
-2026-09-19 (this line said 0.144.5 until then). **On the Windows box it works;
-in the cloud container it is unauthenticated — see the warning below.**
+`codex` (OpenAI) is installed and on PATH — `codex-cli 0.163.0` in the cloud
+container, re-measured 2026-11-18 (this line said 0.155.1 until then, and
+0.144.5 before that). **It works on the Windows box, and it works in the cloud
+container once you log it in — see the warning below.**
 **Run it on your own diff before opening any PR:**
 
 ```
@@ -192,19 +193,36 @@ codex exec review --base origin/main              # the whole PR diff
 codex exec review --uncommitted                   # work not yet committed
 ```
 
-⚠️ **CODEX CANNOT RUN FROM THE CLOUD CONTAINER — it is installed there but
-unauthenticated.** Claude Code on the web has `codex` on PATH (v0.155.1,
-measured 2026-09-19), so it looks available, and then every call dies with
-`401 Unauthorized: Missing bearer or basic authentication` against
-`api.openai.com`. There is no key in that environment.
+⚠️ **IN THE CLOUD CONTAINER codex STARTS LOGGED OUT. LOG IT IN — DO NOT RECORD
+THE ROUND AS OWED.** Claude Code on the web has `codex` on PATH, and every call
+dies with `401 Unauthorized: Missing bearer or basic authentication` against
+`api.openai.com` until you authenticate. **The key is there** — the environment
+carries `OPENAI_API_KEY`; `codex login status` says `Not logged in`, which is
+the actual fault:
 
-This is the §2b `gh` problem wearing a different hat, and it is more dangerous,
-because a missing binary announces itself and an unauthenticated one looks like
-a tool that merely failed. **An unavailable reviewer is never a clean reviewer.**
-A cloud session must run the other gates, self-review the diff, and then write
-into the PR body, in those words, that **the codex round is OWED** and must be
-run on the Windows box before merge. Do not report §2c as satisfied, and do not
-count the failed invocation as a round.
+```bash
+printenv OPENAI_API_KEY | codex login --with-api-key   # the --api-key FLAG is no longer supported
+codex exec review --base origin/main -m gpt-5.6-terra  # codex's default model is not available to this key
+```
+
+Measured 2026-11-18 on #699: three rounds ran in the cloud this way, and rounds
+1 and 2 each found a real defect.
+
+⚠️ **This paragraph said the exact opposite until 2026-11-18, and it was wrong
+in the expensive direction.** It read "CODEX CANNOT RUN FROM THE CLOUD
+CONTAINER … There is no key in that environment", so a cloud session following
+it skipped a mandatory reviewer and wrote "the codex round is OWED" into the PR
+body instead. qodo found it as a defect in the very PR that added it — the PR
+whose subject is docs drifting from measured reality. The lesson is the one §2c
+already teaches: **an unavailable reviewer is never a clean reviewer, and
+"unavailable" is a claim that needs re-measuring, not inheriting.**
+
+**An unavailable reviewer is still never a clean reviewer.** If authentication
+genuinely fails, or the review itself cannot complete, run the other gates,
+self-review the diff, and write into the PR body, in those words, that **the
+codex round is OWED** — naming what failed, so the next session can tell a real
+outage from a stale belief. Do not report §2c as satisfied, and do not count a
+failed invocation as a round. Reserve the OWED handoff for that case only.
 
 ⚠️ **`--base main`, not `origin/main`, is a trap in this repo.** Every worktree
 shares one `main` ref, and it is only advanced by whoever runs `git pull` in the
@@ -369,7 +387,7 @@ npm --prefix functions run test:rules          # firestore rules
 npx tsc -b  &&  npm run build                  # FRONTEND typecheck + build
 npm --prefix functions run typecheck           # FUNCTIONS typecheck (tsconfig.test.json)
 npm --prefix functions run build               # FUNCTIONS build (tsconfig.json)
-npm run lint:ratchet                           # --max-warnings 1855; exits 1 on ANY new warning
+npm run lint:ratchet                           # --max-warnings 1855; exits 1 ABOVE THE CAP (see below)
 ```
 
 **Why the last two are on the list.** On 2026-08-27, PR #612 shipped a change
@@ -409,6 +427,22 @@ This replaces the manual ritual that used to live here (commit, `git checkout
 is that the number written here was **1881** while the measured count on
 `37ac1aa` was **1855** — 26 low, drifting in the direction nobody checks. A
 ratchet whose pawl is a human procedure is not a ratchet.
+
+⚠️ **THE CAP IS A CEILING, NOT A ZERO-DELTA GATE.** `--max-warnings 1855` exits
+1 only ABOVE 1855, so while the measured count sits below the cap the difference
+is headroom: new warnings up to that many pass CI's required `lint` job. The
+gate-list line above claimed "exits 1 on ANY new warning" until 2026-11-18,
+which is the stronger promise the machine does not make (qodo's finding on
+#699). Measured on `278c6704`: **1840**, i.e. 15 warnings of headroom.
+
+So until the cap is lowered to meet the floor, **a PR that adds warnings must
+compare its own count against `origin/main`** rather than trusting a green
+`lint` job:
+
+```bash
+npm run lint 2>&1 | tail -3                  # this branch
+git stash && git checkout --detach origin/main && npm run lint 2>&1 | tail -3
+```
 
 **To lower the floor** — which is the only direction it should move — fix the
 warnings, then edit `--max-warnings` in `package.json` and say so in the PR.

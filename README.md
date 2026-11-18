@@ -260,7 +260,7 @@ npm --prefix functions run test:rules       # firestore.rules
 npx tsc -b && npm run build                 # frontend typecheck + build
 npm --prefix functions run typecheck        # functions typecheck
 npm --prefix functions run build            # functions build
-npm run lint                                # delta must be ZERO
+npm run lint:ratchet                        # capped at 1855 warnings; what CI's required lint job runs
 ```
 
 **Current green baseline** (`main`, 2026-08-31): root **3067** passed across 159

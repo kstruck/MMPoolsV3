@@ -146,9 +146,12 @@
 > vocabulary includes `INCONCLUSIVE`, so a loop that could not check has
 > somewhere honest to land. `npm run lint:ratchet` pins `--max-warnings 1855`
 > and CI's required `lint` job runs it. CI gained the functions deploy build.
-> `.claude/agents/verifier.md` is a checker with no write tools at all.
-> `tests/loop-engineering-invariants.test.ts` (**35 test cases**) holds all of
-> it together.
+> `.claude/agents/verifier.md` is a checker with **no Edit/Write tools** — it
+> does hold `Bash`, and a shell writes through `sed -i`/`tee`/`>`, so that half
+> of the boundary is an instruction its prompt spells out by name, not a
+> sandbox. (It said "no write tools at all" until 2026-11-18; codex and qodo
+> each flagged the overclaim.) `tests/loop-engineering-invariants.test.ts`
+> (**56 test cases**, measured 2026-11-18) holds all of it together.
 >
 > **Every invariant was mutation-tested** — broken on purpose, confirmed to
 > fail, restored. That pass found three guards that did NOT bite: the lint-job
