@@ -34,7 +34,6 @@ export const createNewPool = (name: string = 'New March Melee Pool', ownerId?: s
   lockGrid: false,
   numberSets: 1,
 
-  gridSize: '10x10',
   numberTheSquares: true,
   showPaid: true,
 

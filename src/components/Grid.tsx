@@ -100,7 +100,10 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
    });
 
    const [isIdentitySet, setIsIdentitySet] = useState(false);
-   const [isIdentityOpen, setIsIdentityOpen] = useState(true); // Is the form expanded?
+   // Is the form expanded? CLOSED to start, for everybody (board first, Kevin
+   // 2026-11-16). A guest who has not given a name is still asked for one: the
+   // Reserve button opens the guest-details modal when `isIdentitySet` is false.
+   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
 
    // Load from local storage on mount for seamless return
    useEffect(() => {
@@ -243,15 +246,18 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
       });
    };
 
-   const handleSetIdentity = () => {
+   /** Validates and saves the player's details. Returns whether it succeeded —
+    *  the guest modal must NOT move on to confirmation when it did not (qodo,
+    *  PR #783: an invalid email used to sail through to the reservation). */
+   const handleSetIdentity = (): boolean => {
       if (!playerInfo.name.trim()) {
          setErrorMsg("Name is required to start picking.");
-         return;
+         return false;
       }
       // Basic email validation if provided
       if (playerInfo.details.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(playerInfo.details.email || '')) {
          setErrorMsg("Please enter a valid email.");
-         return;
+         return false;
       }
 
       setIsIdentitySet(true);
@@ -260,6 +266,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
       // Save to local storage
       localStorage.setItem('sbSquaresPlayer', JSON.stringify(playerInfo));
+      return true;
    };
 
    const handleJoinWaitlist = async () => {
@@ -309,24 +316,41 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          }
       }));
       setIsIdentitySet(true);
+      // A signed-in player is known: show the one-line bar, not the form. It
+      // used to stay open and push the board a screen down (Kevin, 2026-11-16).
+      setIsIdentityOpen(false);
    });
+
+   // The phone is OPTIONAL, so ask once per visit: a player who leaves it blank
+   // and continues is not sent back to the modal on every Reserve.
+   const [phoneAsked, setPhoneAsked] = useState(false);
+   const needsPhone = !!gameState.collectPhone && !playerInfo.details.phone?.trim() && !phoneAsked;
+
+   /** The ONE way into the confirmation dialog. Both Reserve and the details
+    *  modal's Continue come through here, so neither can skip the per-player
+    *  limit (qodo, PR #783: Continue used to go straight to confirmation). */
+   const proceedToConfirm = (): boolean => {
+      // Final check on limit before modal
+      if (remainingAllowance < 0) {
+         setErrorMsg(`Limit exceeded. Please deselect ${Math.abs(remainingAllowance)} squares.`);
+         return false;
+      }
+      setIsConfirming(true);
+      return true;
+   };
 
    const handleInitiateCheckout = () => {
       if (selectedSquares.length === 0) return;
 
-      if (!isIdentitySet) {
-         // Replaces scroll-to-top with Modal
+      // The details modal asks for what the closed player bar did not: a name,
+      // and — on a pool that collects phone numbers — a phone (qodo, PR #783:
+      // with the form closed by default, the phone field was never seen).
+      if (!isIdentitySet || needsPhone) {
          setShowGuestModal(true);
          return;
       }
 
-      // Final check on limit before modal
-      if (remainingAllowance < 0) {
-         setErrorMsg(`Limit exceeded. Please deselect ${Math.abs(remainingAllowance)} squares.`);
-         return;
-      }
-
-      setIsConfirming(true);
+      proceedToConfirm();
    };
 
    const [liabilityAccepted, setLiabilityAccepted] = useState(false);
@@ -497,35 +521,39 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
          {/* --- SECTION 1: IDENTITY & ACCOUNT --- */}
          {!gameState.isLocked && (
-            <div className={`w-full max-w-2xl mb-6 rounded-xl border overflow-hidden transition-ui duration-300 ${currentUser ? 'bg-card border-gold-500/40' : (isIdentitySet ? 'bg-card border-line' : 'bg-card border-gold-500/50 shadow-card')}`}>
+            <div data-testid="squares-identity" className={`w-full max-w-2xl mb-3 rounded-xl border overflow-hidden transition-ui duration-300 ${currentUser ? 'bg-card border-gold-500/40' : (isIdentitySet ? 'bg-card border-line' : 'bg-card border-gold-500/50 shadow-card')}`}>
 
-               {/* Header */}
+               {/* Header — ONE line once we know who is picking (Kevin, 2026-11-16:
+                   the sign-in card was taking a screen of its own above the board). */}
                <div
-                  className={`p-4 flex items-center justify-between cursor-pointer ${currentUser ? 'bg-gold-500/5' : (isIdentitySet ? 'bg-gold-500/5' : 'bg-card')}`}
+                  className={`px-3 py-1.5 min-h-[44px] flex items-center justify-between gap-2 cursor-pointer ${currentUser ? 'bg-gold-500/5' : (isIdentitySet ? 'bg-gold-500/5' : 'bg-card')}`}
                   onClick={() => setIsIdentityOpen(!isIdentityOpen)}
                >
-                  <div className="flex items-center gap-3">
-                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${currentUser ? 'bg-navy-700 text-gold-300' : (isIdentitySet ? 'bg-[#0F7B4A] text-white' : 'bg-page text-muted border border-line')}`}>
-                        {currentUser ? <UserIcon size={20} /> : <UserIcon size={20} />}
+                  <div className="flex items-center gap-2 min-w-0">
+                     <div className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center ${currentUser ? 'bg-navy-700 text-gold-300' : (isIdentitySet ? 'bg-[#0F7B4A] text-white' : 'bg-page text-muted border border-line')}`}>
+                        <UserIcon size={14} />
                      </div>
-                     <div>
-                        <h3 className={`font-display font-bold text-sm uppercase tracking-[0.08em] ${currentUser ? 'text-gold-600' : (isIdentitySet ? 'text-gold-600' : 'text-muted')}`}>
+                     <div className="flex items-baseline gap-x-2 gap-y-0 flex-wrap min-w-0">
+                        <h3 className={`font-display font-bold text-[10px] uppercase tracking-[0.08em] ${currentUser ? 'text-gold-600' : (isIdentitySet ? 'text-gold-600' : 'text-muted')}`}>
                            {currentUser ? 'Signed In As' : (isIdentitySet ? 'Picking as Guest' : 'Player Details')}
                         </h3>
-                        <div className="flex items-center gap-2">
-                           <p className="text-lg font-display font-bold text-[color:var(--text)] leading-none">
-                              {currentUser ? currentUser.name : (isIdentitySet ? playerInfo.name : 'Enter info to start')}
-                           </p>
-                           {squaresAlreadyOwned > 0 && (
-                              <span className="text-xs bg-page px-2 py-0.5 rounded text-muted border border-line num">
-                                 {squaresAlreadyOwned} owned
-                              </span>
-                           )}
-                        </div>
+                        <p className="text-sm font-display font-bold text-[color:var(--text)] leading-tight truncate">
+                           {currentUser ? currentUser.name : (isIdentitySet ? playerInfo.name : 'Enter your name to start')}
+                        </p>
+                        {squaresAlreadyOwned > 0 && (
+                           <span className="text-[10px] bg-page px-1.5 py-0.5 rounded text-muted border border-line num">
+                              {squaresAlreadyOwned} owned
+                           </span>
+                        )}
                      </div>
                   </div>
-                  <button className="text-muted hover:text-[color:var(--text)] transition-colors duration-150">
-                     {isIdentityOpen ? <ChevronUp size={20} /> : <Edit2 size={18} />}
+                  <button
+                     type="button"
+                     aria-expanded={isIdentityOpen}
+                     aria-label={isIdentityOpen ? 'Close player details' : 'Edit player details'}
+                     className="shrink-0 min-w-[44px] min-h-[36px] flex items-center justify-center gap-1 text-muted hover:text-[color:var(--text)] transition-colors duration-150 text-xs font-display font-bold uppercase tracking-[0.05em]"
+                  >
+                     {isIdentityOpen ? <ChevronUp size={18} /> : <><Edit2 size={14} /> Edit</>}
                   </button>
                </div>
 
@@ -682,16 +710,16 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
          {/* --- PAYMENT CONFIRMATION SECTION --- */}
          {/* Show if user has unpaid squares OR has pending confirmations OR we have a success message */}
          {isIdentitySet && (unpaidSquaresCount > 0 || pendingConfirmationCount > 0 || paymentConfirmMsg) && (
-            <div className="w-full max-w-2xl mb-6 p-4 bg-card border border-line rounded-xl shadow-card relative overflow-hidden">
+            <div data-testid="squares-payment-status" className="w-full max-w-2xl mb-3 px-3 py-2 bg-card border border-line rounded-xl shadow-card relative overflow-hidden">
                <div className="absolute top-0 left-0 w-1 h-full bg-gold-500"></div>
 
-               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pl-1">
                   <div>
-                     <h3 className="text-lg font-display font-bold uppercase text-[color:var(--text)] flex items-center gap-2">
-                        <DollarSign className="text-gold-500" size={20} /> Payment Status
+                     <h3 className="text-xs font-display font-bold uppercase tracking-[0.08em] text-[color:var(--text)] flex items-center gap-1.5">
+                        <DollarSign className="text-gold-500" size={14} /> Payment Status
                      </h3>
 
-                     <div className="mt-2 space-y-1 text-sm">
+                     <div className="mt-1 space-y-1 text-xs sm:text-sm">
                         {unpaidSquaresCount > 0 && (
                            <p className="text-muted">
                               You have <span className="font-bold text-[color:var(--text)] num">{unpaidSquaresCount}</span> unpaid square{unpaidSquaresCount !== 1 ? 's' : ''}.
@@ -855,11 +883,30 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                            <input
                               type="email"
                               value={playerInfo.details.email}
+                              disabled={!!currentUser}
                               onChange={(e) => updateDetail('email', e.target.value)}
                               className="w-full bg-page border border-line rounded-lg px-4 py-3 font-body text-[color:var(--text)] focus:ring-2 focus:ring-gold-500 outline-none placeholder:text-faint"
                               placeholder="john@example.com"
                            />
                         </div>
+                        {/* OPTIONAL, as it has always been: the pool setting is "collect",
+                            not "require" — the player form never required it and
+                            `reserveSquares` accepts a reservation without one. Making it
+                            required is a product decision this layout change does not make. */}
+                        {gameState.collectPhone && (
+                           <label htmlFor="squares-guest-phone" className="block">
+                              <span className="block text-xs font-display font-bold text-muted uppercase tracking-[0.08em] mb-1">Phone Number <span className="normal-case font-body font-normal tracking-normal">(optional)</span></span>
+                              <input
+                                 id="squares-guest-phone"
+                                 data-testid="squares-guest-phone"
+                                 type="tel"
+                                 value={playerInfo.details.phone}
+                                 onChange={(e) => updateDetail('phone', e.target.value)}
+                                 className="w-full bg-page border border-line rounded-lg px-4 py-3 font-body text-[color:var(--text)] focus:ring-2 focus:ring-gold-500 outline-none placeholder:text-faint"
+                                 placeholder="(555) 123-4567"
+                              />
+                           </label>
+                        )}
                         {/* Show validation error inside modal if needed */}
                         {errorMsg && (
                            <div className="text-xs text-brandred-600 bg-brandred-600/10 p-2 rounded border border-brandred-600/20 flex items-center gap-2">
@@ -881,9 +928,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                  setErrorMsg("Name is required.");
                                  return;
                               }
-                              handleSetIdentity(); // Validates and saves
+                              // Validates and saves; stays on this modal when that fails.
+                              if (!handleSetIdentity()) return;
+                              setPhoneAsked(true);
                               setShowGuestModal(false); // Close this modal
-                              setIsConfirming(true); // Open CONFIRMATION modal
+                              // Same limit check as Reserve. On failure the error shows
+                              // on the page, where the player can deselect squares.
+                              proceedToConfirm();
                            }}
                            className="flex-1 py-3 bg-brandred-600 hover:bg-brandred-500 text-white rounded-lg font-display font-bold uppercase tracking-[0.05em] shadow-red-cta flex items-center justify-center gap-2 transition-ui duration-150"
                         >
@@ -1090,14 +1141,14 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
 
                   {/* --- SECTION 2: GRID HEADER (TEAMS) --- */}
-                  <div className="w-full max-w-[80vh] mx-auto bg-navy-900 p-4 rounded-t-xl border border-[rgba(230,206,150,0.16)] flex flex-wrap justify-between items-center gap-4 shadow-panel relative z-10">
-                     <div className="flex items-center gap-3 bg-gradient-to-r from-navy-700/60 to-navy-900 px-4 py-2 rounded-lg border border-gold-500/25 shadow-inner">
-                        {awayLogo && <img src={awayLogo} alt="" className="w-8 h-8 object-contain drop-shadow" />}
+                  <div className="w-full max-w-[80vh] mx-auto bg-navy-900 p-2 sm:p-4 rounded-t-xl border border-[rgba(230,206,150,0.16)] flex flex-wrap justify-between items-center gap-2 sm:gap-4 shadow-panel relative z-10">
+                     <div className="flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-navy-700/60 to-navy-900 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-gold-500/25 shadow-inner">
+                        {awayLogo && <img src={awayLogo} alt="" className="w-6 h-6 sm:w-8 sm:h-8 object-contain drop-shadow" />}
                         <div className="flex flex-col">
                            <span className="text-[10px] text-gold-400 uppercase font-display font-bold flex items-center gap-1 tracking-wider">
                               <ArrowDown size={10} /> Rows (Left)
                            </span>
-                           <span className="text-lg font-display font-bold text-white leading-none">
+                           <span className="text-sm sm:text-lg font-display font-bold text-white leading-none">
                               {gameState.awayTeam}
                            </span>
                         </div>
@@ -1117,44 +1168,46 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                         )}
                      </div>
 
-                     <div className="flex items-center gap-3 bg-gradient-to-l from-brandred-700/40 to-navy-900 px-4 py-2 rounded-lg border border-brandred-500/30 shadow-inner text-right">
+                     <div className="flex items-center gap-2 sm:gap-3 bg-gradient-to-l from-brandred-700/40 to-navy-900 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-brandred-500/30 shadow-inner text-right">
                         <div className="flex flex-col items-end">
                            <span className="text-[10px] text-brandred-500 uppercase font-display font-bold flex items-center gap-1 tracking-wider">
                               Cols (Top) <ArrowRight size={10} />
                            </span>
-                           <span className="text-lg font-display font-bold text-white leading-none">
+                           <span className="text-sm sm:text-lg font-display font-bold text-white leading-none">
                               {gameState.homeTeam}
                            </span>
                         </div>
-                        {homeLogo && <img src={homeLogo} alt="" className="w-8 h-8 object-contain drop-shadow" />}
+                        {homeLogo && <img src={homeLogo} alt="" className="w-6 h-6 sm:w-8 sm:h-8 object-contain drop-shadow" />}
                      </div>
                   </div>
 
                   {/* --- ZOOM CONTROLS (Mobile-Friendly) --- */}
-                  <div className="w-full max-w-[80vh] mx-auto flex justify-between items-center px-2 mb-2 md:hidden">
-                     <span className="text-xs text-muted font-display font-bold uppercase tracking-[0.08em] num">
+                  <div className="w-full max-w-[80vh] mx-auto flex justify-between items-center px-2 py-1 bg-navy-950 border-x border-[rgba(230,206,150,0.16)] md:hidden">
+                     <span className="text-[10px] text-[#9FB0CC] font-display font-bold uppercase tracking-[0.08em] num">
                         Zoom: {Math.round(zoomLevel * 100)}%
                      </span>
-                     <div className="flex gap-2">
+                     <div className="flex gap-1.5">
                         <button
+                           aria-label="Zoom out"
                            onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
                            disabled={zoomLevel <= 0.5}
-                           className="bg-card hover:bg-page disabled:opacity-40 text-[color:var(--text)] p-2 rounded-lg transition-colors duration-150 border border-line"
+                           className="bg-navy-900 hover:bg-navy-800 disabled:opacity-40 text-white min-w-[36px] min-h-[32px] flex items-center justify-center rounded-lg transition-colors duration-150 border border-navy-800"
                         >
-                           <ZoomOut size={18} />
+                           <ZoomOut size={16} />
                         </button>
                         <button
                            onClick={() => setZoomLevel(1)}
-                           className="bg-card hover:bg-page text-[color:var(--text)] px-3 py-2 rounded-lg text-xs font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 border border-line"
+                           className="bg-navy-900 hover:bg-navy-800 text-white px-2.5 min-h-[32px] rounded-lg text-[10px] font-display font-bold uppercase tracking-[0.05em] transition-colors duration-150 border border-navy-800"
                         >
                            Reset
                         </button>
                         <button
+                           aria-label="Zoom in"
                            onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))}
                            disabled={zoomLevel >= 1.5}
-                           className="bg-card hover:bg-page disabled:opacity-40 text-[color:var(--text)] p-2 rounded-lg transition-colors duration-150 border border-line"
+                           className="bg-navy-900 hover:bg-navy-800 disabled:opacity-40 text-white min-w-[36px] min-h-[32px] flex items-center justify-center rounded-lg transition-colors duration-150 border border-navy-800"
                         >
-                           <ZoomIn size={18} />
+                           <ZoomIn size={16} />
                         </button>
                      </div>
                   </div>

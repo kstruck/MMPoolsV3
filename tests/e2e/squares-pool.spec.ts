@@ -219,7 +219,12 @@ test.describe('a squares pool, from the wizard to a paid prize', () => {
     // ---- 3. A guest, on another device, with no account.
     const guest = await newVisitor(browser);
     await guest.goto(`/pool/${poolId}`);
-    await guest.locator('input[placeholder="e.g. John Smith"]').first().fill('Gina Guest');
+    // The player-details form starts CLOSED (board first, 2026-11-16): open the bar.
+    const guestNameBox = guest.locator('input[placeholder="e.g. John Smith"]').first();
+    if (!(await guestNameBox.isVisible().catch(() => false))) {
+      await guest.getByTestId('squares-identity').getByText(/Player Details/i).first().click();
+    }
+    await guestNameBox.fill('Gina Guest');
     await guest.getByRole('button', { name: /Start Picking|Update Details|Continue/i }).first().click().catch(() => undefined);
     await claimSquares(guest, [37]);
     pool = await eventually(() => readPool(poolId), (p) => !!squareOf(p, 37).owner, 'square 37 to be claimed');
