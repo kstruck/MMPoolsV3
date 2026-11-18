@@ -67,6 +67,79 @@ export function ledgerRowState(row: string): 'ACTIVE' | 'PARKED' | null {
     return saysActive ? 'ACTIVE' : 'PARKED';
 }
 
+/** The body of a `## ` section of a markdown file, or '' when it is absent. */
+export function section(body: string, heading: string): string {
+    const lines = body.split('\n');
+    const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
+    if (start === -1) return '';
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((l) => /^## /.test(l));
+    return (end === -1 ? rest : rest.slice(0, end)).join('\n');
+}
+
+/** The section that has to carry the verifier's no-write rule. */
+export const BAN_SECTION = 'The rule that makes you worth invoking';
+
+/**
+ * Why the verifier's shell ban is not operative, or [] when it is.
+ *
+ * ⚠️ READ THE OPERATIVE SECTION, NOT THE WHOLE FILE. The first version asserted
+ * the backticked command names appeared ANYWHERE in `verifier.md` — and the
+ * explanatory "know the limit of your own cage" paragraph added in the SAME
+ * commit also says `sed -i`. So deleting the actual prohibition left the names
+ * behind in prose and the assertion stayed green while a shell-equipped checker
+ * had no no-write instruction at all. Found by qodo on #699; it is the third
+ * time this one assertion has been holed, each time one level further out
+ * (bare substrings → backticked substrings → whole-file scope).
+ */
+export function shellBanErrors(body: string): string[] {
+    const ban = section(body, BAN_SECTION);
+    if (ban.trim() === '') return [`the "${BAN_SECTION}" section is missing`];
+
+    const errors: string[] = [];
+    if (!/you may not edit anything/i.test(ban)) {
+        errors.push(`the "${BAN_SECTION}" section must state that the verifier may not edit anything`);
+    }
+    for (const cmd of ['`sed -i`', '`tee`', '`git apply`', '`patch`']) {
+        if (!ban.includes(cmd)) {
+            errors.push(`the ban must name ${cmd} among the writes the shell may not run`);
+        }
+    }
+    return errors;
+}
+
+/** One CI step, with the two fields that decide whether it can run at all. */
+export type CiStep = { run: string; dir: string; cond: string; continueOnError: string };
+
+/** Parse a job block's steps. */
+export function parseSteps(job: string): CiStep[] {
+    return job.split(/^ {6}- /m).slice(1).map((chunk) => ({
+        run: chunk.match(/run:\s*(.+)/)?.[1].trim() ?? '',
+        dir: chunk.match(/working-directory:\s*(.+)/)?.[1].trim() ?? '.',
+        cond: chunk.match(/^\s*if:\s*(.+)$/m)?.[1].trim() ?? '',
+        continueOnError: chunk.match(/^\s*continue-on-error:\s*(.+)$/m)?.[1].trim() ?? '',
+    }));
+}
+
+/**
+ * The steps that actually gate: no `if:` and no `continue-on-error: true`.
+ *
+ * ⚠️ THE PARSER USED TO READ ONLY `run` AND `working-directory`, so a step's
+ * ABILITY TO RUN was invisible to every assertion built on it. Adding
+ * `if: false` to the ratchet step or the functions-build step left both
+ * invariants green while the required gate never executed — a guard that looks
+ * like it guards, in the file whose subject is that. Found by qodo on #699.
+ *
+ * ANY `if:` disqualifies the step, not just a falsy-looking one: the condition's
+ * runtime value is not knowable from the YAML, so `if: ${{ env.SKIP != '1' }}`
+ * is indistinguishable here from `if: false`. A required gate that runs
+ * conditionally is not required. If one of these steps ever genuinely needs a
+ * condition, that is a deliberate change to this test — which is the point.
+ */
+export function runnableSteps(all: CiStep[]): CiStep[] {
+    return all.filter((s) => s.cond === '' && s.continueOnError !== 'true');
+}
+
 const SKILLS_DIR = path.join(REPO_ROOT, '.claude', 'skills');
 const loopSkills = readdirSync(SKILLS_DIR).filter((d) => d.startsWith('mmp-loop-'));
 
@@ -131,11 +204,17 @@ describe('CI wiring', () => {
      * file whose entire purpose is stopping that. Caught by self-review of this
      * diff, which is what CLAUDE.md §2c says self-review is for.
      */
-    function steps(job: string): { run: string; dir: string }[] {
-        return job.split(/^ {6}- /m).slice(1).map((chunk) => ({
-            run: chunk.match(/run:\s*(.+)/)?.[1].trim() ?? '',
-            dir: chunk.match(/working-directory:\s*(.+)/)?.[1].trim() ?? '.',
-        }));
+    function steps(job: string): CiStep[] {
+        return parseSteps(job);
+    }
+
+    /**
+     * A required command only gates if the step carrying it CAN RUN.
+     * `runnableSteps` drops the ones that cannot; the assertions below look for
+     * the commands among those, never among all steps.
+     */
+    function runnable(job: string): CiStep[] {
+        return runnableSteps(parseSteps(job));
     }
 
     /**
@@ -150,9 +229,12 @@ describe('CI wiring', () => {
      */
     it('runs the ratchet, not bare eslint, in the required lint job', () => {
         const lint = jobBlock('lint');
-        const commands = steps(lint).map((s) => s.run);
+        const commands = runnable(lint).map((s) => s.run);
 
-        expect(commands, 'the lint job must run the capped ratchet').toContain('npm run lint:ratchet');
+        expect(
+            commands,
+            'the lint job must run the capped ratchet in a step that can actually run',
+        ).toContain('npm run lint:ratchet');
         expect(
             commands,
             'the lint job must not fall back to uncapped `npm run lint`',
@@ -169,7 +251,7 @@ describe('CI wiring', () => {
      * that `firebase deploy` performs was exercised only by a deploy.
      */
     it('runs the functions deploy build, not just the typecheck', () => {
-        const inFunctions = steps(jobBlock('build-and-test')).filter((s) => s.dir === 'functions');
+        const inFunctions = runnable(jobBlock('build-and-test')).filter((s) => s.dir === 'functions');
         const commands = inFunctions.map((s) => s.run);
 
         expect(commands, 'functions typecheck must run in CI').toContain('npm run typecheck');
@@ -402,15 +484,13 @@ describe('maker/checker separation', () => {
             .map((t) => t.trim());
         if (!tools.includes('Bash')) return; // no shell, no gap to disclose
 
-        // Backticked, as the ban line writes them: a bare 'tee' is satisfied by
-        // "guarantee" and a bare 'patch' by "dispatch", which would make this
-        // assertion the very thing it is here to catch.
-        for (const ban of ['`sed -i`', '`tee`', '`git apply`', '`patch`']) {
-            expect(
-                body,
-                `verifier holds Bash, so its prompt must name ${ban} among the writes it may not run`,
-            ).toContain(ban);
-        }
+        // Scoped to the OPERATIVE section and backticked, so neither explanatory
+        // prose elsewhere in the file nor a bare word inside another word
+        // ("guarantee" for 'tee', "dispatch" for 'patch') can satisfy it.
+        expect(
+            shellBanErrors(body),
+            'verifier holds Bash, so its no-write rule must be operative',
+        ).toEqual([]);
 
         // The overclaim the description used to make, in the forms it could take.
         for (const overclaim of [
@@ -423,5 +503,104 @@ describe('maker/checker separation', () => {
                 `verifier holds Bash, so it must not claim it "${overclaim}"`,
             ).not.toContain(overclaim);
         }
+    });
+});
+
+/**
+ * The guards on the guards. Both assertions above were holed by a reviewer who
+ * noticed they inspected the wrong thing — `shellBanErrors` searched the whole
+ * file, `parseSteps` could not see whether a step runs. Mutating the real files
+ * proves a fix once, by hand; these fixtures prove it on every CI run, which is
+ * the difference between a ratchet and a ritual.
+ */
+describe('the guards hold under mutation', () => {
+    describe('shellBanErrors', () => {
+        const OPERATIVE = [
+            '# verifier',
+            '',
+            '## The rule that makes you worth invoking',
+            '',
+            '**You may not edit anything.** No `Edit`, no `Write` — and you never run',
+            '`sed -i`, `tee`, `>` redirection, `git apply`, `patch`, or any other write.',
+            '',
+            '## What to check, in order',
+            '',
+            'Nothing here matters to the ban.',
+        ].join('\n');
+
+        it('accepts a prompt whose ban names every shell write', () => {
+            expect(shellBanErrors(OPERATIVE)).toEqual([]);
+        });
+
+        /**
+         * THE EXACT HOLE qodo FOUND. The prohibition is gone; the explanatory
+         * paragraph still mentions the same backticked commands. A whole-file
+         * search passes this and a scoped one does not.
+         */
+        it('rejects a prompt where only explanatory prose mentions the commands', () => {
+            const holed = [
+                '# verifier',
+                '',
+                '## What to check, in order',
+                '',
+                'Know the limit of your own cage: nothing stops a `sed -i`, a `tee`, a',
+                '`git apply` or a `patch` but you.',
+            ].join('\n');
+
+            expect(shellBanErrors(holed)).toContain(
+                `the "${BAN_SECTION}" section is missing`,
+            );
+        });
+
+        it('rejects a ban that drops one of the commands', () => {
+            expect(shellBanErrors(OPERATIVE.replace('`tee`, ', ''))).toEqual([
+                'the ban must name `tee` among the writes the shell may not run',
+            ]);
+        });
+
+        it('rejects a section that lists commands but never forbids editing', () => {
+            const noRule = OPERATIVE.replace('**You may not edit anything.**', 'Some other text.');
+            expect(shellBanErrors(noRule)).toContain(
+                `the "${BAN_SECTION}" section must state that the verifier may not edit anything`,
+            );
+        });
+    });
+
+    describe('runnableSteps', () => {
+        const job = (extra = '') =>
+            [
+                '    steps:',
+                '      - uses: actions/checkout@v4',
+                '      - name: Lint',
+                `        run: npm run lint:ratchet${extra ? '\n' + extra : ''}`,
+            ].join('\n');
+
+        it('keeps an unconditional step', () => {
+            expect(runnableSteps(parseSteps(job())).map((s) => s.run)).toContain(
+                'npm run lint:ratchet',
+            );
+        });
+
+        /** THE HOLE qodo FOUND: `if: false` left the invariant green. */
+        it.each(['        if: false', "        if: ${{ env.SKIP_LINT != '1' }}", '        if: always()'])(
+            'drops a step carrying %p, because a conditional gate is not a gate',
+            (cond) => {
+                expect(runnableSteps(parseSteps(job(cond))).map((s) => s.run)).not.toContain(
+                    'npm run lint:ratchet',
+                );
+            },
+        );
+
+        it('drops a step that cannot fail the job', () => {
+            expect(
+                runnableSteps(parseSteps(job('        continue-on-error: true'))).map((s) => s.run),
+            ).not.toContain('npm run lint:ratchet');
+        });
+
+        it('keeps a step that explicitly does not continue on error', () => {
+            expect(
+                runnableSteps(parseSteps(job('        continue-on-error: false'))).map((s) => s.run),
+            ).toContain('npm run lint:ratchet');
+        });
     });
 });
