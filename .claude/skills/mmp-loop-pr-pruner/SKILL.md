@@ -5,13 +5,17 @@ description: Flag and eventually close stale open PRs on kstruck/MMPoolsV3. Comm
 
 # Stale PR Pruner
 
-Loop 2 of 5 (build order per PLAN-LOOPS.md). Comment/close only — fully reversible,
+Loop 2 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). Comment/close only — fully reversible,
 a closed PR reopens with one click. **Not yet activated** — manual invoke only until
 Kevin approves scheduling.
 
 ## Steps
 
-1. `gh pr list --repo kstruck/MMPoolsV3 --state open --json number,title,updatedAt,labels`
+1. List open PRs. **In the cloud (the default home for this loop) there is no
+   `gh`** — use `mcp__github__list_pull_requests` (`owner: kstruck`,
+   `repo: MMPoolsV3`, `state: open`) and read `updated_at` and `labels` off each
+   result. On the Windows box the equivalent is
+   `gh pr list --repo kstruck/MMPoolsV3 --state open --json number,title,updatedAt,labels`.
 2. Filter to PRs where `updatedAt` is more than 14 days old and there's no `keep` label.
 3. For each stale PR, check whether this skill already commented a warning on a prior
    run (search PR comments for the pruner's own marker text).
@@ -19,9 +23,21 @@ Kevin approves scheduling.
      will be closed if untouched for another cycle. Do not close yet.
    - **Prior warning exists and still stale:** close the PR with a comment explaining why
      and how to reopen.
-4. **Verify (real gate):** after closing, `gh pr view <PR#>` and confirm `state` actually
-   changed to `CLOSED` — don't report success off the close command's exit code alone.
-5. Append one line per action to `PRUNE-LOG.md` at repo root (create if missing).
+4. **Verify (real gate):** after closing, re-read the PR
+   (`mcp__github__pull_request_read` with `method: "get"`, or `gh pr view <PR#>`)
+   and confirm `state` actually changed to `CLOSED`. Never report success off the
+   close call's own exit code — a 200 on the write is not the state afterwards.
+5. Append **one row for this invocation** to `LOOP-LOG.tsv` — in the **primary
+   checkout**, then commit and push it. Full rules in
+   `docs/plans/PLAN-LOOPS.md` ("One row per INVOCATION" and "Where the row is
+   written"); the short version: one tab-separated row per run
+   (`date loop commit verdict metric idea lesson`), append only, never
+   rewriting an earlier row. **A run that found nothing stale still writes a
+   row** — `CLEAN` with metric `0 stale`; it said "one row per action" until
+   2026-11-18, so an idle run left no record at all (qodo's finding on #699).
+   **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never
+   `CLEAN`**, and `metric` carries the number the verifier produced. The PRs
+   acted on go in `idea` (`closed 3: #612, #655, #661`), not in extra rows.
 
 ## Rules
 
@@ -31,5 +47,6 @@ Kevin approves scheduling.
 - Retry cap: 2 attempts per PR action (comment or close) if a `gh` call fails, then skip
   that PR and flag it — don't retry indefinitely.
 - Cheap-model task — this is pure age/label triage, no judgment call about PR content.
-- **Do not wire this to `/loop` or `CronCreate` yet.** Manual invoke only until Kevin
-  explicitly approves scheduled/unattended activation.
+- **Still parked** — manual invoke only until Kevin approves scheduled/unattended
+  activation. What changed on 2026-09-19 is portability, not activation: it can
+  now run in the cloud once it is turned on. Loop 1 gets two weeks first.
