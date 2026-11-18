@@ -1692,7 +1692,11 @@ function stripCode(markdown: string): string {
 
     if (fence) {
       // Only a run of the SAME character and >= the opener's length closes it.
-      if (run && run.char === fence.char && run.len >= fence.len && line.slice(m!.index + m![1].length).trim() === '') {
+      // slice past the WHOLE match (m[0]), indentation included. Slicing by
+      // m[1].length alone leaves the indent's worth of backticks behind, so an
+      // indented closer never matched and the fence swallowed the rest of the
+      // file. 124 fence lines in live docs are indented (qodo's finding).
+      if (run && run.char === fence.char && run.len >= fence.len && line.slice(m![0].length).trim() === '') {
         fence = null;
       }
       continue; // drop the fence body and both delimiter lines
@@ -1922,6 +1926,37 @@ describe('the status-marker scanner sees what the docs actually contain', () => 
   it('ignores markers inside a four-backtick fence', () => {
     // CommonMark allows 3+. The old regex matched only exactly three.
     expect(countMarkers(['text', '````markdown', '```', '\u2705 quoted', '```', '````', 'more'].join('\n')).size).toBe(0);
+  });
+
+  it('closes an INDENTED fence, so later prose is still counted', () => {
+    // REGRESSION (qodo, #789). The closing check sliced by m[1].length instead
+    // of m[0].length, leaving the indent's backticks behind, so `.trim()` was
+    // never '' and an indented fence never closed — it swallowed the rest of
+    // the file. 124 fence lines in live docs are indented, and the bug was
+    // suppressing 30 ⚠, 13 ✅, 10 🛑 and 4 🔴 from the census: a silent
+    // UNDER-count, which is the direction that hides drift.
+    //
+    // It survived review because the python mirror used to verify the census
+    // sliced correctly while the shipped TypeScript did not, so the two
+    // disagreed and only the mirror was checked. The suite stayed green
+    // because every marker cleared the threshold even suppressed. Hence this
+    // test, which exercises the shipped function.
+    const counts = countMarkers(['  ```bash', '  echo hi', '  ```', '\u{1f6d1} after the fence'].join('\n'));
+    expect(counts.get('\u{1f6d1}')).toBe(1);
+  });
+
+  it('closes a three-space-indented fence, the deepest CommonMark allows', () => {
+    const counts = countMarkers(['   ```powershell', '   Get-ChildItem', '   ```', '\u2705 done'].join('\n'));
+    expect(counts.get('\u2705')).toBe(1);
+  });
+
+  it('still swallows an indented fence body', () => {
+    // The fix must not stop indented fences from hiding their CONTENTS.
+    expect(countMarkers(['  ```', '  \u2705 quoted', '  ```'].join('\n')).size).toBe(0);
+  });
+
+  it('lets an unindented closer close an indented opener', () => {
+    expect(countMarkers(['  ```', '\u2705 inside', '```', '\u{1f6d1} outside'].join('\n')).get('\u{1f6d1}')).toBe(1);
   });
 
   it('ignores markers inside a tilde fence', () => {
