@@ -100,6 +100,46 @@ Tabs separate, no quoting, no embedded tabs or newlines in a field. Append only:
 a run never edits or deletes an earlier row. `tests/loop-engineering-invariants.test.ts`
 enforces the shape.
 
+### One row per INVOCATION, including the empty ones
+
+**Every invocation writes exactly one row, even when it found nothing to do.** A
+loop that lists zero candidate PRs, or sweeps a window with no actions in it,
+still ran — and the charter calls this file the record of runs, so a run with no
+row is a run with no evidence it happened. Log `CLEAN` with an explicit
+zero-result metric (`0 PRs`, `0 stale`, `0 gaps`); that is a different and more
+useful statement than silence, which is indistinguishable from the loop never
+having fired.
+
+Per-PR or per-action detail belongs in the `idea` field of that one row
+(`3 PRs: 751, 768, 773`) or in the PR comments the loop already posts — not in
+extra rows. The skills said "one row per PR" and "one row per action" until
+2026-11-18, which both omitted the empty case and, on a busy run, buried the
+invocation count (qodo's finding on #699).
+
+### Where the row is written, and how it gets off the machine
+
+🛑 **THE ROW IS WORTHLESS UNTIL IT IS COMMITTED AND PUSHED.** `LOOP-LOG.tsv` is
+a tracked file at the repo root, so an append in an isolated worktree lands in
+**that worktree's** working tree and nowhere else. Remove the worktree — which
+`mmp-loop-babysit-deps` explicitly tells you to do — and the row goes with it.
+An uncommitted append in the primary checkout is no better: the next session
+reads `origin/main`, not somebody's dirty tree.
+
+So, for every loop:
+
+1. **Append in the PRIMARY checkout** (`D:\march-melee-pools`, or the cloud
+   session's own checkout), never in a throwaway worktree. A loop that *works*
+   in a worktree still *logs* in the primary checkout.
+2. **Log BEFORE tearing anything down.** Worktree removal, branch deletion and
+   cleanup come after the row exists.
+3. **Commit the row and push it** — `git add LOOP-LOG.tsv && git commit -m
+   "chore(loops): <loop> run <date>" && git push`. One commit per run is fine
+   and expected; the file is append-only so these never conflict in content,
+   and a conflict in the file means two runs raced, which is itself worth
+   seeing.
+4. A cloud run that cannot push (no branch, protected target) puts the row in
+   its PR instead and says so in `lesson`. **It never silently drops it.**
+
 ## Activation decisions, with dates
 
 - **2026-09-19 — loop 1 ACTIVATED.** Read-only, no mutation, worst case is a

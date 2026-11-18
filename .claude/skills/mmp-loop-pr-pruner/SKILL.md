@@ -27,11 +27,17 @@ Kevin approves scheduling.
    (`mcp__github__pull_request_read` with `method: "get"`, or `gh pr view <PR#>`)
    and confirm `state` actually changed to `CLOSED`. Never report success off the
    close call's own exit code — a 200 on the write is not the state afterwards.
-5. Append one row per action to `LOOP-LOG.tsv` at the repo root — one tab-separated row per run
-   (`date loop commit verdict metric idea lesson`, spec in
-   `docs/plans/PLAN-LOOPS.md`). Append only; never rewrite an earlier row.
+5. Append **one row for this invocation** to `LOOP-LOG.tsv` — in the **primary
+   checkout**, then commit and push it. Full rules in
+   `docs/plans/PLAN-LOOPS.md` ("One row per INVOCATION" and "Where the row is
+   written"); the short version: one tab-separated row per run
+   (`date loop commit verdict metric idea lesson`), append only, never
+   rewriting an earlier row. **A run that found nothing stale still writes a
+   row** — `CLEAN` with metric `0 stale`; it said "one row per action" until
+   2026-11-18, so an idle run left no record at all (qodo's finding on #699).
    **A run that could not evaluate its verifier logs `INCONCLUSIVE`, never
-   `CLEAN`**, and `metric` carries the number the verifier produced.
+   `CLEAN`**, and `metric` carries the number the verifier produced. The PRs
+   acted on go in `idea` (`closed 3: #612, #655, #661`), not in extra rows.
 
 ## Rules
 
