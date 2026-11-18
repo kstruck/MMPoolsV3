@@ -1579,3 +1579,396 @@ describe('App Check stays off, and the outage stays documented', () => {
     });
   });
 });
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * STATUS-MARKER ROSTER
+ *
+ * WHY THIS EXISTS. `mmp-docs-and-writing` enumerates the emoji this repo uses
+ * as status markers, and the rule attached to it ("no decorative emoji beyond
+ * the status-marker set") is enforced in review. The enumeration read
+ * `✅ ⚠️ ⛔ ▶️` for months while the repo's second-most-used marker was `🛑`,
+ * which the list did not mention — along with `❌`, `🟢`, `🟡`, `🔴` and `📌`.
+ *
+ * A stale enumeration is not harmless noise. It cost four reviews (qodo raised
+ * it on #691, #699 and #782 and was rejected each time), and on
+ * PLAN-SQUARES-SERVER-FIELDS-REVIEW-LOG.md finding 10 it was ACCEPTED — which
+ * deleted a legitimate `🟢` from README.md to satisfy a roster that did not
+ * describe the repo. The wrong list won an argument it should have lost. That
+ * is the same class as §2e's lint baseline drifting to 1881 against a measured
+ * 1855: a number in a doc that nothing re-measures.
+ *
+ * DESIGN — why a THRESHOLD, and why the check runs BOTH ways.
+ *
+ * The obvious guard ("fail when a doc uses an unrostered emoji") fails on the
+ * wrong person: the author who used a new emoji once is not the problem, the
+ * roster is, and a guard that fires on first use is the cry-wolf invariant this
+ * file's header warns about. So membership is forced only once a marker is
+ * ESTABLISHED — 3+ uses in live docs. Below that, nothing fails.
+ *
+ * The reverse direction matters just as much and is easy to miss: a roster may
+ * list a marker nothing uses. That is how this very table nearly gained a `⚪`
+ * entry for "parked / inactive" — proposed in good faith, measured at ZERO uses
+ * anywhere in the repo or its history. Listing a marker nobody uses invites the
+ * same false findings in the opposite direction, so a dead entry fails too.
+ *
+ * WHAT IS EXCLUDED, and why each exclusion is principled rather than convenient:
+ *   - docs/archive/  — frozen history. The rule governs NEW docs; archived docs
+ *                      carry markers (🟠, 🏗) that were practice once and are
+ *                      not now, and rewriting them is not the point.
+ *   - README.md      — the skill explicitly carves out per-section emoji
+ *                      (🚀 🏈 🏀 …) as existing practice. Counting them would
+ *                      force decorative emoji into a status-marker roster.
+ *   - the skill file — the roster must not be evidence for itself. Measured,
+ *                      not assumed: with the file counted, its own PROSE
+ *                      mentions (the un-backticked "🟢 / 🟡 / 🔴 are a set"
+ *                      line) register as uses, so the reverse check would
+ *                      confirm those three from the roster's own sentence
+ *                      rather than from practice. Its TABLE cells are
+ *                      backticked and so already fall to stripCode — a mutant
+ *                      that added a `⚪` row and removed this exclusion still
+ *                      went red. The exclusion is therefore belt-and-braces
+ *                      for the table and load-bearing for the prose.
+ *   - code spans and fenced blocks — quoted tool output is not this repo
+ *                      marking a status. `✔ Deploy complete!` is Firebase's
+ *                      stdout and `✓ Resolved` is qodo's mark; both appear in
+ *                      backticks and neither is a house convention. Stripping
+ *                      code drops them below threshold without a hand-kept
+ *                      exemption list that would itself go stale.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/** The skill that carries the roster. Excluded from its own census. */
+const ROSTER_SKILL = path.join('.claude', 'skills', 'mmp-docs-and-writing', 'SKILL.md');
+
+/** Uses in live docs at or above which a marker MUST be rostered. */
+const ESTABLISHED_USES = 3;
+
+/**
+ * Emoji-ish codepoints. Deliberately a curated set of ranges rather than a
+ * \p{Emoji} class: \p{Emoji} matches ASCII digits and `#`, which would make
+ * every numbered list a "marker". U+26A0/U+26D4/U+25B6 sit outside the main
+ * blocks and are named individually because the repo uses all three.
+ */
+function isMarkerCodepoint(cp: number): boolean {
+  if (cp >= 0x2600 && cp <= 0x27bf) return true; // Misc Symbols + Dingbats
+  if (cp >= 0x1f300 && cp <= 0x1faff) return true; // Misc Symbols & Pictographs .. Symbols Extended-A
+  return cp === 0x26a0 || cp === 0x26d4 || cp === 0x25b6 || cp === 0x2b05 || cp === 0x2b06 || cp === 0x2b07;
+}
+
+/**
+ * Fenced blocks and inline code spans removed — quoted output is not this repo
+ * marking a status.
+ *
+ * Hand-rolled rather than two regexes, because the regex version only handled
+ * exactly three fence characters and single-backtick spans. A cross-model round
+ * flagged that: CommonMark allows a fence of 3 OR MORE, and a span delimited by
+ * a run of N backticks (both used to quote text that itself contains
+ * backticks). No tracked markdown uses either form today — measured, 0 of 262
+ * files — so this was latent rather than live, and it is fixed anyway because
+ * the failure is silent and points the wrong way: a 4-backtick opener whose
+ * closing line the regex could not match ran on to the NEXT ``` fence and blanked
+ * everything between, which UNDER-counts and hides exactly the drift this guard
+ * exists to catch.
+ *
+ * Fence rule: an opening run of >=3 of the same character (` or ~), up to 3
+ * spaces of indent, closed by a line whose run is the same character and at
+ * least as long. An unclosed fence runs to end of document, as CommonMark says.
+ * Span rule: a run of N backticks closes on the next run of exactly N.
+ */
+function stripCode(markdown: string): string {
+  const lines = markdown.split('\n');
+  const kept: string[] = [];
+  let fence: { char: string; len: number } | null = null;
+
+  for (const line of lines) {
+    const m = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    const run = m ? { char: m[1][0], len: m[1].length } : null;
+
+    if (fence) {
+      // Only a run of the SAME character and >= the opener's length closes it.
+      if (run && run.char === fence.char && run.len >= fence.len && line.slice(m!.index + m![1].length).trim() === '') {
+        fence = null;
+      }
+      continue; // drop the fence body and both delimiter lines
+    }
+    if (run) {
+      fence = run;
+      continue;
+    }
+    kept.push(line);
+  }
+
+  return kept.map(stripSpansInLine).join('\n');
+}
+
+/**
+ * Inline code spans within ONE line. A run of N backticks closes on the next
+ * run of exactly N, searched no further than the end of the line.
+ *
+ * The line confinement is deliberate and was measured, not assumed. CommonMark
+ * lets a code span cross newlines, and 199 prose lines in this repo carry an
+ * ODD number of backticks — these docs wrap long backticked identifier lists
+ * across two lines. Pairing strictly left-to-right across the whole document,
+ * as CommonMark says, therefore pairs delimiters the authors never intended and
+ * swallows arbitrary prose between them: it dropped the ⚠ count from 208 to 178
+ * and 🔴 from 8 to 4. That is the silent UNDER-count this guard must not have,
+ * since it hides the very drift the guard exists to catch.
+ *
+ * The trade-off, stated rather than hidden: a span that genuinely wraps across
+ * a line break leaks its content into the census. That can only ever
+ * OVER-count, which fails toward forcing a roster conversation — the safe
+ * direction — and wrapped identifier lists do not contain status markers
+ * anyway.
+ */
+function stripSpansInLine(line: string): string {
+  let out = '';
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] !== '`') {
+      out += line[i++];
+      continue;
+    }
+    let n = 0;
+    while (i + n < line.length && line[i + n] === '`') n++;
+    // Next run of EXACTLY n backticks, on this line.
+    const close = new RegExp(`(?<!\`)\`{${n}}(?!\`)`, 'g');
+    close.lastIndex = i + n;
+    const hit = close.exec(line);
+    if (hit) {
+      i = hit.index + n; // drop delimiters and content
+    } else {
+      out += line.slice(i, i + n); // unterminated run is literal text
+      i += n;
+    }
+  }
+  return out;
+}
+
+/**
+ * Marker codepoints in `text`, counted by BASE codepoint with U+FE0F dropped.
+ * `⚠️` is two codepoints and `⚠` is one; some uses in this repo omit the
+ * variation selector, so counting the two-codepoint form undercounts silently
+ * (it read 769 against a true 771 across all tracked markdown).
+ */
+function countMarkers(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const ch of stripCode(text)) {
+    if (ch === '️' || ch === '︎') continue;
+    const cp = ch.codePointAt(0)!;
+    if (isMarkerCodepoint(cp)) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** The roster skill's own path, slash-separated as git reports it. */
+const ROSTER_SKILL_POSIX = ROSTER_SKILL.split(path.sep).join('/');
+
+function trackedMarkdown(): string[] {
+  const out = execFileSync('git', ['ls-files', '-z', '*.md'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  return out.split('\0').filter(Boolean);
+}
+
+/**
+ * Scope for the FORWARD check ("what is established CURRENT practice?").
+ * Excludes archive, README and the roster itself, per the reasoning above.
+ */
+function liveMarkdownFiles(): string[] {
+  return trackedMarkdown().filter(
+    (f) => !f.startsWith('docs/archive/') && f !== 'README.md' && f !== ROSTER_SKILL_POSIX,
+  );
+}
+
+/**
+ * Scope for the REVERSE check ("does ANYTHING in this repo use it?").
+ *
+ * Deliberately wider, and the asymmetry is the point — each direction asks a
+ * different question, so each gets the scope that answers it.
+ *
+ * A cross-model review round flagged `▶️` as a dead entry. The specific claim
+ * was wrong (its use in PLAN-SQUARES-SERVER-FIELDS-REVIEW-LOG.md survives
+ * stripCode — the backticks there wrap `mmp-docs-and-writing`, not the emoji,
+ * and the suite passed), but it was pointing at something real: that single
+ * surviving use is a line QUOTING the old roster, while `▶️`'s actual
+ * documented home — the deploy checklist §2f models it on — is
+ * docs/archive/PHASE0-DEPLOY-CHECKLIST.md, which the live scope excludes. So
+ * the entry was resting on accidental evidence, and editing an unrelated
+ * review log would have turned the guard red for no good reason.
+ *
+ * Counting archive here fixes that honestly: a marker documented in §2f and
+ * used in the checklist that section cites IS evidence of practice, even
+ * though the checklist is finished. A marker nothing has EVER used — the `⚪`
+ * that was proposed for this table and measures zero everywhere, history
+ * included — still fails.
+ */
+function anyMarkdownFiles(): string[] {
+  return trackedMarkdown().filter((f) => f !== ROSTER_SKILL_POSIX);
+}
+
+/**
+ * The markers the roster table lists, parsed from the skill rather than copied
+ * here. A hardcoded duplicate would be one more thing to drift — the defect
+ * this whole block exists to catch.
+ */
+function rosteredMarkers(): Set<string> {
+  const text = fs.readFileSync(path.join(REPO_ROOT, ROSTER_SKILL), 'utf8');
+  const start = text.indexOf('### Status markers');
+  if (start === -1) throw new Error(`${ROSTER_SKILL}: no "### Status markers" section — the roster was renamed or removed`);
+  const after = text.indexOf('\n### ', start + 1);
+  const section = text.slice(start, after === -1 ? text.length : after);
+
+  const markers = new Set<string>();
+  for (const line of section.split('\n')) {
+    // Table rows only: | `<marker>` | <meaning> | <count> |
+    const m = /^\|\s*`([^`]+)`\s*\|.*\|\s*\d+\s*\|\s*$/.exec(line);
+    if (!m) continue;
+    for (const ch of m[1]) {
+      if (ch === '️' || ch === '︎') continue;
+      if (isMarkerCodepoint(ch.codePointAt(0)!)) markers.add(ch);
+    }
+  }
+  if (markers.size === 0) throw new Error(`${ROSTER_SKILL}: parsed the Status markers section but found no table rows`);
+  return markers;
+}
+
+function describeChar(ch: string): string {
+  return `${ch} (U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')})`;
+}
+
+describe('status-marker roster describes measured practice', () => {
+  it('parses a non-trivial roster out of the skill', () => {
+    const roster = rosteredMarkers();
+    // Guards the parser, not the docs: a regex that silently matches nothing
+    // would make every assertion below vacuously pass.
+    expect(roster.size).toBeGreaterThanOrEqual(8);
+  });
+
+  it('rosters every marker that is established practice in live docs', () => {
+    const roster = rosteredMarkers();
+    const totals = new Map<string, number>();
+    for (const rel of liveMarkdownFiles()) {
+      const text = fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8');
+      for (const [ch, n] of countMarkers(text)) totals.set(ch, (totals.get(ch) ?? 0) + n);
+    }
+
+    const unrostered = [...totals.entries()]
+      .filter(([ch, n]) => n >= ESTABLISHED_USES && !roster.has(ch))
+      .sort((a, b) => b[1] - a[1])
+      .map(([ch, n]) => `${describeChar(ch)} — ${n} uses`);
+
+    expect(
+      unrostered,
+      `These markers are established practice (${ESTABLISHED_USES}+ uses in live tracked markdown) but are ` +
+        `NOT in the roster at ${ROSTER_SKILL} §3 "Status markers".\n\n` +
+        `Add them with their measured meaning, or — if a use really is decorative — remove the uses. ` +
+        `Do not leave the roster behind practice: a stale enumeration generates false review findings, ` +
+        `and on PLAN-SQUARES-SERVER-FIELDS-REVIEW-LOG.md finding 10 one was ACCEPTED and deleted a ` +
+        `legitimate marker from README.md.\n\nMissing:\n  ${unrostered.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('rosters no marker that nothing actually uses', () => {
+    const roster = rosteredMarkers();
+    const used = new Set<string>();
+    for (const rel of anyMarkdownFiles()) {
+      for (const ch of countMarkers(fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8')).keys()) used.add(ch);
+    }
+
+    const dead = [...roster].filter((ch) => !used.has(ch)).map(describeChar);
+
+    expect(
+      dead,
+      `These markers are listed in the roster at ${ROSTER_SKILL} §3 "Status markers" but are used ` +
+        `NOWHERE in tracked markdown — not in live docs, not even in docs/archive/.\n\n` +
+        `The roster is descriptive of measured practice, so an entry nothing uses does not belong in it — ` +
+        `it invites the same false findings in the opposite direction. This table nearly gained a ⚪ entry ` +
+        `for "parked / inactive" that measured ZERO uses in the repo and in its history.\n\nDead entries:\n  ${dead.join('\n  ')}`,
+    ).toEqual([]);
+  });
+});
+
+describe('the status-marker scanner sees what the docs actually contain', () => {
+  it('counts a marker written without its variation selector', () => {
+    // `⚠️` (U+26A0 U+FE0F) and `⚠` (U+26A0) must land on the same key.
+    const counts = countMarkers('a ⚠️ b ⚠ c');
+    expect(counts.get('⚠')).toBe(2);
+  });
+
+  it('ignores markers inside inline code spans', () => {
+    // `✔ Deploy complete!` is Firebase's stdout, quoted — not a house marker.
+    expect(countMarkers('see `✔ Deploy complete!` above').size).toBe(0);
+  });
+
+  it('ignores markers inside fenced blocks', () => {
+    expect(countMarkers(['text', '```bash', 'echo "✅ done"', '```', 'more'].join('\n')).size).toBe(0);
+  });
+
+  it('still counts a marker in ordinary prose on the same line as code', () => {
+    const counts = countMarkers('\u{1f6d1} do not run `npm publish` here');
+    expect(counts.get('\u{1f6d1}')).toBe(1);
+    expect(counts.size).toBe(1);
+  });
+
+  it('ignores markers inside a four-backtick fence', () => {
+    // CommonMark allows 3+. The old regex matched only exactly three.
+    expect(countMarkers(['text', '````markdown', '```', '\u2705 quoted', '```', '````', 'more'].join('\n')).size).toBe(0);
+  });
+
+  it('ignores markers inside a tilde fence', () => {
+    expect(countMarkers(['~~~', '\u2705 quoted', '~~~'].join('\n')).size).toBe(0);
+  });
+
+  it('does not let a mismatched fence character close a fence', () => {
+    // A `~~~` line must not close a ``` fence; the marker stays swallowed.
+    expect(countMarkers(['```', '\u2705 inside', '~~~', '\u2705 still inside'].join('\n')).size).toBe(0);
+  });
+
+  it('treats an unclosed fence as running to end of document', () => {
+    expect(countMarkers(['```bash', 'echo \u2705', 'no closing fence here'].join('\n')).size).toBe(0);
+  });
+
+  it('ignores markers inside a double-backtick span', () => {
+    expect(countMarkers('see ``\u2714 Deploy ` complete!`` above').size).toBe(0);
+  });
+
+  it('counts a marker after an unterminated backtick run', () => {
+    // A stray backtick must not swallow the rest of the file.
+    const counts = countMarkers('a ` stray \u{1f6d1} marker');
+    expect(counts.get('\u{1f6d1}')).toBe(1);
+  });
+
+  it('keeps prose markers on a line that also has a code span', () => {
+    const counts = countMarkers('\u{1f6d1} never run `npm publish` \u2705 verified');
+    expect(counts.get('\u{1f6d1}')).toBe(1);
+    expect(counts.get('\u2705')).toBe(1);
+  });
+
+  it('does not treat digits or # as markers', () => {
+    // \p{Emoji} matches these; a naive class would make every numbered list a marker.
+    expect(countMarkers('1. step #2 of 3').size).toBe(0);
+  });
+
+  it('counts astral markers as one codepoint, not two surrogates', () => {
+    expect(countMarkers('\u{1f7e2} \u{1f7e1} \u{1f534}').size).toBe(3);
+  });
+
+  it('scopes the forward census to live docs, excluding README and the roster itself', () => {
+    const files = liveMarkdownFiles();
+    expect(files.some((f) => f.startsWith('docs/archive/'))).toBe(false);
+    expect(files).not.toContain('README.md');
+    expect(files).not.toContain('.claude/skills/mmp-docs-and-writing/SKILL.md');
+    // And it is scanning something substantial, not an empty list.
+    expect(files.length).toBeGreaterThan(50);
+  });
+
+  it('scopes the reverse census wider — archive included, roster still excluded', () => {
+    const files = anyMarkdownFiles();
+    expect(files.some((f) => f.startsWith('docs/archive/'))).toBe(true);
+    expect(files).toContain('README.md');
+    // The roster must never be evidence for itself, in EITHER direction.
+    expect(files).not.toContain('.claude/skills/mmp-docs-and-writing/SKILL.md');
+    expect(files.length).toBeGreaterThan(liveMarkdownFiles().length);
+  });
+});
