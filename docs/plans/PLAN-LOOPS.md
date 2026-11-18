@@ -35,7 +35,7 @@ weakness of that loop, and it is marked.
 
 | # | Loop | Skill | Mutates? | Verifier (the real gate) | Runs where | State |
 |---|------|-------|----------|--------------------------|-----------|-------|
-| 1 | Audit-trail integrity sweep | `mmp-loop-audit-sweep` | No — read-only | admin-action count vs `admin_audit` count matches 1:1, or every mismatch individually explained. Anything else is "inconclusive", never "clean" | Needs prod Firestore credentials — **Windows box** | 🟢 **ACTIVE 2026-09-19** |
+| 1 | Audit-trail integrity sweep | `mmp-loop-audit-sweep` | No — read-only | **TWO verdicts, see the note below.** Integrity (every admin action left an audit row) is **not evaluable today** — no correlatable action record exists — so it reports `INCONCLUSIVE` by construction. Self-consistency (rows well-formed, no action type silently producing none) is evaluable: `CLEAN`/`FINDING` with counts | Needs prod Firestore credentials — **Windows box** | 🟢 **ACTIVE 2026-09-19** |
 | 2 | Stale PR pruner | `mmp-loop-pr-pruner` | Comments + closes PRs (reversible) | after a close, re-read the PR and confirm `state == CLOSED`. Never the close call's exit code | Cloud (GitHub MCP) | ⚪ Parked |
 | 3 | Nightly e2e sweep | `mmp-loop-e2e-nightly` | No — beyond the test run | Playwright pass rate ≥ 95% | Needs Java + emulators — **Windows box** | ⚪ Parked |
 | 4 | Dependabot babysitter | `mmp-loop-babysit-deps` | Can merge code (highest consequence) | build exit code AND test exit code, both 0 | Cloud (GitHub MCP) + a build host | ⚪ Parked. Auto-merge is a **second, separate** approval |
@@ -99,6 +99,31 @@ date	loop	commit	verdict	metric	idea	lesson
 Tabs separate, no quoting, no embedded tabs or newlines in a field. Append only:
 a run never edits or deletes an earlier row. `tests/loop-engineering-invariants.test.ts`
 enforces the shape.
+
+### ⚠️ Loop 1's integrity verifier cannot run yet — DECISION PENDING
+
+Loop 1 is the only ACTIVE loop, and the verifier the row above used to claim —
+"admin-action count vs `admin_audit` count matches 1:1" — **cannot be evaluated
+with today's instrumentation.** `admin_audit` cannot witness its own absence,
+and there is no independent record of completed admin actions to compare it
+against: `validated()` logs an invocation only when the caller supplied a
+correlation ID (`functions/src/lib/validated.ts:112`), those fields carry no
+target id, and raw `onCall` handlers log nothing uniform. Found by qodo and then
+by codex on #699 — codex reviewing the first attempt at a fix, which prescribed
+a correlation that reads as runnable and is not.
+
+What the loop can still do unattended, read-only, is **audit-trail
+self-consistency**; that is narrower than the name "integrity sweep" promises.
+`mmp-loop-audit-sweep` now carries both verdicts separately and refuses to let
+one stand in for the other.
+
+**Kevin's call, not taken here:** leave loop 1 ACTIVE under the narrower
+self-consistency claim (current state, since it is read-only and still finds
+real things), or park it until the instrumentation lands. The unblocking change
+— one unconditional invocation event per admin callable, carrying callable,
+target and timestamp, written by something other than `writeAdminAudit` — is a
+`functions/` change touching authorization-adjacent paths, so it needs its own
+plan-gated PR and is deliberately not in this one.
 
 ### One row per INVOCATION, including the empty ones
 

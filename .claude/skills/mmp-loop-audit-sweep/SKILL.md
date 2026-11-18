@@ -34,40 +34,80 @@ actions: per `mmp-diagnostics-and-tooling`, "what did admin X do" resolves **to
 test pools and health — not actions. Diffing `admin_audit` against `admin_audit`
 is vacuous: it can detect a malformed row, never a missing one.
 
-**The action side is the Cloud Functions invocation log** (`npx firebase
-functions:log`, §1 of `mmp-diagnostics-and-tooling`) — each admin callable logs
-its own invocation, and that record is written by a different mechanism than the
-audit row, which is what makes the comparison meaningful. Correlate on
-*(callable name, invocation timestamp ±2 min, target id)* against the
-`admin_audit` row's `action`, `at` and target fields.
+🛑 **AND THERE IS NO CORRELATABLE ACTION RECORD TODAY, SO THE 1:1 GATE IS NOT
+EVALUABLE AT ALL.** The obvious candidate is the Cloud Functions invocation log
+(`npx firebase functions:log`), written by a different mechanism than the audit
+row — but it cannot supply the tuple the comparison needs:
 
-⚠️ **Until that correlation has actually been performed, the only honest verdict
-is `INCONCLUSIVE`.** This skill described itself as establishing audit integrity
-while prescribing no source for the action side (qodo's finding on #699). A run
-that reads only `admin_audit` has checked that the audit trail is
-self-consistent, which is a weaker and different claim — say that, and say
-`INCONCLUSIVE`, rather than reporting a clean integrity sweep.
+- **The structured invocation log is conditional.** `validated()` emits its
+  `[correlation] <label> start|ok|error` lines inside `if (correlationId)`
+  (`functions/src/lib/validated.ts:112`, `118`, `123`) — i.e. only when the
+  CALLER passed a correlation ID. An ordinary admin call logs nothing
+  structured, so absence of a log line means nothing.
+- **Even when it logs, there is no target.** `traceLogFields(correlationId,
+  cfg.label)` carries the label, not the pool/user the action touched, so a log
+  line cannot be matched to a specific `admin_audit` row — only to an action
+  *type*. Matching on type plus timestamp invites false pairs.
+- **Raw `onCall` handlers have no uniform invocation log at all.**
+
+So a 1:1 reconciliation would be either permanently inconclusive or built on
+timestamp-only false matches. **This was found by codex on #699, reviewing the
+previous fix in this same file** — that fix named the function log as the action
+side and prescribed a `(callable, timestamp ±2 min, target id)` correlation,
+which reads as runnable and is not. One unsatisfiable verifier had been replaced
+with a more plausible-looking one.
+
+### What this sweep can and cannot conclude, until that is fixed
+
+**CANNOT:** that every admin action left an audit row. That is the integrity
+claim in the charter, it needs an action record that does not exist, and a run
+must report **`INCONCLUSIVE`** for it — every time, by construction, not as an
+error path.
+
+**CAN**, and worth doing read-only: audit-trail **self-consistency** —
+malformed rows, rows whose target no longer exists, an action type in the
+superadmin surface that has produced *no* rows at all in a long window (a
+strong hint its logging is broken), and rows outside the expected schema
+(`mmp-diagnostics-and-tooling` §"admin_audit schema"). Log those as `FINDING`
+with the count; log `CLEAN` only for the self-consistency check, and say in
+`idea` which check ran.
+
+**What would unblock the real gate:** one standardized invocation event per
+admin callable — emitted unconditionally, carrying callable name, target id and
+timestamp — written by something other than `writeAdminAudit`. That is a
+`functions/` change, out of this skill's scope and out of this PR's; it belongs
+in its own plan-gated change because it touches authorization-adjacent code
+paths.
+
+⚠️ If a future run does use the function log for anything, pass `--lines`
+explicitly: `npx firebase functions:log` returns the CLI's default recent slice,
+not a time-bounded window, so an unbounded call silently truncates the window it
+claims to cover (codex's second P1 on #699).
 
 ## Steps
 
 1. Load the mmp-superadmin-surface and mmp-diagnostics-and-tooling skills for the exact
    admin callable list and the read-only firestore-census query patterns.
-2. **Get the ACTION side from the function logs**, not from Firestore:
-   `npx firebase functions:log --only <callable> --project gridiron-gamble-uzuqo`
-   for each admin callable in the lookback window (default: since last run, or
-   last 24h if no prior run recorded). If the logs are not reachable from this
-   host, stop and report `INCONCLUSIVE` — there is no substitute source, and
-   Firestore cannot stand in for one (see "What this checks").
+2. **Record that the action side is unavailable** (see "What this checks"): there
+   is no correlatable independent record of completed admin actions in this
+   repo today. The integrity half of this sweep is therefore `INCONCLUSIVE`
+   before it starts — state that in the report rather than implying it was
+   checked. Then carry on with the self-consistency checks below, which are
+   what this run can actually establish.
 3. Query `admin_audit` (+ scoped audit/activity subcollections) for the same window.
 4. Diff the two sets. A gap is: an admin action with no matching audit entry, or an audit
    entry that doesn't correspond to any real action (the latter is lower priority but
    still worth a line).
-5. **Verify condition (the real gate):** every invocation found in step 2 has a
-   matching `admin_audit` row from step 3 — 1:1, or every mismatch individually
-   explained (e.g. a known no-op action type not required to log). **This gate is
-   only evaluable if step 2 produced a real action list from the function logs.**
-   If it did not, the gate was not evaluated: report `INCONCLUSIVE, needs review`
-   and say which side was missing. Never report "clean" off a one-sided read.
+5. **Verify condition.** Two separate verdicts, never merged into one:
+   - **Integrity (action → audit row, 1:1):** `INCONCLUSIVE`, always, until the
+     instrumentation described above exists. Say which side was missing.
+   - **Self-consistency:** `CLEAN` when every `admin_audit` row is well-formed
+     and every expected action type has produced rows in the window, `FINDING`
+     with counts otherwise.
+
+   Never report a clean *integrity* sweep off a one-sided read, and never let a
+   clean self-consistency result be reported as though it were the integrity
+   check.
 6. Append **one row for this invocation** to `LOOP-LOG.tsv`, in the **primary
    checkout**, then commit and push it (rules in `docs/plans/PLAN-LOOPS.md`,
    "Where the row is written") — one tab-separated row per run
