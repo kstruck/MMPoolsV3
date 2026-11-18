@@ -230,14 +230,15 @@ point-in-time snapshot and drift like every other count in these docs.
 
 | Marker | Meaning as used | Live uses |
 |---|---|---|
-| `⚠️` | Warning callout — a caveat or trap the reader must not miss | 215 |
+| `⚠️` | Warning callout — a caveat or trap the reader must not miss | 227 |
 | `✅` | Done / shipped — plan status blocks and checklist DONE sections, with commit hash where applicable | 144 |
-| `🛑` | **Hard stop: do not skip, do not do this.** The strongest marker, and `CLAUDE.md`'s primary "stop, read this" | 69 |
+| `🛑` | **Hard stop: do not skip, do not do this.** The strongest marker, and `CLAUDE.md`'s primary "stop, read this" | 72 |
 | `⛔` | Forbidden / deliberately absent — "DO NOT SET THIS IN PROD", "must stay absent", "do not reintroduce" | 23 |
 | `❌` | Not done / cancelled / disabled — the negative state in status tables | 23 |
+| `🟢` | Live / active / restored (`CLAUDE.md` §2b "🟢 RESTORED", HANDOFF state headings) | 11 |
 | `🟡` | Partial or in-flight — shipped but not deployed, open PR, deferred findings (HANDOFF state headings) | 9 |
-| `🟢` | Live / active / restored (`CLAUDE.md` §2b "🟢 RESTORED", HANDOFF state headings) | 8 |
 | `🔴` | Blocker / critical open item | 8 |
+| `⚪` | Parked / inactive — built but deliberately not running (`PLAN-LOOPS.md`'s State column) | 4 |
 | `📌` | Pinned carried note — typically an `UNVERIFIED` claim carried forward, not re-measured | 3 |
 | `▶️` | Remaining-steps header in a deploy checklist (`## ▶️ REMAINING`) | 1 |
 
@@ -247,7 +248,8 @@ it as the deploy-checklist REMAINING header, and the checklist it models,
 review-log line that merely *quotes* the old roster, so do not read that number
 as current usage. Frequency decides what MUST be listed, never what may be.
 
-`🟢` / `🟡` / `🔴` are a set: live / in-flight / blocked. `README.md` additionally
+`🟢` / `🟡` / `🔴` / `⚪` are a set: live / in-flight / blocked / parked.
+`README.md` additionally
 uses per-section emoji (🚀 🏈 🏀 …) — that is existing practice and is **not**
 part of this roster, which is why the re-measure command below excludes it.
 
@@ -260,7 +262,7 @@ status-marker set in new docs.** Only the enumeration was wrong.
 # Uses of each status marker in LIVE tracked markdown. Reproduces the table above.
 # Excludes docs/archive/ (frozen), README.md (section emoji, carved out above),
 # and THIS skill file — the roster must not be evidence for itself.
-for m in ⚠ ✅ 🛑 ⛔ ❌ 🟡 🟢 🔴 ▶ 📌; do
+for m in ⚠ ✅ 🛑 ⛔ ❌ 🟢 🟡 🔴 ⚪ 📌 ▶; do
   n=$(git ls-files -z '*.md' \
       | grep -zZv -e '^docs/archive/' -e '^README\.md$' -e 'mmp-docs-and-writing' \
       | xargs -0 grep -oh -- "$m" 2>/dev/null | wc -l)
@@ -277,8 +279,8 @@ one-liner for a human check and the test for the gate.
 Count the **base codepoint** (`⚠`, `▶`), not the emoji-presentation form
 (`⚠️` = `U+26A0 U+FE0F`): some uses omit the `U+FE0F` variation selector, and
 grepping the two-codepoint form silently undercounts them. Across **all**
-tracked markdown (archive included) the base codepoint `⚠` measured 771 while
-`⚠️` measured 769 — two uses carry no variation selector.
+tracked markdown (archive included) the base codepoint `⚠` measured 792 while
+`⚠️` measured 786 — six uses carry no variation selector.
 
 `tests/docs-state-invariants.test.ts` guards this table mechanically — see
 "status-marker roster" there. It reads this table directly (no second copy to
@@ -290,11 +292,24 @@ drift) and checks both directions, each at the scope that answers its question:
 - **Reverse**, over **all** tracked markdown, `docs/archive/` included: a
   marker listed here must be used *somewhere*. `▶️` passes on the archived
   `PHASE0-DEPLOY-CHECKLIST.md` that §2f models — documented practice whose
-  model doc is finished is still practice. A marker used nowhere at all is not.
+  model doc is finished is still practice. A marker used nowhere at all is not,
+  which keeps this table from accumulating entries on somebody's hunch.
 
 Both directions exclude this file: the roster must not be evidence for itself.
 So the drift that produced the old roster is now detectable rather than
 arguable.
+
+🟢 **The guard has already earned its keep — on its own PR.** When this table
+was first written, `⚪` was proposed for it and **rejected on measurement**: it
+had zero uses in tracked markdown and zero in history, so listing it would have
+been the same defect in the opposite direction. Then `PLAN-LOOPS.md` merged
+([#699](https://github.com/kstruck/MMPoolsV3/pull/699)) with four `⚪ Parked`
+cells in its ledger's State column, and CI went red on this very invariant
+before the PR could merge — `⚪ (U+26AA) — 4 uses ... NOT in the roster`. Both
+calls were right at the time they were made, and the table is correct now
+because a test noticed the moment practice changed. That is the whole point:
+the roster was wrong for months because nothing re-measured it, and the lag is
+now minutes.
 
 **History.** The roster read `✅ ⚠️ ⛔ ▶️` until 2026-11-18 and was wrong in two
 directions: it omitted `🛑` (then the second-most-used marker in the repo) along
@@ -406,7 +421,7 @@ All facts verified 2026-07-06 against `D:\march-melee-pools` plus owner intervie
 | Seed-parsing stale section | `Select-String -Path docs\bracket-pool-architecture.md -Pattern "E1-Duke"` |
 | UI copy rules unchanged | `Select-String -Path docs\UI-REVAMP-GUIDE.md -Pattern "No emoji|Visual refactor only"` |
 | ADR count / next number | `Get-ChildItem docs\adr` |
-| **Status-marker roster matches practice** | the `for m in ⚠ ✅ 🛑 ⛔ ❌ 🟡 🟢 🔴 ▶ 📌` loop in §3 "Status markers → Re-measure"; `npx vitest run tests/docs-state-invariants.test.ts -t "status-marker roster"` gates it |
+| **Status-marker roster matches practice** | the `for m in ⚠ ✅ 🛑 ⛔ ❌ 🟢 🟡 🔴 ⚪ 📌 ▶` loop in §3 "Status markers → Re-measure"; `npx vitest run tests/docs-state-invariants.test.ts -t "status-marker roster"` gates it |
 | Plan status blocks current | `Select-String -Path PLAN-SUPERADMIN-CONTROL.md -Pattern "^- ✅" | Measure-Object` |
 | Current test counts (never copy old ones) | `npm test` then `npm --prefix functions test` |
 | POOL_CREATED writer (merged on main, `lib/poolCreation.ts:110-112`) | `Select-String -Path functions\src\lib\poolCreation.ts -Pattern "POOL_CREATED"` |

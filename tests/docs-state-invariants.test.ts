@@ -1606,10 +1606,17 @@ describe('App Check stays off, and the outage stays documented', () => {
  * ESTABLISHED — 3+ uses in live docs. Below that, nothing fails.
  *
  * The reverse direction matters just as much and is easy to miss: a roster may
- * list a marker nothing uses. That is how this very table nearly gained a `⚪`
- * entry for "parked / inactive" — proposed in good faith, measured at ZERO uses
- * anywhere in the repo or its history. Listing a marker nobody uses invites the
- * same false findings in the opposite direction, so a dead entry fails too.
+ * list a marker nothing uses. Listing a marker nobody uses invites the same
+ * false findings in the opposite direction, so a dead entry fails too — it
+ * keeps the table from accumulating entries on somebody's hunch.
+ *
+ * BOTH DIRECTIONS HAVE NOW FIRED ON THIS TABLE, which is the best evidence the
+ * design is right. `⚪` was proposed for the roster and rejected on
+ * measurement — zero uses in tracked markdown, zero in history. Days later
+ * PLAN-LOOPS.md merged (#699) with four `⚪ Parked` cells in its ledger, and
+ * the FORWARD check went red in CI before this PR could merge:
+ * `⚪ (U+26AA) — 4 uses ... NOT in the roster`. The rejection was right when it
+ * was made and the entry is right now; a test is what noticed the difference.
  *
  * WHAT IS EXCLUDED, and why each exclusion is principled rather than convenient:
  *   - docs/archive/  — frozen history. The rule governs NEW docs; archived docs
@@ -1883,8 +1890,9 @@ describe('status-marker roster describes measured practice', () => {
       `These markers are listed in the roster at ${ROSTER_SKILL} §3 "Status markers" but are used ` +
         `NOWHERE in tracked markdown — not in live docs, not even in docs/archive/.\n\n` +
         `The roster is descriptive of measured practice, so an entry nothing uses does not belong in it — ` +
-        `it invites the same false findings in the opposite direction. This table nearly gained a ⚪ entry ` +
-        `for "parked / inactive" that measured ZERO uses in the repo and in its history.\n\nDead entries:\n  ${dead.join('\n  ')}`,
+        `it invites the same false findings in the opposite direction, and lets the table accumulate ` +
+        `entries on somebody's hunch. Either find the practice that justifies it, or drop the row.` +
+        `\n\nDead entries:\n  ${dead.join('\n  ')}`,
     ).toEqual([]);
   });
 });
