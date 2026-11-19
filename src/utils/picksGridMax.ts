@@ -176,3 +176,29 @@ export function maxUnknownTitle(reason: MaxUnknownReason | undefined): string {
         default: return 'Not known yet';
     }
 }
+
+/**
+ * Points still winnable this week — the "Pts Left" column on the Current Picks
+ * grid and the Week Results table (Kevin, 2026-11-19, from member feedback:
+ * "if there are still 2 games to go and the player has chosen those two games
+ * to have a confidence score of 5 and 6, they would have 11 total pts still
+ * possible").
+ *
+ * It is `max − earned` from the SAME tally, so it can never disagree with the
+ * Max column beside it: every pick on a game not yet decided, at its confidence
+ * weight (or 1 point), plus — in standard scoring — unrevealed picks priced at 1.
+ * `null` (printed "?") exactly when Max is: the weights are not revealed yet,
+ * or the reveal has not arrived. A finished week reads 0.
+ */
+export function pointsLeft(t: Pick<GridRowTally, 'max' | 'earned'>): number | null {
+    return t.max === null ? null : Math.max(0, t.max - t.earned);
+}
+
+/** Why a Pts Left cell reads "?", in the words the column's tooltip uses. */
+export function pointsLeftUnknownTitle(reason: MaxUnknownReason | undefined): string {
+    switch (reason) {
+        case 'WEIGHTS_HIDDEN': return "Their confidence weights are not revealed yet, so the points they have left are not known";
+        case 'WEIGHT_MISSING': return 'A pick on this row has no stored confidence weight';
+        default: return 'Not known yet';
+    }
+}

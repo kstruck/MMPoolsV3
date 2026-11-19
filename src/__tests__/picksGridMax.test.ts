@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { NFLGame } from '../types';
 import type { PicksGridCell } from '../utils/picksGrid';
-import { tallyGridRow, formatWinLoss, maxUnknownTitle } from '../utils/picksGridMax';
+import { tallyGridRow, formatWinLoss, maxUnknownTitle, pointsLeft, pointsLeftUnknownTitle } from '../utils/picksGridMax';
 
 // A FINAL game carries a real score (away 24, home 20) unless told otherwise —
 // a scoreless FINAL is a separate case, pinned by its own test.
@@ -242,5 +242,25 @@ describe('formatting', () => {
     it('every unknown reason has its own tooltip', () => {
         const titles = new Set(['COUNT_UNKNOWN', 'WEIGHTS_HIDDEN', 'WEIGHT_MISSING'].map(r => maxUnknownTitle(r as never)));
         expect(titles.size).toBe(3);
+    });
+});
+
+// Pts Left (Kevin, 2026-11-19): Max minus what is already won, from one tally.
+describe('pointsLeft', () => {
+    it('is max − earned', () => {
+        expect(pointsLeft({ max: 20, earned: 9 })).toBe(11);
+    });
+    it('is 0 once the week is over (max === earned)', () => {
+        expect(pointsLeft({ max: 13, earned: 13 })).toBe(0);
+    });
+    it('is null — printed "?" — exactly when Max is unknown', () => {
+        expect(pointsLeft({ max: null, earned: 4 })).toBeNull();
+    });
+    it('never goes negative, whatever the inputs', () => {
+        expect(pointsLeft({ max: 3, earned: 5 })).toBe(0);
+    });
+    it('explains a "?" in the same words as the Max column, about points left', () => {
+        expect(pointsLeftUnknownTitle('WEIGHTS_HIDDEN')).toContain('points they have left');
+        expect(pointsLeftUnknownTitle(undefined)).toBe('Not known yet');
     });
 });

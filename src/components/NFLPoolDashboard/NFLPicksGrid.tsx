@@ -8,7 +8,7 @@ import { nflWeekLabel } from '../../utils/nflWeekLabel';
 import { poolSeasonType, gamesForPoolWeek } from '../../utils/nflPending';
 import { picksGridCell, majorityFor, type ConsensusSplit } from '../../utils/picksGrid';
 import { sortGridRows, gridWeekValue, type GridSort } from '../../utils/picksGridSort';
-import { tallyGridRow, formatWinLoss, maxUnknownTitle } from '../../utils/picksGridMax';
+import { tallyGridRow, formatWinLoss, maxUnknownTitle, pointsLeft, pointsLeftUnknownTitle } from '../../utils/picksGridMax';
 import { GridSortToggle } from './GridSortToggle';
 import { rowDisplayName } from '../../utils/entrySelection';
 import { useDistributionVisibility } from './pickSheet/useDistributionVisibility';
@@ -217,7 +217,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
             <thead>
               <tr className="border-b border-line bg-surface">
                 <th className={`sticky left-0 z-10 bg-card ${TH}`}>Player</th>
-                <th className={`${TH} text-center w-20`}>Set</th>
+                <th className={`${TH} text-center w-20`} title={settings.confidenceMode
+                  ? 'Points this player can still win this week: every pick on a game not yet decided, at its confidence weight'
+                  : 'Points this player can still win this week: one point for every pick on a game not yet decided'}>Pts Left</th>
                 <th className={`${TH} text-center w-20`} title="This week's points from the scorer — blank until the week is scored">Week Pts</th>
                 <th className={`${TH} text-center w-20`} title="Revealed picks that won and lost so far this week">W-L</th>
                 <th className={`${TH} text-center w-20`} title="The most this player can finish the week with: points already won plus every pick still in play">Max</th>
@@ -256,6 +258,7 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   pickMode: settings.pickMode,
                 });
                 const winLoss = formatWinLoss(tally);
+                const left = pointsLeft(tally);
                 return (
                   <tr
                     key={row.id}
@@ -279,22 +282,18 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                         )}
                       </span>
                     </td>
-                    {/* "?" and not "—". Inside ONE table the same glyph must not
-                        mean two things, and the pick cells already spend "—" on
-                        a positive fact ("revealed, and they picked nothing").
-                        An unknown count has the same cause as an unknown pick —
-                        the reveal has not arrived — so it gets the same "?".
-                        (qodo #8 pointed here. Its stated reason, that a dash is
-                        a plausible-looking substitute, is REJECTED: "—" is this
-                        repo's unavailable marker throughout `NFLStandings` and
-                        `NFLResults`, and the plausible-looking substitute would
-                        have been "0/16", which is what this deliberately avoids.
-                        The overloading within this table is the real defect.) */}
+                    {/* PTS LEFT (Kevin, 2026-11-19 — replaces the Set column,
+                        which members said told them nothing). It is Max minus
+                        the points already won, from the SAME tally, so the two
+                        columns can never disagree. The Set COUNT is still
+                        computed above: it prices unrevealed picks in the tally.
+                        "?" and not "—": inside one table "—" already means
+                        "revealed, and they picked nothing". */}
                     <td
                       className="py-3 px-3 text-center text-[12px] num font-bold text-muted"
-                      title={set === undefined ? 'Not known yet' : undefined}
+                      title={left === null ? pointsLeftUnknownTitle(tally.maxUnknown) : undefined}
                     >
-                      {set === undefined ? '?' : `${set}/${weekGames.length}`}
+                      {left === null ? '?' : left}
                     </td>
                     {/* Item 11: this week's score, per row. `—` = not scored yet
                         (the repo's unavailable marker), never a 0. */}
@@ -393,15 +392,15 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
         {revealMode === 'WEEK' ? ' — this pool reveals the whole week at its one deadline'
           : revealMode === 'PER_GAME' ? ' — picks reveal game by game, each at its own lock'
           : ''}
-        . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Set</strong>{' '}
-        counts the picks a player has saved out of {weekGames.length} this week — how MANY, never which,
-        so it says nothing about who picked what. Your own is live the moment you save it, and everyone
-        else's is visible to the whole pool at any time. <strong>W-L</strong> counts the revealed picks that
+        . <strong>—</strong> means the pick IS revealed and that player made none. <strong>Pts Left</strong>{' '}
+        is how many points that player can still win this week — every pick on a game not yet decided
+        {settings.confidenceMode ? ', at its confidence weight' : ', one point each'} — so it reads 0 once
+        their week is over. <strong>W-L</strong> counts the revealed picks that
         have won and lost so far (a tie or a cancelled game counts as neither). <strong>Max</strong> is the
         most that player can finish the week with — points already won plus every pick still in play
         {settings.confidenceMode ? ', each at its confidence weight' : ', one point each'}. It is counted here
         from the cells on screen, so for a few minutes after a game ends it can differ from <strong>Week
-        Pts</strong>, which waits for the scorer. A <strong>?</strong> under Max means it cannot be worked
+        Pts</strong>, which waits for the scorer. A <strong>?</strong> under Pts Left or Max means it cannot be worked
         out yet{settings.confidenceMode ? ' — until the deadline reveals a player’s confidence weights' : ''}.
         {majorityMode !== 'OFF' && (
           <> <strong>Majority</strong> is the share of

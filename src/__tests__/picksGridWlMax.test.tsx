@@ -64,7 +64,8 @@ describe('NFLPicksGrid — W-L and Max', () => {
   it('has the two headers after Week Pts and before the games', () => {
     const { container } = renderGrid();
     const heads = [...container.querySelectorAll('thead th')].map(th => th.textContent);
-    expect(heads.slice(0, 5)).toEqual(['Player', 'Set', 'Week Pts', 'W-L', 'Max']);
+    // Kevin, 2026-11-19: "Set" was replaced by "Pts Left".
+    expect(heads.slice(0, 5)).toEqual(['Player', 'Pts Left', 'Week Pts', 'W-L', 'Max']);
     expect(heads.slice(5)).toEqual(['KC/BAL', 'BUF/MIA']);
   });
 
@@ -94,6 +95,48 @@ describe('NFLPicksGrid — W-L and Max', () => {
     const { container } = renderGrid({ reveal: null });
     expect(cellsOf(container, 'Sam Sample')[4]).toBe('?');
     expect(cellsOf(container, 'Me Myself')[4]).toBe('2');
+  });
+
+  // PTS LEFT = Max − points already won, from the same tally (Kevin, 2026-11-19).
+  it("Pts Left: the viewer's own row has 1 left — the won game is banked, one game still to play", () => {
+    const { container } = renderGrid();
+    expect(cellsOf(container, 'Me Myself')[1]).toBe('1');
+  });
+
+  it("Pts Left: another player's unrevealed pick still counts as 1 point left (standard scoring)", () => {
+    const { container } = renderGrid();
+    expect(cellsOf(container, 'Sam Sample')[1]).toBe('1');
+  });
+
+  it('Pts Left reads "?" — never a guess — when the count is unknown, with the reason in the tooltip', () => {
+    const { container } = renderGrid();
+    expect(cellsOf(container, 'Lee Longname')[1]).toBe('?');
+    const row = [...container.querySelectorAll('tbody tr')].find(r => r.textContent?.includes('Lee Longname'))!;
+    expect(row.querySelectorAll('td')[1].getAttribute('title')).toBe('Not known yet');
+  });
+
+  it('Pts Left in a confidence pool is the sum of the weights still in play (5 + 6 = 11)', () => {
+    const games = [
+      { id: 'c1', week: 3, seasonType: 2, startTime: 1, status: 'FINAL', awayTeam: team('KC'), homeTeam: team('BAL'), scores: { home: 20, away: 24 } },
+      { id: 'c2', week: 3, seasonType: 2, startTime: 2, status: 'IN_PROGRESS', awayTeam: team('BUF'), homeTeam: team('MIA') },
+      { id: 'c3', week: 3, seasonType: 2, startTime: 3, status: 'SCHEDULED', awayTeam: team('SF'), homeTeam: team('DAL') },
+    ] as never[];
+    const { container } = render(
+      <MemoryRouter>
+        <NFLPicksGrid
+          pool={{ id: 'p1', type: 'NFL_PICKEM', seasonType: 2, settings: { confidenceMode: true } } as never}
+          entries={[{ id: 'me', ownerUid: 'me', userName: 'Me Myself', picks: { c1: 'KC', c2: 'BUF', c3: 'SF' }, confidence: { c1: 9, c2: 5, c3: 6 } }]}
+          games={games}
+          week={3}
+          viewerUid="me"
+          reveal={null}
+          ownEntryLoaded
+        />
+      </MemoryRouter>,
+    );
+    const c = cellsOf(container, 'Me Myself');
+    expect(c[1]).toBe('11');   // c2 (5) + c3 (6) still in play; c1's 9 is already won
+    expect(c[4]).toBe('20');   // Max = 9 earned + 11 left
   });
 
   it('the Majority row keeps a placeholder under each new column, so the game cells do not shift', () => {
