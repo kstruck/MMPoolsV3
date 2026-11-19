@@ -294,6 +294,28 @@ describe('tallyGridRow — left (the Pts Left column)', () => {
         expect(pointsLeft(t)).toBe(1);
     });
 
+    // codex r2: one hidden pick across a just-finished game and an open one is
+    // 0 or 1 left — not knowable, so "?", never the best case.
+    it('ambiguous: fewer unrevealed picks than hidden games, spanning finished and open games → unknown', () => {
+        const slate = [game('f1', 'FINAL'), game('o1')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]),
+            setCount: 1, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        });
+        expect(pointsLeft(t)).toBeNull();
+        expect(t.leftUnknown).toBe('COUNT_UNKNOWN');
+        expect(t.max).toBe(1);                         // Max stays the upper bound
+    });
+
+    it('not ambiguous: every hidden game is still open, so each unrevealed pick is 1 left', () => {
+        const slate = [game('o1'), game('o2'), game('o3')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['o1', HIDDEN], ['o2', HIDDEN], ['o3', HIDDEN]]),
+            setCount: 2, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+        });
+        expect(pointsLeft(t)).toBe(2);
+    });
+
     it('a hidden pick on an unfinished game, standard scoring: 1 point left each', () => {
         const t = tallyGridRow({
             weekGames: GAMES, cells: cells(pick('W'), pick('L'), HIDDEN, HIDDEN, HIDDEN),

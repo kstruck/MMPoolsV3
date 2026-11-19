@@ -160,13 +160,22 @@ export function tallyGridRow(args: {
         // Only a pick on a hidden game that CAN still pay has a weight that
         // matters. A pick on a cancelled game grades VOID whatever its weight, so
         // when no hidden game can pay the answer is exact (qodo #2 on #721).
-        // Points LEFT price only the unrevealed picks that can sit on a game not
-        // yet decided. In confidence scoring their weights are unknowable, so
-        // any such pick makes Pts Left unknown; otherwise it is exact.
-        const openUnrevealed = Math.min(unrevealed, hiddenOpen);
+        // Points LEFT price only the unrevealed picks that sit on a game not yet
+        // decided — and we cannot see which hidden game a pick is on. So bound
+        // it: at most every unrevealed pick is on an open game (`openMost`), at
+        // least the ones that cannot all fit on the decided hidden games
+        // (`openLeast`). Only when the two agree is the number exact (codex r2:
+        // one hidden pick across a just-finished game and an open one could be
+        // 0 or 1, and printing 1 would be a guess).
+        const openMost = Math.min(unrevealed, hiddenOpen);
+        const openLeast = Math.max(0, unrevealed - (hiddenCells - hiddenOpen));
         const leftPart = confidenceMode
-            ? (openUnrevealed > 0 ? { left: null, leftUnknown: 'WEIGHTS_HIDDEN' as const } : { left: remaining })
-            : { left: remaining + openUnrevealed };
+            // Confidence: an unrevealed pick that may sit on an open game has an
+            // unknowable weight.
+            ? (openMost > 0 ? { left: null, leftUnknown: 'WEIGHTS_HIDDEN' as const } : { left: remaining })
+            : openLeast === openMost
+                ? { left: remaining + openMost }
+                : { left: null, leftUnknown: 'COUNT_UNKNOWN' as const };
         if (confidenceMode && Math.min(unrevealed, hiddenLive) > 0) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', ...leftPart };
         // Standard scoring prices every unrevealed pick at exactly 1. They cannot
         // outnumber the hidden games that can still pay, which keeps Max an UPPER
