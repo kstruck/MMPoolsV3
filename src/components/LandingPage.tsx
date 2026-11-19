@@ -4,10 +4,10 @@ import type { User } from '../types';
 import { Trophy, LayoutGrid, CheckCircle2, Heart, Users, Shield, Zap, Percent, Target, Timer, Grid3X3 } from 'lucide-react';
 import { Header } from './Header';
 import { Footer } from './Footer';
-import { Countdown } from './Countdown';
-import { canAccessPoolCreation, POOL_CREATION_ENABLED } from '../utils/auth';
+import { SquaresFreePromo, FreeTag } from './landing/SquaresFreePromo';
+import { canAccessPoolCreation, canAccessSquaresCreation, POOL_CREATION_ENABLED } from '../utils/auth';
 import { cn } from './ui/cn';
-import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel } from '../config/season';
+import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel, SQUARES_FREE_PROMO, SQUARES_CREATION_OPEN } from '../config/season';
 
 interface LandingPageProps {
   user?: User | null;
@@ -16,6 +16,8 @@ interface LandingPageProps {
   onSignup: () => void;
   onLogout?: () => void;
   onCreatePool?: () => void;
+  /** Straight to the squares wizard (the hero's free-squares CTA). */
+  onCreateSquaresPool?: () => void;
   onBrowse: () => void;
   onGoToDashboard?: () => void;
   isLoggedIn: boolean;
@@ -35,9 +37,13 @@ const heroCardCls = 'bg-navy-900 border border-[rgba(230,206,150,0.16)] rounded-
 const heroBtn =
   'w-full sm:w-auto inline-flex items-center justify-center gap-2 font-display font-bold uppercase tracking-[0.05em] text-[17px] px-[34px] py-4 rounded-lg transition-ui duration-150 fine:hover:-translate-y-px cursor-pointer';
 
-export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = false, onLogin, onSignup, onLogout, onCreatePool, onCreateSquaresPool, onBrowse, totalDonated = 0, totalPrizes = 0 }) => {
   const navigate = useNavigate();
   const canCreate = canAccessPoolCreation(user);
+  // Kevin, 2026-11-19: the hero leads with free squares while the promo runs.
+  // Both switches, because a promo for a closed pool type must never show.
+  const squaresPromo = SQUARES_FREE_PROMO && SQUARES_CREATION_OPEN;
+  const canCreateSquares = canAccessSquaresCreation(user);
 
   return (
     <div className="min-h-screen bg-page text-[color:var(--text)] font-body">
@@ -78,23 +84,43 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
             </span>
           </div>
 
-          <div className="flex justify-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-500 delay-50">
-            <Countdown />
-          </div>
+          {/* The season countdown lived here until 2026-11-19 (Kevin: remove it). */}
+          {squaresPromo && (
+            <div className="mb-8 animate-in fade-in slide-in-from-bottom-6 duration-500 delay-50">
+              <SquaresFreePromo />
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-12 duration-500 delay-100 mb-8">
-            <button
-              onClick={canCreate ? onCreatePool : undefined}
-              disabled={!canCreate}
-              className={cn(
-                heroBtn,
-                'bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500',
-                'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none'
-              )}
-              title={canCreate ? "Create an NFL Pool" : "Pool creation is coming soon"}
-            >
-              <Trophy size={20} /> {canCreate ? 'Create an NFL Pool' : 'Pool Creation Coming Soon'}
-            </button>
+            {squaresPromo ? (
+              <button
+                onClick={canCreateSquares ? onCreateSquaresPool : undefined}
+                disabled={!canCreateSquares}
+                data-testid="hero-host-squares"
+                className={cn(
+                  heroBtn,
+                  'bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500',
+                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none'
+                )}
+                title={canCreateSquares ? 'Host a Squares Pool for free' : 'Pool creation is coming soon'}
+              >
+                <Grid3X3 size={20} /> {canCreateSquares ? 'Host a Squares Pool' : 'Pool Creation Coming Soon'}
+                {canCreateSquares && <FreeTag className="ml-1 text-[11px]" />}
+              </button>
+            ) : (
+              <button
+                onClick={canCreate ? onCreatePool : undefined}
+                disabled={!canCreate}
+                className={cn(
+                  heroBtn,
+                  'bg-brandred-600 text-white shadow-red-cta hover:bg-brandred-500',
+                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none'
+                )}
+                title={canCreate ? "Create an NFL Pool" : "Pool creation is coming soon"}
+              >
+                <Trophy size={20} /> {canCreate ? 'Create an NFL Pool' : 'Pool Creation Coming Soon'}
+              </button>
+            )}
             <button
               onClick={onBrowse}
               className={cn(heroBtn, 'border-[1.5px] border-white/30 text-white hover:border-gold-500 hover:text-gold-300 bg-transparent')}

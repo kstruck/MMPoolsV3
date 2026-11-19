@@ -45,6 +45,8 @@ export default {
         // at for hours is noise, not signal.
         'bounce-3': 'bounce 1s ease-in-out 3',
         'spin-slow': 'spin 3s linear infinite',
+        // The FREE tag's light sweep: a few passes, then still (finite, like bounce-3).
+        sheen: 'sheen 2.4s ease-in-out 1s 4',
       },
       // Bounded replacement for `transition-all`: everything a hover/press/
       // state change legitimately animates, nothing that triggers layout.
@@ -76,6 +78,10 @@ export default {
         'live-pulse': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.35' },
+        },
+        sheen: {
+          '0%': { transform: 'translateX(-120%) skewX(-20deg)' },
+          '60%, 100%': { transform: 'translateX(220%) skewX(-20deg)' },
         }
       }
     },
