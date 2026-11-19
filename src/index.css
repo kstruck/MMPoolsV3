@@ -166,27 +166,59 @@ h1, h2, h3, h4, .display {
    =========================================== */
 @media print {
 
-  /* By default, use body:has to scope hiding.
-     If the Squares grid is being printed: */
-  body:has(#printable-grid):not(:has(#bracket-print-view)) * {
-    visibility: hidden;
+  /* "Print Grid" prints the grid and nothing else, on ONE page (Kevin,
+     2026-11-19: it printed 7 pages, the grid split across two and five blank).
+
+     Everything that is not the grid, inside it, or one of its ancestors is
+     taken out of the layout with display:none. It used to be hidden with
+     visibility:hidden, which keeps each element's height, so the rest of the
+     pool page still ran onto blank pages after the grid. Scoped with body:has
+     so it applies only when the squares grid is on the page. */
+  body:has(#printable-grid):not(:has(#bracket-print-view)) *:not(#printable-grid):not(#printable-grid *):not(:has(#printable-grid)) {
+    display: none !important;
   }
 
-  body:has(#printable-grid):not(:has(#bracket-print-view)) #printable-grid,
-  body:has(#printable-grid):not(:has(#bracket-print-view)) #printable-grid * {
-    visibility: visible;
-  }
-
-  #printable-grid {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+  /* The grid's ancestors stay, but add no size, spacing or scrolling of their
+     own: min-h-screen, padding and margins here would add a page on their own. */
+  html:has(#printable-grid):not(:has(#bracket-print-view)),
+  body:has(#printable-grid):not(:has(#bracket-print-view)),
+  body:has(#printable-grid):not(:has(#bracket-print-view)) *:has(#printable-grid) {
+    display: block !important;
+    position: static !important;
+    min-height: 0 !important;
+    height: auto !important;
+    width: auto !important;
+    max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
-    border: none !important;
+    border: 0 !important;
     box-shadow: none !important;
-    max-width: none !important;
+    overflow: visible !important;
+    transform: none !important;
+    background: white !important;
+  }
+
+  /* The grid itself: sized to the page HEIGHT, not its width. Eleven rows of
+     square cells are as tall as the grid is wide, so at the full width of a
+     landscape page (10.5in) they ran onto a second page. 7.5in fits the
+     printable area of US Letter and A4, landscape or portrait (0.25in margins). */
+  body:has(#printable-grid):not(:has(#bracket-print-view)) #printable-grid {
+    position: static !important;
+    width: 7.5in !important;
+    max-width: 7.5in !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* The mobile zoom control sets the grid's width inline; print ignores it. */
+  body:has(#printable-grid):not(:has(#bracket-print-view)) #printable-grid > div {
+    width: 100% !important;
   }
 
   /* Squares grid cell borders */
