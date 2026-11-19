@@ -8,6 +8,8 @@ import { poolSeasonType, gamesForPoolWeek, poolSeasonWeeks } from '../../utils/n
 import type { PoolPicksReveal } from '../../services/dbService';
 import { EntryWeekPicks } from './EntryWeekPicks';
 import { rowDisplayName } from '../../utils/entrySelection';
+import { picksGridCell } from '../../utils/picksGrid';
+import { tallyGridRow, pointsLeft, pointsLeftUnknownTitle } from '../../utils/picksGridMax';
 import {
   rankByWeek,
   rankBySeason,
@@ -115,6 +117,44 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // nothing. Only an unloaded slate is unknown. `maxPoints || dash` conflated
   // the two and rendered the real zero as "—". (codex r2, on r1's own fix.)
   const maxKnown = weekSlateCount > 0;
+
+  // PTS LEFT (Kevin, 2026-11-19): the points each player can still win this
+  // week. It is the Current Picks grid's own number — the same cells
+  // (`picksGridCell`, gated by the server's reveal) and the same tally
+  // (`tallyGridRow`), fed the same `entries`, `reveal` and `ownEntryLoaded` the
+  // dashboard hands the grid — so the two pages cannot disagree. It reads no
+  // pick the row-click strip below does not already show.
+  //
+  // ⚠️ Only the reveal for the week on screen, as everywhere else: last week's
+  // allowlist applied to this week's slate would reveal by coincidence.
+  const wk = reveal && reveal.week === week ? reveal : null;
+  const revealedGameIds = useMemo(() => (wk ? new Set(wk.revealedGameIds) : undefined), [wk]);
+  const pointsLeftFor = (row: ResultsRow, isMine: boolean): { left: number | null; title?: string } => {
+    // The viewer's own row is sourced from their own entry, once it has loaded —
+    // the same bypass the grid uses (`ownPicksKnown`).
+    const isOwnRow = isMine && ownEntryLoaded;
+    const entry = row as unknown as { picks?: Record<string, string>; confidence?: Record<string, number> };
+    const cells = new Map(weekGames.map(g => [g.id, picksGridCell({
+      game: g,
+      entry,
+      isOwnRow,
+      revealedGameIds,
+      pickMode: settings.pickMode,
+      confidenceMode: !!settings.confidenceMode,
+    })] as const));
+    const setCount = isOwnRow ? weekGames.filter(g => !!entry.picks?.[g.id]).length : wk?.counts?.[row.id];
+    const tally = tallyGridRow({
+      weekGames,
+      cells,
+      setCount,
+      revealMode: wk?.mode,
+      isOwnRow,
+      confidenceMode: !!settings.confidenceMode,
+      pickMode: settings.pickMode,
+    });
+    const left = pointsLeft(tally);
+    return { left, title: left === null ? pointsLeftUnknownTitle(tally.leftUnknown) : undefined };
+  };
 
   const rows = entries as ResultsRow[];
   const weekly = useMemo(() => rankByWeek(rows, week, isMargin), [rows, week, isMargin]);
@@ -233,9 +273,10 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                 ) : (
                   <>
                     <th className={`${TH} text-right w-24`}>Points</th>
+                    <th className={`${TH} text-right w-24`} title="Points this player can still win this week">Pts Left</th>
                     <th className={`${TH} text-right w-24`}>Max</th>
                     <th className={`${TH} text-right w-24`}>Correct</th>
-                    <th className={`${TH} text-right w-28`}>No Points</th>
+                    <th className={`${TH} text-right w-28`} title="Graded picks that earned nothing — a tie or a cancelled game counts here too">Games Wrong</th>
                   </>
                 )}
               </tr>
@@ -249,8 +290,12 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                 // zero until the scorer has published the week.
                 const correct = wr?.correct;
                 const total = wr?.total;
-                // 🛑 THIS COLUMN IS "No Points", NOT "Incorrect" — the rename is
-                // the fix, not a cosmetic choice.
+                // 🛑 THIS COLUMN IS NOW "Games Wrong" (Kevin, 2026-11-19: members
+                // found "No Points" unclear beside "Correct"). The figure is
+                // unchanged and the caveat below still holds — a tie or a
+                // cancelled game lands in it — so the header tooltip and the
+                // caption say so. It was "No Points", and before that
+                // "Incorrect"; the history follows.
                 //
                 // `total - correct` is graded picks that did not WIN. That is
                 // the same set as "incorrect" only on a week with no push and
@@ -272,6 +317,8 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                   typeof correct === 'number' && typeof total === 'number' ? total - correct : null;
                 const isOpen = openRowId === row.id;
                 const isMine = !!viewerUid && (row.ownerUid ?? row.id) === viewerUid;
+                // Margin's weekly table has no Pts Left column, so it is not computed there.
+                const ptsLeft = isMargin ? { left: null, title: undefined } : pointsLeftFor(row, isMine);
                 return (
                   <React.Fragment key={row.id}>
                   <tr
@@ -293,6 +340,9 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                       <>
                         <td className={`${TD} text-right font-display font-bold text-[color:var(--text)]`}>
                           {value === null ? dash : value}
+                        </td>
+                        <td className={`${TD} text-right text-muted font-bold`} title={ptsLeft.title}>
+                          {ptsLeft.left === null ? '?' : ptsLeft.left}
                         </td>
                         <td className={`${TD} text-right text-muted`}>{maxKnown ? maxPoints : dash}</td>
                         <td className={`${TD} text-right text-muted font-bold`}>
