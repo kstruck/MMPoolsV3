@@ -97,7 +97,7 @@ describe('NFLPicksGrid — W-L and Max', () => {
     expect(cellsOf(container, 'Me Myself')[4]).toBe('2');
   });
 
-  // PTS LEFT = Max − points already won, from the same tally (Kevin, 2026-11-19).
+  // PTS LEFT = points on games not yet decided, from the same tally as Max (Kevin, 2026-11-19).
   it("Pts Left: the viewer's own row has 1 left — the won game is banked, one game still to play", () => {
     const { container } = renderGrid();
     expect(cellsOf(container, 'Me Myself')[1]).toBe('1');

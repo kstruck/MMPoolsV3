@@ -283,15 +283,17 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                       </span>
                     </td>
                     {/* PTS LEFT (Kevin, 2026-11-19 — replaces the Set column,
-                        which members said told them nothing). It is Max minus
-                        the points already won, from the SAME tally, so the two
-                        columns can never disagree. The Set COUNT is still
-                        computed above: it prices unrevealed picks in the tally.
+                        which members said told them nothing): points on games
+                        not yet decided, from the SAME tally as Max, so the two
+                        columns read the same cells. Not Max − earned: Max keeps
+                        a hidden pick on a just-finished game as an upper bound,
+                        which is not "left to play" (codex r1). The Set COUNT is
+                        still computed above: it prices unrevealed picks.
                         "?" and not "—": inside one table "—" already means
                         "revealed, and they picked nothing". */}
                     <td
                       className="py-3 px-3 text-center text-[12px] num font-bold text-muted"
-                      title={left === null ? pointsLeftUnknownTitle(tally.maxUnknown) : undefined}
+                      title={left === null ? pointsLeftUnknownTitle(tally.leftUnknown) : undefined}
                     >
                       {left === null ? '?' : left}
                     </td>

@@ -46,6 +46,14 @@ export interface GridRowTally {
     /** The most this row can finish the week with: `earned` + still winnable. `null` when unknowable. */
     max: number | null;
     maxUnknown?: MaxUnknownReason;
+    /**
+     * Points still winnable on games NOT YET DECIDED — the "Pts Left" column.
+     * Not `max − earned`: Max keeps a hidden pick on a finished game (the reveal
+     * can lag the game, and that pick may already be a win), which is right for
+     * an upper bound and wrong for "left to play". `null` when unknowable.
+     */
+    left: number | null;
+    leftUnknown?: MaxUnknownReason;
 }
 
 /**
@@ -97,6 +105,10 @@ export function tallyGridRow(args: {
     // Hidden games that can still pay (`hiddenGameCanPay`): a pick on one that
     // can never score is counted in Set but must not be priced in Max.
     let hiddenLive = 0;
+    // Hidden games not yet DECIDED (not cancelled, and not a FINAL with scores):
+    // the only hidden games whose picks count as points LEFT (codex r1 on the
+    // Pts Left PR — a lagging reveal must not show a finished game as left).
+    let hiddenOpen = 0;
     let weightMissing = false;
 
     for (const game of weekGames) {
@@ -105,6 +117,7 @@ export function tallyGridRow(args: {
         if (cell.kind === 'HIDDEN') {
             hiddenCells++;
             if (hiddenGameCanPay(game, pickMode)) hiddenLive++;
+            if (game.status !== 'CANCELLED' && (game.status !== 'FINAL' || !hasReportedScores(game))) hiddenOpen++;
             continue;
         }
         if (cell.kind !== 'PICK') continue;
@@ -127,14 +140,14 @@ export function tallyGridRow(args: {
 
     const tally = { wins, losses, earned };
 
-    if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING' };
+    if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left: null, leftUnknown: 'WEIGHT_MISSING' };
 
     // The viewer's own row is sourced from their own entry: every cell is known.
     if (!isOwnRow && hiddenCells > 0) {
         // Not the viewer's row and some picks are unrevealed. Without the reveal
         // there is no count to price them with.
         if (revealMode === undefined || setCount === undefined) {
-            return { ...tally, max: null, maxUnknown: 'COUNT_UNKNOWN' };
+            return { ...tally, max: null, maxUnknown: 'COUNT_UNKNOWN', left: null, leftUnknown: 'COUNT_UNKNOWN' };
         }
         // How many saved picks are still unrevealed. A stale count smaller than
         // what is already revealed clamps to 0.
@@ -147,7 +160,14 @@ export function tallyGridRow(args: {
         // Only a pick on a hidden game that CAN still pay has a weight that
         // matters. A pick on a cancelled game grades VOID whatever its weight, so
         // when no hidden game can pay the answer is exact (qodo #2 on #721).
-        if (confidenceMode && Math.min(unrevealed, hiddenLive) > 0) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN' };
+        // Points LEFT price only the unrevealed picks that can sit on a game not
+        // yet decided. In confidence scoring their weights are unknowable, so
+        // any such pick makes Pts Left unknown; otherwise it is exact.
+        const openUnrevealed = Math.min(unrevealed, hiddenOpen);
+        const leftPart = confidenceMode
+            ? (openUnrevealed > 0 ? { left: null, leftUnknown: 'WEIGHTS_HIDDEN' as const } : { left: remaining })
+            : { left: remaining + openUnrevealed };
+        if (confidenceMode && Math.min(unrevealed, hiddenLive) > 0) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', ...leftPart };
         // Standard scoring prices every unrevealed pick at exactly 1. They cannot
         // outnumber the hidden games that can still pay, which keeps Max an UPPER
         // bound even though we cannot see which hidden game a pick sits on.
@@ -157,10 +177,13 @@ export function tallyGridRow(args: {
         // already be a win. Dropping it could put Max BELOW the player's real
         // score; counting it can only leave Max one point high until the reveal
         // lands, which an upper bound is allowed to be.
-        if (!confidenceMode) remaining += Math.min(unrevealed, hiddenLive);
+        if (!confidenceMode) return { ...tally, max: earned + remaining + Math.min(unrevealed, hiddenLive), ...leftPart };
+        return { ...tally, max: earned + remaining, ...leftPart };
     }
 
-    return { ...tally, max: earned + remaining };
+    // Every cell on the row is known: what is left is exactly the revealed picks
+    // on games not yet decided.
+    return { ...tally, max: earned + remaining, left: remaining };
 }
 
 /** "3-1", or "—" while nothing on the row has been graded. */
@@ -184,14 +207,15 @@ export function maxUnknownTitle(reason: MaxUnknownReason | undefined): string {
  * to have a confidence score of 5 and 6, they would have 11 total pts still
  * possible").
  *
- * It is `max − earned` from the SAME tally, so it can never disagree with the
- * Max column beside it: every pick on a game not yet decided, at its confidence
- * weight (or 1 point), plus — in standard scoring — unrevealed picks priced at 1.
- * `null` (printed "?") exactly when Max is: the weights are not revealed yet,
- * or the reveal has not arrived. A finished week reads 0.
+ * From the SAME tally as Max (`tallyGridRow`, over the same reveal-gated cells),
+ * but counting only games not yet decided: every revealed pick on such a game,
+ * at its confidence weight (or 1 point), plus — in standard scoring — the
+ * unrevealed picks that can sit on one, at 1 each. `null` (printed "?") when
+ * that is unknowable: confidence weights not revealed yet, or the reveal has
+ * not arrived. A finished week reads 0.
  */
-export function pointsLeft(t: Pick<GridRowTally, 'max' | 'earned'>): number | null {
-    return t.max === null ? null : Math.max(0, t.max - t.earned);
+export function pointsLeft(t: Pick<GridRowTally, 'left'>): number | null {
+    return t.left;
 }
 
 /** Why a Pts Left cell reads "?", in the words the column's tooltip uses. */

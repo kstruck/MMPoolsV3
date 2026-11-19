@@ -153,7 +153,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       pickMode: settings.pickMode,
     });
     const left = pointsLeft(tally);
-    return { left, title: left === null ? pointsLeftUnknownTitle(tally.maxUnknown) : undefined };
+    return { left, title: left === null ? pointsLeftUnknownTitle(tally.leftUnknown) : undefined };
   };
 
   const rows = entries as ResultsRow[];
