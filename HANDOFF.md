@@ -44,6 +44,10 @@
 > `settings/billing_config` `trialDays` / `gracePeriodDays` were not read —
 > **UNVERIFIED**. Workaround: Super-Admin → billing → Extend Trial
 > (`SuperAdminBillingPanel.tsx`, +14 days a click).
+> **Fixed by `PLAN-SQUARES-ZERO-PRICE-FREE` once its PR's functions are
+> deployed:** a squares pool priced at $0 then launches free at any size, and
+> one already created as a $0 trial can be activated free from the pricing
+> page (unless its owner already has an active free pool).
 >
 > **To stop it, fastest first.**
 > 1. Winner records look wrong on a live game: set
