@@ -96,7 +96,7 @@ export function tallyGridRow(args: {
     weekGames: readonly NFLGame[];
     /** What the grid already computed for this row, keyed by game id. */
     cells: ReadonlyMap<string, PicksGridCell>;
-    /** The Set column's number: the server's count, or the viewer's own. */
+    /** The saved-pick count: the server's (`reveal.counts`), or the viewer's own. Prices unrevealed picks. */
     setCount: number | undefined;
     /** The server's reveal mode, or `undefined` when the reveal has not arrived. */
     revealMode: 'WEEK' | 'PER_GAME' | undefined;

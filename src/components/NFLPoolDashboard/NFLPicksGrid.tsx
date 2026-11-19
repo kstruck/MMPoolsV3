@@ -28,8 +28,9 @@ import { useDistributionVisibility } from './pickSheet/useDistributionVisibility
  * permission-denied for anyone who was not the pool's `ownerId`, `managerUid`
  * or SUPER_ADMIN (#414, PLAN-COMMISSIONER-BLIND-PICKS Q5). #501 admitted a
  * PROVEN member to `assertPickReader`, and 2026-08-22 opened the per-member
- * `counts` to them as well (PLAN-MEMBER-SET-COLUMN.md), so the Set column now
- * fills in during the week rather than reading `—` until the last kickoff.
+ * `counts` to them as well (PLAN-MEMBER-SET-COLUMN.md). That count filled the
+ * grid's Set column, which Pts Left replaced (Kevin, 2026-11-19); it still
+ * prices a player's unrevealed picks in Pts Left and Max during the week.
  *
  * WHAT DID NOT MOVE: pick CONTENT. `picks`, `confidence` and `tiebreakers` are
  * still assembled by allowlist from the server's reveal boundary, and a
