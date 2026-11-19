@@ -352,6 +352,36 @@ describe('tallyGridRow — left (the Pts Left column)', () => {
         expect(t.leftUnknown).toBe('COUNT_UNKNOWN');
     });
 
+    // qodo #790, finding 1: a won pick with no stored weight makes Max unknown,
+    // but it is on a decided game — Pts Left is still exact.
+    it('a won pick missing its weight: Max unknown, Pts Left still exact (0 on a finished week)', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES.slice(0, 2), cells: cells(pick('W'), pick('L', 3)),
+            setCount: 2, revealMode: 'WEEK', isOwnRow: true, confidenceMode: true,
+        });
+        expect(t.max).toBeNull();
+        expect(pointsLeft(t)).toBe(0);
+    });
+
+    it('a pick still IN PLAY missing its weight: Pts Left unknown too', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: cells(pick('W', 9), NO_PICK, pick(null), NO_PICK, NO_PICK),
+            setCount: 2, revealMode: 'WEEK', isOwnRow: true, confidenceMode: true,
+        });
+        expect(pointsLeft(t)).toBeNull();
+        expect(t.leftUnknown).toBe('WEIGHT_MISSING');
+    });
+
+    // qodo #790, finding 2: no reveal, but every hidden game is decided.
+    it("another player, no reveal, a finished week: Pts Left 0 (Max stays '?')", () => {
+        const t = tallyGridRow({
+            weekGames: GAMES.slice(0, 2), cells: cells(HIDDEN, HIDDEN),
+            setCount: undefined, revealMode: undefined, isOwnRow: false, confidenceMode: false,
+        });
+        expect(t.max).toBeNull();
+        expect(pointsLeft(t)).toBe(0);
+    });
+
     it('explains a "?" about points left', () => {
         expect(pointsLeftUnknownTitle('WEIGHTS_HIDDEN')).toContain('points they have left');
         expect(pointsLeftUnknownTitle(undefined)).toBe('Not known yet');

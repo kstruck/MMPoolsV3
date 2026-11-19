@@ -3,16 +3,19 @@ import type { PicksGridCell } from './picksGrid';
 import { gradePick, hasReportedScores } from './pickemResult';
 
 /**
- * W-L and Max for one row of the Current Picks grid (PLAN-SPLIT-POT-SETTLEMENT
- * Part B, Kevin 2026-10-08).
+ * W-L, Max and Pts Left for one row of the Current Picks grid
+ * (PLAN-SPLIT-POT-SETTLEMENT Part B, Kevin 2026-10-08; Pts Left added
+ * 2026-11-19, and shown on Week Results too).
  *
  * 🛑 THIS GRADES NOTHING AND REVEALS NOTHING. Every result comes from a cell
  * `picksGridCell` already built (and `gradePick` already graded, parity-pinned to
  * the scorer by `tests/pickem-result-parity.test.ts`), and every cell is already
  * gated by the server's reveal allowlist. This module only COUNTS cells. It must
  * never read a pick the grid is not already showing — an unrevealed pick is a
- * `HIDDEN` cell, and it contributes nothing but the one fact the Set column
- * already discloses: HOW MANY picks the player has saved.
+ * `HIDDEN` cell, and it contributes nothing but the one fact the server's
+ * saved-pick count (`reveal.counts`) already discloses: HOW MANY picks the
+ * player has saved. (That count was once printed as the grid's Set column; it
+ * still prices unrevealed picks here.)
  *
  * Max = points already earned + points still winnable this week.
  *
@@ -26,6 +29,14 @@ import { gradePick, hasReportedScores } from './pickemResult';
  *   - confidence scoring and some of their picks are unrevealed, so their
  *     weights are unknowable (`WEIGHTS_HIDDEN`);
  *   - a confidence pick with no stored weight (`WEIGHT_MISSING`).
+ *
+ * Pts Left (`left`) = points still winnable on games NOT YET DECIDED — not
+ * `max − earned`, because Max keeps a hidden pick on a finished game as an upper
+ * bound. `null` when it would be a guess: a reveal/count is missing and a hidden
+ * game is still open (`COUNT_UNKNOWN`); a hidden pick could sit on either a
+ * finished or an open game (`COUNT_UNKNOWN`); in confidence scoring an
+ * unrevealed pick could sit on an open game (`WEIGHTS_HIDDEN`); or a pick still
+ * in play has no stored weight (`WEIGHT_MISSING`).
  *
  * PUSH and VOID earn nothing and are nobody's mistake: excluded from W-L and
  * from Max. A FINAL the feed reported no scores for stays ungraded (`null`), is
@@ -110,6 +121,9 @@ export function tallyGridRow(args: {
     // Pts Left PR — a lagging reveal must not show a finished game as left).
     let hiddenOpen = 0;
     let weightMissing = false;
+    // A missing weight on a pick still IN PLAY makes Pts Left unknown too; one on
+    // an already-won pick affects only Max (qodo #790, finding 1).
+    let openWeightMissing = false;
 
     for (const game of weekGames) {
         const cell = cells.get(game.id);
@@ -133,21 +147,25 @@ export function tallyGridRow(args: {
             // Ungraded: not over yet, OR a FINAL the feed reported no scores for —
             // the scorer will grade that one when scores arrive, so it is still
             // winnable and must stay in Max (an upper bound).
-            if (typeof weight === 'number') remaining += weight; else weightMissing = true;
+            if (typeof weight === 'number') remaining += weight; else { weightMissing = true; openWeightMissing = true; }
         }
         // PUSH and VOID: neither earned nor winnable.
     }
 
     const tally = { wins, losses, earned };
 
-    if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left: null, leftUnknown: 'WEIGHT_MISSING' };
+    if (openWeightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left: null, leftUnknown: 'WEIGHT_MISSING' };
 
     // The viewer's own row is sourced from their own entry: every cell is known.
     if (!isOwnRow && hiddenCells > 0) {
         // Not the viewer's row and some picks are unrevealed. Without the reveal
         // there is no count to price them with.
         if (revealMode === undefined || setCount === undefined) {
-            return { ...tally, max: null, maxUnknown: 'COUNT_UNKNOWN', left: null, leftUnknown: 'COUNT_UNKNOWN' };
+            // With no hidden game still OPEN, no hidden pick can be points left,
+            // so Pts Left is exact from the revealed cells even without a count —
+            // a finished week reads 0, not "?" (qodo #790, finding 2).
+            const leftKnown = hiddenOpen === 0 ? { left: remaining } : { left: null, leftUnknown: 'COUNT_UNKNOWN' as const };
+            return { ...tally, max: null, maxUnknown: 'COUNT_UNKNOWN', ...leftKnown };
         }
         // How many saved picks are still unrevealed. A stale count smaller than
         // what is already revealed clamps to 0.
@@ -186,9 +204,14 @@ export function tallyGridRow(args: {
         // already be a win. Dropping it could put Max BELOW the player's real
         // score; counting it can only leave Max one point high until the reveal
         // lands, which an upper bound is allowed to be.
+        if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', ...leftPart };
         if (!confidenceMode) return { ...tally, max: earned + remaining + Math.min(unrevealed, hiddenLive), ...leftPart };
         return { ...tally, max: earned + remaining, ...leftPart };
     }
+
+    // A won pick with no stored weight: Max is unknown, but it is on a decided
+    // game, so Pts Left is not (qodo #790, finding 1).
+    if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left: remaining };
 
     // Every cell on the row is known: what is left is exactly the revealed picks
     // on games not yet decided.
