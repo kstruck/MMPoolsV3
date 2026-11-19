@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { checkoutPricingType } from '../utils/checkoutPricingType';
 import { useNavigate, useSearchParams } from 'react-router';
 import type { User, Pool, BillingConfig } from '../types';
 import { DEFAULT_TRIAL_DAYS, DEFAULT_FORMAT_TIER_MAP, normalizeLegacyPackage } from '@shared/schemas/billingConfig';
@@ -263,8 +264,11 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         const unsubscribe = dbService.subscribeToPool(selectedPoolId, (pool) => {
             if (pool) {
                 setSelectedPoolData(pool);
-                // Synchronize calculator inputs to match selected pool for convenience
-                setCalcPoolType(pool.type);
+                // Synchronize calculator inputs to match selected pool for convenience.
+                // The type is the one checkout PRICES the pool as (its stored type,
+                // normalized exactly as the server does), so the quote shown is the
+                // price charged — including legacy 'playoff' and typeless pools.
+                setCalcPoolType(checkoutPricingType((pool as { type?: unknown }).type));
                 setCalcPlayers((pool as any).estimatedPlayers || ((pool as any).settings?.maxEntriesTotal > 0 ? (pool as any).settings.maxEntriesTotal : 30));
                 // ⚠️ `pool.addons` FIRST, `billing.featuresUnlocked` only as the
                 // legacy fallback (PLAN-WIZARD-BUYFLOW-FIXES T3). `addons` is the
