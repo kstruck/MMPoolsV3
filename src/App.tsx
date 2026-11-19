@@ -230,6 +230,10 @@ const App: React.FC = () => {
   };
 
   const handleSquaresPoolCreate = () => {
+    // Same G2 intent as handleCreatePoolClick: an anonymous visitor who signs
+    // up from the homepage's free-squares CTA lands in the squares wizard,
+    // not on /participant (2026-11-19).
+    if (!user) setPostAuthIntent('/create/squares');
     if (!checkAccess()) return;
     navigate('/create/squares');
   };
@@ -257,6 +261,7 @@ const App: React.FC = () => {
                 onSignup={() => handleOpenAuth('register')}
                 onLogout={handleLogout}
                 onCreatePool={handleCreatePoolClick}
+                onCreateSquaresPool={handleSquaresPoolCreate}
                 onBrowse={() => navigate('/browse')}
                 totalPrizes={stats?.totalRevenue || 0}
                 totalDonated={stats?.totalDonated || 0}
