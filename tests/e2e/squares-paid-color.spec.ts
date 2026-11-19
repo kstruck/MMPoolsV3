@@ -62,9 +62,16 @@ test.describe('Squares grid colours', () => {
     // with Grid.tsx by hand (qodo, PR #793), so there is none; this pins it.
     await page.emulateMedia({ media: 'print' });
     const printed = await page.evaluate(() =>
-      [0, 1].map((i) => getComputedStyle(document.querySelector(`[data-testid="square-${i}"]`)!).backgroundColor));
-    expect(printed[0]).toBe(PAID_GREEN);
-    expect(printed[1]).not.toBe(PAID_GREEN);
+      [0, 1].map((i) => {
+        const cs = getComputedStyle(document.querySelector(`[data-testid="square-${i}"]`)!);
+        return { bg: cs.backgroundColor, adjust: cs.printColorAdjust || cs.getPropertyValue('-webkit-print-color-adjust') };
+      }));
+    expect(printed[0].bg).toBe(PAID_GREEN);
+    expect(printed[1].bg).not.toBe(PAID_GREEN);
+    // The computed colour is the same with or without the forcing, so pin the
+    // forcing itself: without it a browser drops backgrounds when "Background
+    // graphics" is off, and paid squares would print white (qodo, PR #793).
+    expect(printed[0].adjust).toBe('exact');
     await context.close();
   });
 });
