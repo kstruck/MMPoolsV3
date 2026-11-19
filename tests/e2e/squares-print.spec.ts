@@ -1,0 +1,116 @@
+import { test, expect, type Page } from '@playwright/test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { registerFreshUser, patchDoc } from './helpers';
+
+/**
+ * "PRINT GRID" PRINTS THE GRID, ON ONE PAGE — through Chromium's own print
+ * engine, against the auth, functions and Firestore emulators.
+ *
+ * Kevin, 2026-11-19: Print Grid produced a 7-page PDF. Page 1 held the top
+ * eight rows, page 2 the last three, and pages 3–7 were blank. The print CSS
+ * hid the rest of the pool page with `visibility: hidden`, which keeps every
+ * hidden element's height on paper, and it sized the grid to the full page
+ * WIDTH, so eleven square rows ran taller than a landscape page.
+ *
+ * A jsdom test cannot see either: it does no layout and no pagination. This
+ * test asks the browser for the PDF and counts its pages.
+ */
+
+const RUN_ID = `${Date.now()}`;
+const s = (v: string) => ({ stringValue: v });
+const n = (v: number) => ({ integerValue: String(v) });
+const arr = (values: unknown[]) => ({ arrayValue: { values } });
+
+/** Make a squares pool through the wizard: the same path a commissioner takes. */
+async function createSquaresPool(page: Page): Promise<string> {
+  await page.goto('/create/squares');
+  await page.locator('#name').waitFor({ state: 'visible', timeout: 20_000 });
+  await page.locator('#name').fill('Print Test Squares');
+  const next = () => page.getByRole('button', { name: 'Next', exact: true }).click();
+  await next();                                         // basics -> game
+  await page.locator('#homeTeam').fill('Detroit Lions');
+  await page.locator('#awayTeam').fill('Green Bay Packers');
+  await next();                                         // game -> fee
+  await page.locator('#costPerSquare').fill('10');
+  await next();                                         // fee -> payouts
+  for (const [period, share] of [['q1', '10'], ['half', '20'], ['q3', '10'], ['final', '60']] as const) {
+    await page.locator(`[id="squaresPayouts.${period}"]`).fill(share);
+  }
+  await next();                                         // payouts -> branding
+  await next();                                         // branding -> launch
+  await page.getByRole('spinbutton', { name: /Expected number of players/i }).fill('10');
+  await page.locator('label', { hasText: /Terms of Service/i }).locator('input[type="checkbox"]').check();
+  await page.getByRole('button', { name: 'Launch free pool', exact: true }).click();
+  await page.waitForURL(/\/pool\/[a-zA-Z0-9]+/, { timeout: 30_000 });
+  return page.url().match(/\/pool\/([a-zA-Z0-9]+)/)![1];
+}
+
+/** The grid as it looks on game day: every square sold, numbers drawn, locked. */
+async function fillAndLock(poolId: string): Promise<void> {
+  const names = ['Kevin Struck', 'Ron Johnson', 'A Much Longer Player Name'];
+  const squares = Array.from({ length: 100 }, (_, id) => ({
+    mapValue: { fields: { id: n(id), owner: s(names[id % names.length]) } },
+  }));
+  const digits = (order: number[]) => arr(order.map(n));
+  await patchDoc(`pools/${poolId}`, {
+    squares: arr(squares),
+    isLocked: { booleanValue: true },
+    axisNumbers: { mapValue: { fields: {
+      home: digits([3, 1, 2, 0, 8, 5, 4, 9, 7, 6]),
+      away: digits([4, 2, 8, 7, 3, 5, 6, 1, 0, 9]),
+    } } },
+  }, ['squares', 'isLocked', 'axisNumbers']);
+}
+
+/** Page objects in a Chromium PDF (`/Type /Page`, not the `/Pages` tree). No PDF tooling needed on the runner. */
+function pdfPageCount(pdf: Buffer): number {
+  return (pdf.toString('latin1').match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+}
+
+test.describe('Print Grid', () => {
+  test('prints the full grid and nothing else, on exactly one page', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+    const page = await context.newPage();
+    await registerFreshUser(page, `e2e-sq-print-${RUN_ID}@example.com`);
+    const poolId = await createSquaresPool(page);
+    await fillAndLock(poolId);
+    await page.reload();
+    await expect(page.getByRole('button', { name: /Print Grid/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('#printable-grid')).toContainText('A Much Longer Player Name');
+
+    // preferCSSPageSize: use the app's own @page rule (landscape), as the
+    // browser's print dialog does.
+    const dir = mkdtempSync(path.join(tmpdir(), 'squares-print-'));
+    const file = path.join(dir, 'grid.pdf');
+    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+    writeFileSync(file, pdf);
+    test.info().attachments.push({ name: 'grid.pdf', path: file, contentType: 'application/pdf' });
+    expect(pdfPageCount(pdf)).toBe(1);
+
+    // And the one page is the grid: in print media every row and every column
+    // of it is inside the page, and nothing outside it is shown.
+    await page.emulateMedia({ media: 'print' });
+    const layout = await page.evaluate(() => {
+      const grid = document.getElementById('printable-grid')!;
+      const r = grid.getBoundingClientRect();
+      const visibleOutside = [...document.body.querySelectorAll<HTMLElement>('body *')]
+        .filter((el) => !grid.contains(el) && !el.contains(grid))
+        .filter((el) => {
+          const cs = getComputedStyle(el);
+          const box = el.getBoundingClientRect();
+          return cs.display !== 'none' && cs.visibility !== 'hidden' && box.width > 0 && box.height > 0;
+        })
+        .map((el) => el.tagName + (el.id ? `#${el.id}` : ''));
+      return { width: r.width, height: r.height, top: r.top, visibleOutside };
+    });
+    // A landscape US Letter page less the 0.25in margins is 10.5in x 8in, at 96px/in.
+    expect(layout.height).toBeLessThanOrEqual(8 * 96);
+    expect(layout.width).toBeLessThanOrEqual(10.5 * 96);
+    expect(layout.height).toBeGreaterThan(6 * 96);       // fits by being sized, not by vanishing
+    expect(layout.visibleOutside).toEqual([]);
+    await context.close();
+  });
+});
