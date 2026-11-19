@@ -23,8 +23,23 @@ describe('homepage hero — free squares promo', () => {
     });
 
     it('the promo shows only while BOTH the promo flag and squares creation are on', () => {
-        expect(landing).toContain('const squaresPromo = SQUARES_FREE_PROMO && SQUARES_CREATION_OPEN;');
+        expect(landing).toContain('const squaresPromo = SQUARES_FREE_PROMO && SQUARES_CREATION_OPEN && squaresLiveFree;');
         expect(landing).toMatch(/\{squaresPromo && \([\s\S]{0,200}?<SquaresFreePromo \/>/);
+    });
+
+    it('and only while the LIVE state agrees (qodo on #792): squares not paused, every price tier $0', () => {
+        expect(landing).toContain('const squaresLiveFree = useSquaresFreeOffer();');
+        const hook = read('src/hooks/useSquaresFreeOffer.ts');
+        expect(hook).toContain("doc(db, 'settings', 'billing_config')");
+        expect(hook).toContain('squaresHostingIsFree(snap.data())');
+        // Hidden until both live signals load, and on a read error.
+        expect(hook).toContain('return !flagsLoading && poolTypeFlags.SQUARES !== false && free === true;');
+        expect(hook).toContain('() => setFree(false)');
+    });
+
+    it('the promo frame is gold only — red is for live/CTA/alerts (docs/UI-REVAMP-GUIDE.md)', () => {
+        const promo = read('src/components/landing/SquaresFreePromo.tsx');
+        expect(promo).not.toMatch(/via-brandred|from-brandred|to-brandred/);
     });
 
     it('the flags are on today (squares is $0 until after Thanksgiving, plan K10)', () => {

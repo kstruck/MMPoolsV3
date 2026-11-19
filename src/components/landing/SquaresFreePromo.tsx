@@ -63,7 +63,7 @@ export const SquaresFreePromo: React.FC = () => (
     <section
         aria-labelledby="squares-free-promo-title"
         data-testid="squares-free-promo"
-        className="relative w-full max-w-3xl mx-auto rounded-2xl p-[2px] bg-gradient-to-r from-gold-500 via-brandred-500 to-gold-500 shadow-[0_0_40px_rgba(230,206,150,0.25)]"
+        className="relative w-full max-w-3xl mx-auto rounded-2xl p-[2px] bg-gradient-to-r from-gold-500 via-gold-300 to-gold-500 shadow-[0_0_40px_rgba(230,206,150,0.25)]"
     >
         <div className="relative rounded-[14px] bg-navy-900 px-5 py-5 sm:px-8 sm:py-6 flex flex-col sm:flex-row items-center gap-5 sm:gap-8 text-center sm:text-left overflow-hidden">
             <div aria-hidden="true" className="absolute -top-16 -right-16 w-48 h-48 rounded-full blur-[70px] bg-gold-500/20" />

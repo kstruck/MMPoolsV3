@@ -5,6 +5,7 @@ import { Trophy, LayoutGrid, CheckCircle2, Heart, Users, Shield, Zap, Percent, T
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { SquaresFreePromo, FreeTag } from './landing/SquaresFreePromo';
+import { useSquaresFreeOffer } from '../hooks/useSquaresFreeOffer';
 import { canAccessPoolCreation, canAccessSquaresCreation, POOL_CREATION_ENABLED } from '../utils/auth';
 import { cn } from './ui/cn';
 import { NFL_KICKOFF_MS, SUPER_BOWL_MS, SUPER_BOWL_TITLE, milestoneLabel, SQUARES_FREE_PROMO, SQUARES_CREATION_OPEN } from '../config/season';
@@ -41,8 +42,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ user, isManager = fals
   const navigate = useNavigate();
   const canCreate = canAccessPoolCreation(user);
   // Kevin, 2026-11-19: the hero leads with free squares while the promo runs.
-  // Both switches, because a promo for a closed pool type must never show.
-  const squaresPromo = SQUARES_FREE_PROMO && SQUARES_CREATION_OPEN;
+  // Both build switches, because a promo for a closed pool type must never
+  // show — AND the live state (qodo on #792): squares not paused in
+  // system/config, and every squares price tier at $0 in billing_config.
+  const squaresLiveFree = useSquaresFreeOffer();
+  const squaresPromo = SQUARES_FREE_PROMO && SQUARES_CREATION_OPEN && squaresLiveFree;
   const canCreateSquares = canAccessSquaresCreation(user);
 
   return (
