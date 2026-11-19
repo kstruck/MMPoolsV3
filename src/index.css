@@ -247,14 +247,6 @@ h1, h2, h3, h4, .display {
     color: #0B1526 !important;
   }
 
-  /* Paid squares: green (Kevin, 2026-11-19). Scoped to the grid: the admin
-     panels use a 5% tint of the same green (bg-[#0F7B4A]/5) that must not
-     print as solid green. */
-  #printable-grid [class*="bg-[#0F7B4A]"] {
-    background-color: #0F7B4A !important;
-    color: white !important;
-  }
-
   /* Current user's paid squares */
   .bg-navy-600 {
     background-color: #24507F !important;

@@ -54,6 +54,17 @@ test.describe('Squares grid colours', () => {
     await expect(legend).toHaveCSS('background-color', PAID_GREEN);
 
     await page.locator('#printable-grid').screenshot({ path: test.info().outputPath('paid-green.png') });
+
+    // Printed, too. There is no print rule of its own for the green: the
+    // squares already carry print-color-adjust: exact (index.css), so the
+    // screen class prints as it is, even with "Background graphics" off. A
+    // separate rule matching the class text would only have to be kept in step
+    // with Grid.tsx by hand (qodo, PR #793), so there is none; this pins it.
+    await page.emulateMedia({ media: 'print' });
+    const printed = await page.evaluate(() =>
+      [0, 1].map((i) => getComputedStyle(document.querySelector(`[data-testid="square-${i}"]`)!).backgroundColor));
+    expect(printed[0]).toBe(PAID_GREEN);
+    expect(printed[1]).not.toBe(PAID_GREEN);
     await context.close();
   });
 });
