@@ -94,22 +94,37 @@ test.describe('Print Grid', () => {
     // of it is inside the page, and nothing outside it is shown.
     await page.emulateMedia({ media: 'print' });
     const layout = await page.evaluate(() => {
+      // Shown = laid out, not hidden by visibility or opacity, and with a box.
+      // A size check alone would pass a grid hidden with visibility:hidden,
+      // which keeps its box and prints a blank page (qodo, PR #791).
+      const shown = (el: Element) =>
+        el.checkVisibility({ visibilityProperty: true, opacityProperty: true }) &&
+        el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
       const grid = document.getElementById('printable-grid')!;
       const r = grid.getBoundingClientRect();
+      const squares = [...grid.querySelectorAll('[data-testid^="square-"]')];
       const visibleOutside = [...document.body.querySelectorAll<HTMLElement>('body *')]
         .filter((el) => !grid.contains(el) && !el.contains(grid))
-        .filter((el) => {
-          const cs = getComputedStyle(el);
-          const box = el.getBoundingClientRect();
-          return cs.display !== 'none' && cs.visibility !== 'hidden' && box.width > 0 && box.height > 0;
-        })
+        .filter(shown)
         .map((el) => el.tagName + (el.id ? `#${el.id}` : ''));
-      return { width: r.width, height: r.height, top: r.top, visibleOutside };
+      return {
+        width: r.width, height: r.height,
+        gridShown: shown(grid),
+        squares: squares.length,
+        squaresShown: squares.filter(shown).length,
+        // The squares print their owners' names: the page has the grid's content, not only its box.
+        namesShown: squares.filter((sq) => shown(sq) && /\S/.test((sq as HTMLElement).innerText)).length,
+        visibleOutside,
+      };
     });
     // A landscape US Letter page less the 0.25in margins is 10.5in x 8in, at 96px/in.
     expect(layout.height).toBeLessThanOrEqual(8 * 96);
     expect(layout.width).toBeLessThanOrEqual(10.5 * 96);
     expect(layout.height).toBeGreaterThan(6 * 96);       // fits by being sized, not by vanishing
+    expect(layout.gridShown).toBe(true);
+    expect(layout.squares).toBe(100);
+    expect(layout.squaresShown).toBe(100);
+    expect(layout.namesShown).toBe(100);
     expect(layout.visibleOutside).toEqual([]);
     await context.close();
   });
