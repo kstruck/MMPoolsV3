@@ -220,7 +220,10 @@ export interface PoolQuote {
   couponState?: CouponQuoteState;
   /**
    * True IFF players ≤ freePlayerThreshold AND total is $0 (i.e. no paid
-   * add-on and no residual base). Any paid add-on disqualifies free.
+   * add-on and no residual base). Any paid add-on disqualifies free. Also true,
+   * at any size, for a pool type exempt from the free-plan cap (SQUARES) whose
+   * configured price is $0 with no paid add-on selected
+   * (PLAN-SQUARES-ZERO-PRICE-FREE, `zeroPricedLaunchesFree`).
    */
   freeTierEligible: boolean;
   /** Trial length in days (from billing_config) so the UI needn't guess. */

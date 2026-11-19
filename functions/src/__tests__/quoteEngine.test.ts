@@ -16,6 +16,7 @@ import {
   discountLabel,
   computeQuote,
   computeAddonUpgradeQuote,
+  zeroPricedLaunchesFree,
 } from '../lib/quoteEngine';
 import { BillingConfigSchema, type BillingConfig } from '../shared/schemas/billingConfig';
 
@@ -286,6 +287,89 @@ describe('computeQuote — itemized, coupon-inclusive, free-tier eligibility', (
     expect(() =>
       computeQuote({ config: CONFIG, poolType: 'BOGUS', estimatedPlayers: 40, addons: NO_ADDONS })
     ).toThrow(/No pricing tier mapping/);
+  });
+});
+
+// PLAN-SQUARES-ZERO-PRICE-FREE. Kevin, 2026-11-17: squares is free until after
+// Thanksgiving (one band, 11–9999 at $0), and the wizard said "Start 14-day
+// trial" for an 11+ grid — a trial a $0 pool could never pay its way out of.
+describe('zero-priced squares launch free (PLAN-SQUARES-ZERO-PRICE-FREE)', () => {
+  const zeroBands = (key: 'squares' | 'season') => BillingConfigSchema.parse({
+    ...CONFIG,
+    pricing: { ...CONFIG.pricing, [key]: [{ min: 11, max: 9999, price: 0 }] },
+  });
+  const NONE = { aiCommissioner: false, smsNotifications: false, whatIfSimulator: false, customBranding: false };
+
+  it('a squares pool above the threshold, priced at $0, is free-tier eligible', () => {
+    const q = computeQuote({ config: zeroBands('squares'), poolType: 'SQUARES', estimatedPlayers: 40, addons: NONE });
+    expect(q.basePrice).toBe(0);
+    expect(q.freeTierEligible).toBe(true);
+    expect(q.tier).toBe('free_tier');
+    expect(zeroPricedLaunchesFree(zeroBands('squares'), 'SQUARES', 40, NONE)).toBe(true);
+  });
+
+  it('a priced squares band stays on the trial path (after Thanksgiving)', () => {
+    const q = computeQuote({ config: CONFIG, poolType: 'SQUARES', estimatedPlayers: 40, addons: NONE });
+    expect(q.freeTierEligible).toBe(false);
+    expect(zeroPricedLaunchesFree(CONFIG, 'SQUARES', 40, NONE)).toBe(false);
+  });
+
+  // Every other type keeps the cap, so a $0 band there must NOT make it free:
+  // it would launch free and then refuse player 11.
+  it('does not apply to a pool type that keeps the free-plan cap', () => {
+    const q = computeQuote({ config: zeroBands('season'), poolType: 'NFL_PICKEM', estimatedPlayers: 40, addons: NONE });
+    expect(q.basePrice).toBe(0);
+    expect(q.freeTierEligible).toBe(false);
+    expect(zeroPricedLaunchesFree(zeroBands('season'), 'NFL_PICKEM', 40, NONE)).toBe(false);
+  });
+
+  it('a priced add-on keeps a $0 squares pool off the free path', () => {
+    const addons = { ...NONE, aiCommissioner: true };
+    const q = computeQuote({ config: zeroBands('squares'), poolType: 'SQUARES', estimatedPlayers: 40, addons });
+    expect(q.freeTierEligible).toBe(false);
+    expect(zeroPricedLaunchesFree(zeroBands('squares'), 'SQUARES', 40, addons)).toBe(false);
+  });
+
+  // codex round 1: an add-on the config prices at $0 adds no quote line, but
+  // createPool still puts a pool that selects it on a trial (the trial is what
+  // switches the add-on on). The quote must say "trial" too, not "free".
+  it('a SELECTED add-on that the config prices at $0 still keeps it off the free path', () => {
+    const cfg = BillingConfigSchema.parse({
+      ...zeroBands('squares'),
+      features: { ...CONFIG.features, aiCommissioner: { isPremium: true, addonPrice: 0 } },
+    });
+    const addons = { ...NONE, aiCommissioner: true };
+    const q = computeQuote({ config: cfg, poolType: 'SQUARES', estimatedPlayers: 40, addons });
+    expect(q.addonLines).toHaveLength(0);
+    expect(q.freeTierEligible).toBe(false);
+    expect(zeroPricedLaunchesFree(cfg, 'SQUARES', 40, addons)).toBe(false);
+  });
+
+  // An INCLUDED add-on is never paid and never forces a trial.
+  it('an included add-on does not keep a $0 squares pool off the free path', () => {
+    const addons = { ...NONE, customBranding: true };
+    const q = computeQuote({ config: zeroBands('squares'), poolType: 'SQUARES', estimatedPlayers: 40, addons });
+    expect(q.freeTierEligible).toBe(true);
+    expect(zeroPricedLaunchesFree(zeroBands('squares'), 'SQUARES', 40, addons)).toBe(true);
+  });
+
+  // The SUBTOTAL decides, not the total: a coupon that discounts a priced pool
+  // to $0 is a paid pool activated with a coupon, not a free one.
+  it('a full-discount coupon on a priced squares band is not free-tier eligible', () => {
+    const q = computeQuote({
+      config: CONFIG, poolType: 'SQUARES', estimatedPlayers: 40, addons: NONE,
+      couponState: { code: 'ALL', valid: true, discountType: 'percentage', discountValue: 100 },
+      coupon: { code: 'ALL', discountType: 'percentage', discountValue: 100 },
+    });
+    expect(q.total).toBe(0);
+    expect(q.freeTierEligible).toBe(false);
+  });
+
+  it('an unpriceable squares config is "not zero-priced", never an error', () => {
+    const noTiers = BillingConfigSchema.parse({ ...CONFIG, pricing: { ...CONFIG.pricing, squares: [] } });
+    expect(zeroPricedLaunchesFree(noTiers, 'SQUARES', 40, NONE)).toBe(false);
+    const unmapped = { ...CONFIG, formatTierMap: {} } as unknown as BillingConfig;
+    expect(zeroPricedLaunchesFree(unmapped, 'SQUARES', 40, NONE)).toBe(false);
   });
 });
 

@@ -467,7 +467,7 @@ Non-negotiable phrasings preserved from these cycles (reuse verbatim):
 
 ## 5. What automation actually enforces — and what it does NOT
 
-Verified against `.github/workflows/` and `.husky/` on 2026-07-06.
+Verified against `.github/workflows/` and `.husky/` on 2026-07-06; the `lint` row re-verified 2026-11-18 (it described the pre-ratchet command and a third stale warning count — qodo's finding on #699).
 
 **Enforced by CI** (`.github/workflows/ci.yml` — runs on every PR and pushes
 to main/master; token is contents:read only):
@@ -476,7 +476,7 @@ to main/master; token is contents:read only):
 |---|---|---|
 | `build-and-test` | `npm ci` (root + functions), `npm run build:static` (tsc -b + vite build + prerender), functions `npm run typecheck` (via the npm script — it mirrors `shared/` into `functions/src/shared/` first; bare tsc fails), root `npm test`, functions `npm test`. Node 20. | Intended as the REQUIRED check |
 | `nginx-validate` | `nginx -t` on `nginx.conf` in a docker nginx:alpine — gates the Coolify container config | Yes (job fails on bad conf) |
-| `lint` | `npm run lint` (0 errors / 1871 warnings baseline, warnings do not fail it) | YES — required ruleset context since 2026-09-03 |
+| `lint` | `npm run lint:ratchet` — `eslint . --max-warnings 1855`. **Warnings DO fail it above the cap** (measured 1840 on 2026-11-18, so ~15 of headroom; the cap only moves down). Bare `npm run lint` stays uncapped for local use and gates errors only. | YES — required ruleset context since 2026-09-03 |
 
 `security-scan.yml` (same triggers): `npm audit --audit-level=high` + a Python
 dependency scanner (`skills/skill-security-scanner/scripts/scanner.py`).
