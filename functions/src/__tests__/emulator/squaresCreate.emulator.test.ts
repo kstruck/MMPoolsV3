@@ -21,6 +21,7 @@ import { computePeriodPayouts, squaresPot } from '../../shared/squaresPayouts';
 import { isUsableAxis } from '../../lib/squaresGame';
 import { GUEST_KEY_PREFIX } from '../../shared/squaresClaim';
 import { FEED_FIXTURE_COLLECTION, feedFixtureDocId } from '../../lib/squaresFeedGame';
+import { BillingConfigSchema, DEFAULT_FORMAT_TIER_MAP } from '../../shared/schemas/billingConfig';
 
 const test = ftest();
 const db = admin.firestore();
@@ -90,6 +91,65 @@ beforeEach(async () => {
 });
 
 afterAll(() => test.cleanup());
+
+// PLAN-SQUARES-ZERO-PRICE-FREE. Kevin, 2026-11-17: with squares priced at $0
+// ("free until after Thanksgiving"), an 11+ grid still launched on a TRIAL — a
+// trial a $0 pool cannot be activated out of, so it went to grace and locked.
+describe('Z — a squares pool priced at $0 launches free at any size', () => {
+  const BILLING = db.collection('settings').doc('billing_config');
+  const config = (squaresPrice: number) => BillingConfigSchema.parse({
+    freePlayerThreshold: 10,
+    gracePeriodDays: 7,
+    trialDays: 14,
+    pricing: {
+      season: [{ min: 11, max: 9999, price: 0 }],
+      bracket: [{ min: 11, max: 9999, price: 19 }],
+      squares: [{ min: 11, max: 9999, price: squaresPrice }],
+      props: [{ min: 11, max: 9999, price: 9 }],
+    },
+    formatTierMap: DEFAULT_FORMAT_TIER_MAP,
+    features: {
+      aiCommissioner: { isPremium: true, addonPrice: 19 },
+      whatIfSimulator: { isPremium: true, addonPrice: 9 },
+      customBranding: { isPremium: true, addonPrice: 29 },
+    },
+  });
+  afterAll(async () => { await BILLING.delete(); });
+
+  it('40 expected players at $0: free, no trial clock', async () => {
+    await BILLING.set(JSON.parse(JSON.stringify(config(0))));
+    const { pool } = await createSquares({ estimatedPlayers: 40 });
+    expect(pool.billing.status).toBe('free');
+    expect(pool.billing.trialEndsAt).toBeUndefined();
+  });
+
+  it('40 expected players at a real price: still a trial (after Thanksgiving)', async () => {
+    await BILLING.set(JSON.parse(JSON.stringify(config(9.99))));
+    const { pool } = await createSquares({ estimatedPlayers: 40 });
+    expect(pool.billing.status).toBe('trial');
+    expect(typeof pool.billing.trialEndsAt).toBe('number');
+  });
+
+  // codex round 6 claimed a free squares pool now draws the free-plan "blocked
+  // at 10" emails. It cannot: `onPoolParticipantChange` (billing.ts) counts a
+  // squares pool by `entryCount`, and no squares path writes one. Pinned here,
+  // through the real reserve path, so a future write of it shows up.
+  it('a free squares pool never gets an entryCount, so the free-plan cap emails never fire', async () => {
+    await BILLING.set(JSON.parse(JSON.stringify(config(0))));
+    const { id, pool } = await createSquares({ estimatedPlayers: 40, maxSquaresPerPlayer: 0 });
+    expect(pool.billing.status).toBe('free');
+    for (let i = 0; i < 12; i++) await guestReserve(id, [i], `Guest${i}`);
+    const after = await poolDoc(id);
+    expect(after.squares.filter((s: Doc) => s.owner).length).toBe(12);
+    expect(after.entryCount).toBeUndefined();
+  });
+
+  it('a paid add-on at $0 still starts a trial', async () => {
+    await BILLING.set(JSON.parse(JSON.stringify(config(0))));
+    const { pool } = await createSquares({ estimatedPlayers: 40, addons: { aiCommissioner: true } });
+    expect(pool.billing.status).toBe('trial');
+  });
+});
 
 describe('C0 — a pool the wizard creates is a complete document', () => {
   it('has every piece the squares pages read with no guard', async () => {
