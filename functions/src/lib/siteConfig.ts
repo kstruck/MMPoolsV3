@@ -23,6 +23,24 @@ export const PRODUCTION_SITE_ORIGIN = "https://www.marchmeleepools.com";
 export const PRODUCTION_PROJECT_ID = "gridiron-gamble-uzuqo";
 
 /**
+ * Every host that serves (or redirects to) production. A non-production
+ * project may use none of them (qodo #2 on #796: comparing against the one
+ * canonical origin let the apex through). Matches stripe.ts's allowlist.
+ */
+export const PRODUCTION_HOSTS: ReadonlySet<string> = new Set([
+    "www.marchmeleepools.com",
+    "marchmeleepools.com",
+    "www.marchmelee.com",
+    "marchmelee.com",
+]);
+
+/** True when an origin points at a production host, in any spelling URL accepts. */
+export function isProductionOrigin(origin: string): boolean {
+    const host = new URL(origin).hostname.toLowerCase().replace(/\.$/, "");
+    return PRODUCTION_HOSTS.has(host);
+}
+
+/**
  * Resolves the public site origin (`protocol//host`, no trailing slash).
  * Unset or blank means production. Anything else must be a bare https origin
  * (http is accepted for localhost only), with no path, query, fragment or
@@ -97,7 +115,7 @@ export function resolveSiteIdentity(env: {
         if (origin !== PRODUCTION_SITE_ORIGIN) {
             throw new Error(`MMP_SITE_ORIGIN=${origin} is not production's origin, but this is production's project`);
         }
-    } else if (origin === PRODUCTION_SITE_ORIGIN) {
+    } else if (isProductionOrigin(origin)) {
         throw new Error(`Project ${projectId} is not production: set MMP_SITE_ORIGIN to its own site in functions/.env.${projectId}`);
     }
     return { origin, projectId };

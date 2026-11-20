@@ -80,6 +80,13 @@ describe("resolveSiteIdentity: origin and project must agree (qodo #1 on #796)",
         ["unset", undefined],
         ["blank", "  "],
         ["production's origin", PROD],
+        // qodo #2 on #796: every production host, not just the canonical one.
+        ["production's apex", "https://marchmeleepools.com"],
+        ["production's host with a trailing dot", "https://www.marchmeleepools.com."],
+        ["production's apex with a trailing dot", "https://marchmeleepools.com."],
+        ["the marchmelee.com alias", "https://marchmelee.com"],
+        ["the www.marchmelee.com alias", "https://www.marchmelee.com"],
+        ["production's host on another port", "https://www.marchmeleepools.com:8443"],
     ])("a real non-production project with the origin %s fails instead of linking to production", (_l, origin) => {
         expect(() => resolveSiteIdentity({ GCLOUD_PROJECT: "mmp-staging", MMP_SITE_ORIGIN: origin }))
             .toThrow(/not production: set MMP_SITE_ORIGIN/);
