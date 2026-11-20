@@ -97,10 +97,12 @@
 > reported either way: that a LIVE pool still shows the matchup card after
 > #727, and that a finished bracket or playoff pool actually stays quiet.
 >
-> ⚠️ **Three PRs handed over together do not merge together.** #727 was
-> refused because its branch fell behind `main` the moment #725 and #726
-> merged, and the Coolify rebuild that followed shipped a bundle without it.
-> When several PRs are ready at once, re-check `gh pr view <N> --json state`
+> ⚠️ **Three PRs handed over together do not merge together.** #727's first
+> merge was refused because its branch fell behind `main` the moment #725 and
+> #726 merged, and the Coolify rebuild that followed shipped a bundle without
+> it. It was then brought up to date and merged (`980efc94`, 2026-10-11
+> 00:33Z, 27 minutes after #726), and the rebuild after THAT is the one the
+> deploy-state paragraph above measures. When several PRs are ready at once, re-check `gh pr view <N> --json state`
 > for each one after the merges, before any deploy step; fix a refused one
 > with `gh pr update-branch <N>` and wait for CI again.
 >
