@@ -39,3 +39,12 @@ VERDICT: REVISE. 1 finding, accepted.
 |---|---|---|
 | X4.1 (P1) | The manual run that finishes a rules release executes the ref selected when it is clicked, not the commit that stopped. If `main` has advanced, it deploys rules and frontend for a different commit while claiming to be the same release. | **Valid, fixed.** §4.3 now pins the manual run to a required SHA input, checked against `main` and the recorded pending release, and stops later push-triggered runs while a release is pending. |
 
+### Round X5: codex (`gpt-5.6-terra`), on `c39d26b`
+
+VERDICT: REVISE. 2 findings, both accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X5.1 (P1) | A manual run may name a newer SHA, but the gate was specified only for the pushed commit, so a manual run could deploy a commit with red, missing or pending checks. | **Valid, fixed.** §4.3 now states the gate runs on the SHA being deployed in every run, manual runs included. |
+| X5.2 (P2) | S8 says staging must serve a deny-all `robots.txt` and no sitemap, but no phase did that work; the image copies `public/` unchanged. | **Valid, fixed.** Phase 1a now carries it, with a `noindex` header added. |
+

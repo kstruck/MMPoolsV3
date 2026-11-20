@@ -128,6 +128,11 @@ one the lockfile pins, the same one the emulator jobs in `ci.yml` use.
   refuses any SHA that is not on `main` or is older than the pending
   release. Naming a newer SHA is allowed and deploys the whole range up to
   it, re-running the functions step first. (codex X4.1.)
+- **The gate in §4.1 runs on the SHA that will be deployed, in every run.**
+  A manual run waits for the six contexts on its input SHA exactly as a
+  push-triggered run does on the pushed commit, so naming a newer commit
+  cannot deploy one whose checks are red, missing or still running.
+  (codex X5.1.)
 - **While a release is pending, later merges do not deploy.** Their
   push-triggered runs stop at the start and say which release is pending,
   so production never holds the frontend of one commit against the
@@ -238,7 +243,7 @@ Each phase is its own PR and is shippable alone.
 | Phase | What | Touches production? |
 |---|---|---|
 | 0 | Kevin: set the `www` app's Auto deploy to "Manual deployments only". | A setting that is already dead |
-| 1a | Code: project id and site origin become per-environment values (§4.10, S8), defaults equal to production. Proven by tests that production's rendered `nginx.conf` and URLs are unchanged. | Yes, as an ordinary release that must change nothing observable |
+| 1a | Code: project id and site origin become per-environment values (§4.10, S8), defaults equal to production. Includes the staging crawl rules from S8: a non-production image serves a deny-all `robots.txt`, no sitemap, and a `noindex` header, so the public staging site is never indexed (codex X5.2). Proven by tests that production's rendered `nginx.conf` and URLs are unchanged. | Yes, as an ordinary release that must change nothing observable |
 | 1b | Staging Firebase project and staging `www` app. The workflow deploys `main` to staging on every merge, with no approval. All UNVERIFIED items observed and recorded here. | No |
 | 2 | Production: the service account and trust, the `production` environment with Kevin as required reviewer, Coolify domain, API access and token, and the switch to pulling the image. The workflow gains the production stage. | Yes, first use is a release with no rules change |
 | 3 | Docs and skills: every file in sweep S1 is corrected in one PR, including CLAUDE.md §3 and the Rule 2 ritual. The manual ritual stays documented as the fallback. | No |
