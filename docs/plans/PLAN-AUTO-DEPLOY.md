@@ -120,6 +120,19 @@ one the lockfile pins, the same one the emulator jobs in `ci.yml` use.
   finishes the release with "Run workflow" and picks `rules-first` or
   `frontend-first`. The mixed case stays a two-PR split, as today.
 
+- **The manual run is pinned to a commit.** A "Run workflow" click runs
+  whatever the chosen branch points at when it is clicked, which may be a
+  later merge than the one that stopped. So the stopped run records its
+  commit as the pending release, and the manual run takes the commit SHA as
+  a required input, runs only from `main`, checks out exactly that SHA, and
+  refuses any SHA that is not on `main` or is older than the pending
+  release. Naming a newer SHA is allowed and deploys the whole range up to
+  it, re-running the functions step first. (codex X4.1.)
+- **While a release is pending, later merges do not deploy.** Their
+  push-triggered runs stop at the start and say which release is pending,
+  so production never holds the frontend of one commit against the
+  half-finished rules release of another.
+
 This costs one extra click on roughly one release in seventeen, and keeps
 the §1a classification with a human who can read the diff.
 

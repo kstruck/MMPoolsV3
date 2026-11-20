@@ -31,3 +31,11 @@ VERDICT: REVISE. 2 findings, both accepted.
 | X3.1 (P1) | `npm --prefix functions ci` does not install `firebase-tools`, which is a root devDependency. On a clean runner `npx firebase` would fetch an unpinned current release. | **Valid, fixed.** Verified in the root `package.json`. §4.2 now installs root dependencies first and deploys with the lockfile's CLI. |
 | X3.2 (P2) | `functions:list` shows the same name whether the new revision or the previous one is serving, so it cannot prove the approved commit landed, which is the §1c failure mode. | **Valid, fixed.** §4.8 now adds a per-function check that the serving revision was created during the run. The query itself is marked UNVERIFIED for staging. |
 
+### Round X4: codex (`gpt-5.6-terra`), on `13e7e36`
+
+VERDICT: REVISE. 1 finding, accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X4.1 (P1) | The manual run that finishes a rules release executes the ref selected when it is clicked, not the commit that stopped. If `main` has advanced, it deploys rules and frontend for a different commit while claiming to be the same release. | **Valid, fixed.** §4.3 now pins the manual run to a required SHA input, checked against `main` and the recorded pending release, and stops later push-triggered runs while a release is pending. |
+
