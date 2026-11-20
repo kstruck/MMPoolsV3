@@ -1,5 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { SITE_HOST } from "./lib/siteConfig";
 import { SITE, isSocialCrawler, extractPoolId, buildJoinPreviewHtml } from "./joinPreview.helpers";
 
 const db = admin.firestore();
@@ -48,7 +49,7 @@ export const joinPreview = onRequest({ timeoutSeconds: 15, memory: "256MiB" }, a
     try {
         const now = Date.now();
         if (!spaCache || now - spaCache.at > 60_000) {
-            const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "www.marchmeleepools.com";
+            const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || SITE_HOST;
             const resp = await fetch(`https://${host}/index.html`);
             spaCache = { html: await resp.text(), at: now };
         }

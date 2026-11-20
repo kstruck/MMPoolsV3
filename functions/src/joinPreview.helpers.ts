@@ -2,7 +2,10 @@
 // Kept separate from joinPreview.ts (which imports firebase) so they can be
 // unit-tested without any Firebase mocks.
 
-export const SITE = "https://www.marchmeleepools.com";
+import { SITE_ORIGIN } from "./lib/siteConfig";
+
+// Per-environment since PLAN-AUTO-DEPLOY Phase 1a; production's value is unchanged.
+export const SITE = SITE_ORIGIN;
 export const DEFAULT_IMG = `${SITE}/og-image.png`;
 
 // SOCIAL link-unfurl crawlers only. Search engines (Googlebot/bingbot) are

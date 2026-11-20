@@ -88,9 +88,13 @@ FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 # Copy our custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Per-environment settings applied at container start (PLAN-AUTO-DEPLOY
+# Phase 1a). The stock image's entrypoint runs it before nginx starts. With no
+# MMP_* variables set (production) it changes nothing; see the script header.
+COPY scripts/docker/40-mmp-environment.sh /docker-entrypoint.d/40-mmp-environment.sh
 
 # Fix permissions
-RUN chmod -R 755 /usr/share/nginx/html
+RUN chmod -R 755 /usr/share/nginx/html && chmod 755 /docker-entrypoint.d/40-mmp-environment.sh
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
