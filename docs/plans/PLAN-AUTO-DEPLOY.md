@@ -105,6 +105,12 @@ environment) and deploys only the surfaces that changed:
 `--project` is always explicit. The checkout is the commit itself, so the
 stale-tree failure in §1.1 cannot occur.
 
+The run starts with `npm ci` at the repo root as well as in `functions/`.
+`firebase-tools` is a root devDependency, so without the root install `npx`
+on a clean runner would download whatever CLI release is current, and the
+deploy would not be reproducible (codex X3.1). The CLI that deploys is the
+one the lockfile pins, the same one the emulator jobs in `ci.yml` use.
+
 ### 4.3 The rules order is chosen by a person, not guessed
 
 - **No rules change in the range:** functions → indexes → frontend, with no
@@ -165,9 +171,16 @@ memory.
 
 ### 4.8 Proof that it landed
 
-- **Functions:** the deploy's exit status, then `functions:list` compared
-  with the exports of `functions/src/index.ts`. CLAUDE.md §3: the tell of a
-  bad deploy is an absence.
+- **Functions, three checks.** (1) The deploy's exit status. (2)
+  `functions:list` compared with the exports of `functions/src/index.ts`:
+  CLAUDE.md §3, the tell of a bad deploy is an absence. (3) A name in the
+  list does not prove the new revision is serving, since a failed update
+  leaves the last good revision live under the same name (§1c). So for every
+  function the deploy output reports as updated, the run confirms that the
+  revision now serving was created during this run. A function that fails
+  this check fails the run and is named. (codex X3.2.) **UNVERIFIED:** the
+  exact query for the serving revision's creation time; to be settled on
+  staging.
 - **Frontend:** the image writes the commit SHA into a small static file,
   and the workflow fetches it from the live site until it matches or times
   out.

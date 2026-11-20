@@ -22,3 +22,12 @@ VERDICT: REVISE. 2 findings, both accepted.
 | X2.1 (P1) | After the branch switch, pushes to `develop` never pass the gate: `ci.yml` and `security-scan.yml` only run on pushes to `main` and `master`, so the six contexts never exist on a `develop` commit. | **Valid, fixed.** Verified in both workflow files. Phase 4 now extends the triggers in the same PR; sweep S9 lists every branch-named trigger. |
 | X2.2 (P2) | Listing scheduled jobs after the first staging deploy is too late: deploying all functions starts every scheduler job at once, including `runReminders` (every 15 minutes, bound to Courier). | **Valid, fixed.** §4.9 now has staging deploy from a committed include/exclude list with a test for completeness, scheduled exports excluded by default. Added D6. |
 
+### Round X3: codex (`gpt-5.6-terra`), on `f8e2de6`
+
+VERDICT: REVISE. 2 findings, both accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X3.1 (P1) | `npm --prefix functions ci` does not install `firebase-tools`, which is a root devDependency. On a clean runner `npx firebase` would fetch an unpinned current release. | **Valid, fixed.** Verified in the root `package.json`. §4.2 now installs root dependencies first and deploys with the lockfile's CLI. |
+| X3.2 (P2) | `functions:list` shows the same name whether the new revision or the previous one is serving, so it cannot prove the approved commit landed, which is the §1c failure mode. | **Valid, fixed.** §4.8 now adds a per-function check that the serving revision was created during the run. The query itself is marked UNVERIFIED for staging. |
+
