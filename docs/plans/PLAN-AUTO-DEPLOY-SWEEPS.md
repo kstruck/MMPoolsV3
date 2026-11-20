@@ -101,3 +101,22 @@ exactly in Phase 1 from `functions:list` on staging.
 | `tests/deploy-bundle-invariants.test.ts` | What `firebase deploy --only functions` uploads | No |
 | `tests/loop-engineering-invariants.test.ts` | `ci.yml` contents and the lint cap | No: `ci.yml` is not edited; the workflow is a new file |
 | `tests/docs-state-invariants.test.ts` | Deploy-state claims in operator docs | Yes in Phase 3 (S1) |
+
+## S8: production identifiers hard-coded where staging would inherit them
+
+`git grep -n -c "gridiron-gamble-uzuqo\|marchmeleepools\.com" -- nginx.conf src public index.html firebase.json functions/src shared scripts/prerender.ts Dockerfile`
+
+| Group | Files (hit count) | Phase 1a treatment |
+|---|---|---|
+| Container config | `nginx.conf` (7): CSP `connect-src`, CSP report endpoint ×3, `/join` proxy host | Per-environment at image build or container start. Must stay valid for the `nginx-validate` job |
+| Functions, money path | `functions/src/stripe.ts` (2) | Per-environment site origin. Plan-gated (money) |
+| Functions, other | `statsTrigger.ts` (2), `squares.ts`, `securityNotices.ts`, `joinPreview.ts`, `joinPreview.helpers.ts`, `emailStyles.ts`, `cspReport.ts` (1 each) | Per-environment site origin or project id |
+| Shared | `shared/emailPromo.ts` (1) | Per-environment site origin |
+| Frontend code | `src/components/ContactPage.tsx` (4), `src/services/emailService.ts` (2), `TermsPage.tsx` (2), `SEO.tsx` (2), `PrivacyPage.tsx` (2), `seoConfig.ts`, `SupportPage.tsx`, `HowItWorksPage.tsx` (1 each) | Classify each: a contact address or legal text naming the company stays; a link or canonical URL becomes per-environment |
+| Static files | `public/sitemap.xml` (15), `index.html` (6), `public/.well-known/api-catalog` (4), `public/auth.md` (3), `public/robots.txt`, `public/api/openapi.json`, `public/api/docs.html` (1 each) | Staging must not be indexed: serve a deny-all `robots.txt` and no sitemap on staging. Canonical URLs stay production's |
+| Hosting config | `firebase.json` (2) | Firebase Hosting does not serve prod `www` (S3): leave |
+| Tests | `functions/src/__tests__/cspReport.test.ts` (4), `nflPickConfirmation.test.ts`, `emulator/setup.ts` (1 each) | Update with the code they pin |
+
+This list is by file. Phase 1a starts by expanding it to every line, since
+"a domain in a legal page" and "a domain in a redirect" need opposite
+answers.

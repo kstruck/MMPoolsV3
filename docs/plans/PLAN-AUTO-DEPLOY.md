@@ -73,11 +73,15 @@ frontend. A rules release is about one in seventeen.
 ### 4.1 One workflow, `.github/workflows/deploy.yml`
 
 - **Trigger:** push to `main`, and a manual "Run workflow" button.
-- **Gate job:** reads the check runs on the pushed commit and stops unless
-  all six required contexts (`build-and-test`, `emulator-tests`,
-  `nginx-validate`, `lint`, `secrets-scan`, `security-audit`) succeeded. The
-  ruleset's admin bypass can merge a red commit; this job means a red commit
-  still does not deploy.
+- **Gate job:** waits for the six required contexts (`build-and-test`,
+  `emulator-tests`, `nginx-validate`, `lint`, `secrets-scan`,
+  `security-audit`) on the pushed commit. `ci.yml` and `security-scan.yml`
+  start at the same moment as this workflow, so the gate polls until every
+  context reaches a final state, with a time limit. It continues only if all
+  six succeeded; a failure, a missing context or the time limit stops the
+  run. The ruleset's admin bypass can merge a red commit; this job means a
+  red commit still does not deploy. (codex X1.1: the first draft read the
+  checks once and would have stopped almost every green merge.)
 - **Concurrency:** one deploy at a time per environment, never cancelled
   mid-run.
 - **Stages:** staging runs with no approval. Production runs the same steps
@@ -177,6 +181,22 @@ memory.
   cannot charge a card or email a real person.
 - Staging is where every UNVERIFIED item in this plan gets observed.
 
+### 4.10 Production hosts are written into the code today
+
+Sweep S8: the production project id and site domain are hard-coded in
+`nginx.conf` (the Content-Security-Policy, the CSP report endpoint and the
+`/join` crawler proxy), in `functions/src` (including `stripe.ts`), and in
+`src`. A staging image built from this tree would have its function calls
+blocked by its own CSP, would proxy join previews to production, and its
+functions would send users and emails to the production site. (codex X1.2.)
+
+So staging needs one preparatory change before it can exist: the project id
+and the site origin become per-environment values, with production's values
+as the defaults so that production's output is byte-for-byte unchanged.
+That change touches `stripe.ts`, so it is **plan-gated (money) in its own
+right** and gets its own classification, tests and review when it is
+written. It is Phase 1a below.
+
 ## 5. Phases
 
 Each phase is its own PR and is shippable alone.
@@ -184,13 +204,18 @@ Each phase is its own PR and is shippable alone.
 | Phase | What | Touches production? |
 |---|---|---|
 | 0 | Kevin: set the `www` app's Auto deploy to "Manual deployments only". | A setting that is already dead |
-| 1 | Staging Firebase project and staging `www` app. The workflow deploys `main` to staging on every merge, with no approval. All UNVERIFIED items observed and recorded here. | No |
+| 1a | Code: project id and site origin become per-environment values (§4.10, S8), defaults equal to production. Proven by tests that production's rendered `nginx.conf` and URLs are unchanged. | Yes, as an ordinary release that must change nothing observable |
+| 1b | Staging Firebase project and staging `www` app. The workflow deploys `main` to staging on every merge, with no approval. All UNVERIFIED items observed and recorded here. | No |
 | 2 | Production: the service account and trust, the `production` environment with Kevin as required reviewer, Coolify domain, API access and token, and the switch to pulling the image. The workflow gains the production stage. | Yes, first use is a release with no rules change |
 | 3 | Docs and skills: every file in sweep S1 is corrected in one PR, including CLAUDE.md §3 and the Rule 2 ritual. The manual ritual stays documented as the fallback. | No |
 | 4 | Branch switch (A3): `develop` deploys to staging, `main` to production, the ruleset names both branches, and the approval is dropped (A2). | Yes |
 
 ## 6. Risks
 
+- **Staging is not free to stand up.** Phase 1a edits code on the money
+  path (`stripe.ts` return URLs) and the CSP. It is small, but it is a real
+  release to production before staging exists to test it. Its safety rests on
+  tests that pin production's output as unchanged.
 - **Scheduled jobs in staging.** 30 source files define `onSchedule` jobs.
   In a second project they run on their own data, call ESPN, and cost money.
   Kill-switches default off, but jobs without one still run. Phase 1 lists
@@ -216,7 +241,7 @@ Each phase is its own PR and is shippable alone.
 | # | Question | Recommendation | On "approve as recommended" |
 |---|---|---|---|
 | D1 | When a release changes `firestore.rules`, who picks the order? | The pipeline stops after functions and Kevin picks (§4.3). | Rules releases need one "Run workflow" click with an order chosen. |
-| D2 | Staging before production, or production first? | Staging first (Phase 1 before Phase 2). | Production auto-deploy arrives after staging has run real releases. Until then deploys stay manual. |
+| D2 | Staging before production, or production first? | Staging first (Phases 1a and 1b before Phase 2). | Production auto-deploy arrives after staging has run real releases. Until then deploys stay manual. |
 | D3 | Frontend: image per commit from GHCR, or keep Coolify building from source? | Image per commit (§4.6). | The production `www` app changes build strategy in Phase 2. |
 | D4 | Function deletions and index deletions: manual only? | Yes (§4.4). | Removing an export or an index still ends with a manual command by Kevin. |
 | D5 | Staging `www` on `coolify.versistai.net`? | Yes (§4.9). | No change to MarchMelee's own Coolify server until Phase 2. |
