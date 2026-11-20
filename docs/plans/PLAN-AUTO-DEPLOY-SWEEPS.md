@@ -120,3 +120,14 @@ exactly in Phase 1 from `functions:list` on staging.
 This list is by file. Phase 1a starts by expanding it to every line, since
 "a domain in a legal page" and "a domain in a redirect" need opposite
 answers.
+
+## S9: workflow triggers that name a branch
+
+`git grep -n -A3 "^on:" -- .github/workflows` and `.github/dependabot.yml`
+
+| File | Today | Phase 4 |
+|---|---|---|
+| `.github/workflows/ci.yml` | `pull_request` (any base); `push` to `main`, `master` | add `develop` to `push` |
+| `.github/workflows/security-scan.yml` | `pull_request` to `main`, `master`; `push` to `main`, `master` | add `develop` to both |
+| `.github/dependabot.yml` | no `target-branch`, so the default branch | follows the default branch when it becomes `develop`; confirm, do not assume |
+| `tests/loop-engineering-invariants.test.ts` | reads `ci.yml` | re-run after the edit; it pins content, not triggers |

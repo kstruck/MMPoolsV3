@@ -180,6 +180,14 @@ memory.
 - Its own secrets: Stripe test keys, and no live Courier token, so staging
   cannot charge a card or email a real person.
 - Staging is where every UNVERIFIED item in this plan gets observed.
+- **Scheduled jobs are decided before the first staging deploy, not after.**
+  `firebase deploy --only functions` creates and starts the Cloud Scheduler
+  job of every scheduled export at once (`runReminders` runs every 15
+  minutes and is bound to Courier). So staging never deploys "all
+  functions". It deploys from a committed list: every export is named either
+  as deployed to staging or as excluded, with a reason, and a test fails
+  when an export is in neither. Scheduled exports start in the excluded
+  list. (codex X2.2.)
 
 ### 4.10 Production hosts are written into the code today
 
@@ -208,7 +216,7 @@ Each phase is its own PR and is shippable alone.
 | 1b | Staging Firebase project and staging `www` app. The workflow deploys `main` to staging on every merge, with no approval. All UNVERIFIED items observed and recorded here. | No |
 | 2 | Production: the service account and trust, the `production` environment with Kevin as required reviewer, Coolify domain, API access and token, and the switch to pulling the image. The workflow gains the production stage. | Yes, first use is a release with no rules change |
 | 3 | Docs and skills: every file in sweep S1 is corrected in one PR, including CLAUDE.md §3 and the Rule 2 ritual. The manual ritual stays documented as the fallback. | No |
-| 4 | Branch switch (A3): `develop` deploys to staging, `main` to production, the ruleset names both branches, and the approval is dropped (A2). | Yes |
+| 4 | Branch switch (A3): `develop` deploys to staging, `main` to production, the ruleset names both branches, and the approval is dropped (A2). In the same PR, `ci.yml` and `security-scan.yml` gain `develop` in their `push` triggers (and `security-scan.yml` in its `pull_request` branches): both name only `main` and `master` today, so without this the gate in §4.1 would wait for six contexts that never start on `develop` (codex X2.1). Dependabot's target branch moves to `develop` with it. | Yes |
 
 ## 6. Risks
 
@@ -217,9 +225,9 @@ Each phase is its own PR and is shippable alone.
   release to production before staging exists to test it. Its safety rests on
   tests that pin production's output as unchanged.
 - **Scheduled jobs in staging.** 30 source files define `onSchedule` jobs.
-  In a second project they run on their own data, call ESPN, and cost money.
-  Kill-switches default off, but jobs without one still run. Phase 1 lists
-  them and decides which are deployed to staging.
+  In a second project they would run on their own data, call ESPN, send
+  through Courier and cost money. §4.9 keeps them out of staging by default;
+  each one added later is a deliberate, named choice.
 - **A partly finished release.** Functions deploy, then the run stops (a
   rules release, or a failure). Production then has new functions with the
   old frontend. This is the state every manual deploy already passes
@@ -245,6 +253,7 @@ Each phase is its own PR and is shippable alone.
 | D3 | Frontend: image per commit from GHCR, or keep Coolify building from source? | Image per commit (§4.6). | The production `www` app changes build strategy in Phase 2. |
 | D4 | Function deletions and index deletions: manual only? | Yes (§4.4). | Removing an export or an index still ends with a manual command by Kevin. |
 | D5 | Staging `www` on `coolify.versistai.net`? | Yes (§4.9). | No change to MarchMelee's own Coolify server until Phase 2. |
+| D6 | Which functions run in staging? | Callables and triggers yes; every scheduled job excluded until named (§4.9). | Staging cannot test a scheduled job until Kevin adds it to the list. |
 
 ## 8. Out of scope
 
