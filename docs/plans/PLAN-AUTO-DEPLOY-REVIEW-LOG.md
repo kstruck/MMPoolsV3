@@ -57,3 +57,11 @@ VERDICT: REVISE. 2 findings, both accepted.
 | X6.1 (P1) | The first deploy to an environment has no deployment record to diff against, so the changed-surface calculation selects nothing and staging can never get its first deploy. | **Valid, fixed.** §4.2 now defines the first run: everything on staging, and an explicit baseline SHA supplied by Kevin on production. |
 | X6.2 (P2) | "Rollback is deploy the previous SHA" contradicts §4.4: without `--force`, an older SHA cannot remove functions or indexes added since. | **Valid, fixed.** New §4.11 states what a rollback does and does not undo per surface, including that a rules rollback needs an order chosen. §4.6 no longer claims more than the frontend. |
 
+### Round X7: codex (`gpt-5.6-terra`), on `92f81bf`
+
+VERDICT: REVISE. 1 finding, accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X7.1 (P1) | The §4.2 table gives one unconditional `--only functions` command, which on staging deploys every export and bypasses the include/exclude list §4.9 requires. | **Valid, fixed.** The table now gives the two commands separately; staging deploys by name from the committed list. |
+

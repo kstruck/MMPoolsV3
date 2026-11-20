@@ -97,7 +97,7 @@ environment) and deploys only the surfaces that changed:
 
 | Surface | Changed when | Step |
 |---|---|---|
-| Functions | `functions/**` or `shared/**` | `npm --prefix functions ci`, then `npx firebase deploy --only functions --project <id>` |
+| Functions | `functions/**` or `shared/**` | `npm --prefix functions ci`, then: **production** `npx firebase deploy --only functions --project <id>`; **staging** `--only functions:<name>,...` built from the committed staging list in §4.9, never the bare `--only functions` (codex X7.1) |
 | Rules | `firestore.rules` | `npx firebase deploy --only firestore:rules --project <id>` |
 | Indexes | `firestore.indexes.json` | `npx firebase deploy --only firestore:indexes --project <id>` |
 | Frontend | anything the image is built from | build image, push, tell Coolify to pull that tag |
