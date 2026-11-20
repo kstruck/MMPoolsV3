@@ -139,14 +139,19 @@
 >      `isLocked`, not `status`. So once `lockAt` passes, a cancelled grid is
 >      locked and its digits are drawn (with a `DIGITS_GENERATED` audit
 >      event). The every-minute `autoLockPools` job in the same file has the
->      same gap: its squares query is `reminders.lock.enabled == true` and
->      `isLocked == false`, with no `status` filter. Not observed on prod;
->      found by reading. Kevin's ruling above
+>      same gap, and acts EARLIER: its squares query is
+>      `reminders.lock.enabled == true` and `isLocked == false`, with no
+>      `status` filter, and it locks a grid once `lockAt - now <=
+>      SQUARES_LOCK_LEAD_MS` (30 s, `functions/src/shared/squaresDefaults.ts`)
+>      — so the window opens 30 seconds BEFORE `lockAt`, not at it. Not
+>      observed on prod; found by reading. Kevin's ruling above
 >      was made before this was known. Fixing it changes a production write,
 >      so it takes a `PLAN-*.md` — natural home: the plan K6 / K9(a)
 >      `reminders.ts` PR after Thanksgiving. Until then, to cancel an unlocked
 >      squares pool cleanly, first turn its auto-lock off
->      (`reminders.lock.enabled`) — both lock paths query on it.
+>      (`reminders.lock.enabled`) — both lock paths query on it — and do it
+>      more than a minute before `lockAt` (the job runs once a minute, with
+>      the 30-second lead above).
 >    - `checkPaymentReminders`' auto-release is already scheduled for change:
 >      plan K6 (`docs/plans/PLAN-SQUARES-REOPEN.md`, approved 2026-11-17) puts
 >      it in one `reminders.ts` PR with K9(a) after Thanksgiving, under its own
