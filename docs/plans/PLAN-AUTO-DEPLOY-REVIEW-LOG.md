@@ -48,3 +48,12 @@ VERDICT: REVISE. 2 findings, both accepted.
 | X5.1 (P1) | A manual run may name a newer SHA, but the gate was specified only for the pushed commit, so a manual run could deploy a commit with red, missing or pending checks. | **Valid, fixed.** §4.3 now states the gate runs on the SHA being deployed in every run, manual runs included. |
 | X5.2 (P2) | S8 says staging must serve a deny-all `robots.txt` and no sitemap, but no phase did that work; the image copies `public/` unchanged. | **Valid, fixed.** Phase 1a now carries it, with a `noindex` header added. |
 
+### Round X6: codex (`gpt-5.6-terra`), on `81de765`
+
+VERDICT: REVISE. 2 findings, both accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X6.1 (P1) | The first deploy to an environment has no deployment record to diff against, so the changed-surface calculation selects nothing and staging can never get its first deploy. | **Valid, fixed.** §4.2 now defines the first run: everything on staging, and an explicit baseline SHA supplied by Kevin on production. |
+| X6.2 (P2) | "Rollback is deploy the previous SHA" contradicts §4.4: without `--force`, an older SHA cannot remove functions or indexes added since. | **Valid, fixed.** New §4.11 states what a rollback does and does not undo per surface, including that a rules rollback needs an order chosen. §4.6 no longer claims more than the frontend. |
+

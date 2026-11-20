@@ -105,6 +105,14 @@ environment) and deploys only the surfaces that changed:
 `--project` is always explicit. The checkout is the commit itself, so the
 stale-tree failure in §1.1 cannot occur.
 
+**The first run in an environment has nothing to diff against.** A missing
+deployment record never means "nothing changed". On staging it means deploy
+every surface. On production the first run requires an explicit baseline
+SHA as input, which Kevin supplies as the commit of the last manual deploy
+(checked against `functions:list` and the Coolify deployment row before the
+run); the workflow refuses to start a first production run without one.
+(codex X6.1.)
+
 The run starts with `npm ci` at the repo root as well as in `functions/`.
 `firebase-tools` is a root devDependency, so without the root install `npx`
 on a clean runner would download whatever CLI release is current, and the
@@ -167,8 +175,8 @@ GitHub Actions builds the `www` image from the commit, with the eight
 `VITE_*` build arguments (S4) read from the GitHub environment's variables,
 and pushes it to GHCR tagged with the commit SHA. Coolify pulls that tag.
 This closes §1.4: the frontend that goes live is the commit that was
-approved, and rollback is "deploy the previous SHA" for functions and
-frontend alike.
+approved, and a rollback of the frontend is "deploy the previous SHA's
+image". Rolling back the other surfaces is not that simple: see §4.11.
 
 `tests/dockerfile-build-parity.test.ts` and `tests/dockerfile-sentry-env.test.ts`
 keep pinning the Dockerfile; the workflow builds that same file.
@@ -202,6 +210,24 @@ memory.
 - **Frontend:** the image writes the commit SHA into a small static file,
   and the workflow fetches it from the live site until it matches or times
   out.
+
+### 4.11 Rollback
+
+Running the workflow on an older SHA is a rollback only for what a deploy
+can overwrite. It is not one for what a deploy would have to delete, and
+§4.4 forbids unattended deletion. (codex X6.2.)
+
+| Surface | Rolling back to an older SHA |
+|---|---|
+| Frontend | Complete: the older image is served. |
+| Function code | Complete for functions that exist at both SHAs. |
+| Functions added since | **Left running.** Kevin deletes them by hand if they must go, after checking nothing live calls them. |
+| Indexes added since | **Left in place.** Harmless to leave; deleted by hand only if wanted. |
+| Rules | The older `firestore.rules` is deployed, and the §2 order question applies in reverse: a rollback that revokes a read the live frontend makes needs the frontend rolled back first. So a rules rollback always goes through the manual run with an order chosen. |
+| Data written by the newer code | Not touched. A release that changes stored shapes needs its own repair plan, as today. |
+
+The manual run reports which added functions and indexes it left behind, so
+a rollback never looks more complete than it is.
 
 ### 4.9 Staging
 
