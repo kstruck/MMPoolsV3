@@ -15,6 +15,7 @@ import { reserveSquareSchema, reserveSquaresSchema, markSquaresPaidSchema } from
 import { planClaim, claimRefusalMessage, type ClaimRefusal } from "./shared/squaresClaim";
 import { guestKeyHashOrNull } from "./lib/guestKey";
 import { squaresGameHasStarted } from "./lib/squaresGame";
+import { SITE_ORIGIN } from "./lib/siteConfig";
 
 
 /** What a claim needs, whichever callable it arrived through. */
@@ -201,7 +202,7 @@ async function reserveSquaresForCaller(
             "Your Grid is Full!",
             `<p>Great news! All squares in your pool <strong>${result.poolName}</strong> have been reserved.</p>
              <p>It's time to generate the numbers and lock the pool!</p>`,
-            `https://www.marchmeleepools.com/pool/${poolId}`,
+            `${SITE_ORIGIN}/pool/${poolId}`,
             "Go to Pool"
         );
         sendEmail(db, result.contactEmail, subject, html, { poolId, reason: 'GRID_FULL' }).catch(err => console.error("Failed to send grid full email", err));

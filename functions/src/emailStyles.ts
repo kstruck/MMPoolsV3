@@ -4,7 +4,10 @@
 
 import { activeEmailPromo, renderEmailPromoHtml } from "./shared/emailPromo";
 
-export const BASE_URL = "https://www.marchmeleepools.com";
+import { SITE_ORIGIN } from "./lib/siteConfig";
+
+// Per-environment since PLAN-AUTO-DEPLOY Phase 1a; production's value is unchanged.
+export const BASE_URL = SITE_ORIGIN;
 export const LOGO_URL = `${BASE_URL}/email-logo.png`;
 
 export const escapeHtml = (unsafe: string): string => {

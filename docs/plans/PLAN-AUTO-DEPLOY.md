@@ -1,8 +1,8 @@
 # PLAN: deploys run from GitHub Actions, to staging first and then production
 
-> **STATUS: PROPOSED. Nothing is built, nothing is deployed, and no setting
-> has been changed.** This PR is the plan only. Implementation starts after
-> Kevin rules on the DECISION NEEDED items in §7.
+> **STATUS: APPROVED; Phase 1a in progress.** Kevin approved D1 to D6 in §7
+> as recommended on 2026-11-20. Phase 1a (§4.10) is the first implementation
+> PR; nothing is deployed by it and no setting has been changed.
 > Review log: `PLAN-AUTO-DEPLOY-REVIEW-LOG.md`. Sweeps: `PLAN-AUTO-DEPLOY-SWEEPS.md`.
 
 Kevin, 2026-11-19, on the `www` app's dead "Deploy on push" setting: *"I want
@@ -273,6 +273,20 @@ That change touches `stripe.ts`, so it is **plan-gated (money) in its own
 right** and gets its own classification, tests and review when it is
 written. It is Phase 1a below.
 
+**Phase 1a as built (2026-11-20).** The line-by-line expansion of S8 gave
+these answers:
+
+| Where | Treatment |
+|---|---|
+| `functions/src` | One module, `functions/src/lib/siteConfig.ts`: `SITE_ORIGIN` from `MMP_SITE_ORIGIN` (set per project in `functions/.env.<projectId>`), `PROJECT_ID` from `GCLOUD_PROJECT`. Unset means production's literal. A malformed value throws at load, and so does an origin that does not match the project (a real non-production project must set its own origin, which may not be any production host (qodo #2); production's project must use production's; the emulator and `demo-*` projects are exempt), so a bad or missing staging config fails the deploy instead of linking to production (qodo #1 on #796). Used by `stripe.ts` (the fallback return origin), `emailStyles.ts` (`BASE_URL`), `joinPreview*`, `squares.ts`, `statsTrigger.ts` (link and callable CORS) and `securityNotices.ts`. |
+| `stripe.ts` allowlist | Production's alternate hosts stay in the redirect allowlist on every project: production's list must not change, and a staging project accepting them is harmless. |
+| `nginx.conf` | Unchanged values. The `www` container's start script, `scripts/docker/40-mmp-environment.sh`, rewrites the project id when `MMP_SITE_ENV=staging` and `MMP_FIREBASE_PROJECT_ID` names the staging project, and also writes the `X-Robots-Tag: noindex` include, a deny-all `robots.txt` and removes `sitemap.xml`. With nothing set it touches no file. It refuses to start for staging without a non-production project, for a non-production project served as production, and when the browser bundle was built for a different project than the one named (the Dockerfile records `VITE_FIREBASE_PROJECT_ID` in the image; qodo #1 on #796). |
+| `src`, `index.html`, `public/` | Unchanged. Canonical URLs and the support address name production on purpose (S8), and staging is noindex. The two client-side email links (`emailService.ts`, `shared/emailPromo.ts`) stay production's: staging has no live Courier token (§4.9), so those emails are never sent from staging. |
+
+Tests: `functions/src/__tests__/siteConfig.test.ts` and
+`tests/site-environment-invariants.test.ts`, which also fails if a
+production literal is added to `functions/src` outside `siteConfig.ts`.
+
 ## 5. Phases
 
 Each phase is its own PR and is shippable alone.
@@ -313,6 +327,8 @@ Each phase is its own PR and is shippable alone.
   list is the second.
 
 ## 7. DECISION NEEDED
+
+**RULED 2026-11-20: Kevin approved D1 to D6 as recommended.**
 
 | # | Question | Recommendation | On "approve as recommended" |
 |---|---|---|---|

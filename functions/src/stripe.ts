@@ -64,6 +64,7 @@ import {
     type ProductSnapshot,
 } from "./shared/schemas/bundle";
 import { rethrowOrInternal } from "./lib/safeError";
+import { SITE_ORIGIN } from "./lib/siteConfig";
 
 const db = admin.firestore();
 
@@ -309,12 +310,15 @@ function getStripe() {
 // production origin) and builds fixed route templates.
 // =============================================================================
 
-const PRODUCTION_ORIGIN = "https://www.marchmeleepools.com";
+// The fallback origin. Per-environment since PLAN-AUTO-DEPLOY Phase 1a (a
+// staging project returns its checkouts to the staging site); production's
+// value is unchanged. It is always allowlisted, as before.
+const FALLBACK_ORIGIN = SITE_ORIGIN;
 
 /** Allowlisted origins. Extendable via BUYFLOW_ALLOWED_ORIGINS (comma-separated). */
 function allowedOrigins(): string[] {
     const base = [
-        PRODUCTION_ORIGIN,
+        FALLBACK_ORIGIN,
         "https://marchmeleepools.com",
         "https://marchmelee.com",
         "https://www.marchmelee.com",
@@ -342,8 +346,8 @@ function normalizeOrigin(raw: string | undefined): string | null {
 
 /**
  * The safe origin to build redirect URLs from. Uses the request Origin/Referer
- * ONLY when it is in the allowlist; otherwise falls back to the production
- * origin. Client-supplied redirect URLs are never used.
+ * ONLY when it is in the allowlist; otherwise falls back to the site
+ * origin (FALLBACK_ORIGIN). Client-supplied redirect URLs are never used.
  */
 function safeRedirectOrigin(rawRequest: any): string {
     const headerOrigin =
@@ -352,7 +356,7 @@ function safeRedirectOrigin(rawRequest: any): string {
     if (headerOrigin && allowedOrigins().includes(headerOrigin)) {
         return headerOrigin;
     }
-    return PRODUCTION_ORIGIN;
+    return FALLBACK_ORIGIN;
 }
 
 function poolSuccessUrl(origin: string, poolId: string): string {

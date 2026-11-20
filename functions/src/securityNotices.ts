@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { emailHash } from "./emailPrefs";
 import { sendEmail } from "./reminders";
+import { SITE_DISPLAY_HOST } from "./lib/siteConfig";
 
 /**
  * PLAN-AUDIT-AUTH-HARDENING A3 — notify the account owner after a password
@@ -46,7 +47,7 @@ const NOTICE_HTML = `
 Pools account, or received a report of one.</p>
 <p><strong>If you did this</strong>, no action is needed.</p>
 <p><strong>If you did NOT do this</strong>, someone may have access to your
-email inbox. Go to marchmeleepools.com, use "Forgot password" to set a new
+email inbox. Go to ${SITE_DISPLAY_HOST}, use "Forgot password" to set a new
 password, and secure your email account. This message intentionally contains
 no links or buttons.</p>`;
 
