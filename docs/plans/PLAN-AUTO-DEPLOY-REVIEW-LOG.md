@@ -65,3 +65,12 @@ VERDICT: REVISE. 1 finding, accepted.
 |---|---|---|
 | X7.1 (P1) | The §4.2 table gives one unconditional `--only functions` command, which on staging deploys every export and bypasses the include/exclude list §4.9 requires. | **Valid, fixed.** The table now gives the two commands separately; staging deploys by name from the committed list. |
 
+### Round X8: codex (`gpt-5.6-terra`), on `e4b1d0b`
+
+VERDICT: REVISE. 2 findings, both P1, both accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X8.1 | The production baseline SHA added for X6.1 cannot be verified: §1 says the functions checkout can be stale and Coolify builds current `main`, and `functions:list` proves names, not revisions. A wrong baseline makes the first diff skip surfaces that are missing from production. | **Valid, fixed.** No baseline is trusted. The first run in every environment deploys every surface, as a manual run with the rules order chosen. |
+| X8.2 | A manual run started from `main` that checks out an older SHA would have GitHub's environment record carry `main`'s SHA, so the next diff starts from the wrong commit and omits changes. | **Valid, fixed.** §4.2: the workflow writes its own record of the SHA it checked out, at the end of a fully successful run, and diffs only from that. |
+

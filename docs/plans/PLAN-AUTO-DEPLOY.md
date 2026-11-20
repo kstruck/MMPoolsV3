@@ -92,8 +92,12 @@ frontend. A rules release is about one in seventeen.
 ### 4.2 What each run deploys
 
 The run diffs the commit against the last commit that deployed successfully
-to that environment (read from GitHub's deployment record for the
-environment) and deploys only the surfaces that changed:
+to that environment and deploys only the surfaces that changed. That last
+commit comes from a record the workflow writes itself, at the end of a fully
+successful run, naming the SHA it checked out. It is not GitHub's automatic
+environment record: on a manual run that record carries the SHA of the
+branch the run was started from, not the SHA that was deployed, and a later
+diff from it would skip the changes in between (codex X8.2).
 
 | Surface | Changed when | Step |
 |---|---|---|
@@ -106,12 +110,15 @@ environment) and deploys only the surfaces that changed:
 stale-tree failure in §1.1 cannot occur.
 
 **The first run in an environment has nothing to diff against.** A missing
-deployment record never means "nothing changed". On staging it means deploy
-every surface. On production the first run requires an explicit baseline
-SHA as input, which Kevin supplies as the commit of the last manual deploy
-(checked against `functions:list` and the Coolify deployment row before the
-run); the workflow refuses to start a first production run without one.
-(codex X6.1.)
+record never means "nothing changed", and no baseline is taken on trust:
+§1 is the evidence that production's functions and frontend may not come
+from one commit, and nothing available today can prove which revision is
+serving. So the first run in each environment, production included, deploys
+every surface: all functions (the CLI skips the ones whose source already
+matches, as on 2026-11-17), indexes, the frontend image, and rules. Because
+that run deploys rules, it is always a manual run with the order chosen,
+after Kevin has compared the live ruleset in the Firebase console with
+`firestore.rules` at that commit. (codex X6.1, X8.1.)
 
 The run starts with `npm ci` at the repo root as well as in `functions/`.
 `firebase-tools` is a root devDependency, so without the root install `npx`
