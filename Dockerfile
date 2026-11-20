@@ -92,6 +92,11 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Phase 1a). The stock image's entrypoint runs it before nginx starts. With no
 # MMP_* variables set (production) it changes nothing; see the script header.
 COPY scripts/docker/40-mmp-environment.sh /docker-entrypoint.d/40-mmp-environment.sh
+# The project the bundle above was built for, so the start script can refuse a
+# bundle built for one project running as another (qodo #1 on #796). ARGs do
+# not cross stages, so it is declared again here; Coolify passes the same value.
+ARG VITE_FIREBASE_PROJECT_ID
+RUN printf '%s\n' "$VITE_FIREBASE_PROJECT_ID" > /etc/nginx/mmp-build-project
 
 # Fix permissions
 RUN chmod -R 755 /usr/share/nginx/html && chmod 755 /docker-entrypoint.d/40-mmp-environment.sh

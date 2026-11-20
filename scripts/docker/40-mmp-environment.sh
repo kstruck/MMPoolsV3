@@ -9,7 +9,7 @@
 # PRODUCTION SETS NOTHING AND THIS SCRIPT CHANGES NOTHING. With both variables
 # unset (or MMP_SITE_ENV=production and the production project id), no file is
 # touched: nginx.conf, robots.txt and sitemap.xml are served exactly as built.
-# `tests/docker-environment-script.test.ts` pins that.
+# `tests/site-environment-invariants.test.ts` pins that.
 #
 # Variables (set on the container, e.g. in Coolify):
 #   MMP_SITE_ENV             production (default) | staging
@@ -36,6 +36,12 @@ PROD_PROJECT_ID="gridiron-gamble-uzuqo"
 CONF="${MMP_NGINX_CONF:-/etc/nginx/conf.d/default.conf}"
 HTML_ROOT="${MMP_HTML_ROOT:-/usr/share/nginx/html}"
 ENV_DIR="${MMP_ENV_DIR:-/etc/nginx/mmp-env}"
+# The Firebase project the browser bundle was BUILT for (VITE_FIREBASE_PROJECT_ID,
+# written by the Dockerfile). The bundle talks to that project directly, so the
+# runtime variables below can only be trusted if they agree with it (qodo #1
+# on #796: a production-built image started as staging would otherwise pass
+# every check here while its users wrote to production).
+BUILD_PROJECT_FILE="${MMP_BUILD_PROJECT_FILE:-/etc/nginx/mmp-build-project}"
 
 site_env="${MMP_SITE_ENV:-production}"
 project="${MMP_FIREBASE_PROJECT_ID:-$PROD_PROJECT_ID}"
@@ -54,9 +60,23 @@ if ! printf '%s' "$project" | grep -Eq '^[a-z][a-z0-9-]{4,28}[a-z0-9]$'; then
     fail "MMP_FIREBASE_PROJECT_ID is not a valid project id: '$project'"
 fi
 
+built=""
+if [ -f "$BUILD_PROJECT_FILE" ]; then
+    built="$(tr -d ' \t\r\n' < "$BUILD_PROJECT_FILE")"
+fi
+
 if [ "$site_env" = "production" ]; then
     if [ "$project" != "$PROD_PROJECT_ID" ]; then
         fail "MMP_FIREBASE_PROJECT_ID=$project is not production's project; set MMP_SITE_ENV=staging"
+    fi
+    # A bundle built for another project must never be served as production.
+    # An EMPTY record is allowed, with a warning, so that production behaves
+    # exactly as it did before this script existed.
+    if [ -n "$built" ] && [ "$built" != "$PROD_PROJECT_ID" ]; then
+        fail "this image's bundle was built for project '$built', not production's"
+    fi
+    if [ -z "$built" ]; then
+        echo "40-mmp-environment: warning: no build-time project recorded in $BUILD_PROJECT_FILE" >&2
     fi
     echo "40-mmp-environment: production, nothing to change"
     exit 0
@@ -65,6 +85,10 @@ fi
 # ---- staging ----
 if [ "$project" = "$PROD_PROJECT_ID" ]; then
     fail "MMP_SITE_ENV=staging needs MMP_FIREBASE_PROJECT_ID set to the staging project, not production's"
+fi
+# Staging is strict: the bundle must have been built for this very project.
+if [ "$built" != "$project" ]; then
+    fail "this image's bundle was built for project '${built:-<none recorded>}', not $project"
 fi
 
 # The project id was validated above against a pattern with no sed or regex

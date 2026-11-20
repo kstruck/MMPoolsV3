@@ -29,12 +29,14 @@ describe('40-mmp-environment.sh (www container start)', () => {
     let conf: string;
     let html: string;
     let envDir: string;
+    let buildFile: string;
 
     beforeEach(() => {
         dir = mkdtempSync(join(tmpdir(), 'mmp-env-'));
         conf = join(dir, 'default.conf');
         html = join(dir, 'html');
         envDir = join(dir, 'mmp-env');
+        buildFile = join(dir, 'mmp-build-project');
         mkdirSync(html);
         writeFileSync(conf, read('nginx.conf'));
         writeFileSync(join(html, 'robots.txt'), read('public/robots.txt'));
@@ -42,14 +44,18 @@ describe('40-mmp-environment.sh (www container start)', () => {
     });
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
+    // What the Dockerfile writes: the project the bundle was built for.
+    const builtFor = (project: string) => writeFileSync(buildFile, `${project}\n`);
+
     const run = (env: Record<string, string>) =>
         spawnSync('sh', [SCRIPT], {
             encoding: 'utf8',
             // A clean environment: no MMP_* leaks in from the developer's shell.
-            env: { PATH: process.env.PATH ?? '', MMP_NGINX_CONF: conf, MMP_HTML_ROOT: html, MMP_ENV_DIR: envDir, ...env },
+            env: { PATH: process.env.PATH ?? '', MMP_NGINX_CONF: conf, MMP_HTML_ROOT: html, MMP_ENV_DIR: envDir, MMP_BUILD_PROJECT_FILE: buildFile, ...env },
         });
 
     it('production with nothing set changes no file at all', () => {
+        builtFor(PROD_PROJECT);
         const r = run({});
         expect(r.status, r.stderr).toBe(0);
         expect(readFileSync(conf, 'utf8')).toBe(read('nginx.conf'));
@@ -59,6 +65,7 @@ describe('40-mmp-environment.sh (www container start)', () => {
     });
 
     it('production named explicitly changes no file either', () => {
+        builtFor(PROD_PROJECT);
         const r = run({ MMP_SITE_ENV: 'production', MMP_FIREBASE_PROJECT_ID: PROD_PROJECT });
         expect(r.status, r.stderr).toBe(0);
         expect(readFileSync(conf, 'utf8')).toBe(read('nginx.conf'));
@@ -66,6 +73,7 @@ describe('40-mmp-environment.sh (www container start)', () => {
     });
 
     it('staging rewrites every production project id and nothing else', () => {
+        builtFor('mmp-staging');
         const r = run({ MMP_SITE_ENV: 'staging', MMP_FIREBASE_PROJECT_ID: 'mmp-staging' });
         expect(r.status, r.stderr).toBe(0);
         const out = readFileSync(conf, 'utf8');
@@ -77,12 +85,38 @@ describe('40-mmp-environment.sh (www container start)', () => {
     });
 
     it('staging is never indexable: noindex header, deny-all robots.txt, no sitemap', () => {
+        builtFor('mmp-staging');
         const r = run({ MMP_SITE_ENV: 'staging', MMP_FIREBASE_PROJECT_ID: 'mmp-staging' });
         expect(r.status, r.stderr).toBe(0);
         expect(readdirSync(envDir)).toEqual(['noindex.conf']);
         expect(readFileSync(join(envDir, 'noindex.conf'), 'utf8')).toBe('add_header X-Robots-Tag "noindex, nofollow" always;\n');
         expect(readFileSync(join(html, 'robots.txt'), 'utf8')).toBe('User-agent: *\nDisallow: /\n');
         expect(existsSync(join(html, 'sitemap.xml'))).toBe(false);
+    });
+
+    it('production with no build record still starts unchanged (as before this script), with a warning', () => {
+        const r = run({});
+        expect(r.status, r.stderr).toBe(0);
+        expect(r.stderr).toMatch(/no build-time project recorded/);
+        expect(readFileSync(conf, 'utf8')).toBe(read('nginx.conf'));
+        expect(existsSync(envDir)).toBe(false);
+    });
+
+    // qodo #1 on #796: the bundle talks to the project it was BUILT for, so the
+    // runtime settings must agree with it or staging users write to production.
+    it.each([
+        ['a production-built bundle started as staging', PROD_PROJECT, { MMP_SITE_ENV: 'staging', MMP_FIREBASE_PROJECT_ID: 'mmp-staging' }],
+        ['a staging bundle with no build record', null, { MMP_SITE_ENV: 'staging', MMP_FIREBASE_PROJECT_ID: 'mmp-staging' }],
+        ['a bundle built for another staging project', 'mmp-other', { MMP_SITE_ENV: 'staging', MMP_FIREBASE_PROJECT_ID: 'mmp-staging' }],
+        ['a staging-built bundle served as production', 'mmp-staging', {}],
+    ])('refuses %s', (_label, built, env) => {
+        if (built) builtFor(built);
+        const r = run(env as Record<string, string>);
+        expect(r.status).toBe(1);
+        expect(r.stderr).toMatch(/bundle was built for project/);
+        expect(readFileSync(conf, 'utf8')).toBe(read('nginx.conf'));
+        expect(existsSync(join(html, 'sitemap.xml'))).toBe(true);
+        expect(existsSync(envDir)).toBe(false);
     });
 
     it.each([
@@ -129,6 +163,11 @@ describe('nginx.conf carries the per-environment header include', () => {
         const dockerfile = read('Dockerfile');
         expect(dockerfile).toContain('COPY scripts/docker/40-mmp-environment.sh /docker-entrypoint.d/40-mmp-environment.sh');
         expect(dockerfile).toMatch(/chmod 755 \/docker-entrypoint\.d\/40-mmp-environment\.sh/);
+        // The build-time project record, written in the nginx stage (ARGs do not
+        // cross stages, so it must be declared there again).
+        const nginxStage = dockerfile.slice(dockerfile.indexOf('FROM nginx:alpine'));
+        expect(nginxStage).toContain('ARG VITE_FIREBASE_PROJECT_ID');
+        expect(nginxStage).toContain(`RUN printf '%s\\n' "$VITE_FIREBASE_PROJECT_ID" > /etc/nginx/mmp-build-project`);
     });
 });
 

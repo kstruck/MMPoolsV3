@@ -14,9 +14,10 @@
 // production literal is added anywhere else in `functions/src`.
 //
 // A staging project sets `MMP_SITE_ORIGIN` in `functions/.env.<projectId>`
-// (Firebase loads that file at deploy). A malformed value THROWS at module
-// load, which fails the deploy's function discovery rather than shipping a
-// staging build whose links quietly fall back to production.
+// (Firebase loads that file at deploy). A malformed value, or an origin that
+// does not match the project (see resolveSiteIdentity), THROWS at module load,
+// which fails the deploy's function discovery rather than shipping a staging
+// build whose links quietly fall back to production.
 
 export const PRODUCTION_SITE_ORIGIN = "https://www.marchmeleepools.com";
 export const PRODUCTION_PROJECT_ID = "gridiron-gamble-uzuqo";
@@ -65,8 +66,51 @@ export function resolveProjectId(raw: string | undefined): string {
     return value;
 }
 
+/**
+ * True for a project that is not a real deployment: the emulator, or a
+ * `demo-*` project (Firebase's convention for offline-only projects, used by
+ * this repo's emulator suite and unit tests).
+ */
+export function isLocalProject(projectId: string, functionsEmulator: string | undefined): boolean {
+    return functionsEmulator === "true" || projectId.startsWith("demo-");
+}
+
+/**
+ * The origin and project must agree (qodo #1 on #796). A real non-production
+ * project with MMP_SITE_ORIGIN unset would otherwise default to production's
+ * origin and send staging users to the live site, which is exactly what this
+ * module exists to prevent. So:
+ *   - production's project must use production's origin;
+ *   - a real non-production project must set its own, non-production origin;
+ *   - the emulator and `demo-*` projects may use either.
+ * A violation throws at module load, which fails the deploy.
+ */
+export function resolveSiteIdentity(env: {
+    MMP_SITE_ORIGIN?: string;
+    GCLOUD_PROJECT?: string;
+    FUNCTIONS_EMULATOR?: string;
+}): { origin: string; projectId: string } {
+    const projectId = resolveProjectId(env.GCLOUD_PROJECT);
+    const origin = resolveSiteOrigin(env.MMP_SITE_ORIGIN);
+    if (isLocalProject(projectId, env.FUNCTIONS_EMULATOR)) return { origin, projectId };
+    if (projectId === PRODUCTION_PROJECT_ID) {
+        if (origin !== PRODUCTION_SITE_ORIGIN) {
+            throw new Error(`MMP_SITE_ORIGIN=${origin} is not production's origin, but this is production's project`);
+        }
+    } else if (origin === PRODUCTION_SITE_ORIGIN) {
+        throw new Error(`Project ${projectId} is not production: set MMP_SITE_ORIGIN to its own site in functions/.env.${projectId}`);
+    }
+    return { origin, projectId };
+}
+
+const IDENTITY = resolveSiteIdentity({
+    MMP_SITE_ORIGIN: process.env.MMP_SITE_ORIGIN,
+    GCLOUD_PROJECT: process.env.GCLOUD_PROJECT,
+    FUNCTIONS_EMULATOR: process.env.FUNCTIONS_EMULATOR,
+});
+
 /** The public site origin, e.g. "https://www.marchmeleepools.com". */
-export const SITE_ORIGIN = resolveSiteOrigin(process.env.MMP_SITE_ORIGIN);
+export const SITE_ORIGIN = IDENTITY.origin;
 
 /** The site's host, e.g. "www.marchmeleepools.com". */
 export const SITE_HOST = new URL(SITE_ORIGIN).host;
@@ -78,4 +122,4 @@ export const SITE_HOST = new URL(SITE_ORIGIN).host;
 export const SITE_DISPLAY_HOST = SITE_HOST.replace(/^www\./, "");
 
 /** The Firebase project id this code is running in. */
-export const PROJECT_ID = resolveProjectId(process.env.GCLOUD_PROJECT);
+export const PROJECT_ID = IDENTITY.projectId;
