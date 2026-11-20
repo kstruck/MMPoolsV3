@@ -127,17 +127,34 @@
 >    recommendation ("`SQUARES_CREATION_OPEN` is false") no longer holds —
 >    squares reopened 2026-11-17 — so the reason on record is now:
 >    - `checkLockReminders` acts only `if (!pool.isLocked)`
->      (`functions/src/reminders.ts`), and a finished grid is locked, so on a
->      finished pool it writes nothing. Its draw is the single `executeAutoLock`
->      path since plan K7.
+>      (`functions/src/reminders.ts`). A grid that played out is locked, so on
+>      a settled or finalized pool it writes nothing. Its draw is the single
+>      `executeAutoLock` path since plan K7.
+>    - ⚠️ **One exception, OPEN (codex round 2 on #728, verified in code):
+>      a squares pool CANCELED before its lock time.** `cancelPool`
+>      (`functions/src/poolExceptions.ts`) writes only `status: "CANCELED"`,
+>      `cancelledAt`, `cancelReason` — `isLocked` stays false. `poolIsOver`
+>      counts it as over, but `reminderChecksFor` still queues `SQUARES_LOCK`
+>      for squares, and `executeAutoLock` (`functions/src/autoLock.ts`) checks
+>      `isLocked`, not `status`. So once `lockAt` passes, a cancelled grid is
+>      locked and its digits are drawn (with a `DIGITS_GENERATED` audit
+>      event). The every-minute `autoLockPools` job in the same file has the
+>      same gap: its squares query is `reminders.lock.enabled == true` and
+>      `isLocked == false`, with no `status` filter. Not observed on prod;
+>      found by reading. Kevin's ruling above
+>      was made before this was known. Fixing it changes a production write,
+>      so it takes a `PLAN-*.md` — natural home: the plan K6 / K9(a)
+>      `reminders.ts` PR after Thanksgiving. Until then, to cancel an unlocked
+>      squares pool cleanly, first turn its auto-lock off
+>      (`reminders.lock.enabled`) — both lock paths query on it.
 >    - `checkPaymentReminders`' auto-release is already scheduled for change:
 >      plan K6 (`docs/plans/PLAN-SQUARES-REOPEN.md`, approved 2026-11-17) puts
 >      it in one `reminders.ts` PR with K9(a) after Thanksgiving, under its own
 >      plan. Any finished-pool rule for it belongs in that PR, not a separate
 >      one.
 >
->    Nothing to do now. Reopen only if a finished squares pool is seen
->    receiving a lock or release write.
+>    Nothing to do now for settled or finalized pools. The cancelled-pool case
+>    above stays open until the K6 / K9(a) plan takes it or Kevin rules it out.
 >
 > **Known limits.** The Members & Payments roster reminder buttons
 > (`NFLManagerView.tsx`) have no render test — the server guard and the
