@@ -74,3 +74,24 @@ VERDICT: REVISE. 2 findings, both P1, both accepted.
 | X8.1 | The production baseline SHA added for X6.1 cannot be verified: §1 says the functions checkout can be stale and Coolify builds current `main`, and `functions:list` proves names, not revisions. A wrong baseline makes the first diff skip surfaces that are missing from production. | **Valid, fixed.** No baseline is trusted. The first run in every environment deploys every surface, as a manual run with the rules order chosen. |
 | X8.2 | A manual run started from `main` that checks out an older SHA would have GitHub's environment record carry `main`'s SHA, so the next diff starts from the wrong commit and omits changes. | **Valid, fixed.** §4.2: the workflow writes its own record of the SHA it checked out, at the end of a fully successful run, and diffs only from that. |
 
+### Round X9: codex (`gpt-5.6-terra`), on `1536229`
+
+VERDICT: REVISE. 2 findings, both accepted.
+
+| # | Finding | Verdict |
+|---|---|---|
+| X9.1 (P1) | The first-run rule added for X8.1 says "all functions" in every environment, which on staging contradicts §4.9 and would start the scheduled jobs on the very first staging deploy. | **Valid, fixed.** §4.2 now says the first staging run deploys the committed staging list only, like every other staging run. |
+| X9.2 (P2) | A change to `firebase.json` alone does not select the functions surface, although that file sets the functions source, ignore list and predeploy build. | **Valid, fixed.** `firebase.json` is now part of the functions change rule. |
+
+## Resolution status
+
+**NOT CONVERGED. Stopped at 9 of the 10 rounds CLAUDE.md §2c allows.** 9
+rounds, 17 findings (11 P1, 6 P2 or unlabelled), 17 accepted, 0 rejected.
+No round came back clean: findings per round ran 2, 2, 2, 1, 2, 2, 1, 2, 2.
+Later rounds mostly found gaps in the fixes for earlier ones (X7.1, X8.1,
+X9.1), which is the pattern §2c predicts.
+
+The two X9 fixes have not been reviewed. One round remains under the cap;
+past that needs Kevin's say-so with a reason. The plan is PROPOSED and
+builds nothing, so the open risk is a design gap carried into Phase 1a, not
+a defect in production.

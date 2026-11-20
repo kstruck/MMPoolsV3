@@ -101,7 +101,7 @@ diff from it would skip the changes in between (codex X8.2).
 
 | Surface | Changed when | Step |
 |---|---|---|
-| Functions | `functions/**` or `shared/**` | `npm --prefix functions ci`, then: **production** `npx firebase deploy --only functions --project <id>`; **staging** `--only functions:<name>,...` built from the committed staging list in §4.9, never the bare `--only functions` (codex X7.1) |
+| Functions | `functions/**`, `shared/**`, or `firebase.json` (it sets the functions source, ignore list and predeploy build; codex X9.2) | `npm --prefix functions ci`, then: **production** `npx firebase deploy --only functions --project <id>`; **staging** `--only functions:<name>,...` built from the committed staging list in §4.9, never the bare `--only functions` (codex X7.1) |
 | Rules | `firestore.rules` | `npx firebase deploy --only firestore:rules --project <id>` |
 | Indexes | `firestore.indexes.json` | `npx firebase deploy --only firestore:indexes --project <id>` |
 | Frontend | anything the image is built from | build image, push, tell Coolify to pull that tag |
@@ -114,8 +114,12 @@ record never means "nothing changed", and no baseline is taken on trust:
 §1 is the evidence that production's functions and frontend may not come
 from one commit, and nothing available today can prove which revision is
 serving. So the first run in each environment, production included, deploys
-every surface: all functions (the CLI skips the ones whose source already
-matches, as on 2026-11-17), indexes, the frontend image, and rules. Because
+every surface: functions, indexes, the frontend image, and rules. On
+production "functions" means all of them (the CLI skips the ones whose
+source already matches, as on 2026-11-17). On staging it means the committed
+staging list from §4.9 and nothing else, on the first run as on every run:
+there is no run, first or otherwise, in which staging deploys every export
+(codex X9.1). Because
 that run deploys rules, it is always a manual run with the order chosen,
 after Kevin has compared the live ruleset in the Firebase console with
 `firestore.rules` at that commit. (codex X6.1, X8.1.)
