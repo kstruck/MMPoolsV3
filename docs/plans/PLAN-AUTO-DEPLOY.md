@@ -243,8 +243,11 @@ a rollback never looks more complete than it is.
 ### 4.9 Staging
 
 - A second Firebase project, on the same plan as production.
-- A second `www` app. Proposed home: `coolify.versistai.net`, which already
-  has a domain, API access and a working deploy webhook.
+- A second `www` app, on MarchMelee's own Coolify server (the KVM 4 that
+  serves production), in its own Coolify project with memory and CPU limits,
+  one build at a time, HTTP basic auth, at `staging.marchmeleepools.com`.
+  Re-ruled 2026-11-20 (D5): the first proposal, `coolify.versistai.net`, runs
+  on a VPS that is being retired on 2026-12-19.
 - Its own secrets: Stripe test keys, and no live Courier token, so staging
   cannot charge a card or email a real person.
 - Staging is where every UNVERIFIED item in this plan gets observed.
@@ -328,7 +331,7 @@ Each phase is its own PR and is shippable alone.
 
 ## 7. DECISION NEEDED
 
-**RULED 2026-11-20: Kevin approved D1 to D6 as recommended.**
+**RULED 2026-11-20: Kevin approved D1 to D6 as recommended. D5 was re-ruled the same day (see its row).**
 
 | # | Question | Recommendation | On "approve as recommended" |
 |---|---|---|---|
@@ -336,7 +339,7 @@ Each phase is its own PR and is shippable alone.
 | D2 | Staging before production, or production first? | Staging first (Phases 1a and 1b before Phase 2). | Production auto-deploy arrives after staging has run real releases. Until then deploys stay manual. |
 | D3 | Frontend: image per commit from GHCR, or keep Coolify building from source? | Image per commit (§4.6). | The production `www` app changes build strategy in Phase 2. |
 | D4 | Function deletions and index deletions: manual only? | Yes (§4.4). | Removing an export or an index still ends with a manual command by Kevin. |
-| D5 | Staging `www` on `coolify.versistai.net`? | Yes (§4.9). | No change to MarchMelee's own Coolify server until Phase 2. |
+| D5 | Where does the staging `www` app run? | MarchMelee's own Coolify server, as a separate project with limits (§4.9). Re-ruled 2026-11-20; it was `coolify.versistai.net`, which is being retired. | MarchMelee's Coolify gets an instance domain (`coolify.marchmeleepools.com`), API access and the staging project before Phase 2. The production `www` app itself is not changed until Phase 2. |
 | D6 | Which functions run in staging? | Callables and triggers yes; every scheduled job excluded until named (§4.9). | Staging cannot test a scheduled job until Kevin adds it to the list. |
 
 ## 8. Out of scope
