@@ -134,7 +134,14 @@ export const LOCKFILE_EXCLUDES = Object.freeze([':(exclude,glob)**/package-lock.
 
 /** The user message: what was diffed, the stat, and the diff itself. */
 export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff }) {
-  if (!diff.trim()) throw new Error('The diff is empty. There is nothing to review.');
+  // Emptiness is judged on the STAT, which lists every changed file. The diff
+  // body leaves lockfiles out, so a lockfile-only branch (a dependabot refresh)
+  // has an empty body and a real change. Judging on the body reported that as
+  // "nothing to review" (codex round 3 on this PR).
+  if (!stat.trim()) throw new Error('The diff is empty. There is nothing to review.');
+  const body = diff.trim()
+    ? diff
+    : '(no diff body: every changed file is a package-lock.json. Read the lockfiles named in the stat above.)';
   if (diff.length > MAX_DIFF_CHARS) {
     throw new Error(
       `The diff is ${diff.length} characters, over the ${MAX_DIFF_CHARS} limit. ` +
@@ -149,7 +156,7 @@ export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff }) {
     stat.trim(),
     '',
     '--- git diff (package-lock.json bodies are left out; Read them if a dependency change matters) ---',
-    diff,
+    body,
   ].join('\n');
 }
 

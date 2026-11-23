@@ -286,8 +286,14 @@ describe('the review prompt', () => {
     expect(all.filter((f) => f.endsWith('package-lock.json')).length).toBeGreaterThanOrEqual(3);
   });
 
-  it('refuses an empty diff instead of reviewing nothing and calling it clean', () => {
-    expect(() => buildReviewPrompt({ ...base, diff: '  \n' })).toThrow(/empty/);
+  it('refuses an empty change instead of reviewing nothing and calling it clean', () => {
+    expect(() => buildReviewPrompt({ ...base, stat: '  \n', diff: '' })).toThrow(/empty/);
+  });
+
+  it('a lockfile-only change is reviewable: empty body, non-empty stat', () => {
+    const prompt = buildReviewPrompt({ ...base, stat: ' functions/package-lock.json | 40 +--', diff: '' });
+    expect(prompt).toContain('functions/package-lock.json | 40 +--');
+    expect(prompt).toMatch(/every changed file is a package-lock\.json/);
   });
 
   it('refuses an oversize diff instead of truncating it', () => {
