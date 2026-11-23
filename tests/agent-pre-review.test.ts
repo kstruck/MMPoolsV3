@@ -20,6 +20,7 @@ import {
   classifyRun,
   costLogPath,
   formatCostRow,
+  hasHunkChange,
   isCreditKeySource,
   parseArgs,
   parseBinaryFiles,
@@ -310,7 +311,8 @@ describe('the review prompt', () => {
   });
 
   const LOCK_DIFF = 'diff --git a/functions/package-lock.json b/functions/package-lock.json\n--- a/functions/package-lock.json\n+++ b/functions/package-lock.json\n-      "version": "1.0.0",\n+      "version": "1.0.1",';
-  const BINARY_DIFF = 'diff --git a/public/logo.png b/public/logo.png\nindex 111..222 100644\nBinary files a/public/logo.png and b/public/logo.png differ';
+  const TEXT_DIFF = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-const x = 0;\n+const x = 1;';
+  const BINARY_DIFF ='diff --git a/public/logo.png b/public/logo.png\nindex 111..222 100644\nBinary files a/public/logo.png and b/public/logo.png differ';
 
   it('a lockfile-only change is reviewable, and the reviewer is GIVEN the lockfile diff', () => {
     // qodo on #800: the reviewer holds HEAD and no git tool, so "go read the
@@ -325,15 +327,15 @@ describe('the review prompt', () => {
 
   it('an oversize lockfile diff beside real code is left out and NAMED as a gap', () => {
     const big = 'x'.repeat(MAX_LOCKFILE_DIFF_CHARS + 1);
-    const { gaps, lockfileSection } = planCoverage({ diff: '+real code', lockfileDiff: big });
+    const { gaps, lockfileSection } = planCoverage({ diff: TEXT_DIFF, lockfileDiff: big });
     expect(lockfileSection).toBeNull();
     expect(gaps).toHaveLength(1);
     expect(gaps[0]).toMatch(/package-lock\.json diff is \d+ characters .* left out/);
-    const prompt = buildReviewPrompt({ ...base, diff: '+real code', lockfileDiff: big });
+    const prompt = buildReviewPrompt({ ...base, diff: TEXT_DIFF, lockfileDiff: big });
     expect(prompt).toMatch(/NOT REVIEWABLE/);
     expect(prompt).not.toContain(big);
     // At the limit it is still shown.
-    expect(planCoverage({ diff: '+x', lockfileDiff: 'y'.repeat(MAX_LOCKFILE_DIFF_CHARS) }).gaps).toEqual([]);
+    expect(planCoverage({ diff: TEXT_DIFF, lockfileDiff: 'y'.repeat(MAX_LOCKFILE_DIFF_CHARS) }).gaps).toEqual([]);
   });
 
   it('refuses a change where NOTHING can be reviewed: oversize lockfile only', () => {
@@ -349,8 +351,27 @@ describe('the review prompt', () => {
   });
 
   it('a binary file beside real code is a named gap, not a refusal', () => {
-    const { gaps } = planCoverage({ diff: `${BINARY_DIFF}\ndiff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n+const x = 1;`, binaryFiles: ['public/logo.png'] });
+    const { gaps } = planCoverage({ diff: `${BINARY_DIFF}\n${TEXT_DIFF}`, binaryFiles: ['public/logo.png'] });
     expect(gaps).toEqual(['1 binary file(s) have no reviewable diff: public/logo.png']);
+  });
+
+  it('a changed line whose own text starts with `++ ` or `-- ` is content, not a file header', () => {
+    // qodo's second pass on #800. A markdown rule or a SQL comment produces
+    // `+++ foo` / `--- foo` INSIDE a hunk. A prefix test read those as headers
+    // and refused a real text change that sat beside a binary file.
+    const onlyLookalikes = 'diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1 +1 @@\n--- old comment\n+++ new comment';
+    expect(hasHunkChange(onlyLookalikes)).toBe(true);
+    expect(() => planCoverage({ diff: `${BINARY_DIFF}\n${onlyLookalikes}`, binaryFiles: ['public/logo.png'] })).not.toThrow();
+  });
+
+  it('hasHunkChange: headers and context lines are not changes; a second file resets the hunk', () => {
+    expect(hasHunkChange(TEXT_DIFF)).toBe(true);
+    expect(hasHunkChange('diff --git a/x b/x\n--- a/x\n+++ b/x')).toBe(false);
+    expect(hasHunkChange('diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n unchanged')).toBe(false);
+    expect(hasHunkChange(BINARY_DIFF)).toBe(false);
+    // After a hunk in file one, file two's headers must not count as content.
+    expect(hasHunkChange('diff --git a/x b/x\n@@ -1 +1 @@\n same\ndiff --git a/y.png b/y.png\n--- a/y.png\n+++ b/y.png')).toBe(false);
+    expect(hasHunkChange('')).toBe(false);
   });
 
   it('file headers alone are not a text change', () => {

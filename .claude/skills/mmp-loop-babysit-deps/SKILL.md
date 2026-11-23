@@ -70,7 +70,13 @@ manually run, until Kevin approves.
    `query`. Only the probe proves it still talks to the API. **No key on the
    host means the probe did not run, and the verdict for a `scripts/agent` bump
    is then `INCONCLUSIVE`, never green** — say which half ran.
-5. **Verify (real gate):** build exit code + test exit code. This is the actual check —
+   **Every one of those commands is part of the gate in step 5.** A non-zero
+   exit from the install, the import check, the test file or the probe is a
+   **red** result for the bump — comment which command failed and its output,
+   exactly as for a red build. Root and functions being green does not offset
+   it; they never loaded the package that changed.
+5. **Verify (real gate):** build exit code + test exit code — and, for a
+   `scripts/agent` bump, the exit code of each extra command above. This is the actual check —
    not "the commands were run."
 6. Decision:
    - **Patch/minor + green:** comment the result on the PR. **Do not auto-merge** while

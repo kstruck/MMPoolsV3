@@ -146,6 +146,26 @@ export function parseBinaryFiles(numstat) {
 }
 
 /**
+ * True when the diff holds at least one added or removed line INSIDE a hunk.
+ *
+ * Position, not prefix, tells a file header from content. `--- a/x` and
+ * `+++ b/x` sit between `diff --git` and the first `@@`; a changed line whose
+ * own text starts with `++ ` or `-- ` (a markdown rule, a SQL comment) sits
+ * after it and looks identical by prefix. A prefix test read such a line as a
+ * header and reported "nothing to review" on a real text change (qodo's
+ * second pass on #800).
+ */
+export function hasHunkChange(diff) {
+  let inHunk = false;
+  for (const line of String(diff ?? '').split('\n')) {
+    if (line.startsWith('diff --git ')) inHunk = false;
+    else if (line.startsWith('@@')) inHunk = true;
+    else if (inHunk && (line.startsWith('+') || line.startsWith('-'))) return true;
+  }
+  return false;
+}
+
+/**
  * What the reviewer CANNOT inspect, and whether anything is left that it can.
  *
  * The reviewer holds HEAD and no git tool, so it sees a change only through
@@ -169,9 +189,8 @@ export function planCoverage({ diff, lockfileDiff = '', binaryFiles = [] }) {
   if (binaryFiles.length) gaps.push(`${binaryFiles.length} binary file(s) have no reviewable diff: ${binaryFiles.join(', ')}`);
 
   // `git diff` still emits a header and a "Binary files differ" line for a
-  // binary file, so the main diff is non-empty on a binary-only branch. Text
-  // is reviewable only if some `+`/`-` content line exists.
-  const hasTextChange = /^[+-](?![+-]{2} )/m.test(diff);
+  // binary file, so the main diff is non-empty on a binary-only branch.
+  const hasTextChange = hasHunkChange(diff);
   const hasLockfileChange = Boolean(lockfileDiff.trim()) && !lockfileTooBig;
   if (!hasTextChange && !hasLockfileChange && gaps.length) {
     throw new Error(`Nothing in this change can be reviewed: ${gaps.join('; ')}.`);
