@@ -863,6 +863,14 @@ describe('getPoolPicks — pool-wide pick progress', () => {
 // PLAN-PTS-LEFT-HIDDEN-TOTAL — `hiddenLeft`, one SUM per entry
 // ---------------------------------------------------------------------------
 describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)', () => {
+    type Reveal = {
+        hiddenLeft?: Record<string, number>;
+        counts: Record<string, number>;
+        picks: Record<string, Record<string, string>>;
+        confidence: Record<string, Record<string, number>>;
+    };
+    const read = async (poolId: string, auth: unknown) =>
+        (await wGetPicks({ data: { poolId, week: 1 }, auth } as never)) as Reveal;
     const SEASON = 'blind-left-season';
     const POOL = 'blind-left-conf';
     const SURV = 'blind-left-surv';
@@ -905,9 +913,9 @@ describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)
     }, 30000);
 
     it('a member gets each entry\'s TOTAL on hidden open picks — and still no hidden pick or weight', async () => {
-        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        const res = await read(POOL, asAlice);
         // 7 + 3: the cancelled game's 9 can never score, and the locked game is revealed.
-        expect(res.hiddenLeft[ALICE]).toBe(10);
+        expect(res.hiddenLeft?.[ALICE]).toBe(10);
         // Nothing about WHICH open game or team rides along. (The cancelled game
         // has left SCHEDULED, so a confidence pool treats it as locked and
         // reveals it — existing behaviour, unchanged here.)
@@ -919,27 +927,29 @@ describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)
     }, 30000);
 
     it('a hidden open pick with no stored weight leaves the entry OUT — never a short total', async () => {
-        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
-        expect(BOB in res.hiddenLeft).toBe(false);
+        const res = await read(POOL, asAlice);
+        // The map is there (Alice is in it) — Bob alone is left out.
+        expect(res.hiddenLeft?.[ALICE]).toBe(10);
+        expect(BOB in (res.hiddenLeft ?? {})).toBe(false);
     }, 30000);
 
     it('the commissioner gets the same totals as a member (ungated, like counts)', async () => {
-        const member: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
-        const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+        const member = await read(POOL, asAlice);
+        const commish = await read(POOL, asOwner);
         expect(commish.hiddenLeft).toEqual(member.hiddenLeft);
     }, 30000);
 
     it('SUPER_ADMIN sees every pick, so nothing is hidden and every total is 0', async () => {
-        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asSuperAdmin } as never);
-        expect(res.hiddenLeft[ALICE]).toBe(0);
-        expect(res.hiddenLeft[BOB]).toBe(0);
+        const res = await read(POOL, asSuperAdmin);
+        expect(res.hiddenLeft?.[ALICE]).toBe(0);
+        expect(res.hiddenLeft?.[BOB]).toBe(0);
     }, 30000);
 
     it('the commissioner can turn it OFF: no totals are sent, for anyone', async () => {
         await db.collection('pools').doc(POOL).update({ 'settings.shareHiddenPointsLeft': false });
         try {
-            const member: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
-            const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+            const member = await read(POOL, asAlice);
+            const commish = await read(POOL, asOwner);
             expect(member.hiddenLeft).toBeUndefined();
             expect(commish.hiddenLeft).toBeUndefined();
             // Nothing else about the reveal changes.
@@ -950,7 +960,7 @@ describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)
     }, 30000);
 
     it('a Survivor pool carries no hiddenLeft at all', async () => {
-        const res: any = await wGetPicks({ data: { poolId: SURV, week: 1 }, auth: asAlice } as never);
+        const res = await read(SURV, asAlice);
         expect(res.hiddenLeft).toBeUndefined();
     }, 30000);
 });
