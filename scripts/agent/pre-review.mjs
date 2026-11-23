@@ -35,6 +35,7 @@ import {
   tryAppendCostRow,
 } from './lib.mjs';
 import { runQuery } from './run.mjs';
+import { withCleanWorktree } from './worktree.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -55,7 +56,8 @@ async function main() {
   });
   const key = resolveApiKey(process.env);
 
-  const headSha = git('rev-parse', '--short', 'HEAD').trim();
+  const fullHeadSha = git('rev-parse', 'HEAD').trim();
+  const headSha = fullHeadSha.slice(0, 8);
   const mergeBase = git('merge-base', args.base, 'HEAD').trim().slice(0, 8);
   const range = `${args.base}...HEAD`; // THREE dots: what this branch introduces (CLAUDE.md §2c)
   const stat = git('diff', '--stat', range);
@@ -70,17 +72,21 @@ async function main() {
   }
   console.error(`Pre-review of ${range} (head ${headSha}, merge base ${mergeBase}) with ${args.model}, budget $${args['max-budget-usd']}.`);
 
-  const { result, model, refused, error } = await runQuery({
-    prompt,
-    options: buildReviewOptions({
-      cwd: REPO_ROOT,
-      env: buildChildEnv(process.env, key),
-      model: args.model,
-      maxTurns: args['max-turns'],
-      maxBudgetUsd: args['max-budget-usd'],
-      systemPrompt: REVIEW_SYSTEM_PROMPT,
+  // The reviewer never sees this checkout. It reads a throwaway worktree of
+  // HEAD that holds tracked files only (see worktree.mjs for why).
+  const { result, model, refused, error } = await withCleanWorktree(REPO_ROOT, fullHeadSha, (reviewDir) =>
+    runQuery({
+      prompt,
+      options: buildReviewOptions({
+        cwd: reviewDir,
+        env: buildChildEnv(process.env, key),
+        model: args.model,
+        maxTurns: args['max-turns'],
+        maxBudgetUsd: args['max-budget-usd'],
+        systemPrompt: REVIEW_SYSTEM_PROMPT,
+      }),
     }),
-  });
+  );
 
   const outcome = classifyRun({ result, refused, error });
 

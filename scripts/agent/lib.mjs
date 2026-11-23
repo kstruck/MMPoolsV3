@@ -78,7 +78,9 @@ export const REVIEW_TOOLS = Object.freeze(['Read', 'Grep', 'Glob']);
  *   on the machine, and the diff under review is untrusted text: one injected
  *   line could have the reviewer read a key file outside the repo and send it
  *   to the API. With no allow rule, reads inside `cwd` still run (they need no
- *   approval) and a read outside it would prompt.
+ *   approval) and a read outside it would prompt. That is why `cwd` must be
+ *   the clean worktree from worktree.mjs and never the developer's checkout,
+ *   which holds ignored files such as `.env`.
  * - `permissionMode: 'dontAsk'` turns that prompt, and every other, into a denial.
  * - `settingSources: []` loads no user, project or local settings, so the
  *   operator's hooks, plugins and output styles cannot change the review.
@@ -141,7 +143,7 @@ export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff }) {
   }
   return [
     `Review the change between ${base} and HEAD (three-dot diff: merge base ${mergeBase}, head ${headSha}).`,
-    'The working directory is the repository at HEAD. Read any file you need.',
+    'The working directory is a clean checkout of HEAD: tracked files only, no node_modules. Read any file you need.',
     '',
     '--- git diff --stat (every changed file) ---',
     stat.trim(),

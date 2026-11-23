@@ -52,6 +52,12 @@ export default defineConfig({
     // self-checks run via `npx tsc -p shared && node shared/dist/...`, not root vitest.
     // tests/e2e/** are Playwright specs (own `test`/`expect`, own runner via
     // `npx playwright test`) — vitest's runner errors if it loads them.
-    exclude: ['node_modules/**', 'functions/**', '**/.claude/**', 'shared/**', 'tests/e2e/**']
+    //
+    // `**/node_modules/**`, NOT `node_modules/**`. The root-anchored form only
+    // excluded the ROOT install, so once `scripts/agent/` gained its own
+    // node_modules, vitest collected the vendored packages' own test files and
+    // the root suite went red on any machine that had run `npm ci` there
+    // (measured 2026-11-23: 32 vendor test files failed, none of them ours).
+    exclude: ['**/node_modules/**', 'functions/**', '**/.claude/**', 'shared/**', 'tests/e2e/**']
   }
 })

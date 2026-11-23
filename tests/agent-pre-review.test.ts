@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -26,6 +26,8 @@ import {
   tryAppendCostRow,
   // @ts-expect-error — plain .mjs script, no type declarations
 } from '../scripts/agent/lib.mjs';
+// @ts-expect-error — plain .mjs script, no type declarations
+import { withCleanWorktree } from '../scripts/agent/worktree.mjs';
 
 /**
  * THE CLAUDE PRE-REVIEW (scripts/agent/) — what must stay true.
@@ -163,6 +165,55 @@ describe('the reviewer is read-only by construction', () => {
   it('carries the budget and turn limits through', () => {
     expect(options.maxBudgetUsd).toBe(5);
     expect(options.maxTurns).toBe(80);
+  });
+});
+
+describe('the reviewer reads a clean worktree, never the developer checkout', () => {
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout.trim();
+  const listed = () => spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout;
+
+  it('holds tracked files only, and is removed afterwards', async () => {
+    // The checkout this test runs in HAS a node_modules. If it did not, "the
+    // worktree has none" below would pass without proving anything.
+    expect(existsSync(join(REPO_ROOT, 'node_modules'))).toBe(true);
+
+    let seen = '';
+    const returned = await withCleanWorktree(REPO_ROOT, head, async (dir: string) => {
+      seen = dir;
+      expect(resolve(dir).startsWith(REPO_ROOT)).toBe(false);
+      expect(existsSync(join(dir, 'package.json'))).toBe(true);
+      expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
+      // Ignored and untracked content is absent.
+      expect(existsSync(join(dir, 'node_modules'))).toBe(false);
+      expect(existsSync(join(dir, 'dist'))).toBe(false);
+      // `.git` is a pointer FILE whose target lies outside the directory.
+      expect(statSync(join(dir, '.git')).isFile()).toBe(true);
+      expect(readFileSync(join(dir, '.git'), 'utf8')).toMatch(/^gitdir: /);
+      expect(listed().replace(/\\/g, '/')).toContain(dir.replace(/\\/g, '/'));
+      return 'value';
+    });
+    expect(returned).toBe('value');
+    expect(existsSync(seen)).toBe(false);
+    expect(listed().replace(/\\/g, '/')).not.toContain(seen.replace(/\\/g, '/'));
+  }, 120_000);
+
+  it('is removed when the review throws, and the error still surfaces', async () => {
+    let seen = '';
+    await expect(
+      withCleanWorktree(REPO_ROOT, head, async (dir: string) => {
+        seen = dir;
+        throw new Error('review blew up');
+      }),
+    ).rejects.toThrow('review blew up');
+    expect(seen).not.toBe('');
+    expect(existsSync(seen)).toBe(false);
+  }, 120_000);
+
+  it('pre-review.mjs runs the query inside it and never at the repo root', () => {
+    const src = read('scripts/agent/pre-review.mjs');
+    expect(src).toMatch(/withCleanWorktree\(REPO_ROOT, fullHeadSha, \(reviewDir\) =>/);
+    expect(src).toMatch(/cwd: reviewDir/);
+    expect(src).not.toMatch(/cwd: REPO_ROOT,\s*\n\s*env:/);
   });
 });
 
@@ -379,8 +430,22 @@ describe('repo wiring', () => {
     expect(lib).not.toMatch(/from\s+['"]\.\/run\.mjs['"]/);
   });
 
+  it('worktree.mjs never imports the SDK either', () => {
+    expect(read('scripts/agent/worktree.mjs')).not.toMatch(/@anthropic-ai/);
+  });
+
+  it('vitest excludes node_modules at ANY depth, so scripts/agent/node_modules is not collected', () => {
+    // Root-anchored `node_modules/**` let the SDK's vendored test files into
+    // the root suite: 32 failing files, none of them this repo's.
+    const cfg = read('vite.config.ts');
+    const exclude = /exclude:\s*\[([^\]]*)\]/.exec(cfg);
+    expect(exclude, 'test.exclude not found').not.toBeNull();
+    const entries = exclude![1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, ''));
+    expect(entries).toContain('**/node_modules/**');
+  });
+
   it('no script reads a key from ANTHROPIC_API_KEY', () => {
-    for (const f of ['lib.mjs', 'run.mjs', 'probe.mjs', 'pre-review.mjs']) {
+    for (const f of ['lib.mjs', 'run.mjs', 'probe.mjs', 'pre-review.mjs', 'worktree.mjs']) {
       expect(read(`scripts/agent/${f}`), f).not.toMatch(/env\.ANTHROPIC_API_KEY|env\[['"]ANTHROPIC_API_KEY['"]\]/);
     }
   });
