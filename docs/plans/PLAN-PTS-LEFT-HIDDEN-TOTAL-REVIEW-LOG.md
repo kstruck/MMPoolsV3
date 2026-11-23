@@ -24,3 +24,10 @@ Clean.
 | # | Finding | Verdict |
 |---|---|---|
 | X3.1 [P2] | The server counted a FINAL with NO reported scores as decided, while `tallyGridRow` treats it as still winnable (the scorer grades it when scores arrive). A hidden pick on one would be left out, so Pts Left and Max would read low. | **Valid — fixed.** The server now uses the client's rule: decided = CANCELLED, or FINAL with `hasReportedScores`. The game read carries `scores` for it. Emulator test: a standard pool with one open game, one scoreless FINAL and one scored FINAL, all hidden, totals 2. Mutation-checked: the old rule fails it. |
+
+### Round X4 — codex, on `ea850d97`
+
+| # | Finding | Verdict |
+|---|---|---|
+| X4.1 [P2] | On a pool with `isLocked: true`, `buildPoolSettingsUpdate` refuses the whole `settings` group, so a commissioner still could not turn the switch off in season. | **Valid — fixed.** `LOCKED_PHASE_SETTINGS_KEYS` (`shareHiddenPointsLeft` only): a `settings` patch whose EVERY key is listed passes on a locked pool. A mixed patch or an empty one is still refused, so no rule can ride along, and archived pools stay read-only. Unit test covers all four cases. |
+| X4.2 [P2] | With a hidden FINISHED game the row did not pick, Max still allowed for a pick there: one point high in standard scoring, "?" in confidence. | **Valid — fixed.** The hidden-decided allowance is now capped by the saved-pick count. In standard scoring, `hiddenLeft` is the number of hidden open picks, so those come off as well. A row whose count is fully explained shows an exact Max. Unit test covers both modes. |

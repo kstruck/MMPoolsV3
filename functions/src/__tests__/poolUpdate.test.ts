@@ -31,6 +31,20 @@ describe('settings.shareHiddenPointsLeft (PLAN-PTS-LEFT-HIDDEN-TOTAL)', () => {
     }
   });
 
+  it('a LOCKED pool can still change it — alone — but no rule rides along (codex r4)', () => {
+    const locked = { isLocked: true, status: 'OPEN' };
+    expect(buildPoolSettingsUpdate(locked, { settings: { shareHiddenPointsLeft: false } }).set)
+      .toEqual({ settings: { shareHiddenPointsLeft: false } });
+    // Mixed with a real rule: still refused, so the exemption cannot smuggle one.
+    expect(() => buildPoolSettingsUpdate(locked, { settings: { shareHiddenPointsLeft: false, entryFee: 5 } }))
+      .toThrow(/settings is locked/);
+    // An empty patch earns no exemption either.
+    expect(() => buildPoolSettingsUpdate(locked, { settings: {} })).toThrow(/settings is locked/);
+    // Archived stays read-only.
+    expect(() => buildPoolSettingsUpdate({ status: 'ARCHIVED' }, { settings: { shareHiddenPointsLeft: false } }))
+      .toThrow(/settings is locked/);
+  });
+
   it('is ON when absent or unrecognised, OFF only when false', () => {
     expect(sharesHiddenPointsLeft(undefined)).toBe(true);
     expect(sharesHiddenPointsLeft({})).toBe(true);

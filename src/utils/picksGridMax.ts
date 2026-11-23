@@ -185,9 +185,19 @@ export function tallyGridRow(args: {
     if (!isOwnRow && hiddenCells > 0 && typeof hiddenLeft === 'number') {
         const left = remaining + hiddenLeft;
         if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left };
-        if (hiddenDecidedLive > 0) {
+        // How many hidden picks CAN sit on a decided game. Without the saved-pick
+        // count, any of those games might hold one. With it, the picks not yet
+        // accounted for bound it — and in standard scoring `hiddenLeft` IS the
+        // number of hidden picks on open games, so those come off too. A row
+        // whose count is fully explained by what is visible has none, and its
+        // Max is exact (codex r4: it read one high, or "?", before).
+        const unexplained = setCount === undefined
+            ? Infinity
+            : Math.max(0, setCount - revealedPicks - (confidenceMode ? 0 : hiddenLeft));
+        const decidedMost = Math.min(hiddenDecidedLive, unexplained);
+        if (decidedMost > 0) {
             if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', left };
-            return { ...tally, max: earned + left + hiddenDecidedLive, left };
+            return { ...tally, max: earned + left + decidedMost, left };
         }
         return { ...tally, max: earned + left, left };
     }

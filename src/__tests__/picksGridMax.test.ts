@@ -456,6 +456,23 @@ describe('tallyGridRow — the server total for hidden open picks (hiddenLeft)',
         expect(t.max).toBe(2);
     });
 
+    it('a finished hidden game the row did NOT pick adds nothing (the count proves it, codex r4)', () => {
+        const slate = [game('f1', 'FINAL', { scores: { home: 20, away: 10 } }), game('o1')];
+        // One saved pick, and it is the hidden open one (hiddenLeft = 1): none can sit on f1.
+        const std = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 1,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false, hiddenLeft: 1,
+        });
+        expect(std.max).toBe(1);
+        // Confidence: no unrevealed pick beyond what is visible → exact, not "?".
+        const conf = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 0,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: true, hiddenLeft: 0,
+        });
+        expect(conf.max).toBe(0);
+        expect(pointsLeft(conf)).toBe(0);
+    });
+
     it("the viewer's own row ignores it: every cell is already known", () => {
         const t = tallyGridRow({
             weekGames: GAMES, cells: cells(pick('W', 9), pick('L', 3), pick(null, 5), pick(null, 6), pick(null, 7)),
