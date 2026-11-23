@@ -7,6 +7,7 @@ import {
   COST_LOG_HEADER,
   EXIT,
   KEY_ENV,
+  LOCKFILE_EXCLUDES,
   MAX_DIFF_CHARS,
   REVIEW_TOOLS,
   appendCostRow,
@@ -208,6 +209,21 @@ describe('the review prompt', () => {
     expect(prompt).toContain('abc1234');
     expect(prompt).toContain('a.ts | 2 +-');
     expect(prompt).toContain('diff --git a/a.ts b/a.ts\n+x');
+  });
+
+  it('says in the prompt that lockfile bodies were left out, and really leaves them out', () => {
+    expect(buildReviewPrompt({ ...base, diff: '+x' })).toMatch(/package-lock\.json bodies are left out/);
+    // Run the real pathspec against this repo: a lockfile that exists must not
+    // appear, and a source file must. A pathspec that matched nothing would
+    // pass the first half for the wrong reason, hence the second.
+    const tree = spawnSync('git', ['ls-files', '--', '.', ...LOCKFILE_EXCLUDES], { cwd: REPO_ROOT, encoding: 'utf8' });
+    expect(tree.status).toBe(0);
+    const files = tree.stdout.split('\n');
+    expect(files).toContain('scripts/agent/lib.mjs');
+    expect(files).toContain('package.json');
+    expect(files.filter((f) => f.endsWith('package-lock.json'))).toEqual([]);
+    const all = spawnSync('git', ['ls-files'], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout.split('\n');
+    expect(all.filter((f) => f.endsWith('package-lock.json')).length).toBeGreaterThanOrEqual(3);
   });
 
   it('refuses an empty diff instead of reviewing nothing and calling it clean', () => {

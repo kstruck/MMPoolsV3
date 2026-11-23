@@ -121,6 +121,9 @@ export const REVIEW_SYSTEM_PROMPT = [
   'VERDICT: FINDINGS',
 ].join('\n');
 
+/** Git pathspecs that drop lockfile bodies from the diff. The stat still lists them. */
+export const LOCKFILE_EXCLUDES = Object.freeze([':(exclude,glob)**/package-lock.json']);
+
 /** The user message: what was diffed, the stat, and the diff itself. */
 export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff }) {
   if (!diff.trim()) throw new Error('The diff is empty. There is nothing to review.');
@@ -134,10 +137,10 @@ export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff }) {
     `Review the change between ${base} and HEAD (three-dot diff: merge base ${mergeBase}, head ${headSha}).`,
     'The working directory is the repository at HEAD. Read any file you need.',
     '',
-    '--- git diff --stat ---',
+    '--- git diff --stat (every changed file) ---',
     stat.trim(),
     '',
-    '--- git diff ---',
+    '--- git diff (package-lock.json bodies are left out; Read them if a dependency change matters) ---',
     diff,
   ].join('\n');
 }

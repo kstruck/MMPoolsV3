@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   EXIT,
+  LOCKFILE_EXCLUDES,
   REVIEW_SYSTEM_PROMPT,
   appendCostRow,
   buildChildEnv,
@@ -57,7 +58,10 @@ async function main() {
   const mergeBase = git('merge-base', args.base, 'HEAD').trim().slice(0, 8);
   const range = `${args.base}...HEAD`; // THREE dots: what this branch introduces (CLAUDE.md §2c)
   const stat = git('diff', '--stat', range);
-  const diff = git('diff', range);
+  // Lockfile BODIES are left out: thousands of generated lines that cost tokens
+  // and that a model reviews badly. They stay in the stat, and the prompt says
+  // they were left out, so the omission is stated rather than silent.
+  const diff = git('diff', range, '--', '.', ...LOCKFILE_EXCLUDES);
   const prompt = buildReviewPrompt({ base: args.base, headSha, mergeBase, stat, diff });
 
   if (git('status', '--porcelain').trim()) {
