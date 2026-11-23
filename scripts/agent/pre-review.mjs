@@ -24,7 +24,6 @@ import {
   EXIT,
   LOCKFILE_EXCLUDES,
   REVIEW_SYSTEM_PROMPT,
-  appendCostRow,
   buildChildEnv,
   buildReviewOptions,
   buildReviewPrompt,
@@ -32,6 +31,8 @@ import {
   costLogPath,
   parseArgs,
   resolveApiKey,
+  summarizeDenials,
+  tryAppendCostRow,
 } from './lib.mjs';
 import { runQuery } from './run.mjs';
 
@@ -83,7 +84,21 @@ async function main() {
 
   const outcome = classifyRun({ result, refused, error });
 
-  appendCostRow(costLogPath(process.env), {
+  // The reply is printed FIRST, and only for a run that completed. First,
+  // because nothing after this line may cost the operator a review that was
+  // already paid for. Only when complete, because a partial reply from a run
+  // that then failed would read as a review.
+  if (outcome.exit !== EXIT.INCONCLUSIVE) console.log(result.result);
+
+  const denied = summarizeDenials(result?.permission_denials);
+  if (denied) {
+    console.error(
+      `\nNOTE: the reviewer was denied these tool calls: ${denied}. A read outside the repo is denied on purpose; ` +
+        'a denied read INSIDE it means the review saw less than it should have.',
+    );
+  }
+
+  const logFailure = tryAppendCostRow(costLogPath(process.env), {
     date: new Date().toISOString(),
     script: 'pre-review',
     model: model ?? args.model,
@@ -92,12 +107,12 @@ async function main() {
     costUsd: result?.total_cost_usd,
     turns: result?.num_turns,
     durationMs: result?.duration_ms,
-    note: outcome.exit === EXIT.INCONCLUSIVE ? outcome.reason : `base ${args.base}`,
+    note: [outcome.exit === EXIT.INCONCLUSIVE ? outcome.reason : `base ${args.base}`, denied && `denied: ${denied}`]
+      .filter(Boolean)
+      .join('; '),
   });
+  if (logFailure) console.error(`\nNOTE: ${logFailure}. The outcome below is unaffected.`);
 
-  // The reply is printed only for a run that completed. A partial reply from a
-  // run that then failed would read as a review.
-  if (outcome.exit !== EXIT.INCONCLUSIVE) console.log(result.result);
   const cost = Number.isFinite(result?.total_cost_usd) ? ` Estimated cost $${result.total_cost_usd.toFixed(4)}.` : '';
   if (outcome.exit === EXIT.INCONCLUSIVE) {
     console.error(`\nPRE-REVIEW INCONCLUSIVE: ${outcome.reason}.${cost} This is NOT a clean review.`);

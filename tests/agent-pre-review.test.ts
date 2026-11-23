@@ -22,6 +22,8 @@ import {
   parseArgs,
   parseVerdict,
   resolveApiKey,
+  summarizeDenials,
+  tryAppendCostRow,
   // @ts-expect-error — plain .mjs script, no type declarations
 } from '../scripts/agent/lib.mjs';
 
@@ -138,7 +140,14 @@ describe('the reviewer is read-only by construction', () => {
 
   it.each(['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'Agent', 'Task'])('does not hold %s', (tool) => {
     expect(options.tools).not.toContain(tool);
-    expect(options.allowedTools).not.toContain(tool);
+  });
+
+  it('pre-approves NOTHING, so a read outside the repo is denied rather than allowed', () => {
+    // A bare `Read` allow rule approves every read on the machine. The diff is
+    // untrusted text; with an allow rule, one injected line could send a key
+    // file outside the repo to the API. Reads inside cwd need no rule.
+    expect(options.allowedTools).toEqual([]);
+    expect(options.additionalDirectories).toEqual([]);
   });
 
   it('denies anything that would prompt, and never bypasses permissions', () => {
@@ -275,6 +284,38 @@ describe('the cost log', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('a log that cannot be written is reported, never thrown', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mmp-agent-log-'));
+    try {
+      const row = { date: 'd', script: 'pre-review', model: 'm', head: 'h', verdict: 'FINDINGS', costUsd: 1, turns: 1, durationMs: 1, note: '' };
+      // The "file" is a directory: the append fails on every platform.
+      const failure = tryAppendCostRow(dir, row);
+      expect(failure).toMatch(/could not write the cost log/);
+      expect(tryAppendCostRow(join(dir, 'ok.tsv'), row)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('pre-review prints the reply BEFORE it touches the log', () => {
+    // Order is the fix: a paid, completed review must reach the terminal even
+    // when the bookkeeping after it fails.
+    const src = read('scripts/agent/pre-review.mjs');
+    const print = src.indexOf('console.log(result.result)');
+    const log = src.indexOf('tryAppendCostRow(costLogPath');
+    expect(print).toBeGreaterThan(-1);
+    expect(log).toBeGreaterThan(print);
+    for (const f of ['pre-review.mjs', 'probe.mjs']) {
+      expect(read(`scripts/agent/${f}`), f).not.toMatch(/(?<!try)appendCostRow\(/i);
+    }
+  });
+
+  it('summarises denied tool calls by name', () => {
+    expect(summarizeDenials([{ tool_name: 'Read' }, { tool_name: 'Grep' }, { tool_name: 'Grep' }])).toBe('Grep x2, Read x1');
+    expect(summarizeDenials([])).toBe('');
+    expect(summarizeDenials(undefined)).toBe('');
   });
 
   it('lives outside the repo by default, and honours the override', () => {

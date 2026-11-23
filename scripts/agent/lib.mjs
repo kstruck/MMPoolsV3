@@ -74,7 +74,12 @@ export const REVIEW_TOOLS = Object.freeze(['Read', 'Grep', 'Glob']);
  *
  * - `tools` is the BASE SET, so anything not listed does not exist for the model.
  *   `allowedTools` alone would only pre-approve these and leave the rest available.
- * - `permissionMode: 'dontAsk'` denies anything that would otherwise prompt.
+ * - `allowedTools` is EMPTY on purpose. A bare `Read` there approves every read
+ *   on the machine, and the diff under review is untrusted text: one injected
+ *   line could have the reviewer read a key file outside the repo and send it
+ *   to the API. With no allow rule, reads inside `cwd` still run (they need no
+ *   approval) and a read outside it would prompt.
+ * - `permissionMode: 'dontAsk'` turns that prompt, and every other, into a denial.
  * - `settingSources: []` loads no user, project or local settings, so the
  *   operator's hooks, plugins and output styles cannot change the review.
  */
@@ -88,7 +93,8 @@ export function buildReviewOptions({ cwd, env, model, maxTurns, maxBudgetUsd, sy
     systemPrompt,
     abortController,
     tools: [...REVIEW_TOOLS],
-    allowedTools: [...REVIEW_TOOLS],
+    allowedTools: [],
+    additionalDirectories: [],
     permissionMode: 'dontAsk',
     settingSources: [],
     persistSession: false,
@@ -225,6 +231,35 @@ export function appendCostRow(file, row) {
   mkdirSync(path.dirname(file), { recursive: true });
   const prefix = existsSync(file) ? '' : `${COST_LOG_HEADER.join('\t')}\n`;
   appendFileSync(file, `${prefix}${formatCostRow(row)}\n`, 'utf8');
+}
+
+/**
+ * Append a row and NEVER throw. Returns the failure message, or null.
+ *
+ * The log is bookkeeping. By the time it is written the model call has been
+ * paid for, so an unwritable log directory must not turn a completed review
+ * into an INCONCLUSIVE one and hide its findings (codex round 1 on this PR).
+ */
+export function tryAppendCostRow(file, row) {
+  try {
+    appendCostRow(file, row);
+    return null;
+  } catch (error) {
+    return `could not write the cost log at ${file}: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+/** Names of the tools the run was denied, most frequent first, e.g. `Grep x3, Read x1`. */
+export function summarizeDenials(denials) {
+  const counts = new Map();
+  for (const d of Array.isArray(denials) ? denials : []) {
+    const name = String(d?.tool_name ?? 'unknown');
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, n]) => `${name} x${n}`)
+    .join(', ');
 }
 
 /** `--name value` and `--name=value` flags. Unknown flags throw: a typo must not run with defaults. */

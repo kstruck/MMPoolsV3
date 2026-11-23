@@ -10,7 +10,7 @@
 //     https://platform.claude.com/settings/billing and confirm that
 //     "Promotional credits" went down by about the printed cost.
 
-import { EXIT, appendCostRow, buildChildEnv, costLogPath, parseArgs, resolveApiKey } from './lib.mjs';
+import { EXIT, buildChildEnv, costLogPath, parseArgs, resolveApiKey, tryAppendCostRow } from './lib.mjs';
 import { runQuery } from './run.mjs';
 
 async function main() {
@@ -38,7 +38,7 @@ async function main() {
   }
   const ok = !error && result?.subtype === 'success' && !result.is_error;
   const failure = error ?? String(result?.result ?? result?.errors?.join('; ') ?? result?.subtype ?? 'no result');
-  appendCostRow(costLogPath(process.env), {
+  const logFailure = tryAppendCostRow(costLogPath(process.env), {
     date: new Date().toISOString(),
     script: 'probe',
     model: model ?? args.model,
@@ -49,6 +49,7 @@ async function main() {
     durationMs: result?.duration_ms,
     note: ok ? '' : failure.slice(0, 200),
   });
+  if (logFailure) console.error(`NOTE: ${logFailure}. The outcome below is unaffected.`);
 
   if (!ok) {
     console.error(`PROBE FAILED (apiKeySource=${apiKeySource}): ${failure}`);
