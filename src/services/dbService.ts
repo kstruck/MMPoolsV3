@@ -179,6 +179,14 @@ export interface PoolPicksReveal {
      * a non-optional field. (PLAN-MEMBER-PICK-PROGRESS T3, codex r4.)
      */
     progress?: { complete: number; total: number };
+    /**
+     * Entry id → the points that entry has on picks this caller cannot see yet
+     * and whose games are not decided: a SUM, no pick content
+     * (PLAN-PTS-LEFT-HIDDEN-TOTAL). Pick'em only. Optional for the same reason as
+     * `progress`: a client built ahead of the functions deploy reads `undefined`
+     * and keeps showing "?".
+     */
+    hiddenLeft?: Record<string, number>;
 }
 
 // --- Monetization dashboard read shapes (PLAN-BUYFLOW-OVERHAUL Phase 6) -------

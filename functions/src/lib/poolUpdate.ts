@@ -218,6 +218,17 @@ export function flattenSettingsPatch(
       out['settings.pickDistribution'] = value;
       continue;
     }
+    // Points-left sharing (PLAN-PTS-LEFT-HIDDEN-TOTAL). A boolean or nothing: a
+    // string "false" would otherwise be stored and read as ON by
+    // `sharesHiddenPointsLeft`, sharing what the commissioner turned off.
+    if (key === 'shareHiddenPointsLeft') {
+      if (typeof value !== 'boolean') {
+        rejected.push(`settings.shareHiddenPointsLeft (must be true or false)`);
+        continue;
+      }
+      out['settings.shareHiddenPointsLeft'] = value;
+      continue;
+    }
     // Survivor parity settings. `updatePoolSettingsSchema.updates` is
     // `z.record(z.string(), z.unknown())` — permissive, which means these arrive
     // UNVALIDATED. A negative `maxTeamUses` sliding through would read as

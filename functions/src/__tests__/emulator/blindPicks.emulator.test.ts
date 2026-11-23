@@ -138,6 +138,7 @@ const CREATED_POOLS = [
     'blind-reveal-pickem', 'blind-reveal-survivor-open', 'blind-reveal-survivor-locked',
     'blind-bracket-pool', 'blind-plain-commish',
     'blind-progress-pool', 'blind-progress-legacy',
+    'blind-left-conf', 'blind-left-surv',
 ];
 const CREATED_GAMES = [
     'blind-submit-g1', 'blind-submit-g2', 'blind-weekly-w1-g', 'blind-weekly-w2-g',
@@ -145,6 +146,7 @@ const CREATED_GAMES = [
     'blind-surv-future-1', 'blind-surv-future-2', 'blind-surv-past-1', 'blind-surv-past-2',
     'blind-plain-future-g',
     'blind-progress-g1', 'blind-progress-g2', 'blind-progress-legacy-g',
+    'blind-left-locked', 'blind-left-open1', 'blind-left-open2', 'blind-left-cancelled',
 ];
 const CREATED_USERS = [ALICE, BOB, OWNER, ADMIN, STALE_ADMIN, 'blind-legacy-no-record'];
 
@@ -854,5 +856,101 @@ describe('getPoolPicks — pool-wide pick progress', () => {
         // …and the callable's answer is unchanged by the rewrite.
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
         expect(res.progress).toEqual({ complete: 1, total: 2 });
+    }, 30000);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-PTS-LEFT-HIDDEN-TOTAL — `hiddenLeft`, one SUM per entry
+// ---------------------------------------------------------------------------
+describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)', () => {
+    const SEASON = 'blind-left-season';
+    const POOL = 'blind-left-conf';
+    const SURV = 'blind-left-surv';
+    const LOCKED = 'blind-left-locked';
+    const OPEN1 = 'blind-left-open1';
+    const OPEN2 = 'blind-left-open2';
+    const CANCELLED = 'blind-left-cancelled';
+
+    beforeAll(async () => {
+        await seedGame(SEASON, LOCKED, 1, Date.now() - HOUR);
+        await seedGame(SEASON, OPEN1, 1, Date.now() + 4 * HOUR);
+        await seedGame(SEASON, OPEN2, 1, Date.now() + 8 * HOUR);
+        await seedGame(SEASON, CANCELLED, 1, Date.now() + 6 * HOUR);
+        await db.collection('nfl_games').doc(CANCELLED).update({ status: 'CANCELLED' });
+        await seedPool(SEASON, POOL, 'NFL_PICKEM', {
+            // `lockRuleVersion: 2` — a STAMPED pool, so PER_GAME is what it plays.
+            // An unstamped confidence pool still plays WEEKLY (the legacy clause in
+            // `shared/nflLockMode.ts`): its whole week reveals at the first
+            // kickoff, and every total would correctly be 0.
+            settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: true, lockRuleVersion: 2 },
+        });
+        await seedMember(POOL, ALICE);
+        await seedMember(POOL, BOB);
+        const entries = db.collection('pools').doc(POOL).collection('entries');
+        // Alice: locked game at 5 (revealed), open games at 7 and 3 (hidden),
+        // and a pick on the cancelled game at 9 — which can never score.
+        await entries.doc(ALICE).set({
+            id: ALICE, poolId: POOL, ownerUid: ALICE, userName: 'Alice',
+            picks: { [LOCKED]: 'KC', [OPEN1]: 'BUF', [OPEN2]: 'KC', [CANCELLED]: 'KC' },
+            confidence: { [LOCKED]: 5, [OPEN1]: 7, [OPEN2]: 3, [CANCELLED]: 9 },
+        });
+        // Bob: a hidden open pick with NO stored weight.
+        await entries.doc(BOB).set({
+            id: BOB, poolId: POOL, ownerUid: BOB, userName: 'Bob',
+            picks: { [LOCKED]: 'BUF', [OPEN1]: 'KC' },
+            confidence: { [LOCKED]: 4 },
+        });
+        await seedPool(SEASON, SURV, 'NFL_SURVIVOR');
+        await seedMember(SURV, ALICE);
+    }, 30000);
+
+    it('a member gets each entry\'s TOTAL on hidden open picks — and still no hidden pick or weight', async () => {
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        // 7 + 3: the cancelled game's 9 can never score, and the locked game is revealed.
+        expect(res.hiddenLeft[ALICE]).toBe(10);
+        // Nothing about WHICH open game or team rides along. (The cancelled game
+        // has left SCHEDULED, so a confidence pool treats it as locked and
+        // reveals it — existing behaviour, unchanged here.)
+        expect(res.picks[ALICE][OPEN1]).toBeUndefined();
+        expect(res.picks[ALICE][OPEN2]).toBeUndefined();
+        expect(res.confidence[ALICE][OPEN1]).toBeUndefined();
+        expect(res.confidence[ALICE][OPEN2]).toBeUndefined();
+        expect(res.picks[ALICE][LOCKED]).toBe('KC');
+    }, 30000);
+
+    it('a hidden open pick with no stored weight leaves the entry OUT — never a short total', async () => {
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        expect(BOB in res.hiddenLeft).toBe(false);
+    }, 30000);
+
+    it('the commissioner gets the same totals as a member (ungated, like counts)', async () => {
+        const member: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+        const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+        expect(commish.hiddenLeft).toEqual(member.hiddenLeft);
+    }, 30000);
+
+    it('SUPER_ADMIN sees every pick, so nothing is hidden and every total is 0', async () => {
+        const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asSuperAdmin } as never);
+        expect(res.hiddenLeft[ALICE]).toBe(0);
+        expect(res.hiddenLeft[BOB]).toBe(0);
+    }, 30000);
+
+    it('the commissioner can turn it OFF: no totals are sent, for anyone', async () => {
+        await db.collection('pools').doc(POOL).update({ 'settings.shareHiddenPointsLeft': false });
+        try {
+            const member: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
+            const commish: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asOwner } as never);
+            expect(member.hiddenLeft).toBeUndefined();
+            expect(commish.hiddenLeft).toBeUndefined();
+            // Nothing else about the reveal changes.
+            expect(member.counts[ALICE]).toBe(4);
+        } finally {
+            await db.collection('pools').doc(POOL).update({ 'settings.shareHiddenPointsLeft': admin.firestore.FieldValue.delete() });
+        }
+    }, 30000);
+
+    it('a Survivor pool carries no hiddenLeft at all', async () => {
+        const res: any = await wGetPicks({ data: { poolId: SURV, week: 1 }, auth: asAlice } as never);
+        expect(res.hiddenLeft).toBeUndefined();
     }, 30000);
 });

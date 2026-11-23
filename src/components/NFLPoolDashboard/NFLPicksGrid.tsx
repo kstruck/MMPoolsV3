@@ -257,6 +257,9 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   isOwnRow,
                   confidenceMode: !!settings.confidenceMode,
                   pickMode: settings.pickMode,
+                  // The server's total for this row's hidden open picks
+                  // (PLAN-PTS-LEFT-HIDDEN-TOTAL) — Week Results passes the same.
+                  hiddenLeft: wk?.hiddenLeft?.[row.id],
                 });
                 const winLoss = formatWinLoss(tally);
                 const left = pointsLeft(tally);

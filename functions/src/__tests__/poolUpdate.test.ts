@@ -7,6 +7,7 @@ import {
   LOCK_AFFECTING_SETTINGS_KEYS,
 } from '../lib/poolUpdate';
 import { normalizePhase, isGroupEditable, classifyUpdateKey } from '../shared/editability';
+import { sharesHiddenPointsLeft } from '../shared/pointsLeftSharing';
 
 describe('flattenSettingsPatch — pickDistribution (PLAN-SPLIT-POT-SETTLEMENT Part C)', () => {
   it.each(['ALWAYS', 'AFTER_LOCK', 'OFF'])('stores %s as a dotted write', (v) => {
@@ -14,6 +15,28 @@ describe('flattenSettingsPatch — pickDistribution (PLAN-SPLIT-POT-SETTLEMENT P
   });
   it.each(['OFFF', '', 'off', 1, null, true])('rejects %s rather than storing it', (v) => {
     expect(() => flattenSettingsPatch({ settings: { pickDistribution: v } }, 'NFL_SURVIVOR')).toThrow(/pickDistribution/);
+  });
+});
+
+describe('settings.shareHiddenPointsLeft (PLAN-PTS-LEFT-HIDDEN-TOTAL)', () => {
+  it('stores true or false', () => {
+    for (const v of [true, false]) {
+      expect(flattenSettingsPatch({ settings: { shareHiddenPointsLeft: v } }, 'NFL_PICKEM')['settings.shareHiddenPointsLeft']).toBe(v);
+    }
+  });
+
+  it('refuses anything that is not a boolean — a stored "false" would read as ON', () => {
+    for (const v of ['false', 'true', 0, 1, null, {}]) {
+      expect(() => flattenSettingsPatch({ settings: { shareHiddenPointsLeft: v } }, 'NFL_PICKEM')).toThrow(/shareHiddenPointsLeft/);
+    }
+  });
+
+  it('is ON when absent or unrecognised, OFF only when false', () => {
+    expect(sharesHiddenPointsLeft(undefined)).toBe(true);
+    expect(sharesHiddenPointsLeft({})).toBe(true);
+    expect(sharesHiddenPointsLeft({ shareHiddenPointsLeft: 'false' })).toBe(true);
+    expect(sharesHiddenPointsLeft({ shareHiddenPointsLeft: true })).toBe(true);
+    expect(sharesHiddenPointsLeft({ shareHiddenPointsLeft: false })).toBe(false);
   });
 });
 

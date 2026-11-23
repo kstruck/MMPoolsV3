@@ -50,6 +50,7 @@ import { rosterSummaryRef } from "./lib/rosterSummary";
 // whole point here.
 import { isCanonicalMemberRecord } from "./shared/memberRecord";
 import type { NFLGame } from "./nflPoolTypes";
+import { sharesHiddenPointsLeft } from "./shared/pointsLeftSharing";
 
 const NFL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
 
@@ -101,6 +102,25 @@ export interface PoolPicksResponse {
      * (`buildStandingsRows`), which is why it has to come through this door.
      */
     tiebreakers: Record<string, number>;
+    /**
+     * entry id → the points that entry still has riding on games whose picks are
+     * NOT revealed to this caller and are not yet decided (not FINAL, not
+     * CANCELLED): the sum of its confidence weights there, or one per pick in a
+     * standard pool. Pick'em only. PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23).
+     *
+     * It is what lets "Pts Left" and Max show a number for another member before
+     * their remaining games kick off. It carries NO pick content — not which team,
+     * not which game holds which weight. For a complete confidence sheet the total
+     * is already derivable from the revealed weights (the week's weight set is
+     * fixed), so it adds nothing there; for an incomplete sheet it adds one sum.
+     *
+     * Absent for an entry with a hidden open pick that has no stored weight (the
+     * client then shows "?" as before), for every non-Pick'em pool, and for a
+     * pool whose commissioner turned `settings.shareHiddenPointsLeft` off.
+     * Ungated like `counts`: the same answer for every principal, after the same
+     * departed-member filter.
+     */
+    hiddenLeft?: Record<string, number>;
     /**
      * entry id → who owns it and what it is called (PLAN-MULTI-ENTRY D5).
      * Additive: absent for every principal that is not entitled to it.
@@ -387,6 +407,17 @@ export const getPoolPicks = validated(
         const confidence: Record<string, Record<string, number>> = {};
         const tiebreakers: Record<string, number> = {};
         const entries: Record<string, { ownerUid: string; entryName?: string }> = {};
+        const hiddenLeft: Record<string, number> = {};
+        // The unrevealed games a pick can still score on: not revealed to THIS
+        // caller, and not decided. Built from the same `allowedKeys` the picks
+        // are allowlisted by, so a revealed game is never double-counted here.
+        // The commissioner can turn the totals off (`settings.shareHiddenPointsLeft`,
+        // default on): then no total is computed or sent, and members see "?" as before.
+        const sendHiddenLeft = pool.type === 'NFL_PICKEM' && sharesHiddenPointsLeft(pool.settings);
+        const confidenceMode = !!(pool.settings as { confidenceMode?: unknown } | undefined)?.confidenceMode;
+        const hiddenOpenGameIds = sendHiddenLeft
+            ? games.filter(g => !allowedKeys.has(g.id) && g.status !== 'FINAL' && g.status !== 'CANCELLED').map(g => g.id)
+            : [];
 
         for (const doc of entriesSnap.docs) {
             const entry = doc.data() as {
@@ -462,6 +493,23 @@ export const getPoolPicks = validated(
                 const tb = entry.weeklyTiebreakers?.[String(week)];
                 if (typeof tb === 'number') tiebreakers[entryKey] = tb;
             }
+
+            // PLAN-PTS-LEFT-HIDDEN-TOTAL: one SUM per entry over its hidden open
+            // picks — never a per-game value. A hidden open pick with no stored
+            // weight leaves the entry out, so the client shows "?" rather than a
+            // total that is silently short.
+            if (sendHiddenLeft) {
+                let total = 0;
+                let weightMissing = false;
+                for (const gameId of hiddenOpenGameIds) {
+                    const pick = entry.picks?.[gameId];
+                    if (typeof pick !== 'string' || !pick) continue;
+                    if (!confidenceMode) { total += 1; continue; }
+                    const w = entry.confidence?.[gameId];
+                    if (typeof w === 'number') total += w; else weightMissing = true;
+                }
+                if (!weightMissing) hiddenLeft[entryKey] = total;
+            }
         }
 
         const response: PoolPicksResponse = {
@@ -474,6 +522,7 @@ export const getPoolPicks = validated(
             picks,
             confidence,
             tiebreakers,
+            ...(sendHiddenLeft ? { hiddenLeft } : {}),
             // D5 — a participant gets the entry roster only once the week has
             // revealed. Commissioner and SUPER_ADMIN always get it: chasing
             // missing picks is their job and they already see `counts`.

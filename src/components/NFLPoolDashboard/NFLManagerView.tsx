@@ -19,6 +19,7 @@ import { now as serverNow } from '../../utils/serverClock';
 import { gamesForPoolWeek, poolSeasonType } from '../../utils/nflPending';
 import { publicListingToggleValue, publicListingUpdate } from '../../utils/publicListing';
 import { effectivePickDistribution, type PickDistributionVisibility } from '@shared/pickDistribution';
+import { sharesHiddenPointsLeft } from '@shared/pointsLeftSharing';
 import { buildProxyTeamGameIndex, proxyPickPayload, proxyTeamOptions } from '../../utils/proxyPickPayload';
 import { nflWeekLabel, nflWeekChip } from '../../utils/nflWeekLabel';
 import { buildPoolRoster, hasCompletePicks, memberOutstanding, duesRates } from '../../utils/poolRoster';
@@ -380,6 +381,11 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
   const [pickDistributionTouched, setPickDistributionTouched] = useState(false);
   // Until edited, the control shows the LIVE pool value, not the mount-time one.
   const shownPickDistribution = pickDistributionTouched ? pickDistribution : effectivePickDistribution(castPool.settings);
+  // PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23): Pick'em only. Same
+  // send-only-when-touched rule as Pick Distribution, for the same reason.
+  const [sharePointsLeft, setSharePointsLeft] = useState<boolean>(sharesHiddenPointsLeft(castPool.settings));
+  const [sharePointsLeftTouched, setSharePointsLeftTouched] = useState(false);
+  const shownSharePointsLeft = sharePointsLeftTouched ? sharePointsLeft : sharesHiddenPointsLeft(castPool.settings);
 
   const [editManagerName, setEditManagerName] = useState(pool.managerName || '');
   const [editContactEmail, setEditContactEmail] = useState(pool.contactEmail || '');
@@ -891,6 +897,7 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
         // Validated server-side (functions/src/lib/poolUpdate.ts). Only when the
         // control was changed in this view — see `pickDistributionTouched`.
         ...(pickDistributionTouched ? { pickDistribution } : {}),
+        ...(type === 'NFL_PICKEM' && sharePointsLeftTouched ? { shareHiddenPointsLeft: sharePointsLeft } : {}),
         // Sent on every save; the server strips a value equal to the pool's
         // effective max (absent ⇒ 1) as a no-op, so this costs nothing until
         // it is actually raised (PLAN-MULTI-ENTRY D8).
@@ -1414,6 +1421,26 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
                 The card on the pool home showing how the pool picked each game. Also applies to the Majority row on Current Picks.
               </p>
             </div>
+
+            {/* PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23). Pick'em only. */}
+            {type === 'NFL_PICKEM' && (
+              <div className="flex items-center justify-between gap-4 bg-page border border-line rounded-md px-4 py-3">
+                <div>
+                  <FieldLabel tone="muted" htmlFor="share-points-left" helpId="settings.shareHiddenPointsLeft">Show Everyone's Pts Left</FieldLabel>
+                  <p className="font-body text-[10px] text-faint">
+                    Members see each player&apos;s Pts Left and Max before their remaining games kick off. Only a total is shared — never which team or which game.
+                  </p>
+                </div>
+                <input
+                  id="share-points-left"
+                  type="checkbox"
+                  checked={shownSharePointsLeft}
+                  disabled={isSavingSettings}
+                  onChange={e => { setSharePointsLeft(e.target.checked); setSharePointsLeftTouched(true); }}
+                  className="w-5 h-5 shrink-0 rounded border-line text-navy-700 focus:ring-navy-600 dark:focus:ring-gold-500 cursor-pointer"
+                />
+              </div>
+            )}
 
             {/* Host Profile & Contact Links */}
             <div className="space-y-4 pt-4 border-t border-line">
