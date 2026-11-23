@@ -8,7 +8,9 @@ import {
   EXIT,
   KEY_ENV,
   LOCKFILE_EXCLUDES,
+  LOCKFILE_INCLUDES,
   MAX_DIFF_CHARS,
+  MAX_LOCKFILE_DIFF_CHARS,
   REVIEW_TOOLS,
   appendCostRow,
   buildChildEnv,
@@ -20,7 +22,9 @@ import {
   formatCostRow,
   isCreditKeySource,
   parseArgs,
+  parseBinaryFiles,
   parseVerdict,
+  planCoverage,
   resolveApiKey,
   summarizeDenials,
   tryAppendCostRow,
@@ -103,8 +107,17 @@ describe('exit codes: an unavailable reviewer is never a clean reviewer', () => 
 });
 
 describe('parseVerdict', () => {
-  it('takes the LAST verdict line', () => {
+  it('reads the verdict from the LAST non-empty line only', () => {
     expect(parseVerdict('VERDICT: CLEAN\nwait, no\nVERDICT: FINDINGS')).toBe('FINDINGS');
+    expect(parseVerdict('all good\nVERDICT: CLEAN\n\n  \n')).toBe('CLEAN');
+    expect(parseVerdict('all good\r\nVERDICT: CLEAN\r\n')).toBe('CLEAN');
+  });
+
+  it('a verdict followed by more text is an unfinished reply, not a verdict', () => {
+    // qodo on #800: the last MATCHING line used to win, so this was CLEAN.
+    expect(parseVerdict('VERDICT: CLEAN\nI could not finish checking the remaining files')).toBeNull();
+    expect(parseVerdict('VERDICT: FINDINGS\n(but see below)\nmore prose')).toBeNull();
+    expect(classifyResult(success('VERDICT: CLEAN\nI could not finish checking the remaining files')).exit).toBe(EXIT.INCONCLUSIVE);
   });
 
   it('needs a whole line — a quoted verdict inside a sentence does not count', () => {
@@ -271,11 +284,17 @@ describe('the review prompt', () => {
     expect(prompt).toContain('diff --git a/a.ts b/a.ts\n+x');
   });
 
-  it('says in the prompt that lockfile bodies were left out, and really leaves them out', () => {
-    expect(buildReviewPrompt({ ...base, diff: '+x' })).toMatch(/package-lock\.json bodies are left out/);
-    // Run the real pathspec against this repo: a lockfile that exists must not
-    // appear, and a source file must. A pathspec that matched nothing would
-    // pass the first half for the wrong reason, hence the second.
+  it('the two lockfile pathspecs split the tree exactly: one leaves lockfiles out, one selects only them', () => {
+    const only = spawnSync('git', ['ls-files', '--', ...LOCKFILE_INCLUDES], { cwd: REPO_ROOT, encoding: 'utf8' });
+    expect(only.status).toBe(0);
+    const onlyFiles = only.stdout.split('\n').filter(Boolean);
+    expect(onlyFiles).toContain('package-lock.json');
+    expect(onlyFiles).toContain('functions/package-lock.json');
+    expect(onlyFiles).toContain('scripts/agent/package-lock.json');
+    expect(onlyFiles.every((f) => f.endsWith('package-lock.json'))).toBe(true);
+    // Run the real exclude pathspec against this repo: a lockfile that exists
+    // must not appear, and a source file must. A pathspec that matched nothing
+    // would pass the first half for the wrong reason, hence the second.
     const tree = spawnSync('git', ['ls-files', '--', '.', ...LOCKFILE_EXCLUDES], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(tree.status).toBe(0);
     const files = tree.stdout.split('\n');
@@ -290,10 +309,69 @@ describe('the review prompt', () => {
     expect(() => buildReviewPrompt({ ...base, stat: '  \n', diff: '' })).toThrow(/empty/);
   });
 
-  it('a lockfile-only change is reviewable: empty body, non-empty stat', () => {
-    const prompt = buildReviewPrompt({ ...base, stat: ' functions/package-lock.json | 40 +--', diff: '' });
-    expect(prompt).toContain('functions/package-lock.json | 40 +--');
-    expect(prompt).toMatch(/every changed file is a package-lock\.json/);
+  const LOCK_DIFF = 'diff --git a/functions/package-lock.json b/functions/package-lock.json\n--- a/functions/package-lock.json\n+++ b/functions/package-lock.json\n-      "version": "1.0.0",\n+      "version": "1.0.1",';
+  const BINARY_DIFF = 'diff --git a/public/logo.png b/public/logo.png\nindex 111..222 100644\nBinary files a/public/logo.png and b/public/logo.png differ';
+
+  it('a lockfile-only change is reviewable, and the reviewer is GIVEN the lockfile diff', () => {
+    // qodo on #800: the reviewer holds HEAD and no git tool, so "go read the
+    // lockfile" cannot show it what changed. The changed entries must be in
+    // the prompt.
+    const prompt = buildReviewPrompt({ ...base, stat: ' functions/package-lock.json | 2 +-', diff: '', lockfileDiff: LOCK_DIFF });
+    expect(prompt).toContain('functions/package-lock.json | 2 +-');
+    expect(prompt).toContain('+      "version": "1.0.1",');
+    expect(prompt).not.toMatch(/NOT REVIEWABLE/);
+    expect(planCoverage({ diff: '', lockfileDiff: LOCK_DIFF }).gaps).toEqual([]);
+  });
+
+  it('an oversize lockfile diff beside real code is left out and NAMED as a gap', () => {
+    const big = 'x'.repeat(MAX_LOCKFILE_DIFF_CHARS + 1);
+    const { gaps, lockfileSection } = planCoverage({ diff: '+real code', lockfileDiff: big });
+    expect(lockfileSection).toBeNull();
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toMatch(/package-lock\.json diff is \d+ characters .* left out/);
+    const prompt = buildReviewPrompt({ ...base, diff: '+real code', lockfileDiff: big });
+    expect(prompt).toMatch(/NOT REVIEWABLE/);
+    expect(prompt).not.toContain(big);
+    // At the limit it is still shown.
+    expect(planCoverage({ diff: '+x', lockfileDiff: 'y'.repeat(MAX_LOCKFILE_DIFF_CHARS) }).gaps).toEqual([]);
+  });
+
+  it('refuses a change where NOTHING can be reviewed: oversize lockfile only', () => {
+    const big = 'x'.repeat(MAX_LOCKFILE_DIFF_CHARS + 1);
+    expect(() => planCoverage({ diff: '', lockfileDiff: big })).toThrow(/Nothing in this change can be reviewed/);
+    expect(() => buildReviewPrompt({ ...base, diff: '', lockfileDiff: big })).toThrow(/Nothing in this change can be reviewed/);
+  });
+
+  it('refuses a binary-only change: git prints a header and no bytes', () => {
+    // The main diff is NOT empty here, which is why emptiness cannot be the test.
+    expect(BINARY_DIFF.trim()).not.toBe('');
+    expect(() => planCoverage({ diff: BINARY_DIFF, binaryFiles: ['public/logo.png'] })).toThrow(/binary file\(s\) have no reviewable diff: public\/logo\.png/);
+  });
+
+  it('a binary file beside real code is a named gap, not a refusal', () => {
+    const { gaps } = planCoverage({ diff: `${BINARY_DIFF}\ndiff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n+const x = 1;`, binaryFiles: ['public/logo.png'] });
+    expect(gaps).toEqual(['1 binary file(s) have no reviewable diff: public/logo.png']);
+  });
+
+  it('file headers alone are not a text change', () => {
+    // `--- a/x` and `+++ b/x` start with + and -; they must not count as content.
+    const headersOnly = 'diff --git a/x.png b/x.png\n--- a/x.png\n+++ b/x.png';
+    expect(() => planCoverage({ diff: headersOnly, binaryFiles: ['x.png'] })).toThrow(/Nothing in this change/);
+  });
+
+  it('parseBinaryFiles reads numstat: `-` `-` marks a binary file', () => {
+    expect(parseBinaryFiles('20\t0\ta.ts\n-\t-\tpublic/logo.png\r\n3\t1\tb.ts\n-\t-\tfonts/x y.woff2\n')).toEqual(['public/logo.png', 'fonts/x y.woff2']);
+    expect(parseBinaryFiles('')).toEqual([]);
+  });
+
+  it('git really reports a binary file as `-` `-` in numstat', () => {
+    // parseBinaryFiles is only as good as that assumption; check it against git
+    // itself, on a commit that added a PNG, rather than against a string I wrote.
+    const png = spawnSync('git', ['ls-files', '--', ':(glob)**/*.png'], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout.split('\n').filter(Boolean)[0];
+    expect(png, 'no tracked .png to test against').toBeTruthy();
+    const empty = spawnSync('git', ['hash-object', '-t', 'tree', '/dev/null'], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout.trim();
+    const numstat = spawnSync('git', ['diff', '--numstat', empty, 'HEAD', '--', png], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout;
+    expect(parseBinaryFiles(numstat)).toEqual([png]);
   });
 
   it('refuses an oversize diff instead of truncating it', () => {

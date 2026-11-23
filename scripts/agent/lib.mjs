@@ -129,46 +129,106 @@ export const REVIEW_SYSTEM_PROMPT = [
   'VERDICT: FINDINGS',
 ].join('\n');
 
-/** Git pathspecs that drop lockfile bodies from the diff. The stat still lists them. */
+/** Git pathspecs that drop lockfile bodies from the main diff. The stat still lists them. */
 export const LOCKFILE_EXCLUDES = Object.freeze([':(exclude,glob)**/package-lock.json']);
+/** Git pathspecs that select ONLY lockfiles, for the separate bounded lockfile diff. */
+export const LOCKFILE_INCLUDES = Object.freeze([':(glob)**/package-lock.json']);
+/** A lockfile diff up to this size is shown in full. Above it, it is left out and SAID to be. */
+export const MAX_LOCKFILE_DIFF_CHARS = 80_000;
 
-/** The user message: what was diffed, the stat, and the diff itself. */
-export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff }) {
-  // Emptiness is judged on the STAT, which lists every changed file. The diff
-  // body leaves lockfiles out, so a lockfile-only branch (a dependabot refresh)
-  // has an empty body and a real change. Judging on the body reported that as
-  // "nothing to review" (codex round 3 on this PR).
+/** Paths `git diff --numstat` reports as binary: both counts are `-`. */
+export function parseBinaryFiles(numstat) {
+  return String(numstat ?? '')
+    .split('\n')
+    .map((line) => /^-\t-\t(.+)$/.exec(line.replace(/\r$/, '')))
+    .filter(Boolean)
+    .map((m) => m[1]);
+}
+
+/**
+ * What the reviewer CANNOT inspect, and whether anything is left that it can.
+ *
+ * The reviewer holds HEAD and no git tool, so it sees a change only through
+ * the diff text it is handed. Two kinds of change have no usable text: a
+ * binary file (git prints "Binary files differ") and a lockfile diff too large
+ * to include. A verdict over those would cover bytes nobody read, so:
+ *
+ *   - they are listed as `gaps`, which the caller prints beside the verdict;
+ *   - when NOTHING else changed, the run is refused outright. CLEAN on a
+ *     change the reviewer could not see is the failure this file exists to
+ *     prevent (qodo on #800: lockfile-only and binary-only branches).
+ *
+ * @returns {{ gaps: string[], lockfileSection: string | null }}
+ */
+export function planCoverage({ diff, lockfileDiff = '', binaryFiles = [] }) {
+  const gaps = [];
+  const lockfileTooBig = lockfileDiff.length > MAX_LOCKFILE_DIFF_CHARS;
+  if (lockfileTooBig) {
+    gaps.push(`the package-lock.json diff is ${lockfileDiff.length} characters (limit ${MAX_LOCKFILE_DIFF_CHARS}) and was left out`);
+  }
+  if (binaryFiles.length) gaps.push(`${binaryFiles.length} binary file(s) have no reviewable diff: ${binaryFiles.join(', ')}`);
+
+  // `git diff` still emits a header and a "Binary files differ" line for a
+  // binary file, so the main diff is non-empty on a binary-only branch. Text
+  // is reviewable only if some `+`/`-` content line exists.
+  const hasTextChange = /^[+-](?![+-]{2} )/m.test(diff);
+  const hasLockfileChange = Boolean(lockfileDiff.trim()) && !lockfileTooBig;
+  if (!hasTextChange && !hasLockfileChange && gaps.length) {
+    throw new Error(`Nothing in this change can be reviewed: ${gaps.join('; ')}.`);
+  }
+  return { gaps, lockfileSection: hasLockfileChange ? lockfileDiff : null };
+}
+
+/** The user message: what was diffed, the stat, the diff, and what could not be shown. */
+export function buildReviewPrompt({ base, headSha, mergeBase, stat, diff, lockfileDiff = '', binaryFiles = [] }) {
+  // Emptiness is judged on the STAT, which lists every changed file. The main
+  // diff leaves lockfiles out, so a lockfile-only branch (a dependabot refresh)
+  // has an empty main diff and a real change (codex round 3 on #800).
   if (!stat.trim()) throw new Error('The diff is empty. There is nothing to review.');
-  const body = diff.trim()
-    ? diff
-    : '(no diff body: every changed file is a package-lock.json. Read the lockfiles named in the stat above.)';
   if (diff.length > MAX_DIFF_CHARS) {
     throw new Error(
       `The diff is ${diff.length} characters, over the ${MAX_DIFF_CHARS} limit. ` +
         'It is not truncated, because a truncated diff is a partial review reported as a whole one.',
     );
   }
+  const { gaps, lockfileSection } = planCoverage({ diff, lockfileDiff, binaryFiles });
   return [
     `Review the change between ${base} and HEAD (three-dot diff: merge base ${mergeBase}, head ${headSha}).`,
     'The working directory is a clean checkout of HEAD: tracked files only, no node_modules. Read any file you need.',
+    'You hold HEAD only. You cannot see the base version of a file except through the diffs below.',
     '',
     '--- git diff --stat (every changed file) ---',
     stat.trim(),
     '',
-    '--- git diff (package-lock.json bodies are left out; Read them if a dependency change matters) ---',
-    body,
+    '--- git diff (package-lock.json files are shown separately below) ---',
+    diff.trim() ? diff : '(no changes outside package-lock.json files)',
+    ...(lockfileSection ? ['', '--- git diff, package-lock.json files only ---', lockfileSection] : []),
+    ...(gaps.length
+      ? [
+          '',
+          '--- NOT REVIEWABLE: you were given no diff for these, so do not state a conclusion about them ---',
+          ...gaps.map((g) => `- ${g}`),
+        ]
+      : []),
   ].join('\n');
 }
 
 /**
  * The verdict line, or null when the reply has none.
  *
- * The LAST verdict line wins, and it must be a whole line: a reply that merely
- * quotes "VERDICT: CLEAN" inside a sentence about the diff must not pass.
+ * It must be the LAST non-empty line of the reply, and a whole line.
+ *
+ * - Whole line: a reply that merely quotes "VERDICT: CLEAN" inside a sentence
+ *   about the diff must not pass.
+ * - Last line: "VERDICT: CLEAN" followed by "I could not finish checking the
+ *   remaining files" is an unfinished review, not a clean one. Accepting the
+ *   last MATCHING line anywhere in the reply let that through (qodo on #800).
  */
 export function parseVerdict(text) {
-  const matches = [...String(text ?? '').matchAll(/^VERDICT:[ \t]*(CLEAN|FINDINGS)[ \t\r]*$/gm)];
-  return matches.length ? matches[matches.length - 1][1] : null;
+  const lines = String(text ?? '').split('\n').map((l) => l.replace(/[ \t\r]+$/, ''));
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  const m = /^VERDICT:[ \t]*(CLEAN|FINDINGS)$/.exec(lines[lines.length - 1] ?? '');
+  return m ? m[1] : null;
 }
 
 /**

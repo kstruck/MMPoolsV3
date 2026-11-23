@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import {
   EXIT,
   LOCKFILE_EXCLUDES,
+  LOCKFILE_INCLUDES,
   REVIEW_SYSTEM_PROMPT,
   buildChildEnv,
   buildReviewOptions,
@@ -30,6 +31,8 @@ import {
   classifyRun,
   costLogPath,
   parseArgs,
+  parseBinaryFiles,
+  planCoverage,
   resolveApiKey,
   summarizeDenials,
   tryAppendCostRow,
@@ -61,11 +64,15 @@ async function main() {
   const mergeBase = git('merge-base', args.base, 'HEAD').trim().slice(0, 8);
   const range = `${args.base}...HEAD`; // THREE dots: what this branch introduces (CLAUDE.md §2c)
   const stat = git('diff', '--stat', range);
-  // Lockfile BODIES are left out: thousands of generated lines that cost tokens
-  // and that a model reviews badly. They stay in the stat, and the prompt says
-  // they were left out, so the omission is stated rather than silent.
+  // Lockfiles are diffed SEPARATELY so their size can be bounded on its own: a
+  // small lockfile change is shown in full, a huge one is left out and named
+  // as a coverage gap. Binary files have no reviewable diff at all. See
+  // planCoverage() in lib.mjs for what happens when nothing else changed.
   const diff = git('diff', range, '--', '.', ...LOCKFILE_EXCLUDES);
-  const prompt = buildReviewPrompt({ base: args.base, headSha, mergeBase, stat, diff });
+  const lockfileDiff = git('diff', range, '--', ...LOCKFILE_INCLUDES);
+  const binaryFiles = parseBinaryFiles(git('diff', '--numstat', range));
+  const { gaps } = planCoverage({ diff, lockfileDiff, binaryFiles });
+  const prompt = buildReviewPrompt({ base: args.base, headSha, mergeBase, stat, diff, lockfileDiff, binaryFiles });
 
   if (git('status', '--porcelain').trim()) {
     console.error('NOTE: the working tree has uncommitted changes. They are NOT reviewed; this reviews HEAD only.');
@@ -104,6 +111,9 @@ async function main() {
     );
   }
 
+  // Stated next to the verdict, every time: the verdict does not cover these.
+  for (const gap of gaps) console.error(`\nNOTE: NOT REVIEWED — ${gap}. The verdict below does not cover it.`);
+
   const logFailure = tryAppendCostRow(costLogPath(process.env), {
     date: new Date().toISOString(),
     script: 'pre-review',
@@ -113,7 +123,11 @@ async function main() {
     costUsd: result?.total_cost_usd,
     turns: result?.num_turns,
     durationMs: result?.duration_ms,
-    note: [outcome.exit === EXIT.INCONCLUSIVE ? outcome.reason : `base ${args.base}`, denied && `denied: ${denied}`]
+    note: [
+      outcome.exit === EXIT.INCONCLUSIVE ? outcome.reason : `base ${args.base}`,
+      denied && `denied: ${denied}`,
+      gaps.length && `not reviewed: ${gaps.join('; ')}`,
+    ]
       .filter(Boolean)
       .join('; '),
   });

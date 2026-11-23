@@ -51,6 +51,25 @@ manually run, until Kevin approves.
    signature that reads as breakage from the dep bump and is actually the
    harness. If you see "N failed | M passed" with 0 failing assertions, fix
    the harness before blaming the bump.
+   ⚠️ **A PR under `scripts/agent/` is a THIRD dependency tree, and the commands
+   above never install it** (qodo's finding on #800, which added that
+   manifest). The root and functions gates do not import the Claude Agent SDK,
+   so they stay green whatever the bump did, and a green comment would certify
+   a package nobody loaded. When the PR's changed files include
+   `scripts/agent/package.json` or `scripts/agent/package-lock.json`, ALSO run,
+   in the same isolated worktree:
+
+   ```
+   npm --prefix scripts/agent ci
+   node --input-type=module -e "const m = await import('./scripts/agent/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs'); if (typeof m.query !== 'function') process.exit(1)"
+   npx vitest run tests/agent-pre-review.test.ts
+   node scripts/agent/probe.mjs        # only if MMP_AGENT_API_KEY is set on this host
+   ```
+
+   The first three prove the bumped package installs, loads and still exports
+   `query`. Only the probe proves it still talks to the API. **No key on the
+   host means the probe did not run, and the verdict for a `scripts/agent` bump
+   is then `INCONCLUSIVE`, never green** — say which half ran.
 5. **Verify (real gate):** build exit code + test exit code. This is the actual check —
    not "the commands were run."
 6. Decision:
