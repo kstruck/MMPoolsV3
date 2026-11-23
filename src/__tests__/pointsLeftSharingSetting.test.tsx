@@ -8,8 +8,8 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+// `?raw`, not node:fs — the frontend typecheck has no Node types (the #782 trap).
+import view from '../components/NFLPoolDashboard/NFLManagerView.tsx?raw';
 
 vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
 const updatePoolSettings = vi.fn(async () => ({}));
@@ -44,8 +44,6 @@ describe("Show Everyone's Pts Left", () => {
 });
 
 describe('it is not inside the in-season settings lock', () => {
-  const view = readFileSync(path.resolve(__dirname, '../components/NFLPoolDashboard/NFLManagerView.tsx'), 'utf8');
-
   it('is rendered as its own card beside branding, for Pick\'em only', () => {
     expect(view).toContain("{commishTab === 'settings' && type === 'NFL_PICKEM' && <NFLPointsLeftSharingSetting pool={pool} />}");
   });
