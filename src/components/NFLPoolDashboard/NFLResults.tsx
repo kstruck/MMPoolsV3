@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { sharesHiddenPointsLeft } from '@shared/pointsLeftSharing';
 import { useNavigate } from 'react-router';
 import { BarChart3, CalendarRange, Trophy } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -108,6 +109,10 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // ⚠️ Only the reveal for the week on screen, as everywhere else: last week's
   // allowlist applied to this week's slate would reveal by coincidence.
   const wk = reveal && reveal.week === week ? reveal : null;
+  // The commissioner's switch, read from the LIVE pool document (qodo #801):
+  // turning it off hides the totals at once, instead of after the next
+  // reveal poll that would stop sending them.
+  const shareLeft = sharesHiddenPointsLeft((pool as { settings?: { shareHiddenPointsLeft?: unknown } }).settings);
   const revealedGameIds = useMemo(() => (wk ? new Set(wk.revealedGameIds) : undefined), [wk]);
   // MAX (Kevin, 2026-11-23): the most THIS player can finish the week with —
   // points already won plus Pts Left — from the same tally, so Max is always
@@ -136,7 +141,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       confidenceMode: !!settings.confidenceMode,
       pickMode: settings.pickMode,
       // The server's total for this row's hidden open picks (PLAN-PTS-LEFT-HIDDEN-TOTAL).
-      hiddenLeft: wk?.hiddenLeft?.[row.id],
+      hiddenLeft: shareLeft ? wk?.hiddenLeft?.[row.id] : undefined,
     });
     const left = pointsLeft(tally);
     return {
@@ -332,11 +337,12 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                         <td className={`${TD} text-right font-display font-bold text-[color:var(--text)]`}>
                           {value === null ? dash : value}
                         </td>
+                        {/* No slate loaded for the week: unknown, never a zero (qodo #801). */}
                         <td className={`${TD} text-right text-muted font-bold`} title={t?.leftTitle}>
-                          {t?.left == null ? '?' : t.left}
+                          {weekGames.length === 0 ? dash : t?.left == null ? '?' : t.left}
                         </td>
                         <td className={`${TD} text-right text-muted`} title={t?.maxTitle}>
-                          {t?.max == null ? '?' : t.max}
+                          {weekGames.length === 0 ? dash : t?.max == null ? '?' : t.max}
                         </td>
                         <td className={`${TD} text-right text-muted font-bold`}>
                           {typeof correct === 'number' ? correct : dash}

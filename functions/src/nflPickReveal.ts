@@ -105,9 +105,10 @@ export interface PoolPicksResponse {
     tiebreakers: Record<string, number>;
     /**
      * entry id → the points that entry still has riding on games whose picks are
-     * NOT revealed to this caller and are not yet decided (not FINAL, not
-     * CANCELLED): the sum of its confidence weights there, or one per pick in a
-     * standard pool. Pick'em only. PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23).
+     * NOT revealed to this caller and are not yet decided: the sum of its
+     * confidence weights there, or one per pick in a standard pool. "Decided" is
+     * the client's rule (`tallyGridRow`, codex r3): CANCELLED, or FINAL WITH
+     * reported scores — a FINAL with no scores is still winnable and counts. Pick'em only. PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23).
      *
      * It is what lets "Pts Left" and Max show a number for another member before
      * their remaining games kick off. It carries NO pick content — not which team,

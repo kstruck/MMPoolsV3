@@ -31,3 +31,15 @@ Clean.
 |---|---|---|
 | X4.1 [P2] | On a pool with `isLocked: true`, `buildPoolSettingsUpdate` refuses the whole `settings` group, so a commissioner still could not turn the switch off in season. | **Valid — fixed.** `LOCKED_PHASE_SETTINGS_KEYS` (`shareHiddenPointsLeft` only): a `settings` patch whose EVERY key is listed passes on a locked pool. A mixed patch or an empty one is still refused, so no rule can ride along, and archived pools stay read-only. Unit test covers all four cases. |
 | X4.2 [P2] | With a hidden FINISHED game the row did not pick, Max still allowed for a pick there: one point high in standard scoring, "?" in confidence. | **Valid — fixed.** The hidden-decided allowance is now capped by the saved-pick count. In standard scoring, `hiddenLeft` is the number of hidden open picks, so those come off as well. A row whose count is fully explained shows an exact Max. Unit test covers both modes. |
+
+### Round X5 — codex, on `2ef75c32`
+
+Clean.
+
+### Round Q1 — qodo, on `2ef75c32` (3 bugs)
+
+| # | Finding | Verdict |
+|---|---|---|
+| Q1.1 | Week Results printed Max 0 when no games had loaded for the week, where the old guard showed "—". | **Valid — fixed.** With an empty slate, Pts Left and Max show "—". Render test added. |
+| Q1.2 (security) | After a commissioner turns sharing off, members' pages keep showing cached totals until their next reveal poll. | **Valid — fixed.** Both pages gate `hiddenLeft` on `sharesHiddenPointsLeft(pool.settings)`, read from the LIVE pool document every member already subscribes to, so the totals disappear at once. The server still stops sending them on the next call. Render test for Week Results, plus a source pin on the grid. Thread left open for Kevin, per the security-finding rule. |
+| Q1.3 | The `hiddenLeft` doc comment still said "not FINAL, not CANCELLED", the rule X3.1 replaced. | **Valid — fixed.** The comment now states the client's rule. |
