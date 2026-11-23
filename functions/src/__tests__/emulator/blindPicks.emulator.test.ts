@@ -138,7 +138,7 @@ const CREATED_POOLS = [
     'blind-reveal-pickem', 'blind-reveal-survivor-open', 'blind-reveal-survivor-locked',
     'blind-bracket-pool', 'blind-plain-commish',
     'blind-progress-pool', 'blind-progress-legacy',
-    'blind-left-conf', 'blind-left-surv',
+    'blind-left-conf', 'blind-left-surv', 'blind-left-std',
 ];
 const CREATED_GAMES = [
     'blind-submit-g1', 'blind-submit-g2', 'blind-weekly-w1-g', 'blind-weekly-w2-g',
@@ -147,6 +147,7 @@ const CREATED_GAMES = [
     'blind-plain-future-g',
     'blind-progress-g1', 'blind-progress-g2', 'blind-progress-legacy-g',
     'blind-left-locked', 'blind-left-open1', 'blind-left-open2', 'blind-left-cancelled',
+    'blind-left-final-noscore', 'blind-left-final-scored',
 ];
 const CREATED_USERS = [ALICE, BOB, OWNER, ADMIN, STALE_ADMIN, 'blind-legacy-no-record'];
 
@@ -878,6 +879,11 @@ describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)
     const OPEN1 = 'blind-left-open1';
     const OPEN2 = 'blind-left-open2';
     const CANCELLED = 'blind-left-cancelled';
+    const STD = 'blind-left-std';
+    // FINAL with a kickoff still in the future: a STANDARD pool's per-game lock
+    // is clock-only, so these stay hidden — the state codex r3 asked about.
+    const FINAL_NOSCORE = 'blind-left-final-noscore';
+    const FINAL_SCORED = 'blind-left-final-scored';
 
     beforeAll(async () => {
         await seedGame(SEASON, LOCKED, 1, Date.now() - HOUR);
@@ -910,6 +916,26 @@ describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)
         });
         await seedPool(SEASON, SURV, 'NFL_SURVIVOR');
         await seedMember(SURV, ALICE);
+
+        await seedGame(SEASON, FINAL_NOSCORE, 1, Date.now() + 5 * HOUR);
+        await db.collection('nfl_games').doc(FINAL_NOSCORE).update({ status: 'FINAL', scores: admin.firestore.FieldValue.delete() });
+        await seedGame(SEASON, FINAL_SCORED, 1, Date.now() + 5 * HOUR);
+        await db.collection('nfl_games').doc(FINAL_SCORED).update({ status: 'FINAL', scores: { home: 24, away: 17 } });
+        await seedPool(SEASON, STD, 'NFL_PICKEM', {
+            settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: false, lockRuleVersion: 2 },
+        });
+        await seedMember(STD, ALICE);
+        await db.collection('pools').doc(STD).collection('entries').doc(ALICE).set({
+            id: ALICE, poolId: STD, ownerUid: ALICE, userName: 'Alice',
+            picks: { [LOCKED]: 'KC', [OPEN1]: 'BUF', [FINAL_NOSCORE]: 'KC', [FINAL_SCORED]: 'KC' },
+        });
+    }, 30000);
+
+    it('standard scoring: one per hidden pick still winnable — a FINAL with no scores counts, a scored FINAL does not', async () => {
+        // OPEN1 (open) + FINAL_NOSCORE (the scorer grades it when scores arrive):
+        // the client's own notion of "decided" (`tallyGridRow`), codex r3.
+        const res = await read(STD, asAlice);
+        expect(res.hiddenLeft?.[ALICE]).toBe(2);
     }, 30000);
 
     it('a member gets each entry\'s TOTAL on hidden open picks — and still no hidden pick or weight', async () => {

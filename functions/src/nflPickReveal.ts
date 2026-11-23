@@ -51,6 +51,7 @@ import { rosterSummaryRef } from "./lib/rosterSummary";
 import { isCanonicalMemberRecord } from "./shared/memberRecord";
 import type { NFLGame } from "./nflPoolTypes";
 import { sharesHiddenPointsLeft } from "./shared/pointsLeftSharing";
+import { hasReportedScores } from "./nflScoringEngine";
 
 const NFL_TYPES = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
 
@@ -317,7 +318,7 @@ export const getPoolPicks = validated(
         // that has left SCHEDULED is locked — and therefore revealed — whatever
         // its corrected `startTime` says, and `weekRevealFor` reads it.
         const games = gamesSnap.docs.map(d => d.data() as NFLGame)
-            .map(g => ({ id: g.id, startTime: g.startTime, status: g.status }));
+            .map(g => ({ id: g.id, startTime: g.startTime, status: g.status, scores: g.scores }));
 
         const reveal: WeekReveal = isSuperAdmin
             ? fullReveal(pool, games)
@@ -416,7 +417,13 @@ export const getPoolPicks = validated(
         const sendHiddenLeft = pool.type === 'NFL_PICKEM' && sharesHiddenPointsLeft(pool.settings);
         const confidenceMode = !!(pool.settings as { confidenceMode?: unknown } | undefined)?.confidenceMode;
         const hiddenOpenGameIds = sendHiddenLeft
-            ? games.filter(g => !allowedKeys.has(g.id) && g.status !== 'FINAL' && g.status !== 'CANCELLED').map(g => g.id)
+            // "Decided" is the CLIENT'S definition (`tallyGridRow`, codex r3): a
+            // CANCELLED game, or a FINAL the feed has reported scores for. A FINAL
+            // with no scores is still winnable — the scorer grades it when they
+            // arrive — so its hidden pick stays in the total.
+            ? games.filter(g => !allowedKeys.has(g.id)
+                && g.status !== 'CANCELLED'
+                && !(g.status === 'FINAL' && hasReportedScores(g))).map(g => g.id)
             : [];
 
         for (const doc of entriesSnap.docs) {

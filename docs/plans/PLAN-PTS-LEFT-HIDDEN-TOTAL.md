@@ -36,7 +36,7 @@ But on a PER_GAME pool a member who misses a game ends up with a different set
 
 | # | Decision | Why |
 |---|---|---|
-| P1 | `getPoolPicks` returns `hiddenLeft`: per ENTRY, one total of the points on its picks that are **not revealed to the caller** and on games **not FINAL/CANCELLED** (weights in confidence mode, 1 per pick otherwise). Pick'em only. | The one number the client is missing. Built from the same `allowedKeys` allowlist as the picks, so a revealed game is never counted twice. |
+| P1 | `getPoolPicks` returns `hiddenLeft`: per ENTRY, one total of the points on its picks that are **not revealed to the caller** and on games **not yet decided** (decided = CANCELLED, or FINAL with reported scores — the client's own rule in `tallyGridRow`, codex r3) (weights in confidence mode, 1 per pick otherwise). Pick'em only. | The one number the client is missing. Built from the same `allowedKeys` allowlist as the picks, so a revealed game is never counted twice. |
 | P2 | **No pick content**: no team, no per-game weight, only a sum. | Kevin's approval was for the total. With one hidden game left the total equals that game's weight. For a complete sheet that weight was already derivable from the public weights; the help text says so plainly. |
 | P3 | **Ungated by principal**, after the departed-member filter, exactly like `counts`. SUPER_ADMIN gets 0s (nothing is hidden from them). | One definition; an emulator test asserts member and commissioner receive identical totals. |
 | P4 | An entry with a hidden open pick that has **no stored weight** is left out, so the client shows "?" rather than a short total. | Never a silently wrong number. |
