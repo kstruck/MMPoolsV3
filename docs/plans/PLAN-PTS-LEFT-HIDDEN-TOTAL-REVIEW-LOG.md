@@ -43,3 +43,9 @@ Clean.
 | Q1.1 | Week Results printed Max 0 when no games had loaded for the week, where the old guard showed "—". | **Valid — fixed.** With an empty slate, Pts Left and Max show "—". Render test added. |
 | Q1.2 (security) | After a commissioner turns sharing off, members' pages keep showing cached totals until their next reveal poll. | **Valid — fixed.** Both pages gate `hiddenLeft` on `sharesHiddenPointsLeft(pool.settings)`, read from the LIVE pool document every member already subscribes to, so the totals disappear at once. The server still stops sending them on the next call. Render test for Week Results, plus a source pin on the grid. Thread left open for Kevin, per the security-finding rule. |
 | Q1.3 | The `hiddenLeft` doc comment still said "not FINAL, not CANCELLED", the rule X3.1 replaced. | **Valid — fixed.** The comment now states the client's rule. |
+
+### Round X6 — codex, on `dba6b69f`
+
+| # | Finding | Verdict |
+|---|---|---|
+| X6.1 [P2] | Confidence mode: one saved hidden pick, a positive total, and both an open and a finished hidden game showed Max "?", although a positive total proves that pick is on the open game. | **Valid — fixed** (a precision gain; the "?" was never wrong). A positive confidence total accounts for at least one hidden open pick, since every weight is ≥ 1. Unit test added. |

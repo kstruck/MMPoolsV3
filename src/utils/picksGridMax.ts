@@ -191,9 +191,13 @@ export function tallyGridRow(args: {
         // number of hidden picks on open games, so those come off too. A row
         // whose count is fully explained by what is visible has none, and its
         // Max is exact (codex r4: it read one high, or "?", before).
+        // In confidence mode `hiddenLeft` is a weight SUM, not a count — but every
+        // weight is at least 1, so a positive total proves at least ONE hidden
+        // pick is on an open game (codex r6).
+        const hiddenOpenPicksAtLeast = confidenceMode ? (hiddenLeft > 0 ? 1 : 0) : hiddenLeft;
         const unexplained = setCount === undefined
             ? Infinity
-            : Math.max(0, setCount - revealedPicks - (confidenceMode ? 0 : hiddenLeft));
+            : Math.max(0, setCount - revealedPicks - hiddenOpenPicksAtLeast);
         const decidedMost = Math.min(hiddenDecidedLive, unexplained);
         if (decidedMost > 0) {
             if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', left };

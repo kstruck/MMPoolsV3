@@ -473,6 +473,16 @@ describe('tallyGridRow — the server total for hidden open picks (hiddenLeft)',
         expect(pointsLeft(conf)).toBe(0);
     });
 
+    it("confidence: one hidden pick and a positive total — it is on the open game, so Max is exact (codex r6)", () => {
+        const slate = [game('f1', 'FINAL', { scores: { home: 20, away: 10 } }), game('o1')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 1,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: true, hiddenLeft: 8,
+        });
+        expect(pointsLeft(t)).toBe(8);
+        expect(t.max).toBe(8);
+    });
+
     it("the viewer's own row ignores it: every cell is already known", () => {
         const t = tallyGridRow({
             weekGames: GAMES, cells: cells(pick('W', 9), pick('L', 3), pick(null, 5), pick(null, 6), pick(null, 7)),
