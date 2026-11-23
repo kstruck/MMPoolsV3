@@ -43,6 +43,9 @@ describe('settings.shareHiddenPointsLeft (PLAN-PTS-LEFT-HIDDEN-TOTAL)', () => {
     // Archived stays read-only.
     expect(() => buildPoolSettingsUpdate({ status: 'ARCHIVED' }, { settings: { shareHiddenPointsLeft: false } }))
       .toThrow(/settings is locked/);
+    // So does a pool an admin closed: COMPLETED but still isLocked (codex r7).
+    expect(() => buildPoolSettingsUpdate({ isLocked: true, status: 'COMPLETED' }, { settings: { shareHiddenPointsLeft: false } }))
+      .toThrow(/settings is locked/);
   });
 
   it('is ON when absent or unrecognised, OFF only when false', () => {

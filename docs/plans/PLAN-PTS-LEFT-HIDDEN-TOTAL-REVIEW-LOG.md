@@ -49,3 +49,9 @@ Clean.
 | # | Finding | Verdict |
 |---|---|---|
 | X6.1 [P2] | Confidence mode: one saved hidden pick, a positive total, and both an open and a finished hidden game showed Max "?", although a positive total proves that pick is on the open game. | **Valid — fixed** (a precision gain; the "?" was never wrong). A positive confidence total accounts for at least one hidden open pick, since every weight is ≥ 1. Unit test added. |
+
+### Round X7 — codex, on `ee629e2c`
+
+| # | Finding | Verdict |
+|---|---|---|
+| X7.1 [P2] | An admin-closed pool keeps `isLocked: true` beside `status: COMPLETED`, so `normalizePhase` reads it as locked and the X4.1 exemption let this setting change on a finished pool. | **Valid — fixed.** The exemption now also requires a non-terminal status (`normalizePhase({ status })` is not `archived`). Unit test covers COMPLETED + isLocked. |

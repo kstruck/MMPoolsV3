@@ -35,8 +35,16 @@ export interface PoolSettingsUpdatePlan {
  */
 const LOCKED_PHASE_SETTINGS_KEYS: readonly string[] = ['shareHiddenPointsLeft'];
 
-function isPhaseExemptSettingsPatch(phase: string, group: string, value: unknown): boolean {
+function isPhaseExemptSettingsPatch(
+  pool: { status?: string } | null | undefined,
+  phase: string,
+  group: string,
+  value: unknown,
+): boolean {
   if (phase !== 'locked' || group !== 'settings') return false;
+  // A pool closed by an admin keeps `isLocked` beside a terminal status, so
+  // `normalizePhase` reads it as locked. It is finished: read-only (codex r7).
+  if (normalizePhase({ status: pool?.status }) === 'archived') return false;
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.keys(value as Record<string, unknown>);
   return keys.length > 0 && keys.every(k => LOCKED_PHASE_SETTINGS_KEYS.includes(k));
@@ -62,7 +70,7 @@ export function buildPoolSettingsUpdate(
       rejected.push(`${key} (not an editable field)`);
       continue;
     }
-    if (!isGroupEditable(phase, group) && !isPhaseExemptSettingsPatch(phase, group, value)) {
+    if (!isGroupEditable(phase, group) && !isPhaseExemptSettingsPatch(pool, phase, group, value)) {
       rejected.push(`${key} (${group} is locked while the pool is ${phase})`);
       continue;
     }
