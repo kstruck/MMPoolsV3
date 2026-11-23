@@ -40,7 +40,7 @@ But on a PER_GAME pool a member who misses a game ends up with a different set
 | P2 | **No pick content**: no team, no per-game weight, only a sum. | Kevin's approval was for the total. With one hidden game left the total equals that game's weight. For a complete sheet that weight was already derivable from the public weights; the help text says so plainly. |
 | P3 | **Ungated by principal**, after the departed-member filter, exactly like `counts`. SUPER_ADMIN gets 0s (nothing is hidden from them). | One definition; an emulator test asserts member and commissioner receive identical totals. |
 | P4 | An entry with a hidden open pick that has **no stored weight** is left out, so the client shows "?" rather than a short total. | Never a silently wrong number. |
-| P5 | **Commissioner toggle** `settings.shareHiddenPointsLeft` (Pick'em, **default ON**). Off sends no totals, which is the previous behaviour. Validated as a strict boolean in `flattenSettingsPatch`. | Kevin: "an option for the pool manager to turn on or off". Default on because members asked for it and Kevin approved it for every pool first. A stored `"false"` string is refused, because `sharesHiddenPointsLeft` would read it as ON. |
+| P5 | **Commissioner toggle** `settings.shareHiddenPointsLeft` (Pick'em, **default ON**), editable **at any time** (its own card, outside the in-season settings lock: it only matters while picks are hidden, which is during the season). Off sends no totals, which is the previous behaviour. Validated as a strict boolean in `flattenSettingsPatch`. | Kevin: "an option for the pool manager to turn on or off". Default on because members asked for it and Kevin approved it for every pool first. A stored `"false"` string is refused, because `sharesHiddenPointsLeft` would read it as ON. |
 | P6 | **Max is per player**: `tallyGridRow`'s `max` = points won + Pts Left. The Current Picks grid already used it, so both pages agree. | Kevin's definition of the column. |
 | P7 | **Client falls back.** With no `hiddenLeft` (old server, setting off, missing weight), the tally behaves exactly as before. A hidden pick on an already-DECIDED game (the reveal lagging the game) keeps confidence Max unknown and bounds standard Max at 1 each. | Safe in either deploy order; an upper bound never dips below the real score. |
 
@@ -52,7 +52,7 @@ But on a PER_GAME pool a member who misses a game ends up with a different set
 - `src/utils/picksGridMax.ts`: `tallyGridRow` takes `hiddenLeft`.
 - `src/components/NFLPoolDashboard/NFLResults.tsx`: Max per row from the tally; passes `hiddenLeft`.
 - `src/components/NFLPoolDashboard/NFLPicksGrid.tsx`: passes `hiddenLeft`.
-- `src/components/NFLPoolDashboard/NFLManagerView.tsx`: a Pick'em-only checkbox, sent only when touched.
+- `src/components/NFLPoolDashboard/NFLPointsLeftSharingSetting.tsx`: new; the switch, as its OWN card with its own save, outside the in-season `canEditSettings` lock (codex r1). It is rendered by `NFLManagerView.tsx` beside branding, for Pick'em only, and saves on change.
 - `src/services/dbService.ts`: the client mirror type gets an optional `hiddenLeft`.
 - Copy: the Week Results caption (`src/utils/nflResults.ts`), a help topic, and the `CONTEXT.md` Pick Reveal entry.
 
