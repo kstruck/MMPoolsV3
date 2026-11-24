@@ -1,5 +1,22 @@
 # HANDOFF — Session entry point
 
+> ## 🟡 2026-11-24 — **LOOP 2 (STALE-PR PRUNER) IS BUILT AND APPROVED. IT IS NOT RUNNING YET.**
+>
+> `scripts/agent/run-loop.mjs` runs it through the Claude Agent SDK on a
+> nightly GitHub Actions timer (`.github/workflows/loop-pr-pruner.yml`), paid by
+> the Claude plan's API credit. The charter is `docs/plans/PLAN-LOOPS.md`.
+>
+> **It does nothing until Kevin does two things:** add the repository secret
+> `MMP_AGENT_API_KEY`, and set the repository variable `MMP_LOOP_PR_PRUNER` to
+> `on`. Before the first scheduled run: one manual dry run, with a read of the
+> Console billing page before and after. That a run inside GitHub Actions
+> spends the promotional credit is **not yet measured**.
+>
+> Rows of scheduled runs are comments on kstruck/MMPoolsV3#806, not lines in
+> `LOOP-LOG.tsv`. The older box below that says "loops 2–5 stay parked" is
+> superseded for loop 2 only; loops 3–5 are still parked. Loop 1 is ACTIVE and
+> has logged no run.
+
 > ## 🟢 2026-11-17 — **SQUARES IS REOPENED AND DEPLOYED. EVERY OPEN ITEM IS RULED.**
 >
 > Target: Thanksgiving, 2026-11-26. Plan, review log and sweeps:

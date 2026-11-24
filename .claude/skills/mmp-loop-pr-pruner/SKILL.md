@@ -6,8 +6,40 @@ description: Flag and eventually close stale open PRs on kstruck/MMPoolsV3. Comm
 # Stale PR Pruner
 
 Loop 2 of 5 (build order and activation ledger: `docs/plans/PLAN-LOOPS.md`). Comment/close only — fully reversible,
-a closed PR reopens with one click. **Not yet activated** — manual invoke only until
-Kevin approves scheduling.
+a closed PR reopens with one click.
+
+🟢 **ACTIVE since 2026-11-24** (Kevin: "Approve all picks"). It runs every night
+in GitHub Actions (`.github/workflows/loop-pr-pruner.yml`) through the loop
+runner, `scripts/agent/run-loop.mjs`, on the Claude plan's API credit. A
+scheduled run happens only while the repository variable `MMP_LOOP_PR_PRUNER`
+is `on`.
+
+## How the scheduled run differs from the steps below
+
+The steps describe the procedure. In the runner, the model that follows them
+holds **no shell and no `gh`**: this repository is public, and a PR title is
+text a stranger controls. It holds four tools, and the tools carry the rules:
+
+| Step | In the runner |
+|---|---|
+| 1, 2 | `list_open_prs` returns each PR's number, last-activity date, days idle and whether it has the `keep` label. No titles |
+| 3 | `inspect_pr` reads one PR fresh and says which action is allowed. `warn_pr` and `close_pr` re-check that and **refuse** anything else. The tools write the comment text |
+| 4 | `close_pr` re-reads the PR after closing it and reports the state |
+| 5 | The runner builds the row from what the tools recorded and a separate job posts it. The model does not write it |
+
+Two rules are stricter in code than in the prose below, on purpose:
+
+- **A warning counts only when this loop wrote it.** The marker text alone is
+  not enough: anyone can post a comment that contains it.
+- **"Still stale" means nothing has touched the PR since the warning.** A PR
+  that was warned, worked on, and went idle again is warned again, not closed.
+
+To run it by hand (a dry run unless you type `--mode live`):
+
+```
+npm --prefix scripts/agent ci
+node scripts/agent/run-loop.mjs pr-pruner
+```
 
 ## Steps
 
@@ -28,7 +60,9 @@ Kevin approves scheduling.
    and confirm `state` actually changed to `CLOSED`. Never report success off the
    close call's own exit code — a 200 on the write is not the state afterwards.
 5. Append **one row for this invocation** to `LOOP-LOG.tsv` — in the **primary
-   checkout**, then commit and push it. Full rules in
+   checkout**, then commit and push it. (A scheduled GitHub Actions run cannot
+   push to `main`; its row goes to the loop-log issue instead — rule 5 of
+   "Where the row is written".) Full rules in
    `docs/plans/PLAN-LOOPS.md` ("One row per INVOCATION" and "Where the row is
    written"); the short version: one tab-separated row per run
    (`date loop commit verdict metric idea lesson`), append only, never
@@ -47,6 +81,6 @@ Kevin approves scheduling.
 - Retry cap: 2 attempts per PR action (comment or close) if a `gh` call fails, then skip
   that PR and flag it — don't retry indefinitely.
 - Cheap-model task — this is pure age/label triage, no judgment call about PR content.
-- **Still parked** — manual invoke only until Kevin approves scheduled/unattended
-  activation. What changed on 2026-09-19 is portability, not activation: it can
-  now run in the cloud once it is turned on. Loop 1 gets two weeks first.
+- Scheduling was approved on 2026-11-24. That approval covers comment and close
+  on stale PRs, and nothing else: this loop never merges, never pushes, never
+  edits a PR's code or labels.
