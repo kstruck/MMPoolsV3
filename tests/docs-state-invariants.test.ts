@@ -1715,9 +1715,41 @@ function isMarkerCodepoint(cp: number): boolean {
 function stripCode(markdown: string): string {
   const lines = markdown.split('\n');
   const kept: string[] = [];
-  let fence: { char: string; len: number } | null = null;
+  let fence: { char: string; len: number; depth: number } | null = null;
 
-  for (const line of lines) {
+  for (const raw of lines) {
+    // Strip any block-quote prefix before looking for a fence. HANDOFF.md
+    // quotes command output as `> ```…> ``` ` (8 such lines today), and without
+    // this the opener is never recognised, so the quoted body counts as prose —
+    // the same "quoted output leaks into the census" class as the indented-fence
+    // bug and the `✓ Resolved` one, found by a cross-model round while the
+    // leakage was still latent (0 markers inside those blocks when measured).
+    //
+    // QUOTE DEPTH IS PART OF THE FENCE'S IDENTITY, tracked below. A fence
+    // opened inside a block quote ends when that quote ends, per CommonMark,
+    // and only a closer at the SAME depth closes it. The first version of this
+    // normalisation dropped the prefix and kept no depth, so `> ```bash` then
+    // quoted content then UNQUOTED `✅ prose` left the scanner inside the fence
+    // and swallowed the rest of the document — measured, everything dropped.
+    // That is the under-count this guard must never have, and I introduced it
+    // while fixing the leak above; a cross-model round caught it.
+    // ` {0,3}` per CommonMark, NOT `\s*`: four spaces of indent is an indented
+    // CODE block, where a literal `> ``` ` is text rather than a quoted fence.
+    // `\s*` would eat that indent, falsely open a fence and swallow the prose
+    // after it — an under-count, the direction this guard must never have.
+    // Found by a cross-model round; no line in the corpus hits it today (the
+    // permissive and correct forms agree on all 276 tracked files), so this is
+    // precision kept ahead of the first doc that would have needed it.
+    //
+    // `[ \t]?` because CommonMark allows a TAB after the `>` marker. With a
+    // literal space only, `>\t```` left the tab in front of the fence parser,
+    // the fence went unrecognised and its quoted markers counted as prose.
+    // Zero lines in all 276 tracked files use that form, and the failure
+    // direction was over-counting — a visible cry-wolf rather than silent
+    // drift — but the regex was still wrong. Also found by a cross-model round.
+    const prefix = /^(?: {0,3}>)+[ \t]?/.exec(raw);
+    const depth = prefix ? (prefix[0].match(/>/g) ?? []).length : 0;
+    const line = prefix ? raw.slice(prefix[0].length) : raw;
     const m = /^ {0,3}(`{3,}|~{3,})/.exec(line);
     const run = m ? { char: m[1][0], len: m[1].length } : null;
 
@@ -1727,16 +1759,26 @@ function stripCode(markdown: string): string {
       // m[1].length alone leaves the indent's worth of backticks behind, so an
       // indented closer never matched and the fence swallowed the rest of the
       // file. 124 fence lines in live docs are indented (qodo's finding).
-      if (run && run.char === fence.char && run.len >= fence.len && line.slice(m![0].length).trim() === '') {
+      if (depth < fence.depth) {
+        fence = null; // the quote ended, so the fence did too — fall through
+      } else if (
+        run &&
+        run.char === fence.char &&
+        run.len >= fence.len &&
+        depth === fence.depth &&
+        line.slice(m![0].length).trim() === ''
+      ) {
         fence = null;
+        continue; // the closing delimiter is not content
+      } else {
+        continue; // inside the fence — drop it
       }
-      continue; // drop the fence body and both delimiter lines
     }
     if (run) {
-      fence = run;
+      fence = { ...run, depth };
       continue;
     }
-    kept.push(line);
+    kept.push(raw);
   }
 
   return kept.map(stripSpansInLine).join('\n');
@@ -1989,6 +2031,55 @@ describe('the status-marker scanner sees what the docs actually contain', () => 
 
   it('lets an unindented closer close an indented opener', () => {
     expect(countMarkers(['  ```', '\u2705 inside', '```', '\u{1f6d1} outside'].join('\n')).get('\u{1f6d1}')).toBe(1);
+  });
+
+  it('ignores markers inside a BLOCK-QUOTED fence', () => {
+    // REGRESSION (codex, 2026-11-24). HANDOFF.md quotes command output this way.
+    const counts = countMarkers(['> ```bash', '> echo "\u2705 done"', '> ```', '\u{1f6d1} after'].join('\n'));
+    expect(counts.get('\u{1f6d1}')).toBe(1);
+    expect(counts.get('\u2705')).toBeUndefined();
+  });
+
+  it('recognises a fence after a TAB following the quote marker', () => {
+    // REGRESSION (codex, 2026-11-24). CommonMark allows a tab there.
+    expect(countMarkers(['>\t```', '>\t\u2705 quoted', '>\t```'].join('\n')).size).toBe(0);
+  });
+
+  it('ends a quoted fence when the block quote ends, keeping later prose', () => {
+    // REGRESSION (codex, 2026-11-24). This swallowed the whole document before
+    // quote depth was tracked: the quoted opener never saw a quoted closer, so
+    // the scanner stayed inside the fence forever.
+    const counts = countMarkers(['> ```bash', '> echo hi', '', '\u2705 real prose after the quote'].join('\n'));
+    expect(counts.get('\u2705')).toBe(1);
+  });
+
+  it('does not let a quoted fence line close an unquoted fence', () => {
+    // The inverse: a literal `> ``` ` inside an ordinary fenced block is
+    // content, not that block's closer, so the marker after it stays swallowed.
+    expect(countMarkers(['```', '> ```', '\u2705 still inside the block'].join('\n')).size).toBe(0);
+  });
+
+  it('does not let an unquoted fence line close a quoted fence', () => {
+    const counts = countMarkers(['> ```', '> \u2705 inside', '```', '> ```'].join('\n'));
+    expect(counts.size).toBe(0);
+  });
+
+  it('does not treat a 4-space-indented `>` as a block quote', () => {
+    // REGRESSION (codex, 2026-11-24). Four spaces is an indented code block, so
+    // `    > ``` ` is literal text; it must not open a fence and eat the prose
+    // marker that follows.
+    const counts = countMarkers(['    > ```', '\u{1f6d1} real prose marker', '    > ```'].join('\n'));
+    expect(counts.get('\u{1f6d1}')).toBe(1);
+  });
+
+  it('ignores markers inside a nested block-quoted fence', () => {
+    expect(countMarkers(['> > ```', '> > \u2705 quoted', '> > ```'].join('\n')).size).toBe(0);
+  });
+
+  it('still counts markers in block-quoted PROSE, which is not code', () => {
+    // HANDOFF's state headings are block-quoted prose and must keep counting.
+    const counts = countMarkers('> ## \u{1f7e2} 2026-11-17 — SQUARES IS REOPENED');
+    expect(counts.get('\u{1f7e2}')).toBe(1);
   });
 
   it('ignores markers inside a tilde fence', () => {
