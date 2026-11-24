@@ -362,6 +362,20 @@ describe('decideAction: what the rules allow for one pull request', () => {
     });
   });
 
+  it('a warning younger than 14 days never allows a close, even if GitHub did not move updatedAt', () => {
+    // The PR still reads as stale (updatedAt 20 days ago), as it would if a
+    // comment ever stopped moving that field. The warning is 1 day old.
+    const w = warning(daysAgo(1));
+    const input = pr(1, { updatedAt: daysAgo(20), comments: [w] });
+    const decision = decideAction(input, NOW);
+    expect(decision.action).toBe('NOT_STALE');
+    expect(decision.why).toMatch(/not more than 14 days ago/);
+    // Exactly 14 days is still too soon; one second past it is not.
+    expect(decideAction(pr(1, { updatedAt: daysAgo(14), comments: [warning(daysAgo(14))] }), NOW).action).toBe('NOT_STALE');
+    const due = pr(1, { updatedAt: daysAgo(14, -1000), comments: [warning(daysAgo(14, -1000))] });
+    expect(decideAction(due, NOW).action).toBe('CLOSE');
+  });
+
   it('a PR warned yesterday is not stale, so it is not closed on the next run', () => {
     const input = pr(1, { updatedAt: daysAgo(1), comments: [warning(daysAgo(1))] });
     expect(decideAction(input, NOW).action).toBe('NOT_STALE');

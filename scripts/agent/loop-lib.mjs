@@ -278,6 +278,16 @@ export function decideAction(pr, now) {
   if (!warning) return { action: 'WARN', why: 'stale, and no warning from this loop exists' };
   const again = (what) => ({ action: 'WARN', why: `stale again: ${what} after the warning of ${warning.createdAt}` });
 
+  // THE PROMISE IN THE WARNING: "no sooner than 14 days from now". Checked on
+  // the warning's own age, on purpose. Today this is also true by accident:
+  // the warning comment moves `updatedAt`, so the PR is not stale for 14 days
+  // (measured, and tested below). But that is GitHub's behaviour, not this
+  // file's, and a close must not rest on it (codex round 7 on #807). Nothing
+  // is done to the PR in the meantime: not a close, and not a second warning.
+  if (now.getTime() - warning.at <= PRUNER.STALE_DAYS * DAY_MS) {
+    return { action: 'NOT_STALE', why: `warned ${warning.createdAt}, which is not more than ${PRUNER.STALE_DAYS} days ago` };
+  }
+
   if (!pr.headRefOid || pr.headRefOid !== warning.head) return again('the branch was pushed to');
   if (Date.parse(pr.updatedAt) - warning.at > PRUNER.LAST_ACTIVITY_SLACK_MS) return again('something touched the PR');
   if (!Number.isInteger(warning.id)) return again('the warning has no id to order other activity against, so activity is assumed');
