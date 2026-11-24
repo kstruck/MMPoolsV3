@@ -438,7 +438,8 @@ export function summarizePrunerRun({ ledger, failure = null, blocked = null, dry
   if (ledger.failed.length) worsen('INCONCLUSIVE', `${ledger.failed.length} write(s) failed after ${PRUNER.MAX_ATTEMPTS} attempts: ${ledger.failed.map((f) => `#${f.number} ${f.action} (${f.error})`).join('; ')}`);
   if (ledger.refused.length) worsen('FINDING', `the agent asked for ${ledger.refused.length} write(s) the rules refuse: ${ledger.refused.map((r) => `#${r.number} asked ${r.asked}, allowed ${r.allowed}`).join('; ')}`);
   if (ledger.unverified.length) worsen('FINDING', `${ledger.unverified.length} close(s) did not read CLOSED afterwards: ${refs(ledger.unverified)}`);
-  if (!ledger.listed) worsen('ERROR', ledger.listError ? `the PR list could not be read: ${ledger.listError}` : 'the agent never listed the open PRs');
+  // Not when blocked: the agent never ran, so "it never listed" would blame it for that.
+  if (!ledger.listed && !blocked) worsen('ERROR', ledger.listError ? `the PR list could not be read: ${ledger.listError}` : 'the agent never listed the open PRs');
   if (failure) worsen('ERROR', failure);
   if (blocked) worsen('BLOCKED', blocked);
 

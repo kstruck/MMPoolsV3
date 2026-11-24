@@ -402,8 +402,10 @@ describe('the verdict comes from the ledger, never from the model', () => {
 
   it('no key is BLOCKED, and outranks everything', () => {
     const s = live([pr(2)]);
-    const { verdict } = summarizePrunerRun({ ledger: s.ledger, blocked: 'MMP_AGENT_API_KEY is not set', failure: 'x', dryRun: false, now: NOW });
+    const { verdict, row } = summarizePrunerRun({ ledger: s.ledger, blocked: 'MMP_AGENT_API_KEY is not set', failure: 'x', dryRun: false, now: NOW });
     expect(verdict).toBe('BLOCKED');
+    // The agent never ran, so the row must not say it skipped the list.
+    expect(row).not.toContain('never listed');
   });
 
   it('every row it can produce passes the charter\'s own validator', () => {
@@ -642,7 +644,7 @@ describe('the workflow: a public repository that holds an API key', () => {
   it('is started by the timer or by a person with write access, and by nothing else', () => {
     const on = /\non:\n([\s\S]*?)\n(?=\S)/.exec(code);
     expect(on, '`on:` block not found').not.toBeNull();
-    const triggers = [...on![1].matchAll(/^  ([a-z_]+):/gm)].map((m) => m[1]);
+    const triggers = [...on![1].matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]);
     expect(triggers.sort()).toEqual(['schedule', 'workflow_dispatch']);
     expect(code).not.toMatch(/pull_request|issue_comment|workflow_run|repository_dispatch/);
   });
@@ -680,7 +682,7 @@ describe('the workflow: a public repository that holds an API key', () => {
     expect(jobBlock('log')).toContain("if: always() && needs.prune.result != 'skipped'");
     expect(jobBlock('prune')).toMatch(/- name: Keep the row for the log job\n\s+if: always\(\)/);
     // The loop step itself must be able to fail the job: no continue-on-error on it.
-    const loopStep = /- name: Run the loop\n([\s\S]*?)(?=\n      - name: )/.exec(jobBlock('prune'));
+    const loopStep = /- name: Run the loop\n([\s\S]*?)(?=\n {6}- name: )/.exec(jobBlock('prune'));
     expect(loopStep![1]).not.toContain('continue-on-error');
   });
 
