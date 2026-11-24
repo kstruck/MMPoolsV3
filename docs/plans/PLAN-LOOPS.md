@@ -208,9 +208,23 @@ So, for every loop:
    (Kevin, 2026-11-24). A manual run from the Actions tab is still an
    invocation, and "one row per invocation" has no exception for dry runs: the
    dry run made for the billing check is exactly the run whose row should be
-   on record. A job in Actions cannot push to `main` — the branch ruleset
-   needs an approver — and it has no PR of its own, so rule 4 gives it nowhere
-   to write. `scripts/agent/post-loop-row.mjs` posts the row,
+   on record. A job in Actions cannot push to `main`, and it has no PR of its
+   own, so rule 4 gives it nowhere to write.
+
+   **Why it cannot push — measured 2026-11-24, not assumed.** Ruleset
+   `11714546` ("Required Checks", enforcement `active`, on the default branch)
+   carries a `pull_request` rule with `required_approving_review_count: 1` and
+   a `required_status_checks` rule. Its only bypass actor is repository role
+   `5` (admin), so the Actions token is not exempt. Re-measure before relying
+   on this, because the whole routing rests on it:
+
+   ```
+   gh api repos/kstruck/MMPoolsV3/rulesets/11714546 -q '{enforcement, bypass: .bypass_actors, rules: [.rules[].type]}'
+   ```
+
+   If that ruleset is ever relaxed, or the Actions app is added as a bypass
+   actor, a scheduled run COULD commit its row to `LOOP-LOG.tsv`, and this
+   rule should be reconsidered rather than left standing. `scripts/agent/post-loop-row.mjs` posts the row,
    in a job that runs no model and holds a token for issue comments only. It
    runs even when the loop job failed, and posts an `ERROR` row when that job
    left none. Read the rows with

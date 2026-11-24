@@ -60,14 +60,43 @@ const daysAgo = (n: number, extraMs = 0) => new Date(NOW.getTime() - n * 86_400_
 /** The branch head every fake PR has unless a test says otherwise. */
 const HEAD = 'a'.repeat(40);
 const RUN = 'run-1';
+/** Comment ids rise with creation order, as GitHub's do. */
+let nextId = 1000;
 const warning = (createdAt: string, login = 'github-actions[bot]', head = HEAD) => ({
+  id: nextId++,
   author: { login },
   body: `${warningMarker({ head, runId: 'an-earlier-run' })}\nstale`,
   createdAt,
 });
 
-type FakeEvent = { event: string; at: string | null };
-type FakePr = { number: number; state: string; updatedAt: string; labels: { name: string }[]; comments: unknown[]; headRefOid: string; events?: FakeEvent[]; title?: string };
+type FakeEvent = { event: string; at: string | null; id?: number | null };
+type FakeComment = { id?: number; createdAt: string };
+type FakePr = {
+  number: number;
+  state: string;
+  updatedAt: string;
+  labels: { name: string }[];
+  comments: unknown[];
+  headRefOid: string;
+  /** Events other than comments. The timeline is built from these plus one `commented` event per comment. */
+  extraEvents: FakeEvent[];
+  /** The timeline as `decideAction` receives it. Undefined means "could not be read". */
+  events?: FakeEvent[];
+  title?: string;
+};
+
+/**
+ * A timeline in GitHub's order: by time, and within one second a comment's
+ * own event comes BEFORE the other events of that second. That tie order is
+ * the case under test: activity in the same second as the warning.
+ */
+function timelineOf(comments: unknown[], extra: FakeEvent[]): FakeEvent[] {
+  const commented = (comments as FakeComment[]).map((c) => ({ event: 'commented', id: c.id ?? null, at: c.createdAt }));
+  const key = (e: FakeEvent) => (e.at === null ? -1 : Date.parse(e.at));
+  return [...commented.map((e) => ({ e, tie: 0 })), ...extra.map((e) => ({ e, tie: 1 }))]
+    .sort((a, b) => key(a.e) - key(b.e) || a.tie - b.tie)
+    .map((x) => x.e);
+}
 
 /**
  * A fake `gh` over an in-memory repository. It records every call, and its
@@ -101,13 +130,14 @@ function fakeGithub(prs: FakePr[], opts: FakeOpts = {}) {
     }
     if (noun === 'pr' && verb === 'view') {
       // Like the real call, this never carries comments: they come from REST.
-      return { status: 0, stdout: JSON.stringify({ ...find(n), comments: undefined, events: undefined }), stderr: '' };
+      return { status: 0, stdout: JSON.stringify({ ...find(n), comments: undefined, events: undefined, extraEvents: undefined }), stderr: '' };
     }
     if (noun === 'api') {
       const t = /^repos\/o\/r\/issues\/(\d+)\/timeline\?per_page=100$/.exec(args[2]);
       if (t && args[1] === '--paginate') {
         if (opts.timelineFail) return { status: 1, stdout: '', stderr: 'HTTP 504' };
-        const events = (find(t[1]).events ?? []).map((e) => JSON.stringify(e));
+        // Rebuilt on every read, so a comment the loop posts shows up in it.
+        const events = timelineOf(find(t[1]).comments, find(t[1]).extraEvents).map((e) => JSON.stringify(e));
         return { status: 0, stdout: events.length ? `${events.join('\n')}\n` : '', stderr: '' };
       }
       if (opts.commentsFail) return { status: 1, stdout: '', stderr: 'HTTP 503' };
@@ -123,7 +153,7 @@ function fakeGithub(prs: FakePr[], opts: FakeOpts = {}) {
     }
     if (noun === 'pr' && verb === 'comment') {
       if (opts.commentsNeverPost) return { status: 1, stdout: '', stderr: 'HTTP 500' };
-      find(n).comments.push({ author: { login: 'github-actions[bot]' }, body: input, createdAt: NOW.toISOString() });
+      find(n).comments.push({ id: nextId++, author: { login: 'github-actions[bot]' }, body: input, createdAt: NOW.toISOString() });
       if ((opts.commentLandsButReportsFailure ?? 0) > 0) {
         opts.commentLandsButReportsFailure!--;
         return { status: 1, stdout: '', stderr: 'HTTP 502 (the response was lost)' };
@@ -140,7 +170,15 @@ function fakeGithub(prs: FakePr[], opts: FakeOpts = {}) {
   return { gh, calls, writes };
 }
 
-const pr = (number: number, over: Partial<FakePr> = {}): FakePr => ({ number, state: 'OPEN', updatedAt: daysAgo(20), labels: [], comments: [], headRefOid: HEAD, events: [], ...over });
+/**
+ * `events` in `over` means the NON-comment events; the full timeline is built
+ * from them and the comments. `noTimeline` leaves the timeline unread.
+ */
+const pr = (number: number, over: Partial<Omit<FakePr, 'extraEvents'>> & { noTimeline?: boolean } = {}): FakePr => {
+  const { events: extra = [], noTimeline, ...rest } = over;
+  const base = { number, state: 'OPEN', updatedAt: daysAgo(20), labels: [], comments: [] as unknown[], headRefOid: HEAD, ...rest };
+  return { ...base, extraEvents: extra, events: noTimeline ? undefined : timelineOf(base.comments, extra) };
+};
 /** Warned 20 days ago, and the warning is the last thing that touched it. */
 const warnedPr = (number: number, over: Partial<FakePr> = {}) => pr(number, { updatedAt: daysAgo(20), comments: [warning(daysAgo(20))], ...over });
 
@@ -258,18 +296,70 @@ describe('decideAction: what the rules allow for one pull request', () => {
     expect(decideAction(input, NOW).action).toBe('WARN');
   });
 
-  it('events before the warning, the warning\'s own event, and events with no time do not reset it', () => {
+  it('events before the warning, and the warning\'s own event, do not reset it', () => {
     const events = [
       { event: 'committed', at: null },
       { event: 'labeled', at: daysAgo(40) },
-      { event: 'commented', at: daysAgo(20) },
     ];
-    expect(decideAction(pr(1, { comments: [warning(daysAgo(20))], events }), NOW).action).toBe('CLOSE');
+    const input = pr(1, { comments: [warning(daysAgo(20))], events });
+    // The timeline holds: committed, labeled, then the warning's own `commented`.
+    expect(input.events!.map((e) => e.event)).toEqual(['committed', 'labeled', 'commented']);
+    expect(decideAction(input, NOW).action).toBe('CLOSE');
   });
 
   it('a PR read without its timeline is never closable', () => {
-    const input = pr(1, { comments: [warning(daysAgo(20))], events: undefined });
+    const input = pr(1, { comments: [warning(daysAgo(20))], noTimeline: true });
     expect(decideAction(input, NOW).action).toBe('WARN');
+  });
+
+  describe('activity in the SAME SECOND as the warning (GitHub times have one-second resolution)', () => {
+    // Every case below has the same timestamp as the warning, to the
+    // millisecond. A "later than" test on time alone sees none of them, and
+    // each one let the PR be closed with no second warning (qodo, second pass).
+    const AT = daysAgo(20);
+
+    it('a reply in the same second resets it: its id is higher than the warning\'s', () => {
+      const w = warning(AT);
+      const reply = { id: nextId++, author: { login: 'someone' }, body: 'still working on this', createdAt: AT };
+      const input = pr(1, { updatedAt: AT, comments: [w, reply] });
+      const decision = decideAction(input, NOW);
+      expect(decision.action).toBe('WARN');
+      expect(decision.why).toMatch(/a comment was written/);
+    });
+
+    it.each(['reviewed', 'labeled', 'renamed', 'head_ref_force_pushed'])('a "%s" event in the same second, after the warning in the timeline, resets it', (event) => {
+      const input = pr(1, { updatedAt: AT, comments: [warning(AT)], events: [{ event, at: AT }] });
+      expect(input.events!.map((e) => e.event)).toEqual(['commented', event]);
+      expect(decideAction(input, NOW).action).toBe('WARN');
+    });
+
+    it('a commit event after the warning in the timeline resets it, though it has no time at all', () => {
+      const w = warning(AT);
+      const input = pr(1, { updatedAt: AT, comments: [w] });
+      input.events = [{ event: 'commented', id: w.id, at: AT }, { event: 'committed', at: null }];
+      expect(decideAction(input, NOW).action).toBe('WARN');
+    });
+
+    it('an event in the same second that comes BEFORE the warning does not reset it', () => {
+      const w = warning(AT);
+      const input = pr(1, { updatedAt: AT, comments: [w] });
+      input.events = [{ event: 'labeled', at: AT }, { event: 'commented', id: w.id, at: AT }];
+      expect(decideAction(input, NOW).action).toBe('CLOSE');
+    });
+
+    it('when the warning\'s own event is missing from the timeline, the order is unknown: WARN', () => {
+      const input = pr(1, { updatedAt: AT, comments: [warning(AT)] });
+      input.events = [{ event: 'labeled', at: daysAgo(40) }];
+      const decision = decideAction(input, NOW);
+      expect(decision.action).toBe('WARN');
+      expect(decision.why).toMatch(/order of events is unknown/);
+    });
+
+    it('a warning with no id cannot be ordered against anything: WARN', () => {
+      const { id: _unused, ...noId } = warning(AT);
+      void _unused;
+      expect(decideAction(pr(1, { updatedAt: AT, comments: [noId] }), NOW).action).toBe('WARN');
+    });
   });
 
   it('a PR warned yesterday is not stale, so it is not closed on the next run', () => {
@@ -792,6 +882,24 @@ describe('post-loop-row: a run is never missing from the log', () => {
   it('fallbackRow is a valid row', () => {
     expect(loopRowErrors(fallbackRow({ loop: 'pr-pruner', verdict: 'ERROR', reason: 'x', now: NOW }))).toEqual([]);
   });
+
+  it('a dry run that failed is still logged as a dry run', () => {
+    // From the runner (it threw before it had a summary) ...
+    expect(fallbackRow({ loop: 'pr-pruner', verdict: 'ERROR', reason: 'x', now: NOW, dryRun: true }).split('\t')[5]).toBe('DRY RUN; the run did not complete');
+    expect(fallbackRow({ loop: 'pr-pruner', verdict: 'ERROR', reason: 'x', now: NOW }).split('\t')[5]).toBe('the run did not complete');
+    // ... and from the log job, for every reason it writes a row of its own.
+    for (const fileText of [null, '', `${good}\n${good}\n`, 'CLEAN\n', `${good.replace('pr-pruner', 'audit-sweep')}\n`]) {
+      expect(rowToPost({ loop: 'pr-pruner', fileText, dryRun: true }).split('\t')[5], String(fileText)).toMatch(/^DRY RUN; /);
+      expect(rowToPost({ loop: 'pr-pruner', fileText }).split('\t')[5], String(fileText)).not.toMatch(/DRY RUN/);
+    }
+    // A good row is passed through untouched either way: it already says what it was.
+    expect(rowToPost({ loop: 'pr-pruner', fileText: `${good}\n`, dryRun: true })).toBe(good);
+  });
+
+  it('the summary of a blocked or failed dry run says DRY RUN too', () => {
+    const blocked = summarizePrunerRun({ ledger: live([pr(2)]).ledger, blocked: 'no key', dryRun: true, now: NOW });
+    expect(blocked.row.split('\t')[5]).toMatch(/^DRY RUN/);
+  });
 });
 
 describe('the model holds four tools and nothing else', () => {
@@ -987,6 +1095,12 @@ describe('the workflow: a public repository that holds an API key', () => {
   it('a scheduled run needs the switch; a manual run defaults to dry-run', () => {
     expect(jobBlock('prune')).toContain("if: github.event_name == 'workflow_dispatch' || vars.MMP_LOOP_PR_PRUNER == 'on'");
     expect(code).toContain("LOOP_MODE: ${{ github.event_name == 'schedule' && 'live' || inputs.mode }}");
+    // Set ONCE, at workflow level, and read by both jobs: the log job needs it
+    // to mark a failed dry run as a dry run.
+    expect(code.match(/LOOP_MODE: \$\{\{/g) ?? []).toHaveLength(1);
+    expect(/\nenv:\n(?: {2}.*\n)*? {2}LOOP_MODE: /.test(code)).toBe(true);
+    expect(jobBlock('prune')).toContain('--mode "$LOOP_MODE"');
+    expect(jobBlock('log')).toContain('--mode "$LOOP_MODE"');
     expect(code).toMatch(/options:\n\s+- dry-run\n\s+- live\n\s+default: dry-run/);
   });
 
@@ -1029,6 +1143,8 @@ describe('the charter and the skill say what the code does', () => {
   it('the charter says where a GitHub Actions run\'s row goes, manual runs included', () => {
     expect(charter).toContain('scripts/agent/post-loop-row.mjs');
     expect(charter).toMatch(/cannot push to `main`/);
+    // The claim the routing rests on comes with the command that checks it.
+    expect(charter).toContain('gh api repos/kstruck/MMPoolsV3/rulesets/11714546');
     // The workflow posts a row for a manual run too. The charter said
     // "scheduled runs" only, which the workflow contradicted (qodo).
     expect(charter).toMatch(/Every GitHub Actions run[^.]*started by the timer or by hand/);

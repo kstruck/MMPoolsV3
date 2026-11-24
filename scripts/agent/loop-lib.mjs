@@ -67,12 +67,16 @@ export function loopRowErrors(row) {
 }
 
 /** The row for a run that could not start, or that died before it produced one. */
-export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-' }) {
-  return formatLoopRow({ date: now.toISOString().slice(0, 10), loop, commit, verdict, metric: '-', idea: 'the run did not complete', lesson: reason });
+export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-', dryRun = false }) {
+  // A dry run that failed is still a dry run. Without the marker its ERROR row
+  // reads as a live run that broke (qodo, second pass on #807).
+  const idea = `${dryRun ? 'DRY RUN; ' : ''}the run did not complete`;
+  return formatLoopRow({ date: now.toISOString().slice(0, 10), loop, commit, verdict, metric: '-', idea, lesson: reason });
 }
 
 /** The row to post: the file's row when it is valid, an ERROR row that names the problem otherwise. */
-export function rowToPost({ loop, fileText }) {
+export function rowToPost({ loop, fileText, dryRun = false }) {
+  const fallbackRow = (fields) => fallbackRowOf({ ...fields, dryRun });
   if (fileText === null) return fallbackRow({ loop, verdict: 'ERROR', reason: 'the loop job produced no row file (it failed before the runner finished)' });
   const lines = fileText.split('\n').map((l) => l.replace(/\r$/, '')).filter((l) => l.length > 0);
   if (lines.length !== 1) return fallbackRow({ loop, verdict: 'ERROR', reason: `the row file holds ${lines.length} rows, expected exactly 1` });
@@ -86,6 +90,9 @@ export function rowToPost({ loop, fileText }) {
 export function commentBody(row, runUrl = '') {
   return ['```tsv', LOOP_ROW_FIELDS.join('\t'), row, '```', ...(runUrl ? ['', `Run: ${runUrl}`] : [])].join('\n');
 }
+
+/** `fallbackRow` under a name `rowToPost` can wrap without shadowing it. */
+const fallbackRowOf = (fields) => fallbackRow(fields);
 
 /**
  * Drop every GitHub credential from an environment object, in place.
@@ -224,7 +231,7 @@ export function latestTrustedWarning(comments) {
     if (!PRUNER.TRUSTED_AUTHORS.includes(String(c?.author?.login ?? ''))) continue;
     const at = Date.parse(c?.createdAt);
     if (!Number.isFinite(at)) continue;
-    if (!latest || at > latest.at) latest = { at, createdAt: c.createdAt, head: marker.head };
+    if (!latest || at > latest.at) latest = { at, createdAt: c.createdAt, head: marker.head, id: c.id };
   }
   return latest;
 }
@@ -246,6 +253,17 @@ export function latestTrustedWarning(comments) {
  *   3. no comment was written or edited after the warning;
  *   4. no timeline event (review, label, rename, reopen...) is later than it.
  *
+ * Checks 3 and 4 go by IDENTITY AND ORDER first, and by time second. GitHub's
+ * times have one-second resolution, so a reply or a review made in the same
+ * second as the warning has the SAME timestamp, and a "later than" test on
+ * time alone does not see it (qodo, second pass on #807). So:
+ *
+ *   - a comment with a higher id than the warning's is later, whatever its time;
+ *   - a timeline event that comes after the warning's own `commented` event in
+ *     the timeline's order is later, whatever its time;
+ *   - if the warning's own event is not in the timeline at all, the order is
+ *     unknown, and unknown means WARN.
+ *
  * `pr.events` MUST be present. A read that could not fetch the timeline is not
  * "no events": `readPr` throws instead, and this function treats a missing
  * list as activity.
@@ -262,15 +280,22 @@ export function decideAction(pr, now) {
 
   if (!pr.headRefOid || pr.headRefOid !== warning.head) return again('the branch was pushed to');
   if (Date.parse(pr.updatedAt) - warning.at > PRUNER.LAST_ACTIVITY_SLACK_MS) return again('something touched the PR');
+  if (!Number.isInteger(warning.id)) return again('the warning has no id to order other activity against, so activity is assumed');
   const laterComment = (Array.isArray(pr.comments) ? pr.comments : []).some((c) => {
+    if (c?.id === warning.id) return false;
+    if (Number.isInteger(c?.id) && c.id > warning.id) return true;
     const touched = Math.max(Date.parse(c?.createdAt) || 0, Date.parse(c?.updatedAt) || 0);
     return touched > warning.at;
   });
   if (laterComment) return again('a comment was written or edited');
   if (!Array.isArray(pr.events)) return again('the timeline could not be checked, so activity is assumed');
-  // Events with no time of their own (a `committed` event carries the commit's
-  // dates, not a push time) are covered by check 1.
-  const laterEvent = pr.events.find((e) => Date.parse(e?.at) > warning.at);
+  const own = pr.events.findIndex((e) => e?.event === 'commented' && e?.id === warning.id);
+  if (own === -1) return again('the warning is not in the timeline, so the order of events is unknown and activity is assumed');
+  // Everything after the warning's own event, by position. That includes an
+  // event with no time of its own (`committed`) and one in the same second.
+  // The time test stays as a second net, in case the order is ever not what
+  // GitHub documents.
+  const laterEvent = pr.events.find((e, i) => i > own || Date.parse(e?.at) > warning.at);
   if (laterEvent) return again(`a "${String(laterEvent.event).replace(/[^a-z_-]/gi, '')}" event happened`);
   return { action: 'CLOSE', why: `warned ${warning.createdAt} and untouched since` };
 }
@@ -352,7 +377,7 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true,
    * is the failure this function exists to prevent.
    */
   const readComments = (number) => {
-    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/comments?per_page=100`, '--jq', '.[] | {author: {login: .user.login}, body: .body, createdAt: .created_at, updatedAt: .updated_at}'];
+    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/comments?per_page=100`, '--jq', '.[] | {id: .id, author: {login: .user.login}, body: .body, createdAt: .created_at, updatedAt: .updated_at}'];
     const r = gh(args);
     if (r.status !== 0) throw new Error(`gh api issues/${number}/comments failed: ${String(r.stderr).trim().slice(0, 300)}`);
     return String(r.stdout)
@@ -362,15 +387,17 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true,
   };
 
   /**
-   * Every timeline event of the PR, as `{ event, at }`. `at` is null for an
-   * event with no time of its own (`committed`).
+   * Every timeline event of the PR, in GitHub's order, as `{ event, id, at }`.
+   * `at` is null for an event with no time of its own (`committed`). A
+   * `commented` event's `id` is the comment's id (measured on #807,
+   * 2026-11-24), which is how the warning's own event is found.
    *
    * Same rule as `readComments`: a failed or unparseable read THROWS. An empty
    * list here would read as "nothing happened since the warning", which is the
    * one answer that allows a close.
    */
   const readEvents = (number) => {
-    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/timeline?per_page=100`, '--jq', '.[] | {event: .event, at: (.created_at // .submitted_at // null)}'];
+    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/timeline?per_page=100`, '--jq', '.[] | {event: .event, id: (.id // null), at: (.created_at // .submitted_at // null)}'];
     const r = gh(args);
     if (r.status !== 0) throw new Error(`gh api issues/${number}/timeline failed: ${String(r.stderr).trim().slice(0, 300)}`);
     return String(r.stdout)

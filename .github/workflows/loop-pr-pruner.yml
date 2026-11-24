@@ -46,6 +46,10 @@ env:
   # The issue that holds one comment per run, scheduled or manual
   # (scripts/agent/post-loop-row.mjs; docs/plans/PLAN-LOOPS.md, rule 5).
   LOOP_LOG_ISSUE: "806"
+  # A scheduled run is LIVE. A manual run is whatever the person chose, and the
+  # choice defaults to dry-run. Set once here so BOTH jobs see the same value:
+  # the log job needs it to mark a failed dry run as a dry run.
+  LOOP_MODE: ${{ github.event_name == 'schedule' && 'live' || inputs.mode }}
 
 jobs:
   prune:
@@ -73,9 +77,6 @@ jobs:
         working-directory: scripts/agent
         run: npm ci
 
-      # A scheduled run is LIVE. A manual run is whatever the person chose, and
-      # the choice defaults to dry-run.
-      #
       # The step exits non-zero for every verdict except CLEAN, so a FINDING,
       # an INCONCLUSIVE or an ERROR turns the run red and GitHub mails the
       # owner. The row is written before the exit, and the next step uploads it
@@ -84,7 +85,6 @@ jobs:
         env:
           MMP_AGENT_API_KEY: ${{ secrets.MMP_AGENT_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          LOOP_MODE: ${{ github.event_name == 'schedule' && 'live' || inputs.mode }}
         run: node scripts/agent/run-loop.mjs pr-pruner --mode "$LOOP_MODE" --repo "$GITHUB_REPOSITORY" --row-file "$RUNNER_TEMP/loop-row.tsv"
 
       - name: Keep the row for the log job
@@ -132,4 +132,5 @@ jobs:
           --issue "$LOOP_LOG_ISSUE"
           --repo "$GITHUB_REPOSITORY"
           --row-file "$RUNNER_TEMP/row/loop-row.tsv"
+          --mode "$LOOP_MODE"
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

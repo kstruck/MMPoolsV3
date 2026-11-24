@@ -189,7 +189,7 @@ async function main() {
     summary = await runPruner({ profile, args, dryRun: args.mode !== 'live', commit });
   } catch (error) {
     if (args.mode === 'check') throw error;
-    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit }) };
+    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit, dryRun: args.mode !== 'live' }) };
   }
   if (!summary) return 0; // --mode check: no run, so no row
 

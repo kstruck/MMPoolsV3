@@ -1,7 +1,7 @@
 // Posts one loop-log row as a comment on the loop-log GitHub issue.
 //
 // Usage:
-//   node scripts/agent/post-loop-row.mjs --loop pr-pruner --issue <n> --row-file row.tsv
+//   node scripts/agent/post-loop-row.mjs --loop pr-pruner --issue <n> --row-file row.tsv --mode dry-run|live
 //
 // Why an issue and not LOOP-LOG.tsv: a GitHub Actions run cannot push
 // to `main` (the branch ruleset needs an approver), and the charter says a run
@@ -28,12 +28,16 @@ function main() {
     'row-file': { default: '' },
     repo: { default: 'kstruck/MMPoolsV3' },
     'run-url': { default: '' },
+    // The mode the loop job ran in. Needed only for the row this script writes
+    // itself, when the loop job left none: a failed dry run must still say DRY RUN.
+    mode: { default: 'live' },
   });
+  if (!['dry-run', 'live'].includes(args.mode)) throw new Error(`--mode must be dry-run or live, got: ${args.mode}`);
   if (!args.loop) throw new Error('--loop is required');
   if (!Number.isInteger(args.issue) || args.issue <= 0) throw new Error('--issue must be the loop-log issue number');
 
   const fileText = args['row-file'] && existsSync(args['row-file']) ? readFileSync(args['row-file'], 'utf8') : null;
-  const row = rowToPost({ loop: args.loop, fileText });
+  const row = rowToPost({ loop: args.loop, fileText, dryRun: args.mode === 'dry-run' });
   console.log(row);
 
   const r = spawnSync('gh', ['issue', 'comment', String(args.issue), '--repo', args.repo, '--body-file', '-'], {
