@@ -77,8 +77,15 @@ export function seasonCompare(type: string | undefined, a: ResultsRow, b: Result
 }
 
 /**
- * The maximum points ONE player could have scored in a week — the denominator
- * the Weekly Results page's "Max" column reports.
+ * The maximum points ONE player could have scored in a week.
+ *
+ * 🛑 NO LONGER WHAT THE WEEK RESULTS "MAX" COLUMN SHOWS (Kevin, 2026-11-23,
+ * PLAN-PTS-LEFT-HIDDEN-TOTAL): that column is now per player — points won plus
+ * Pts Left, from `tallyGridRow` — because the week's ceiling was the same number
+ * on every row ("Max should reflect the max pts left if that user gets the
+ * remaining picks correct"). This function and `unwinnableGameIds` are kept, with
+ * their tests, as the documented week ceiling; nothing renders them today. The
+ * notes below describe the ruling they were written under.
  *
  * ⚠️ This is max POSSIBLE for the week, not max STILL ATTAINABLE — the
  * difference being that it never falls because a PLAYER's picks went wrong. It
@@ -305,9 +312,7 @@ export function resultsFootnote(opts: {
             }
             return `Pts Left is how many points that player can still win in ${weekLabel} — every pick on a game not yet decided${
                 confidenceMode ? ', at its confidence weight' : ', one point each'
-            }; a ? means it is not known yet. Max is the most points anyone could score in ${weekLabel} — ${
-                confidenceMode ? 'every confidence weight correct' : 'every pick correct'
-            }, counting only games that can still be won. Games Wrong counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`;
+            }; a ? means it is not known yet. Max is the most that player can finish ${weekLabel} with: the points they have won plus their Pts Left, if every remaining pick is correct. Games Wrong counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`;
         case 'STANDINGS':
             return 'Weeks counts the weeks the scorer has published for each player. Players level on total margin points are shown as tied — the season prize tiebreaker is set by your commissioner in the pool rules.';
         case 'SEASON':

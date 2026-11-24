@@ -23,6 +23,34 @@ export interface PoolSettingsUpdatePlan {
 }
 
 /**
+ * Settings that are NOT pool rules, so a LOCKED pool's commissioner may still
+ * change them. `shareHiddenPointsLeft` (PLAN-PTS-LEFT-HIDDEN-TOTAL, codex r4):
+ * it only matters during the season, while picks are hidden, and it defaults on.
+ * If a locked pool could not change it, a commissioner could never turn the
+ * disclosure off when it applies. It changes no lock, score or money.
+ *
+ * Narrow on purpose: a `settings` patch qualifies only when EVERY key in it is
+ * listed here, so this can never carry a rule change past the lock. Archived
+ * pools stay read-only.
+ */
+const LOCKED_PHASE_SETTINGS_KEYS: readonly string[] = ['shareHiddenPointsLeft'];
+
+function isPhaseExemptSettingsPatch(
+  pool: { status?: string } | null | undefined,
+  phase: string,
+  group: string,
+  value: unknown,
+): boolean {
+  if (phase !== 'locked' || group !== 'settings') return false;
+  // A pool closed by an admin keeps `isLocked` beside a terminal status, so
+  // `normalizePhase` reads it as locked. It is finished: read-only (codex r7).
+  if (normalizePhase({ status: pool?.status }) === 'archived') return false;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value as Record<string, unknown>);
+  return keys.length > 0 && keys.every(k => LOCKED_PHASE_SETTINGS_KEYS.includes(k));
+}
+
+/**
  * Throws HttpsError('failed-precondition') if any requested key is unknown or
  * not editable in the pool's current lifecycle phase. Otherwise returns the
  * sanitized update plan. When nested `paymentHandles` are edited, legacy
@@ -42,7 +70,7 @@ export function buildPoolSettingsUpdate(
       rejected.push(`${key} (not an editable field)`);
       continue;
     }
-    if (!isGroupEditable(phase, group)) {
+    if (!isGroupEditable(phase, group) && !isPhaseExemptSettingsPatch(pool, phase, group, value)) {
       rejected.push(`${key} (${group} is locked while the pool is ${phase})`);
       continue;
     }
@@ -216,6 +244,17 @@ export function flattenSettingsPatch(
         continue;
       }
       out['settings.pickDistribution'] = value;
+      continue;
+    }
+    // Points-left sharing (PLAN-PTS-LEFT-HIDDEN-TOTAL). A boolean or nothing: a
+    // string "false" would otherwise be stored and read as ON by
+    // `sharesHiddenPointsLeft`, sharing what the commissioner turned off.
+    if (key === 'shareHiddenPointsLeft') {
+      if (typeof value !== 'boolean') {
+        rejected.push(`settings.shareHiddenPointsLeft (must be true or false)`);
+        continue;
+      }
+      out['settings.shareHiddenPointsLeft'] = value;
       continue;
     }
     // Survivor parity settings. `updatePoolSettingsSchema.updates` is

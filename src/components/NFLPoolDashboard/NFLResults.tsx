@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { sharesHiddenPointsLeft } from '@shared/pointsLeftSharing';
 import { useNavigate } from 'react-router';
 import { BarChart3, CalendarRange, Trophy } from 'lucide-react';
 import type { Pool, NFLGame } from '../../types';
@@ -9,14 +10,12 @@ import type { PoolPicksReveal } from '../../services/dbService';
 import { EntryWeekPicks } from './EntryWeekPicks';
 import { rowDisplayName } from '../../utils/entrySelection';
 import { picksGridCell } from '../../utils/picksGrid';
-import { tallyGridRow, pointsLeft, pointsLeftUnknownTitle } from '../../utils/picksGridMax';
+import { tallyGridRow, pointsLeft, pointsLeftUnknownTitle, maxUnknownTitle } from '../../utils/picksGridMax';
 import {
   rankByWeek,
   rankBySeason,
-  weeklyMaxPoints,
   weekValueFor,
   scoredWeekCount,
-  unwinnableGameIds,
   resultsFootnote,
   type ResultsRow,
   type ResultsView,
@@ -99,24 +98,6 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   useEffect(() => { setOwnView('WEEKLY'); }, [pool.id]);
 
   const weeks = useMemo(() => poolSeasonWeeks(games, pool), [games, pool]);
-  // Max counts only the games that can still be WON. A cancelled game grades
-  // VOID and a tie (or an exact spread cover) grades PUSH — all three earn
-  // nothing, so counting them would print a total the scorer can never award.
-  // (codex r1.)
-  const { weekSlateCount, weekScoreableCount } = useMemo(() => {
-    const slate = gamesForPoolWeek(games || [], pool as any, week);
-    const unwinnable = unwinnableGameIds(slate, settings.pickMode === 'ATS');
-    return {
-      weekSlateCount: slate.length,
-      weekScoreableCount: slate.length - unwinnable.size,
-    };
-  }, [games, pool, week, settings.pickMode]);
-  const maxPoints = weeklyMaxPoints(weekScoreableCount, !!settings.confidenceMode);
-  // ⚠️ A Max of 0 is a FACT on a week whose every game was cancelled or tied —
-  // the scorer still publishes that week, and everyone genuinely scored out of
-  // nothing. Only an unloaded slate is unknown. `maxPoints || dash` conflated
-  // the two and rendered the real zero as "—". (codex r2, on r1's own fix.)
-  const maxKnown = weekSlateCount > 0;
 
   // PTS LEFT (Kevin, 2026-11-19): the points each player can still win this
   // week. It is the Current Picks grid's own number — the same cells
@@ -128,8 +109,16 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // ⚠️ Only the reveal for the week on screen, as everywhere else: last week's
   // allowlist applied to this week's slate would reveal by coincidence.
   const wk = reveal && reveal.week === week ? reveal : null;
+  // The commissioner's switch, read from the LIVE pool document (qodo #801):
+  // turning it off hides the totals at once, instead of after the next
+  // reveal poll that would stop sending them.
+  const shareLeft = sharesHiddenPointsLeft((pool as { settings?: { shareHiddenPointsLeft?: unknown } }).settings);
   const revealedGameIds = useMemo(() => (wk ? new Set(wk.revealedGameIds) : undefined), [wk]);
-  const pointsLeftFor = (row: ResultsRow, isMine: boolean): { left: number | null; title?: string } => {
+  // MAX (Kevin, 2026-11-23): the most THIS player can finish the week with —
+  // points already won plus Pts Left — from the same tally, so Max is always
+  // Points + Pts Left once the scorer has caught up. It used to print the week's
+  // ceiling (every weight on every game), the same number on every row.
+  const tallyFor = (row: ResultsRow, isMine: boolean): { left: number | null; leftTitle?: string; max: number | null; maxTitle?: string } => {
     // The viewer's own row is sourced from their own entry, once it has loaded —
     // the same bypass the grid uses (`ownPicksKnown`).
     const isOwnRow = isMine && ownEntryLoaded;
@@ -151,9 +140,16 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       isOwnRow,
       confidenceMode: !!settings.confidenceMode,
       pickMode: settings.pickMode,
+      // The server's total for this row's hidden open picks (PLAN-PTS-LEFT-HIDDEN-TOTAL).
+      hiddenLeft: shareLeft ? wk?.hiddenLeft?.[row.id] : undefined,
     });
     const left = pointsLeft(tally);
-    return { left, title: left === null ? pointsLeftUnknownTitle(tally.leftUnknown) : undefined };
+    return {
+      left,
+      leftTitle: left === null ? pointsLeftUnknownTitle(tally.leftUnknown) : undefined,
+      max: tally.max,
+      maxTitle: tally.max === null ? maxUnknownTitle(tally.maxUnknown) : undefined,
+    };
   };
 
   const rows = entries as ResultsRow[];
@@ -274,7 +270,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                   <>
                     <th className={`${TH} text-right w-24`}>Points</th>
                     <th className={`${TH} text-right w-24`} title="Points this player can still win this week">Pts Left</th>
-                    <th className={`${TH} text-right w-24`}>Max</th>
+                    <th className={`${TH} text-right w-24`} title="The most this player can finish the week with: points already won plus every pick still in play">Max</th>
                     <th className={`${TH} text-right w-24`}>Correct</th>
                     <th className={`${TH} text-right w-28`} title="Graded picks that earned nothing — a tie or a cancelled game counts here too">Games Wrong</th>
                   </>
@@ -318,7 +314,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                 const isOpen = openRowId === row.id;
                 const isMine = !!viewerUid && (row.ownerUid ?? row.id) === viewerUid;
                 // Margin's weekly table has no Pts Left column, so it is not computed there.
-                const ptsLeft = isMargin ? { left: null, title: undefined } : pointsLeftFor(row, isMine);
+                const t = isMargin ? null : tallyFor(row, isMine);
                 return (
                   <React.Fragment key={row.id}>
                   <tr
@@ -341,10 +337,13 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
                         <td className={`${TD} text-right font-display font-bold text-[color:var(--text)]`}>
                           {value === null ? dash : value}
                         </td>
-                        <td className={`${TD} text-right text-muted font-bold`} title={ptsLeft.title}>
-                          {ptsLeft.left === null ? '?' : ptsLeft.left}
+                        {/* No slate loaded for the week: unknown, never a zero (qodo #801). */}
+                        <td className={`${TD} text-right text-muted font-bold`} title={t?.leftTitle}>
+                          {weekGames.length === 0 ? dash : t?.left == null ? '?' : t.left}
                         </td>
-                        <td className={`${TD} text-right text-muted`}>{maxKnown ? maxPoints : dash}</td>
+                        <td className={`${TD} text-right text-muted`} title={t?.maxTitle}>
+                          {weekGames.length === 0 ? dash : t?.max == null ? '?' : t.max}
+                        </td>
                         <td className={`${TD} text-right text-muted font-bold`}>
                           {typeof correct === 'number' ? correct : dash}
                         </td>

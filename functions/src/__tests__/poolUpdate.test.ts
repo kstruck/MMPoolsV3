@@ -7,6 +7,7 @@ import {
   LOCK_AFFECTING_SETTINGS_KEYS,
 } from '../lib/poolUpdate';
 import { normalizePhase, isGroupEditable, classifyUpdateKey } from '../shared/editability';
+import { sharesHiddenPointsLeft } from '../shared/pointsLeftSharing';
 
 describe('flattenSettingsPatch — pickDistribution (PLAN-SPLIT-POT-SETTLEMENT Part C)', () => {
   it.each(['ALWAYS', 'AFTER_LOCK', 'OFF'])('stores %s as a dotted write', (v) => {
@@ -14,6 +15,45 @@ describe('flattenSettingsPatch — pickDistribution (PLAN-SPLIT-POT-SETTLEMENT P
   });
   it.each(['OFFF', '', 'off', 1, null, true])('rejects %s rather than storing it', (v) => {
     expect(() => flattenSettingsPatch({ settings: { pickDistribution: v } }, 'NFL_SURVIVOR')).toThrow(/pickDistribution/);
+  });
+});
+
+describe('settings.shareHiddenPointsLeft (PLAN-PTS-LEFT-HIDDEN-TOTAL)', () => {
+  it('stores true or false', () => {
+    for (const v of [true, false]) {
+      expect(flattenSettingsPatch({ settings: { shareHiddenPointsLeft: v } }, 'NFL_PICKEM')['settings.shareHiddenPointsLeft']).toBe(v);
+    }
+  });
+
+  it('refuses anything that is not a boolean — a stored "false" would read as ON', () => {
+    for (const v of ['false', 'true', 0, 1, null, {}]) {
+      expect(() => flattenSettingsPatch({ settings: { shareHiddenPointsLeft: v } }, 'NFL_PICKEM')).toThrow(/shareHiddenPointsLeft/);
+    }
+  });
+
+  it('a LOCKED pool can still change it — alone — but no rule rides along (codex r4)', () => {
+    const locked = { isLocked: true, status: 'OPEN' };
+    expect(buildPoolSettingsUpdate(locked, { settings: { shareHiddenPointsLeft: false } }).set)
+      .toEqual({ settings: { shareHiddenPointsLeft: false } });
+    // Mixed with a real rule: still refused, so the exemption cannot smuggle one.
+    expect(() => buildPoolSettingsUpdate(locked, { settings: { shareHiddenPointsLeft: false, entryFee: 5 } }))
+      .toThrow(/settings is locked/);
+    // An empty patch earns no exemption either.
+    expect(() => buildPoolSettingsUpdate(locked, { settings: {} })).toThrow(/settings is locked/);
+    // Archived stays read-only.
+    expect(() => buildPoolSettingsUpdate({ status: 'ARCHIVED' }, { settings: { shareHiddenPointsLeft: false } }))
+      .toThrow(/settings is locked/);
+    // So does a pool an admin closed: COMPLETED but still isLocked (codex r7).
+    expect(() => buildPoolSettingsUpdate({ isLocked: true, status: 'COMPLETED' }, { settings: { shareHiddenPointsLeft: false } }))
+      .toThrow(/settings is locked/);
+  });
+
+  it('is ON when absent or unrecognised, OFF only when false', () => {
+    expect(sharesHiddenPointsLeft(undefined)).toBe(true);
+    expect(sharesHiddenPointsLeft({})).toBe(true);
+    expect(sharesHiddenPointsLeft({ shareHiddenPointsLeft: 'false' })).toBe(true);
+    expect(sharesHiddenPointsLeft({ shareHiddenPointsLeft: true })).toBe(true);
+    expect(sharesHiddenPointsLeft({ shareHiddenPointsLeft: false })).toBe(false);
   });
 });
 

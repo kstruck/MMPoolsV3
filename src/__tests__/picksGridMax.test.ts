@@ -387,3 +387,108 @@ describe('tallyGridRow — left (the Pts Left column)', () => {
         expect(pointsLeftUnknownTitle(undefined)).toBe('Not known yet');
     });
 });
+
+// PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23): members saw "?" on every other
+// row until the last games kicked off. The server now sends one total per row —
+// the points on its hidden picks whose games are not decided — and the tally
+// uses it.
+describe('tallyGridRow — the server total for hidden open picks (hiddenLeft)', () => {
+    // g1 won at 9, g2 lost, g3 live at 5 — revealed; g4 and g5 not kicked off — hidden.
+    const sunday = () => cells(pick('W', 9), pick('L', 3), pick(null, 5), HIDDEN, HIDDEN);
+
+    it('confidence: Pts Left = revealed picks in play + the total; Max = won + Pts Left', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: sunday(), setCount: 5, revealMode: 'PER_GAME',
+            isOwnRow: false, confidenceMode: true, hiddenLeft: 6 + 7,
+        });
+        expect(pointsLeft(t)).toBe(5 + 13);
+        expect(t.max).toBe(9 + 18);
+    });
+
+    it('without it, the same row is still "?" — the pre-deploy behaviour', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: sunday(), setCount: 5, revealMode: 'PER_GAME',
+            isOwnRow: false, confidenceMode: true,
+        });
+        expect(pointsLeft(t)).toBeNull();
+        expect(t.max).toBeNull();
+    });
+
+    it('standard scoring: the total is one point per hidden open pick', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: cells(pick('W'), pick('L'), pick(null), HIDDEN, HIDDEN), setCount: 4,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false, hiddenLeft: 1,
+        });
+        expect(pointsLeft(t)).toBe(2);
+        expect(t.max).toBe(3);
+    });
+
+    it('a total of 0 is a real 0 (no hidden picks still in play)', () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: sunday(), setCount: 3, revealMode: 'PER_GAME',
+            isOwnRow: false, confidenceMode: true, hiddenLeft: 0,
+        });
+        expect(pointsLeft(t)).toBe(5);
+        expect(t.max).toBe(14);
+    });
+
+    it('a hidden pick on a game that has just FINISHED: Pts Left exact, confidence Max unknown', () => {
+        // The reveal lags the game: f1 is final but its pick is still hidden. The
+        // server's total covers only open games; the f1 pick may already be a
+        // win at an unknown weight, so Max cannot be stated.
+        const slate = [game('f1', 'FINAL', { scores: { home: 20, away: 10 } }), game('o1')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 2,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: true, hiddenLeft: 8,
+        });
+        expect(pointsLeft(t)).toBe(8);
+        expect(t.max).toBeNull();
+        expect(t.maxUnknown).toBe('WEIGHTS_HIDDEN');
+    });
+
+    it('the same case in standard scoring bounds the finished hidden pick at 1', () => {
+        const slate = [game('f1', 'FINAL', { scores: { home: 20, away: 10 } }), game('o1')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 2,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false, hiddenLeft: 1,
+        });
+        expect(pointsLeft(t)).toBe(1);
+        expect(t.max).toBe(2);
+    });
+
+    it('a finished hidden game the row did NOT pick adds nothing (the count proves it, codex r4)', () => {
+        const slate = [game('f1', 'FINAL', { scores: { home: 20, away: 10 } }), game('o1')];
+        // One saved pick, and it is the hidden open one (hiddenLeft = 1): none can sit on f1.
+        const std = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 1,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false, hiddenLeft: 1,
+        });
+        expect(std.max).toBe(1);
+        // Confidence: no unrevealed pick beyond what is visible → exact, not "?".
+        const conf = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 0,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: true, hiddenLeft: 0,
+        });
+        expect(conf.max).toBe(0);
+        expect(pointsLeft(conf)).toBe(0);
+    });
+
+    it("confidence: one hidden pick and a positive total — it is on the open game, so Max is exact (codex r6)", () => {
+        const slate = [game('f1', 'FINAL', { scores: { home: 20, away: 10 } }), game('o1')];
+        const t = tallyGridRow({
+            weekGames: slate, cells: new Map([['f1', HIDDEN], ['o1', HIDDEN]]), setCount: 1,
+            revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: true, hiddenLeft: 8,
+        });
+        expect(pointsLeft(t)).toBe(8);
+        expect(t.max).toBe(8);
+    });
+
+    it("the viewer's own row ignores it: every cell is already known", () => {
+        const t = tallyGridRow({
+            weekGames: GAMES, cells: cells(pick('W', 9), pick('L', 3), pick(null, 5), pick(null, 6), pick(null, 7)),
+            setCount: 5, revealMode: 'PER_GAME', isOwnRow: true, confidenceMode: true, hiddenLeft: 999,
+        });
+        expect(pointsLeft(t)).toBe(18);
+        expect(t.max).toBe(27);
+    });
+});
