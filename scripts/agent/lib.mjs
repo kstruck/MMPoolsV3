@@ -30,15 +30,41 @@ export const KEY_ENV = 'MMP_AGENT_API_KEY';
 /** Exit codes. An unavailable reviewer is never a clean reviewer (CLAUDE.md §2c). */
 export const EXIT = Object.freeze({ CLEAN: 0, FINDINGS: 1, INCONCLUSIVE: 2 });
 
-/** Variables that would route the subprocess somewhere the credit does not cover. */
-const STRIPPED_ENV = [
-  'ANTHROPIC_AUTH_TOKEN', // an OAuth/bearer token outranks nothing we want: drop it
-  'CLAUDE_CODE_OAUTH_TOKEN', // the subscription login: never bill the plan's limits
-  'ANTHROPIC_BASE_URL', // a proxy or gateway is not the Claude Platform
-  'CLAUDE_CODE_USE_BEDROCK', // cloud platforms are explicitly not covered
-  'CLAUDE_CODE_USE_VERTEX',
-  'CLAUDE_CODE_USE_FOUNDRY',
-];
+/**
+ * Every inherited variable whose name starts with one of these is DROPPED from
+ * the subprocess environment. Matched case-insensitively, because Windows
+ * environment names are.
+ *
+ * 🛑 THIS IS A PREFIX RULE ON PURPOSE, AND IT WAS A SIX-NAME LIST UNTIL
+ * 2026-11-23. The list named the variables that were KNOWN to reroute a run
+ * (an OAuth token, a base URL, the Bedrock/Vertex switches). It missed the
+ * case that actually happened: the script was started from inside a Claude
+ * Code session, the subprocess inherited that session's ~30 `CLAUDE_CODE_*`
+ * variables, and the run was BILLED AS CLAUDE CODE — which the plan's API
+ * credit does not cover — while every check this file makes still passed
+ * (`apiKeySource` was `ANTHROPIC_API_KEY` throughout).
+ *
+ * Measured with three calls of the same size on one key, reading the Console
+ * billing page after each:
+ *
+ *   plain Messages API call          → promotional credit paid  ($0.08)
+ *   Agent SDK, no CLAUDE* inherited  → promotional credit paid  ($0.12)
+ *   Agent SDK, session vars inherited→ PURCHASED balance paid   ($0.12)
+ *
+ * The first real pre-review ran the third way and took $1.06 of real money.
+ *
+ * Which single variable does it is NOT known: they were removed together, and
+ * telling them apart needs a billing-page read per variable. So nothing that
+ * a Claude Code session exports is passed through. A list of "the bad ones"
+ * is the shape that failed; do not narrow this back to one.
+ */
+const STRIPPED_ENV_PREFIXES = ['CLAUDE', 'ANTHROPIC_'];
+
+/** True when an inherited variable must not reach the subprocess. */
+export function isStrippedEnvName(name) {
+  const upper = String(name).toUpperCase();
+  return STRIPPED_ENV_PREFIXES.some((prefix) => upper.startsWith(prefix));
+}
 
 /** The key from `MMP_AGENT_API_KEY`, or a thrown error that says how to fix it. */
 export function resolveApiKey(env) {
@@ -57,13 +83,30 @@ export function resolveApiKey(env) {
  * The environment handed to the SDK subprocess.
  *
  * `Options.env` REPLACES the subprocess environment (sdk.d.ts), so the parent
- * environment is spread first to keep PATH and friends.
+ * environment is copied to keep PATH and friends — MINUS everything
+ * `isStrippedEnvName` matches. The only `CLAUDE*` / `ANTHROPIC_*` variables
+ * the subprocess sees are the two set here, after the copy.
  */
 export function buildChildEnv(env, key) {
-  const child = { ...env, ANTHROPIC_API_KEY: key, CLAUDE_AGENT_SDK_CLIENT_APP: 'mmp-agent-scripts/0.0.0' };
-  for (const name of STRIPPED_ENV) delete child[name];
-  delete child[KEY_ENV];
+  const child = {};
+  for (const [name, value] of Object.entries(env)) {
+    if (name === KEY_ENV || isStrippedEnvName(name)) continue;
+    child[name] = value;
+  }
+  child.ANTHROPIC_API_KEY = key;
+  child.CLAUDE_AGENT_SDK_CLIENT_APP = 'mmp-agent-scripts/0.0.0';
   return child;
+}
+
+/**
+ * Names in `env` that mark it as a Claude Code session's environment.
+ *
+ * Used only to tell the operator what happened: the variables are dropped
+ * either way. Printing the count turns "the bill went to the wrong balance"
+ * from something found on the billing page into something visible in the run.
+ */
+export function inheritedSessionVars(env) {
+  return Object.keys(env).filter((name) => String(name).toUpperCase().startsWith('CLAUDE'));
 }
 
 /** Tools the reviewer holds. No Bash, no Edit, no Write: read-only by construction. */
