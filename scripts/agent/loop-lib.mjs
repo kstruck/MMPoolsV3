@@ -140,8 +140,26 @@ export const PRUNER = Object.freeze({
   TRUSTED_AUTHORS: Object.freeze(['github-actions', 'github-actions[bot]', 'kstruck']),
   /** `gh pr list --limit`. A full page means the list may be cut short. */
   LIST_LIMIT: 500,
-  /** A warning is "the last thing that touched the PR" when `updatedAt` is within this of it. */
-  LAST_ACTIVITY_SLACK_MS: 120_000,
+  /**
+   * A warning is "the last thing that touched the PR" when `updatedAt` is
+   * within this of it.
+   *
+   * NOT zero, and that is measured: on 40 PRs of this repo (2026-11-24), a PR
+   * whose last event was a comment had `updatedAt` 0 or 1 second AFTER that
+   * comment's own timestamp (#802, #778, #774: 1 s). An exact comparison would
+   * read every warning as "touched since" and the loop would warn for ever
+   * and never close.
+   *
+   * It was 120 s first. That let a push or a review made within two minutes
+   * of the warning go unseen, and the PR be closed with no second warning
+   * (codex round 2 on this PR). 5 s keeps the measured 1 s with room, and
+   * `decideAction` separately refuses to close when any OTHER comment is
+   * newer than the warning, whatever the gap.
+   *
+   * What is left: a push, label or review inside those 5 seconds, followed by
+   * 14 more idle days, is closed without a second warning.
+   */
+  LAST_ACTIVITY_SLACK_MS: 5_000,
   /** Attempts per write before the PR is skipped and flagged (the skill's retry cap). */
   MAX_ATTEMPTS: 2,
   TOOL_SERVER: 'pruner',
@@ -206,6 +224,13 @@ export function decideAction(pr, now) {
   if (sinceWarning > PRUNER.LAST_ACTIVITY_SLACK_MS) {
     return { action: 'WARN', why: `stale again: something touched the PR after the warning of ${warning.createdAt}` };
   }
+  // Comments carry their own times, so for them no slack is needed at all:
+  // any comment written or edited after the warning resets it.
+  const laterComment = (Array.isArray(pr.comments) ? pr.comments : []).some((c) => {
+    const touched = Math.max(Date.parse(c?.createdAt) || 0, Date.parse(c?.updatedAt) || 0);
+    return touched > warning.at;
+  });
+  if (laterComment) return { action: 'WARN', why: `stale again: a comment was written or edited after the warning of ${warning.createdAt}` };
   return { action: 'CLOSE', why: `warned ${warning.createdAt} and untouched since` };
 }
 
@@ -282,7 +307,7 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
    * is the failure this function exists to prevent.
    */
   const readComments = (number) => {
-    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/comments?per_page=100`, '--jq', '.[] | {author: {login: .user.login}, body: .body, createdAt: .created_at}'];
+    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/comments?per_page=100`, '--jq', '.[] | {author: {login: .user.login}, body: .body, createdAt: .created_at, updatedAt: .updated_at}'];
     const r = gh(args);
     if (r.status !== 0) throw new Error(`gh api issues/${number}/comments failed: ${String(r.stderr).trim().slice(0, 300)}`);
     return String(r.stdout)

@@ -173,6 +173,33 @@ describe('decideAction: what the rules allow for one pull request', () => {
     expect(decideAction(input, NOW).action).toBe('WARN');
   });
 
+  it('GitHub stamps the PR a second after the comment: that is still "untouched"', () => {
+    // Measured on this repo: updatedAt runs 0 to 1 s behind a comment's own time.
+    const input = pr(1, { updatedAt: daysAgo(20, 1000), comments: [warning(daysAgo(20))] });
+    expect(decideAction(input, NOW).action).toBe('CLOSE');
+  });
+
+  it('anything that touched the PR more than 5 s after the warning resets it', () => {
+    // A push 30 s after the warning. The first version allowed two minutes.
+    const input = pr(1, { updatedAt: daysAgo(20, 30_000), comments: [warning(daysAgo(20))] });
+    expect(decideAction(input, NOW).action).toBe('WARN');
+    expect(PRUNER.LAST_ACTIVITY_SLACK_MS).toBeLessThanOrEqual(5_000);
+    // And not zero: see the measurement on the constant.
+    expect(PRUNER.LAST_ACTIVITY_SLACK_MS).toBeGreaterThanOrEqual(2_000);
+  });
+
+  it('a comment after the warning resets it however small the gap', () => {
+    const reply = { author: { login: 'someone' }, body: 'still working on this', createdAt: daysAgo(20, 2000) };
+    const input = pr(1, { updatedAt: daysAgo(20, 2000), comments: [warning(daysAgo(20)), reply] });
+    expect(decideAction(input, NOW).action).toBe('WARN');
+  });
+
+  it('an EDIT to an older comment after the warning resets it too', () => {
+    const edited = { author: { login: 'someone' }, body: 'x', createdAt: daysAgo(40), updatedAt: daysAgo(20, 2000) };
+    const input = pr(1, { updatedAt: daysAgo(20, 2000), comments: [edited, warning(daysAgo(20))] });
+    expect(decideAction(input, NOW).action).toBe('WARN');
+  });
+
   it('a PR warned yesterday is not stale, so it is not closed on the next run', () => {
     const input = pr(1, { updatedAt: daysAgo(1), comments: [warning(daysAgo(1))] });
     expect(decideAction(input, NOW).action).toBe('NOT_STALE');
