@@ -5,6 +5,7 @@ import {
   ChevronDown, ChevronUp, Clock, UserCog, Ban
 } from 'lucide-react';
 import { NFLBrandingSettings } from './NFLBrandingSettings';
+import { NFLPointsLeftSharingSetting } from './NFLPointsLeftSharingSetting';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
 import { isPoolManager, poolCoManagers } from '../../utils/auth';
@@ -2057,6 +2058,10 @@ export const NFLManagerView: React.FC<NFLManagerViewProps> = ({
            week 3 for no reason the server asks for.
       ═══════════════════════════════════════════ */}
       {commishTab === 'settings' && <NFLBrandingSettings pool={pool} />}
+
+      {/* PLAN-PTS-LEFT-HIDDEN-TOTAL: Pick'em only, and OUTSIDE `canEditSettings`
+          for the same reason as branding — it only matters in season (codex r1). */}
+      {commishTab === 'settings' && type === 'NFL_PICKEM' && <NFLPointsLeftSharingSetting pool={pool} />}
 
       {commishTab === 'settings' && (
       /* ═══════════════════════════════════════════

@@ -104,8 +104,16 @@ export function tallyGridRow(args: {
     confidenceMode: boolean;
     /** `settings.pickMode` — the same value `picksGridCell` grades with. */
     pickMode?: string;
+    /**
+     * The server's total for this row's picks that are hidden from the viewer and
+     * on games not yet decided (`reveal.hiddenLeft`, PLAN-PTS-LEFT-HIDDEN-TOTAL):
+     * their confidence weights summed, or one per pick. `undefined` when the
+     * server sent none — the pre-deploy server, a non-Pick'em pool, or a hidden
+     * pick with no stored weight — and the tally falls back to bounding them.
+     */
+    hiddenLeft?: number;
 }): GridRowTally {
-    const { weekGames, cells, setCount, revealMode, isOwnRow, confidenceMode, pickMode } = args;
+    const { weekGames, cells, setCount, revealMode, isOwnRow, confidenceMode, pickMode, hiddenLeft } = args;
 
     let wins = 0;
     let losses = 0;
@@ -120,6 +128,10 @@ export function tallyGridRow(args: {
     // the only hidden games whose picks count as points LEFT (codex r1 on the
     // Pts Left PR — a lagging reveal must not show a finished game as left).
     let hiddenOpen = 0;
+    // Hidden games already DECIDED that could still have paid (a reveal lagging
+    // a finished game): the server's `hiddenLeft` does not cover these, and a
+    // pick on one may already be a win, so Max must still allow for it.
+    let hiddenDecidedLive = 0;
     let weightMissing = false;
     // A missing weight on a pick still IN PLAY makes Pts Left unknown too; one on
     // an already-won pick affects only Max (qodo #790, finding 1).
@@ -130,8 +142,11 @@ export function tallyGridRow(args: {
         if (!cell) continue;
         if (cell.kind === 'HIDDEN') {
             hiddenCells++;
-            if (hiddenGameCanPay(game, pickMode)) hiddenLive++;
-            if (game.status !== 'CANCELLED' && (game.status !== 'FINAL' || !hasReportedScores(game))) hiddenOpen++;
+            const canPay = hiddenGameCanPay(game, pickMode);
+            const open = game.status !== 'CANCELLED' && (game.status !== 'FINAL' || !hasReportedScores(game));
+            if (canPay) hiddenLive++;
+            if (open) hiddenOpen++;
+            else if (canPay) hiddenDecidedLive++;
             continue;
         }
         if (cell.kind !== 'PICK') continue;
@@ -155,6 +170,41 @@ export function tallyGridRow(args: {
     const tally = { wins, losses, earned };
 
     if (openWeightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left: null, leftUnknown: 'WEIGHT_MISSING' };
+
+    // The SERVER'S TOTAL for the hidden open picks (PLAN-PTS-LEFT-HIDDEN-TOTAL,
+    // Kevin 2026-11-23: members saw "?" for every other player until the last
+    // games kicked off). With it, Pts Left is exact: the revealed picks still in
+    // play plus that total. Max adds it to what is already won — the most the
+    // row can finish with, which is Kevin's definition of the column.
+    //
+    // A hidden pick on an already-DECIDED game (the reveal lagging the game) is
+    // not in the server's total and may already be a win. Standard scoring can
+    // bound it at 1 each; a confidence weight cannot be bounded, so Max is
+    // unknown until the reveal catches up — Pts Left is still exact, because a
+    // decided game is not points left.
+    if (!isOwnRow && hiddenCells > 0 && typeof hiddenLeft === 'number') {
+        const left = remaining + hiddenLeft;
+        if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left };
+        // How many hidden picks CAN sit on a decided game. Without the saved-pick
+        // count, any of those games might hold one. With it, the picks not yet
+        // accounted for bound it — and in standard scoring `hiddenLeft` IS the
+        // number of hidden picks on open games, so those come off too. A row
+        // whose count is fully explained by what is visible has none, and its
+        // Max is exact (codex r4: it read one high, or "?", before).
+        // In confidence mode `hiddenLeft` is a weight SUM, not a count — but every
+        // weight is at least 1, so a positive total proves at least ONE hidden
+        // pick is on an open game (codex r6).
+        const hiddenOpenPicksAtLeast = confidenceMode ? (hiddenLeft > 0 ? 1 : 0) : hiddenLeft;
+        const unexplained = setCount === undefined
+            ? Infinity
+            : Math.max(0, setCount - revealedPicks - hiddenOpenPicksAtLeast);
+        const decidedMost = Math.min(hiddenDecidedLive, unexplained);
+        if (decidedMost > 0) {
+            if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', left };
+            return { ...tally, max: earned + left + decidedMost, left };
+        }
+        return { ...tally, max: earned + left, left };
+    }
 
     // The viewer's own row is sourced from their own entry: every cell is known.
     if (!isOwnRow && hiddenCells > 0) {

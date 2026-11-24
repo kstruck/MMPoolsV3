@@ -355,7 +355,10 @@ describe('resultsFootnote', () => {
 
     it('switches the weekly wording between confidence and straight scoring', () => {
         expect(f('WEEKLY', true)).toContain('confidence weight');
-        expect(f('WEEKLY', false)).toContain('every pick correct');
+        expect(f('WEEKLY', false)).toContain('one point each');
+        // Max is per player now (Kevin, 2026-11-23), not the week's ceiling.
+        expect(f('WEEKLY', false)).toContain('the points they have won plus their Pts Left');
+        expect(f('WEEKLY', false)).not.toContain('most points anyone could score');
         expect(f('WEEKLY', false)).not.toContain('confidence weight');
     });
 

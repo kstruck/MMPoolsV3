@@ -138,6 +138,7 @@ const CREATED_POOLS = [
     'blind-reveal-pickem', 'blind-reveal-survivor-open', 'blind-reveal-survivor-locked',
     'blind-bracket-pool', 'blind-plain-commish',
     'blind-progress-pool', 'blind-progress-legacy',
+    'blind-left-conf', 'blind-left-surv', 'blind-left-std',
 ];
 const CREATED_GAMES = [
     'blind-submit-g1', 'blind-submit-g2', 'blind-weekly-w1-g', 'blind-weekly-w2-g',
@@ -145,6 +146,8 @@ const CREATED_GAMES = [
     'blind-surv-future-1', 'blind-surv-future-2', 'blind-surv-past-1', 'blind-surv-past-2',
     'blind-plain-future-g',
     'blind-progress-g1', 'blind-progress-g2', 'blind-progress-legacy-g',
+    'blind-left-locked', 'blind-left-open1', 'blind-left-open2', 'blind-left-cancelled',
+    'blind-left-final-noscore', 'blind-left-final-scored',
 ];
 const CREATED_USERS = [ALICE, BOB, OWNER, ADMIN, STALE_ADMIN, 'blind-legacy-no-record'];
 
@@ -854,5 +857,136 @@ describe('getPoolPicks — pool-wide pick progress', () => {
         // …and the callable's answer is unchanged by the rewrite.
         const res: any = await wGetPicks({ data: { poolId: POOL, week: 1 }, auth: asAlice } as never);
         expect(res.progress).toEqual({ complete: 1, total: 2 });
+    }, 30000);
+});
+
+// ---------------------------------------------------------------------------
+// PLAN-PTS-LEFT-HIDDEN-TOTAL — `hiddenLeft`, one SUM per entry
+// ---------------------------------------------------------------------------
+describe('getPoolPicks — hiddenLeft (the points on hidden picks still in play)', () => {
+    type Reveal = {
+        hiddenLeft?: Record<string, number>;
+        counts: Record<string, number>;
+        picks: Record<string, Record<string, string>>;
+        confidence: Record<string, Record<string, number>>;
+    };
+    const read = async (poolId: string, auth: unknown) =>
+        (await wGetPicks({ data: { poolId, week: 1 }, auth } as never)) as Reveal;
+    const SEASON = 'blind-left-season';
+    const POOL = 'blind-left-conf';
+    const SURV = 'blind-left-surv';
+    const LOCKED = 'blind-left-locked';
+    const OPEN1 = 'blind-left-open1';
+    const OPEN2 = 'blind-left-open2';
+    const CANCELLED = 'blind-left-cancelled';
+    const STD = 'blind-left-std';
+    // FINAL with a kickoff still in the future: a STANDARD pool's per-game lock
+    // is clock-only, so these stay hidden — the state codex r3 asked about.
+    const FINAL_NOSCORE = 'blind-left-final-noscore';
+    const FINAL_SCORED = 'blind-left-final-scored';
+
+    beforeAll(async () => {
+        await seedGame(SEASON, LOCKED, 1, Date.now() - HOUR);
+        await seedGame(SEASON, OPEN1, 1, Date.now() + 4 * HOUR);
+        await seedGame(SEASON, OPEN2, 1, Date.now() + 8 * HOUR);
+        await seedGame(SEASON, CANCELLED, 1, Date.now() + 6 * HOUR);
+        await db.collection('nfl_games').doc(CANCELLED).update({ status: 'CANCELLED' });
+        await seedPool(SEASON, POOL, 'NFL_PICKEM', {
+            // `lockRuleVersion: 2` — a STAMPED pool, so PER_GAME is what it plays.
+            // An unstamped confidence pool still plays WEEKLY (the legacy clause in
+            // `shared/nflLockMode.ts`): its whole week reveals at the first
+            // kickoff, and every total would correctly be 0.
+            settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: true, lockRuleVersion: 2 },
+        });
+        await seedMember(POOL, ALICE);
+        await seedMember(POOL, BOB);
+        const entries = db.collection('pools').doc(POOL).collection('entries');
+        // Alice: locked game at 5 (revealed), open games at 7 and 3 (hidden),
+        // and a pick on the cancelled game at 9 — which can never score.
+        await entries.doc(ALICE).set({
+            id: ALICE, poolId: POOL, ownerUid: ALICE, userName: 'Alice',
+            picks: { [LOCKED]: 'KC', [OPEN1]: 'BUF', [OPEN2]: 'KC', [CANCELLED]: 'KC' },
+            confidence: { [LOCKED]: 5, [OPEN1]: 7, [OPEN2]: 3, [CANCELLED]: 9 },
+        });
+        // Bob: a hidden open pick with NO stored weight.
+        await entries.doc(BOB).set({
+            id: BOB, poolId: POOL, ownerUid: BOB, userName: 'Bob',
+            picks: { [LOCKED]: 'BUF', [OPEN1]: 'KC' },
+            confidence: { [LOCKED]: 4 },
+        });
+        await seedPool(SEASON, SURV, 'NFL_SURVIVOR');
+        await seedMember(SURV, ALICE);
+
+        await seedGame(SEASON, FINAL_NOSCORE, 1, Date.now() + 5 * HOUR);
+        await db.collection('nfl_games').doc(FINAL_NOSCORE).update({ status: 'FINAL', scores: admin.firestore.FieldValue.delete() });
+        await seedGame(SEASON, FINAL_SCORED, 1, Date.now() + 5 * HOUR);
+        await db.collection('nfl_games').doc(FINAL_SCORED).update({ status: 'FINAL', scores: { home: 24, away: 17 } });
+        await seedPool(SEASON, STD, 'NFL_PICKEM', {
+            settings: { entryFee: 25, lockMode: 'PER_GAME', pickMode: 'STRAIGHT', confidenceMode: false, lockRuleVersion: 2 },
+        });
+        await seedMember(STD, ALICE);
+        await db.collection('pools').doc(STD).collection('entries').doc(ALICE).set({
+            id: ALICE, poolId: STD, ownerUid: ALICE, userName: 'Alice',
+            picks: { [LOCKED]: 'KC', [OPEN1]: 'BUF', [FINAL_NOSCORE]: 'KC', [FINAL_SCORED]: 'KC' },
+        });
+    }, 30000);
+
+    it('standard scoring: one per hidden pick still winnable — a FINAL with no scores counts, a scored FINAL does not', async () => {
+        // OPEN1 (open) + FINAL_NOSCORE (the scorer grades it when scores arrive):
+        // the client's own notion of "decided" (`tallyGridRow`), codex r3.
+        const res = await read(STD, asAlice);
+        expect(res.hiddenLeft?.[ALICE]).toBe(2);
+    }, 30000);
+
+    it('a member gets each entry\'s TOTAL on hidden open picks — and still no hidden pick or weight', async () => {
+        const res = await read(POOL, asAlice);
+        // 7 + 3: the cancelled game's 9 can never score, and the locked game is revealed.
+        expect(res.hiddenLeft?.[ALICE]).toBe(10);
+        // Nothing about WHICH open game or team rides along. (The cancelled game
+        // has left SCHEDULED, so a confidence pool treats it as locked and
+        // reveals it — existing behaviour, unchanged here.)
+        expect(res.picks[ALICE][OPEN1]).toBeUndefined();
+        expect(res.picks[ALICE][OPEN2]).toBeUndefined();
+        expect(res.confidence[ALICE][OPEN1]).toBeUndefined();
+        expect(res.confidence[ALICE][OPEN2]).toBeUndefined();
+        expect(res.picks[ALICE][LOCKED]).toBe('KC');
+    }, 30000);
+
+    it('a hidden open pick with no stored weight leaves the entry OUT — never a short total', async () => {
+        const res = await read(POOL, asAlice);
+        // The map is there (Alice is in it) — Bob alone is left out.
+        expect(res.hiddenLeft?.[ALICE]).toBe(10);
+        expect(BOB in (res.hiddenLeft ?? {})).toBe(false);
+    }, 30000);
+
+    it('the commissioner gets the same totals as a member (ungated, like counts)', async () => {
+        const member = await read(POOL, asAlice);
+        const commish = await read(POOL, asOwner);
+        expect(commish.hiddenLeft).toEqual(member.hiddenLeft);
+    }, 30000);
+
+    it('SUPER_ADMIN sees every pick, so nothing is hidden and every total is 0', async () => {
+        const res = await read(POOL, asSuperAdmin);
+        expect(res.hiddenLeft?.[ALICE]).toBe(0);
+        expect(res.hiddenLeft?.[BOB]).toBe(0);
+    }, 30000);
+
+    it('the commissioner can turn it OFF: no totals are sent, for anyone', async () => {
+        await db.collection('pools').doc(POOL).update({ 'settings.shareHiddenPointsLeft': false });
+        try {
+            const member = await read(POOL, asAlice);
+            const commish = await read(POOL, asOwner);
+            expect(member.hiddenLeft).toBeUndefined();
+            expect(commish.hiddenLeft).toBeUndefined();
+            // Nothing else about the reveal changes.
+            expect(member.counts[ALICE]).toBe(4);
+        } finally {
+            await db.collection('pools').doc(POOL).update({ 'settings.shareHiddenPointsLeft': admin.firestore.FieldValue.delete() });
+        }
+    }, 30000);
+
+    it('a Survivor pool carries no hiddenLeft at all', async () => {
+        const res = await read(SURV, asAlice);
+        expect(res.hiddenLeft).toBeUndefined();
     }, 30000);
 });

@@ -16,6 +16,8 @@ import { MemoryRouter } from 'react-router';
 vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
 
 import { NFLResults } from '../components/NFLPoolDashboard/NFLResults';
+// `?raw` — the grid renders through a heavier harness; its gate is pinned by source.
+import gridSource from '../components/NFLPoolDashboard/NFLPicksGrid.tsx?raw';
 
 afterEach(cleanup);
 
@@ -112,5 +114,80 @@ describe('NFLResults — Week Results: Pts Left and Games Wrong', () => {
   it('standard scoring: one point per pick still in play', () => {
     const { container } = renderResults(false);
     expect(cellsOf(container, 'Me Myself')[3]).toBe('2');
+  });
+});
+
+describe('NFLResults — Max is per player, and the server total fills hidden picks (Kevin, 2026-11-23)', () => {
+  // A PER_GAME week on Sunday: c1 final, c2 live, c3 not kicked off — so c3 is
+  // hidden from the viewer on every other row.
+  const SUNDAY = {
+    week: 3, mode: 'PER_GAME', revealedGameIds: ['c1', 'c2'],
+    picks: { u2: { c1: 'BAL', c2: 'MIA' } }, confidence: { u2: { c1: 4, c2: 3 } },
+    counts: { u2: 3 },
+  };
+
+  it("Max is that player's own points plus Pts Left, not the week's ceiling", () => {
+    const { container } = renderResults();
+    // Me: won 9, 11 left → 20. Sam: won 0 (c1 lost), 5 left → 5. Lee: nothing → 0.
+    expect(cellsOf(container, 'Me Myself')[4]).toBe('20');
+    expect(cellsOf(container, 'Sam Sample')[4]).toBe('5');
+    expect(cellsOf(container, 'Lee Longname')[4]).toBe('0');
+  });
+
+  it('before the server total exists, a hidden open pick reads "?" in Pts Left and Max', () => {
+    const { container } = renderResults(true, SUNDAY);
+    const c = cellsOf(container, 'Sam Sample');
+    expect(c[3]).toBe('?');
+    expect(c[4]).toBe('?');
+  });
+
+  it("with the server's total for the hidden picks, other players show real numbers", () => {
+    // Sam's hidden c3 pick carries 2: 3 (c2, live) + 2 = 5 left; won 0 → Max 5.
+    const { container } = renderResults(true, { ...SUNDAY, hiddenLeft: { u2: 2 } });
+    const c = cellsOf(container, 'Sam Sample');
+    expect(c[3]).toBe('5');
+    expect(c[4]).toBe('5');
+    // The viewer's own row never needed it.
+    expect(cellsOf(container, 'Me Myself')[3]).toBe('11');
+    expect(cellsOf(container, 'Me Myself')[4]).toBe('20');
+  });
+
+  it("the commissioner's switch OFF hides the totals at once — the live pool setting wins over a cached reveal", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <NFLResults
+          pool={{ id: 'p1', type: 'NFL_PICKEM', seasonType: 2, settings: { confidenceMode: true, shareHiddenPointsLeft: false } } as never}
+          entries={ENTRIES} games={GAMES} week={3} viewerUid="me"
+          reveal={{ ...SUNDAY, hiddenLeft: { u2: 2 } } as never} ownEntryLoaded view="WEEKLY"
+        />
+      </MemoryRouter>,
+    );
+    expect(cellsOf(container, 'Sam Sample')[3]).toBe('?');
+    expect(cellsOf(container, 'Me Myself')[3]).toBe('11');
+  });
+
+  it('the Current Picks grid applies the same live gate', () => {
+    expect(gridSource).toContain('hiddenLeft: shareLeft ? wk?.hiddenLeft?.[row.id] : undefined');
+    expect(gridSource).toContain('const shareLeft = sharesHiddenPointsLeft(');
+  });
+
+  it('no games loaded for the week: a dash, never a Max of 0', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <NFLResults
+          pool={{ id: 'p1', type: 'NFL_PICKEM', seasonType: 2, settings: { confidenceMode: true } } as never}
+          entries={ENTRIES} games={[]} week={3} viewerUid="me"
+          reveal={REVEAL} ownEntryLoaded view="WEEKLY"
+        />
+      </MemoryRouter>,
+    );
+    const c = cellsOf(container, 'Me Myself');
+    expect(c[3]).toBe('—');
+    expect(c[4]).toBe('—');
+  });
+
+  it('a row the server sent no total for still reads "?", never a guess', () => {
+    const { container } = renderResults(true, { ...SUNDAY, hiddenLeft: {} });
+    expect(cellsOf(container, 'Sam Sample')[3]).toBe('?');
   });
 });
