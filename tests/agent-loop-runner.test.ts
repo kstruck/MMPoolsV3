@@ -219,14 +219,15 @@ describe('the tools enforce the rules whatever the model asks', () => {
   it('close_pr on a keep PR is REFUSED and writes nothing', () => {
     const s = live([warnedPr(7, { labels: [{ name: 'keep' }] })]);
     s.handlers.list_open_prs();
-    expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ refused: true, allowedAction: 'KEEP' });
+    // The list never offered it, so it is refused before it is even read.
+    expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ refused: true, allowedAction: 'NONE' });
     expect(s.writes()).toEqual([]);
   });
 
   it('warn_pr on a fresh PR is REFUSED and writes nothing', () => {
     const s = live([pr(7, { updatedAt: daysAgo(2) })]);
     s.handlers.list_open_prs();
-    expect(s.handlers.warn_pr({ number: 7 })).toMatchObject({ refused: true, allowedAction: 'NOT_STALE' });
+    expect(s.handlers.warn_pr({ number: 7 })).toMatchObject({ refused: true, allowedAction: 'NONE' });
     expect(s.writes()).toEqual([]);
   });
 
@@ -237,6 +238,32 @@ describe('the tools enforce the rules whatever the model asks', () => {
     expect(s.writes()).toEqual([]);
     // The refusal does not use the PR up: the allowed action still works.
     expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ ok: true, closed: true });
+  });
+
+  it('no write before the list: a closable PR stays open when the model skipped list_open_prs', () => {
+    const s = live([warnedPr(7)]);
+    expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ ok: false, refused: true });
+    expect(s.handlers.warn_pr({ number: 7 })).toMatchObject({ ok: false, refused: true });
+    // Not even a read: the refusal comes before GitHub is asked anything.
+    expect(s.calls).toEqual([]);
+    expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).row).toContain('#7 asked CLOSE, allowed NOT_LISTED');
+  });
+
+  it('no write after a FAILED list', () => {
+    const s = live([warnedPr(7)], { listFails: true });
+    expect(s.handlers.list_open_prs().ok).toBe(false);
+    expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ refused: true });
+    expect(s.writes()).toEqual([]);
+  });
+
+  it('no write on a PR the list did not mark stale, even one the rules would allow', () => {
+    // #9 becomes closable only after the list was taken (it was fresh then).
+    const prs = [pr(2), pr(9, { updatedAt: daysAgo(1) })];
+    const s = live(prs);
+    s.handlers.list_open_prs();
+    Object.assign(prs[1], { updatedAt: daysAgo(20), comments: [warning(daysAgo(20))] });
+    expect(s.handlers.close_pr({ number: 9 })).toMatchObject({ refused: true });
+    expect(prs[1].state).toBe('OPEN');
   });
 
   it('a PR cannot be warned and then closed in one run', () => {

@@ -385,6 +385,14 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
   /** Shared by warn and close: fresh read, rule check, write, ledger. */
   function act(number, wanted) {
     if (!validNumber(number)) return { ok: false, error: 'number must be a positive integer' };
+    // A write is allowed only on a PR that THIS run's own list found stale and
+    // unprotected. Without this, a model that skipped the list, or whose list
+    // call failed, could still close any PR the rules happen to allow, and the
+    // ERROR row afterwards would not undo it (codex round 3 on this PR).
+    if (!ledger.listed || !ledger.candidates.includes(number)) {
+      ledger.refused.push({ number, asked: wanted, allowed: 'NOT_LISTED' });
+      return { ok: false, refused: true, allowedAction: 'NONE', why: 'this run has not listed that pull request as stale. Call list_open_prs first, and act only on the pull requests it marks stale without the keep label' };
+    }
     if (handled.has(number)) return { ok: false, error: `#${number} was already handled in this run` };
     let pr;
     try {
