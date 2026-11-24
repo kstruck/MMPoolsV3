@@ -1,4 +1,9 @@
 node_modules
+# Nested installs too. A bare `node_modules` matches the ROOT one only, and
+# `scripts/` stays in the build context, so `scripts/agent/node_modules` (the
+# Claude Agent SDK and its native binary) rode into `COPY . .` on any machine
+# that had run `npm --prefix scripts/agent ci`.
+**/node_modules
 dist
 .git
 .gitignore

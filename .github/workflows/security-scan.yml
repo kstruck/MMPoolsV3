@@ -42,6 +42,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
+            scripts/agent/package-lock.json
 
       # npm 10 — the version bundled with node 22 — audits against
       # /-/npm/v1/security/audits/quick, which the registry has RETIRED. It now
@@ -97,6 +98,28 @@ jobs:
         run: |
           for i in 1 2 3; do
             out=$(node ../scripts/auditGate.mjs 2>&1) && { echo "$out"; exit 0; }
+            echo "$out"
+            grep -q "audit endpoint returned an error" <<<"$out" || exit 1
+            echo "npm registry error (attempt $i/3) — retrying in 20s"
+            sleep 20
+          done
+          echo "::error::npm audit could not reach the registry after 3 attempts. NOT masked — failing."
+          exit 1
+
+      # scripts/agent/ IS A THIRD MANIFEST with its own lockfile (the Claude
+      # Agent SDK, kept out of the root so its native binary never enters the
+      # frontend build). Same rule as functions/: a lockfile this job does not
+      # install is a lockfile this job says nothing about.
+      # `tests/agent-pre-review.test.ts` fails if this step is removed.
+      - name: Install Dependencies (scripts/agent)
+        working-directory: scripts/agent
+        run: npm ci
+
+      - name: Run NPM Audit (scripts/agent)
+        working-directory: scripts/agent
+        run: |
+          for i in 1 2 3; do
+            out=$(node ../auditGate.mjs 2>&1) && { echo "$out"; exit 0; }
             echo "$out"
             grep -q "audit endpoint returned an error" <<<"$out" || exit 1
             echo "npm registry error (attempt $i/3) — retrying in 20s"
