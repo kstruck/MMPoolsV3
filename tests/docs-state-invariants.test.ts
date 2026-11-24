@@ -1655,6 +1655,37 @@ const ESTABLISHED_USES = 3;
  * every numbered list a "marker". U+26A0/U+26D4/U+25B6 sit outside the main
  * blocks and are named individually because the repo uses all three.
  */
+/**
+ * OTHER TOOLS' MARKS, which this repo writes ABOUT rather than WITH.
+ *
+ * `✔ Deploy complete!` is the Firebase CLI's stdout; `✓ Resolved` and
+ * `✗ Dismissed` are qodo's marks on a PR; `✖` is what a failed function shows
+ * in a deploy. Stripping code spans catches most of these, because the docs
+ * usually quote them in backticks — but not all. Measured 2026-11-24, after
+ * origin/main added PLAN-SQUARES-ZERO-PRICE-FREE-REVIEW-LOG.md, the surviving
+ * `✓` uses were:
+ *
+ *   "qodo marked it ✓ Resolved" ...      (mmp-qodo-cycle, prose, double quotes)
+ *   Q1.1–Q1.3 were all marked ✓ Resolved  (a review log, prose)
+ *   | 15 pools ✓ |                       (one ad-hoc tick in a table)
+ *
+ * That tipped `✓` to 3 and the forward check demanded it be rostered — which
+ * would have written ANOTHER TOOL'S vocabulary into this repo's roster as if it
+ * were house convention. Two of the three are the repo discussing qodo's
+ * output; `✖`'s single surviving use likewise describes the deploy's red cross.
+ *
+ * So these four are excluded by name, with the reason recorded, rather than
+ * rostered. The repo's own done/not-done markers are `✅` and `❌`, separate
+ * codepoints, and they keep counting normally.
+ *
+ * THE TRADE-OFF, stated rather than hidden: if this repo ever adopts `✓` as a
+ * genuine status marker of its own, this guard will not notice. That is
+ * accepted — the alternative is a roster that documents the Firebase CLI and
+ * qodo as house style. Adding to this list is a visible, reviewable edit, which
+ * is the property a silent exclusion would lack.
+ */
+const EXTERNAL_TOOL_MARKS = new Set(['\u2713', '\u2714', '\u2716', '\u2717']);
+
 function isMarkerCodepoint(cp: number): boolean {
   if (cp >= 0x2600 && cp <= 0x27bf) return true; // Misc Symbols + Dingbats
   if (cp >= 0x1f300 && cp <= 0x1faff) return true; // Misc Symbols & Pictographs .. Symbols Extended-A
@@ -1764,6 +1795,7 @@ function countMarkers(text: string): Map<string, number> {
   const counts = new Map<string, number>();
   for (const ch of stripCode(text)) {
     if (ch === '️' || ch === '︎') continue;
+    if (EXTERNAL_TOOL_MARKS.has(ch)) continue; // see above — quoted, not house style
     const cp = ch.codePointAt(0)!;
     if (isMarkerCodepoint(cp)) counts.set(ch, (counts.get(ch) ?? 0) + 1);
   }
@@ -1986,6 +2018,29 @@ describe('the status-marker scanner sees what the docs actually contain', () => 
     const counts = countMarkers('\u{1f6d1} never run `npm publish` \u2705 verified');
     expect(counts.get('\u{1f6d1}')).toBe(1);
     expect(counts.get('\u2705')).toBe(1);
+  });
+
+  it("ignores other tools' marks even in un-backticked prose", () => {
+    // REGRESSION (2026-11-24). `✓` reached 3 uses and the forward check demanded
+    // it be rostered, but two of the three were the repo QUOTING qodo's
+    // `✓ Resolved` in prose rather than backticks. Rostering it would have
+    // written another tool's vocabulary in as house convention.
+    const counts = countMarkers('Q1.1 was marked \u2713 Resolved, and "qodo marked it \u2713 Resolved"');
+    expect(counts.size).toBe(0);
+  });
+
+  it("ignores the deploy's cross and the CLI's heavy check in prose", () => {
+    expect(countMarkers('a function shows a red \u2716 instead of a tick').size).toBe(0);
+    expect(countMarkers('it prints \u2714 Deploy complete! and lies').size).toBe(0);
+    expect(countMarkers('#8 was marked \u2717 Dismissed').size).toBe(0);
+  });
+
+  it("still counts the repo's OWN done/not-done markers, which are different codepoints", () => {
+    // ✅ U+2705 and ❌ U+274C are house markers and must never be swept up by
+    // the external-tool exclusion above.
+    const counts = countMarkers('\u2705 shipped and \u274c cancelled');
+    expect(counts.get('\u2705')).toBe(1);
+    expect(counts.get('\u274c')).toBe(1);
   });
 
   it('does not treat digits or # as markers', () => {

@@ -230,7 +230,7 @@ point-in-time snapshot and drift like every other count in these docs.
 
 | Marker | Meaning as used | Live uses |
 |---|---|---|
-| `⚠️` | Warning callout — a caveat or trap the reader must not miss | 227 |
+| `⚠️` | Warning callout — a caveat or trap the reader must not miss | 231 |
 | `✅` | Done / shipped — plan status blocks and checklist DONE sections, with commit hash where applicable | 144 |
 | `🛑` | **Hard stop: do not skip, do not do this.** The strongest marker, and `CLAUDE.md`'s primary "stop, read this" | 72 |
 | `⛔` | Forbidden / deliberately absent — "DO NOT SET THIS IN PROD", "must stay absent", "do not reintroduce" | 23 |
@@ -249,6 +249,17 @@ review-log line that merely *quotes* the old roster, so do not read that number
 as current usage. Frequency decides what MUST be listed, never what may be.
 
 `🟢` / `🟡` / `🔴` / `⚪` are a set: live / in-flight / blocked / parked.
+
+⛔ **Other tools' marks are NOT in this roster and are excluded from the
+census: `✓` `✔` `✗` `✖`.** `✔ Deploy complete!` is the Firebase CLI's stdout,
+and `✓ Resolved` / `✗ Dismissed` are qodo's marks on a PR — this repo writes
+*about* them, not *with* them. They are excluded by name rather than rostered,
+because on 2026-11-24 `✓` reached three uses (two of them prose quoting qodo,
+one an ad-hoc tick in a table) and the guard duly demanded it be listed. Listing
+it would have recorded another tool's vocabulary as this repo's house style. The
+repo's own done/not-done markers are `✅` and `❌`, which are different
+codepoints and count normally.
+
 `README.md` additionally
 uses per-section emoji (🚀 🏈 🏀 …) — that is existing practice and is **not**
 part of this roster, which is why the re-measure command below excludes it.
@@ -279,8 +290,8 @@ one-liner for a human check and the test for the gate.
 Count the **base codepoint** (`⚠`, `▶`), not the emoji-presentation form
 (`⚠️` = `U+26A0 U+FE0F`): some uses omit the `U+FE0F` variation selector, and
 grepping the two-codepoint form silently undercounts them. Across **all**
-tracked markdown (archive included) the base codepoint `⚠` measured 792 while
-`⚠️` measured 786 — six uses carry no variation selector.
+tracked markdown (archive included) the base codepoint `⚠` measured 796 while
+`⚠️` measured 790 — six uses carry no variation selector.
 
 `tests/docs-state-invariants.test.ts` guards this table mechanically — see
 "status-marker roster" there. It reads this table directly (no second copy to
