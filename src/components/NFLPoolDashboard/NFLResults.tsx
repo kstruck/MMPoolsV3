@@ -109,6 +109,9 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
   // ⚠️ Only the reveal for the week on screen, as everywhere else: last week's
   // allowlist applied to this week's slate would reveal by coincidence.
   const wk = reveal && reveal.week === week ? reveal : null;
+  // The games that were open when the server's hidden-points total was fetched
+  // (stamped by the dashboard). One Set per render, shared by every row.
+  const openAtFetch = wk?.hiddenLeftOpenGameIds ? new Set(wk.hiddenLeftOpenGameIds) : undefined;
   // The commissioner's switch, read from the LIVE pool document (qodo #801):
   // turning it off hides the totals at once, instead of after the next
   // reveal poll that would stop sending them.
@@ -142,6 +145,7 @@ export const NFLResults: React.FC<NFLResultsProps> = ({ pool, entries, games, we
       pickMode: settings.pickMode,
       // The server's total for this row's hidden open picks (PLAN-PTS-LEFT-HIDDEN-TOTAL).
       hiddenLeft: shareLeft ? wk?.hiddenLeft?.[row.id] : undefined,
+      hiddenLeftOpenAtFetch: openAtFetch,
     });
     const left = pointsLeft(tally);
     return {

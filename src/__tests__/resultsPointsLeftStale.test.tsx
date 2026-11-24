@@ -1,0 +1,109 @@
+// @vitest-environment jsdom
+/**
+ * WEEK RESULTS when the server's hidden-points total is older than the game
+ * statuses on screen. See `picksGridMaxStaleTotal.test.ts` for the rule; this
+ * pins that the table actually passes the stamp through and prints "?", and
+ * that the dashboard is the one that stamps it.
+ */
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+
+vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
+
+import { NFLResults } from '../components/NFLPoolDashboard/NFLResults';
+// `?raw`: the grid and the dashboard render through heavier harnesses.
+import gridSource from '../components/NFLPoolDashboard/NFLPicksGrid.tsx?raw';
+import resultsSource from '../components/NFLPoolDashboard/NFLResults.tsx?raw';
+import dashboardSource from '../components/NFLPoolDashboard/NFLPoolDashboard.tsx?raw';
+
+afterEach(cleanup);
+
+const team = (abbreviation: string) => ({ id: abbreviation, name: abbreviation, abbreviation });
+const slate = (c3Status: string) => [
+  { id: 'c1', week: 3, seasonType: 2, startTime: 1, status: 'FINAL', awayTeam: team('KC'), homeTeam: team('BAL'), scores: { home: 20, away: 24 } },
+  { id: 'c2', week: 3, seasonType: 2, startTime: 2, status: 'IN_PROGRESS', awayTeam: team('BUF'), homeTeam: team('MIA') },
+  { id: 'c3', week: 3, seasonType: 2, startTime: 3, status: c3Status, awayTeam: team('SF'), homeTeam: team('DAL') },
+] as never[];
+
+const ENTRIES = [
+  { id: 'me', ownerUid: 'me', userName: 'Me Myself', picks: { c1: 'KC', c2: 'BUF', c3: 'SF' }, confidence: { c1: 9, c2: 5, c3: 6 },
+    weeklyPoints: { 3: 9 }, weeklyResults: { 3: { correct: 1, total: 1 } } },
+  // Another player. The entry carries the picks, as the real pool document does;
+  // the reveal decides which of them this viewer may see.
+  { id: 'u2', ownerUid: 'u2', userName: 'Sam Sample', picks: { c1: 'BAL', c2: 'MIA', c3: 'DAL' }, confidence: { c1: 4, c2: 3, c3: 2 },
+    weeklyPoints: { 3: 0 }, weeklyResults: { 3: { correct: 0, total: 1 } } },
+];
+
+/** A PER_GAME Sunday: c3 has not kicked off, so Sam's pick on it is hidden. Sam's hidden total is 2. */
+const SUNDAY = {
+  week: 3, mode: 'PER_GAME', revealedGameIds: ['c1', 'c2'],
+  picks: { u2: { c1: 'BAL', c2: 'MIA' } }, confidence: { u2: { c1: 4, c2: 3 } },
+  counts: { u2: 3 }, hiddenLeft: { u2: 2 },
+};
+
+function renderResults(games: never[], reveal: unknown) {
+  return render(
+    <MemoryRouter>
+      <NFLResults
+        pool={{ id: 'p1', type: 'NFL_PICKEM', seasonType: 2, settings: { confidenceMode: true } } as never}
+        entries={ENTRIES} games={games} week={3} viewerUid="me"
+        reveal={reveal as never} ownEntryLoaded view="WEEKLY"
+      />
+    </MemoryRouter>,
+  );
+}
+const cellsOf = (container: HTMLElement, name: string): string[] => {
+  const row = [...container.querySelectorAll('tbody tr')].find(r => r.textContent?.includes(name));
+  expect(row, `row for ${name}`).toBeTruthy();
+  return [...row!.querySelectorAll('td')].map(td => td.textContent ?? '');
+};
+
+describe('NFLResults — a hidden game is decided after the total was fetched', () => {
+  it('control: nothing has changed since the fetch, so the total is shown', () => {
+    // c2 and c3 were open at fetch and still are. 3 (c2, live) + 2 (hidden) = 5.
+    const { container } = renderResults(slate('SCHEDULED'), { ...SUNDAY, hiddenLeftOpenGameIds: ['c2', 'c3'] });
+    expect(cellsOf(container, 'Sam Sample')[3]).toBe('5');
+  });
+
+  it('c3 is cancelled while the old total is still in hand: Pts Left reads "?"', () => {
+    // The total (2) was computed when c3 was open, so it may be Sam's c3 weight.
+    const { container } = renderResults(slate('CANCELLED'), { ...SUNDAY, hiddenLeftOpenGameIds: ['c2', 'c3'] });
+    const row = [...container.querySelectorAll('tbody tr')].find(r => r.textContent?.includes('Sam Sample'))!;
+    expect(cellsOf(container, 'Sam Sample')[3]).toBe('?');
+    expect(row.querySelectorAll('td')[3].getAttribute('title')).toMatch(/not known/i);
+    // The viewer's own row is unaffected: c2 only (the cancelled c3 is not left).
+    expect(cellsOf(container, 'Me Myself')[3]).toBe('5');
+  });
+
+  it('a reveal that was never stamped behaves as before — the stale number, not a crash', () => {
+    // An older cached reveal, or one that arrived before the schedule loaded.
+    // This is the pre-fix behaviour; the stamp is what changes it.
+    const { container } = renderResults(slate('CANCELLED'), SUNDAY);
+    expect(cellsOf(container, 'Sam Sample')[3]).toBe('5');
+  });
+
+  it('the next poll clears it: a total fetched after the cancel is shown again', () => {
+    const { container } = renderResults(slate('CANCELLED'), { ...SUNDAY, hiddenLeft: { u2: 0 }, hiddenLeftOpenGameIds: ['c2'] });
+    expect(cellsOf(container, 'Sam Sample')[3]).toBe('3');
+  });
+});
+
+describe('the stamp is wired end to end', () => {
+  it('both tables pass it to the tally', () => {
+    for (const source of [resultsSource, gridSource]) {
+      expect(source).toContain('const openAtFetch = wk?.hiddenLeftOpenGameIds ? new Set(wk.hiddenLeftOpenGameIds) : undefined;');
+      expect(source).toContain('hiddenLeftOpenAtFetch: openAtFetch,');
+    }
+  });
+
+  it('the dashboard stamps every reveal on arrival, from the latest schedule', () => {
+    expect(dashboardSource).toContain('hiddenLeftOpenGameIds: undecidedGameIds(gamesRef.current)');
+    // The ref follows `games`; a ref that is never written would stamp the
+    // empty first-render schedule forever, i.e. never stamp at all.
+    expect(dashboardSource).toContain('useEffect(() => { gamesRef.current = games; }, [games]);');
+    // The stamped object is what is stored, in both branches of the update.
+    expect(dashboardSource.match(/\[w\]: stamped/g) ?? []).toHaveLength(2);
+    expect(dashboardSource).not.toMatch(/\[w\]: r\b/);
+  });
+});

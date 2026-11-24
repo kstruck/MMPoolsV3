@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { helpRegistry } from '../src/help/registry';
 import { MANAGER_LABEL_ALLOWLIST } from '../src/help/coverage-allowlist';
@@ -30,6 +30,20 @@ const root = resolve(__dirname, '..');
 /** The files T4 owns. T5–T7 add theirs to this list as they land. */
 const MANAGER_FILES = ['src/components/NFLPoolDashboard/NFLManagerView.tsx'];
 
+/**
+ * Settings cards the manager view renders from THEIR OWN file.
+ *
+ * `NFLPointsLeftSharingSetting` (#801) is one: it sits on the settings tab,
+ * outside the gated form, and carries a `helpId`. Because it is not in
+ * `MANAGER_FILES`, nothing checked that id: `helpId` is typed `string` and
+ * `HelpTip` renders nothing for an unknown one, so a typo would compile, show
+ * no help tip and fail no test (found by the Claude pre-review of #801).
+ *
+ * A separate list, not more entries in `MANAGER_FILES`: that list's liveness
+ * check wants more than 20 labels per file, and a one-switch card has one.
+ */
+const MANAGER_CARD_FILES = ['src/components/NFLPoolDashboard/NFLPointsLeftSharingSetting.tsx'];
+
 const codeOf = (file: string) => stripComments(readFileSync(resolve(root, file), 'utf8'));
 
 /**
@@ -47,6 +61,14 @@ function fieldLabels(code: string): { helpId?: string; text: string }[] {
     out.push({ helpId, text: m[2].trim() });
   }
   return out;
+}
+
+/** Does this help id resolve for SOME NFL commissioner scope? (The rule the manager-form test uses.) */
+function resolvesForSomeNflCommissioner(id: string): boolean {
+  const NFL: readonly string[] = ['NFL_PICKEM', 'NFL_SURVIVOR', 'NFL_MARGIN'];
+  return POOL_TYPES.filter((t) => NFL.includes(t)).some(
+    (poolType) => !!helpRegistry.resolveTopic({ poolType, audience: 'commissioner' }, id),
+  );
 }
 
 describe('T4 — the NFL manager form has no un-helped label', () => {
@@ -88,6 +110,43 @@ describe('T4 — the NFL manager form has no un-helped label', () => {
         ),
     );
     expect([...new Set(missing)]).toEqual([]);
+  });
+
+  it.each(MANAGER_CARD_FILES)('%s (a settings card) renders no raw <label and at least one FieldLabel', file => {
+    expect(codeOf(file).match(/<label\b/g) ?? []).toEqual([]);
+    expect(fieldLabels(codeOf(file)).length).toBeGreaterThan(0);
+  });
+
+  it.each(MANAGER_CARD_FILES)('every FieldLabel in %s carries a helpId that resolves', file => {
+    const labels = fieldLabels(codeOf(file));
+    expect(labels.filter((l) => !l.helpId).map((l) => l.text)).toEqual([]);
+    const unresolved = labels
+      .map((l) => l.helpId as string)
+      .filter((id) => !resolvesForSomeNflCommissioner(id));
+    expect(unresolved).toEqual([]);
+  });
+
+  it('the resolver discriminates — a one-letter typo of a real id does not resolve', () => {
+    // Guard-the-guard. If this resolver said yes to anything, the two tests
+    // above would pass on a typo, which is the exact gap they close.
+    expect(resolvesForSomeNflCommissioner('settings.shareHiddenPointsLeft')).toBe(true);
+    expect(resolvesForSomeNflCommissioner('settings.shareHiddenPointsLeftt')).toBe(false);
+    expect(resolvesForSomeNflCommissioner('')).toBe(false);
+  });
+
+  it('every settings card the manager view renders from its own file is on the list', () => {
+    // The list above is hand-kept, so check it against the view: any
+    // `NFL…Setting(s)` component the manager view renders that has a FieldLabel
+    // with a helpId must be listed, or it is unguarded again.
+    const view = codeOf(MANAGER_FILES[0]);
+    const rendered = [...new Set([...view.matchAll(/<(NFL\w+Settings?)\b/g)].map((m) => m[1]))];
+    expect(rendered).toContain('NFLPointsLeftSharingSetting');
+    const dir = 'src/components/NFLPoolDashboard/';
+    const withHelp = rendered
+      .map((name) => `${dir}${name}.tsx`)
+      .filter((file) => existsSync(resolve(root, file)))
+      .filter((file) => fieldLabels(codeOf(file)).some((l) => l.helpId));
+    expect(withHelp.filter((file) => !MANAGER_CARD_FILES.includes(file))).toEqual([]);
   });
 
   it('no allowlist row is stale', () => {

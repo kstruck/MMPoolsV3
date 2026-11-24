@@ -5,6 +5,7 @@ import { isPoolManager, isSuperAdmin } from '../../utils/auth';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft, Users, Crown } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
+import { undecidedGameIds } from '../../utils/picksGridMax';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
@@ -152,6 +153,11 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   // is not hoisted, so leaving it with the other subscribed state would be a TDZ
   // crash on first render.
   const [games, setGames] = useState<NFLGame[]>([]);
+  // The latest schedule, readable from the reveal's `.then` without making the
+  // poll callback depend on `games` (which would restart the poll every time a
+  // score moved). Written in an effect: a ref must not be written during render.
+  const gamesRef = React.useRef<NFLGame[]>(games);
+  useEffect(() => { gamesRef.current = games; }, [games]);
 
   // Estimate current NFL Week based on date (standard season calculations).
   // serverNow(), not Date.now(): a skewed device clock must not choose the week
@@ -405,9 +411,14 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
       .then(r => {
         // The request outlived its own entitlement — discard it.
         if (authGen.current !== gen) return;
+        // Stamp which games were still open when this total arrived. The total is
+        // a snapshot and the statuses are live; without the stamp a hidden game
+        // decided AFTER this moment stays counted in Pts Left until the next
+        // poll (see `PoolPicksReveal.hiddenLeftOpenGameIds`).
+        const stamped: PoolPicksReveal = { ...r, hiddenLeftOpenGameIds: undecidedGameIds(gamesRef.current) };
         setReveal(prev => prev.poolId === pool.id && prev.uid === viewerUid
-          ? { poolId: pool.id, uid: viewerUid, byWeek: { ...prev.byWeek, [w]: r } }
-          : { poolId: pool.id, uid: viewerUid, byWeek: { [w]: r } });
+          ? { poolId: pool.id, uid: viewerUid, byWeek: { ...prev.byWeek, [w]: stamped } }
+          : { poolId: pool.id, uid: viewerUid, byWeek: { [w]: stamped } });
       })
       // A refusal is not a crash — a non-member gets one and every surface then
       // renders "?", which is the honest answer — but the responses already in

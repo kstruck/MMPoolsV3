@@ -187,6 +187,20 @@ export interface PoolPicksReveal {
      * and keeps showing "?".
      */
     hiddenLeft?: Record<string, number>;
+    /**
+     * 🛑 STAMPED BY THE CLIENT WHEN THE RESPONSE ARRIVES — the server never sends
+     * this. The ids of the games that were NOT YET DECIDED, by the page's own
+     * live game statuses, at that moment (`undecidedGameIds`).
+     *
+     * `hiddenLeft` is a snapshot; the game statuses the page renders are live.
+     * A hidden game that is decided NOW but was open when the total was fetched
+     * may still be counted in that total, so Pts Left would read too high until
+     * the next poll (up to five minutes for a member). This is what lets
+     * `tallyGridRow` see that and print "?" for exactly that window. Absent when
+     * the schedule had not loaded at receipt: then nothing can be compared and
+     * the total is used as before.
+     */
+    hiddenLeftOpenGameIds?: string[];
 }
 
 // --- Monetization dashboard read shapes (PLAN-BUYFLOW-OVERHAUL Phase 6) -------

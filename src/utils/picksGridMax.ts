@@ -83,6 +83,28 @@ export interface GridRowTally {
  *                              (the reveal can lag the game document).
  *   not over yet               yes.
  */
+/**
+ * Is this game DECIDED — no pick on it can still be "points left"?
+ *
+ * CANCELLED, or a FINAL the feed has reported scores for. A FINAL with no
+ * scores is NOT decided: the scorer grades it when they arrive. The server uses
+ * the same rule for the total it sends (`functions/src/nflPickReveal.ts`).
+ */
+export function isGameDecided(game: Pick<NFLGame, 'status' | 'scores'>): boolean {
+    return game.status === 'CANCELLED' || (game.status === 'FINAL' && hasReportedScores(game as NFLGame));
+}
+
+/**
+ * The ids of the games not yet decided, by the statuses in hand. The dashboard
+ * stamps this onto a reveal when it arrives (`hiddenLeftOpenGameIds`).
+ * `undefined` for an empty schedule: "no games loaded yet" must not read as
+ * "every game was already decided".
+ */
+export function undecidedGameIds(games: readonly NFLGame[]): string[] | undefined {
+    if (games.length === 0) return undefined;
+    return games.filter((g) => !isGameDecided(g)).map((g) => g.id);
+}
+
 function hiddenGameCanPay(game: NFLGame, pickMode: string | undefined): boolean {
     if (game.status === 'CANCELLED') return false;
     if (game.status !== 'FINAL') return true;
@@ -107,13 +129,24 @@ export function tallyGridRow(args: {
     /**
      * The server's total for this row's picks that are hidden from the viewer and
      * on games not yet decided (`reveal.hiddenLeft`, PLAN-PTS-LEFT-HIDDEN-TOTAL):
-     * their confidence weights summed, or one per pick. `undefined` when the
-     * server sent none — the pre-deploy server, a non-Pick'em pool, or a hidden
-     * pick with no stored weight — and the tally falls back to bounding them.
+     * their confidence weights summed, or one per pick. `undefined` when there is
+     * no total to use — the pre-deploy server, a non-Pick'em pool, a hidden pick
+     * with no stored weight, or the commissioner's "Show Everyone's Pts Left"
+     * setting being OFF (the server then sends none, and the callers pass
+     * `undefined` even for a total still held from before it was turned off) —
+     * and the tally falls back to bounding them.
      */
     hiddenLeft?: number;
+    /**
+     * The games that were not yet decided WHEN `hiddenLeft` WAS FETCHED
+     * (`reveal.hiddenLeftOpenGameIds`, stamped by the dashboard). `hiddenLeft`
+     * is a snapshot and `weekGames` is live: a hidden game in this set that is
+     * decided now may still be counted in the total. `undefined` when the
+     * dashboard could not stamp it — the total is then trusted as it was.
+     */
+    hiddenLeftOpenAtFetch?: ReadonlySet<string>;
 }): GridRowTally {
-    const { weekGames, cells, setCount, revealMode, isOwnRow, confidenceMode, pickMode, hiddenLeft } = args;
+    const { weekGames, cells, setCount, revealMode, isOwnRow, confidenceMode, pickMode, hiddenLeft, hiddenLeftOpenAtFetch } = args;
 
     let wins = 0;
     let losses = 0;
@@ -132,6 +165,9 @@ export function tallyGridRow(args: {
     // a finished game): the server's `hiddenLeft` does not cover these, and a
     // pick on one may already be a win, so Max must still allow for it.
     let hiddenDecidedLive = 0;
+    // Hidden games decided NOW that were still open when the server's total was
+    // fetched: the total may count a pick on each of them, and no longer should.
+    let hiddenDecidedSinceFetch = 0;
     let weightMissing = false;
     // A missing weight on a pick still IN PLAY makes Pts Left unknown too; one on
     // an already-won pick affects only Max (qodo #790, finding 1).
@@ -143,10 +179,11 @@ export function tallyGridRow(args: {
         if (cell.kind === 'HIDDEN') {
             hiddenCells++;
             const canPay = hiddenGameCanPay(game, pickMode);
-            const open = game.status !== 'CANCELLED' && (game.status !== 'FINAL' || !hasReportedScores(game));
+            const open = !isGameDecided(game);
             if (canPay) hiddenLive++;
             if (open) hiddenOpen++;
             else if (canPay) hiddenDecidedLive++;
+            if (!open && hiddenLeftOpenAtFetch?.has(game.id)) hiddenDecidedSinceFetch++;
             continue;
         }
         if (cell.kind !== 'PICK') continue;
@@ -180,11 +217,29 @@ export function tallyGridRow(args: {
     // A hidden pick on an already-DECIDED game (the reveal lagging the game) is
     // not in the server's total and may already be a win. Standard scoring can
     // bound it at 1 each; a confidence weight cannot be bounded, so Max is
-    // unknown until the reveal catches up — Pts Left is still exact, because a
-    // decided game is not points left.
+    // unknown until the reveal catches up.
+    //
+    // ⚠️ PTS LEFT IS EXACT ONLY WHILE THE TOTAL IS AS FRESH AS THE STATUSES.
+    // This comment said "Pts Left is still exact, because a decided game is not
+    // points left" — true of the server's total at the instant it was computed,
+    // and not of a total held for up to five minutes while `weekGames` moves on.
+    // A hidden game that was open at fetch and is decided now (cancelled before
+    // kickoff, or finished while a refresh failed) may still be inside
+    // `hiddenLeft`. We cannot see whether this row picked it, so Pts Left is
+    // somewhere between the total and the total minus those picks: unknown, and
+    // printed as "?" until the next poll brings a total that excludes the game.
+    // (Found by the Claude pre-review of #801; Kevin: "Fix 1 as well".)
+    //
+    // Max does NOT change: a pick on a just-decided game may be a WIN, so it
+    // must stay in the upper bound either way.
     if (!isOwnRow && hiddenCells > 0 && typeof hiddenLeft === 'number') {
-        const left = remaining + hiddenLeft;
-        if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', left };
+        const leftUpper = remaining + hiddenLeft;
+        const mayOvercount = hiddenDecidedSinceFetch > 0 && hiddenLeft > 0;
+        const leftPart: Pick<GridRowTally, 'left' | 'leftUnknown'> = mayOvercount
+            ? { left: null, leftUnknown: confidenceMode ? 'WEIGHTS_HIDDEN' : 'COUNT_UNKNOWN' }
+            : { left: leftUpper };
+        const left = leftUpper;
+        if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', ...leftPart };
         // How many hidden picks CAN sit on a decided game. Without the saved-pick
         // count, any of those games might hold one. With it, the picks not yet
         // accounted for bound it — and in standard scoring `hiddenLeft` IS the
@@ -200,10 +255,10 @@ export function tallyGridRow(args: {
             : Math.max(0, setCount - revealedPicks - hiddenOpenPicksAtLeast);
         const decidedMost = Math.min(hiddenDecidedLive, unexplained);
         if (decidedMost > 0) {
-            if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', left };
-            return { ...tally, max: earned + left + decidedMost, left };
+            if (confidenceMode) return { ...tally, max: null, maxUnknown: 'WEIGHTS_HIDDEN', ...leftPart };
+            return { ...tally, max: earned + left + decidedMost, ...leftPart };
         }
-        return { ...tally, max: earned + left, left };
+        return { ...tally, max: earned + left, ...leftPart };
     }
 
     // The viewer's own row is sourced from their own entry: every cell is known.
