@@ -268,7 +268,33 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
     return JSON.parse(r.stdout);
   };
 
-  const readPr = (number) => json(['pr', 'view', String(number), '--repo', repo, '--json', 'number,state,updatedAt,labels,comments']);
+  /**
+   * EVERY comment on the PR, through REST with `--paginate`.
+   *
+   * Not `gh pr view --json comments`: that is GraphQL and returns a first page
+   * only (CLAUDE.md §2b records the same trap for review comments). On a PR
+   * with a long thread the loop's own warning sits past that page, so it
+   * would never be found, and the PR would be warned again every run and
+   * never closed (codex round 1 on this PR).
+   *
+   * `--jq` prints one compact object per line, across all pages. A line that
+   * does not parse is an error, not a comment to skip: a silently short list
+   * is the failure this function exists to prevent.
+   */
+  const readComments = (number) => {
+    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/comments?per_page=100`, '--jq', '.[] | {author: {login: .user.login}, body: .body, createdAt: .created_at}'];
+    const r = gh(args);
+    if (r.status !== 0) throw new Error(`gh api issues/${number}/comments failed: ${String(r.stderr).trim().slice(0, 300)}`);
+    return String(r.stdout)
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line));
+  };
+
+  const readPr = (number) => ({
+    ...json(['pr', 'view', String(number), '--repo', repo, '--json', 'number,state,updatedAt,labels']),
+    comments: readComments(number),
+  });
 
   /** Run a write up to MAX_ATTEMPTS times. Returns null, or the last error text. */
   const attempt = (args, input) => {

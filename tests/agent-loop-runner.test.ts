@@ -63,7 +63,7 @@ type FakePr = { number: number; state: string; updatedAt: string; labels: { name
  * writes change the state the next read returns — so "re-read after close"
  * is exercised against something that can disagree.
  */
-function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing?: boolean; listFails?: boolean } = {}) {
+function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing?: boolean; listFails?: boolean; commentsFail?: boolean } = {}) {
   const calls: string[][] = [];
   let failWrites = opts.failWrites ?? 0;
   const find = (n: string) => prs.find((p) => String(p.number) === n)!;
@@ -74,7 +74,18 @@ function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing
       if (opts.listFails) return { status: 1, stdout: '', stderr: 'HTTP 502' };
       return { status: 0, stdout: JSON.stringify(prs.filter((p) => p.state === 'OPEN')), stderr: '' };
     }
-    if (noun === 'pr' && verb === 'view') return { status: 0, stdout: JSON.stringify(find(n)), stderr: '' };
+    if (noun === 'pr' && verb === 'view') {
+      // Like the real call, this never carries comments: they come from REST.
+      return { status: 0, stdout: JSON.stringify({ ...find(n), comments: undefined }), stderr: '' };
+    }
+    if (noun === 'api') {
+      if (opts.commentsFail) return { status: 1, stdout: '', stderr: 'HTTP 503' };
+      const m = /^repos\/o\/r\/issues\/(\d+)\/comments\?per_page=100$/.exec(args[2]);
+      if (!m || args[1] !== '--paginate') return { status: 1, stdout: '', stderr: `unexpected gh api call: ${args.join(' ')}` };
+      // One compact object per line, as `--jq` prints across pages.
+      const lines = (find(m[1]).comments as { author: { login: string }; body: string; createdAt: string }[]).map((c) => JSON.stringify(c));
+      return { status: 0, stdout: lines.length ? `${lines.join('\n')}\n` : '', stderr: '' };
+    }
     if (failWrites > 0) {
       failWrites--;
       return { status: 1, stdout: '', stderr: 'HTTP 500' };
@@ -227,6 +238,35 @@ describe('the tools enforce the rules whatever the model asks', () => {
     prs[0].labels.push({ name: 'keep' });
     expect(s.handlers.warn_pr({ number: 7 })).toMatchObject({ refused: true, allowedAction: 'KEEP' });
     expect(s.writes()).toEqual([]);
+  });
+});
+
+describe('comments are read in full, not a first page', () => {
+  it('a warning that sits after 150 other comments is still found', () => {
+    // `gh pr view --json comments` returns a first page only. With that, this
+    // PR would be warned again on every run and never closed (codex round 1).
+    const chatter = Array.from({ length: 150 }, (_, i) => ({ author: { login: 'someone' }, body: `comment ${i}`, createdAt: daysAgo(90) }));
+    const s = live([pr(7, { updatedAt: daysAgo(20), comments: [...chatter, warning(daysAgo(20))] })]);
+    s.handlers.list_open_prs();
+    expect(s.handlers.inspect_pr({ number: 7 }).allowedAction).toBe('CLOSE');
+  });
+
+  it('asks REST for every page', () => {
+    const s = live([pr(7)]);
+    s.handlers.inspect_pr({ number: 7 });
+    const api = s.calls.find((c) => c[0] === 'api')!;
+    expect(api.slice(0, 3)).toEqual(['api', '--paginate', 'repos/o/r/issues/7/comments?per_page=100']);
+    // And the GraphQL field that returns one page is not asked for at all.
+    expect(s.calls.filter((c) => c[1] === 'view').every((c) => !c.join(' ').includes('comments'))).toBe(true);
+  });
+
+  it('a failed comment read stops the write — it is never read as "no warning exists"', () => {
+    const s = live([warnedPr(7)], { commentsFail: true });
+    s.handlers.list_open_prs();
+    expect(s.handlers.inspect_pr({ number: 7 })).toMatchObject({ ok: false });
+    expect(s.handlers.warn_pr({ number: 7 })).toMatchObject({ ok: false });
+    expect(s.writes()).toEqual([]);
+    expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).verdict).toBe('INCONCLUSIVE');
   });
 });
 
