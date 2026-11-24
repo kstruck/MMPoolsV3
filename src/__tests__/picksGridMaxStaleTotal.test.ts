@@ -8,16 +8,17 @@
  *
  * So a hidden game can be decided on screen while the total still counts a
  * pick on it. Before this file's change the tally printed that number as
- * exact, one pick too high. It now prints "?" for exactly that window: when a
- * hidden game is decided now AND was open when the total arrived
- * (`hiddenLeftOpenAtFetch`, stamped by the dashboard).
+ * exact, one pick too high. It now prints "?" when a hidden game is decided
+ * now AND was open when the request for the total was sent
+ * (`hiddenLeftOpenAtFetch`, stamped by `fetchStampedReveal`). The stamp is
+ * taken BEFORE the call, so it errs toward "?" and never toward a wrong number.
  *
  * Found by the Claude pre-review of #801. Kevin, 2026-11-23: "Fix 1 as well".
  */
 import { describe, it, expect } from 'vitest';
 import type { NFLGame } from '../types';
 import type { PicksGridCell } from '../utils/picksGrid';
-import { isGameDecided, pointsLeft, pointsLeftUnknownTitle, tallyGridRow, undecidedGameIds } from '../utils/picksGridMax';
+import { fetchStampedReveal, isGameDecided, pointsLeft, pointsLeftUnknownTitle, tallyGridRow, undecidedGameIds } from '../utils/picksGridMax';
 
 const game = (id: string, status: NFLGame['status'] = 'SCHEDULED', extra: Record<string, unknown> = {}) => ({
     id, status,
@@ -55,6 +56,55 @@ describe('the stamp: which games were open when the total arrived', () => {
         expect(isGameDecided(game('a', 'FINAL', { scores: undefined }))).toBe(false);
         expect(isGameDecided(game('a', 'IN_PROGRESS'))).toBe(false);
         expect(isGameDecided(game('a'))).toBe(false);
+    });
+});
+
+describe('fetchStampedReveal: the stamp is taken BEFORE the request, not when the response lands', () => {
+    it('a game decided WHILE the request is in flight is still in the stamp', async () => {
+        // The ordering the pre-review of this fix found: the server reads g3 as
+        // open and counts the pick on it; the page's listener then delivers g3
+        // as CANCELLED before the response lands. A stamp taken on arrival would
+        // leave g3 out, the stale check would not fire, and the too-high total
+        // would print. The schedule is mutated inside the fetch to model that.
+        const live = [game('g1', 'FINAL'), game('g2', 'IN_PROGRESS'), game('g3'), game('g4')];
+        const fetch = async () => {
+            live[2] = game('g3', 'CANCELLED');
+            return { week: 3, hiddenLeft: { u2: 2 } };
+        };
+        const stamped = await fetchStampedReveal(fetch, live);
+        expect(stamped.hiddenLeftOpenGameIds).toEqual(['g2', 'g3', 'g4']);
+        // The response itself is passed through untouched.
+        expect(stamped.week).toBe(3);
+        expect(stamped.hiddenLeft).toEqual({ u2: 2 });
+
+        // And that stamp is what makes the tally refuse the number.
+        const t = tallyGridRow({
+            weekGames: live, cells: cellsFor(live, pick('W'), pick(null), HIDDEN, HIDDEN),
+            setCount: 4, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+            hiddenLeft: 2, hiddenLeftOpenAtFetch: new Set(stamped.hiddenLeftOpenGameIds),
+        });
+        expect(pointsLeft(t)).toBeNull();
+    });
+
+    it('the arrival-time stamp it replaces would have printed the wrong number', () => {
+        // Guard-the-guard: the same slate, stamped from the statuses AFTER the
+        // cancel, as the first version of this fix did. g3 is absent, nothing
+        // fires, and Pts Left reads 3 with a pick on a cancelled game inside it.
+        const after = [game('g1', 'FINAL'), game('g2', 'IN_PROGRESS'), game('g3', 'CANCELLED'), game('g4')];
+        const arrivalStamp = new Set(undecidedGameIds(after));
+        expect(arrivalStamp.has('g3')).toBe(false);
+        const t = tallyGridRow({
+            weekGames: after, cells: cellsFor(after, pick('W'), pick(null), HIDDEN, HIDDEN),
+            setCount: 4, revealMode: 'PER_GAME', isOwnRow: false, confidenceMode: false,
+            hiddenLeft: 2, hiddenLeftOpenAtFetch: arrivalStamp,
+        });
+        expect(pointsLeft(t)).toBe(3);
+    });
+
+    it('an unloaded schedule stamps nothing, and a rejected fetch still rejects', async () => {
+        const stamped = await fetchStampedReveal(async () => ({ week: 1 }), []);
+        expect(stamped.hiddenLeftOpenGameIds).toBeUndefined();
+        await expect(fetchStampedReveal(async () => { throw new Error('denied'); }, AT_FETCH)).rejects.toThrow('denied');
     });
 });
 

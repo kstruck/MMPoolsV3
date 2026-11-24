@@ -97,13 +97,21 @@ describe('the stamp is wired end to end', () => {
     }
   });
 
-  it('the dashboard stamps every reveal on arrival, from the latest schedule', () => {
-    expect(dashboardSource).toContain('hiddenLeftOpenGameIds: undecidedGameIds(gamesRef.current)');
+  it('the dashboard fetches every reveal through fetchStampedReveal, from the latest schedule', () => {
+    // A WIRING pin on source, and only that: the dashboard needs a harness this
+    // repo does not have. What the stamp does, and that it is taken before the
+    // request, is tested for real in `picksGridMaxStaleTotal.test.ts`.
+    //
+    // Line comments are dropped first, so prose that happens to contain these
+    // strings cannot satisfy the pin.
+    const code = dashboardSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+    expect(code).toContain('fetchStampedReveal<PoolPicksReveal>(() => dbService.getPoolPicks(pool.id, w), gamesRef.current)');
     // The ref follows `games`; a ref that is never written would stamp the
     // empty first-render schedule forever, i.e. never stamp at all.
-    expect(dashboardSource).toContain('useEffect(() => { gamesRef.current = games; }, [games]);');
-    // The stamped object is what is stored, in both branches of the update.
-    expect(dashboardSource.match(/\[w\]: stamped/g) ?? []).toHaveLength(2);
-    expect(dashboardSource).not.toMatch(/\[w\]: r\b/);
+    expect(code).toContain('useEffect(() => { gamesRef.current = games; }, [games]);');
+    // No path fetches a reveal without the stamp, and the stamped object is
+    // what is stored, in both branches of the update.
+    expect(code.match(/dbService\.getPoolPicks\(/g) ?? []).toHaveLength(1);
+    expect(code.match(/\[w\]: stamped/g) ?? []).toHaveLength(2);
   });
 });

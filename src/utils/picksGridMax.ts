@@ -68,6 +68,59 @@ export interface GridRowTally {
 }
 
 /**
+ * Is this game DECIDED — no pick on it can still be "points left"?
+ *
+ * CANCELLED, or a FINAL the feed has reported scores for. A FINAL with no
+ * scores is NOT decided: the scorer grades it when they arrive. The server uses
+ * the same rule for the total it sends (`functions/src/nflPickReveal.ts`).
+ *
+ * Not the same question as `hiddenGameCanPay` below: a FINAL game with scores
+ * is decided (nothing is LEFT on it) and can still pay (a hidden pick on it may
+ * already be a win, so it stays in Max).
+ */
+export function isGameDecided(game: Pick<NFLGame, 'status' | 'scores'>): boolean {
+    return game.status === 'CANCELLED' || (game.status === 'FINAL' && hasReportedScores(game as NFLGame));
+}
+
+/**
+ * The ids of the games not yet decided, by the statuses in hand.
+ * `undefined` for an empty schedule: "no games loaded yet" must not read as
+ * "every game was already decided".
+ */
+export function undecidedGameIds(games: readonly NFLGame[]): string[] | undefined {
+    if (games.length === 0) return undefined;
+    return games.filter((g) => !isGameDecided(g)).map((g) => g.id);
+}
+
+/**
+ * Fetch a reveal and stamp it with the games that were open WHEN THE REQUEST
+ * WAS SENT (`hiddenLeftOpenGameIds`).
+ *
+ * 🛑 BEFORE THE CALL, NOT WHEN THE RESPONSE LANDS. The server computes its
+ * hidden-points total from its own game read, some time after the request
+ * leaves. A stamp taken on arrival can already show a game as decided that the
+ * server still counted — the game would then be missing from the stamp, the
+ * stale check in `tallyGridRow` would not fire, and Pts Left would print the
+ * too-high number this exists to stop (the Claude pre-review of the fix found
+ * exactly that ordering). Taken before the call, the stamp is a superset of
+ * what the server can have counted.
+ *
+ * The cost of that choice is the safe direction: a game decided between the
+ * request and the server's read is in the stamp but not in the total, so Pts
+ * Left reads "?" until the next poll although the total was right. A spurious
+ * "?" for one poll, never a wrong number.
+ *
+ * `gamesNow` is read synchronously, so a caller may pass a ref's current value.
+ */
+export function fetchStampedReveal<R extends object>(
+    fetch: () => Promise<R>,
+    gamesNow: readonly NFLGame[],
+): Promise<R & { hiddenLeftOpenGameIds?: string[] }> {
+    const openAtRequest = undecidedGameIds(gamesNow);
+    return fetch().then((r) => ({ ...r, hiddenLeftOpenGameIds: openAtRequest }));
+}
+
+/**
  * Could a pick on this game that we cannot see still earn a point?
  *
  *   CANCELLED                  never — grades VOID.
@@ -83,28 +136,6 @@ export interface GridRowTally {
  *                              (the reveal can lag the game document).
  *   not over yet               yes.
  */
-/**
- * Is this game DECIDED — no pick on it can still be "points left"?
- *
- * CANCELLED, or a FINAL the feed has reported scores for. A FINAL with no
- * scores is NOT decided: the scorer grades it when they arrive. The server uses
- * the same rule for the total it sends (`functions/src/nflPickReveal.ts`).
- */
-export function isGameDecided(game: Pick<NFLGame, 'status' | 'scores'>): boolean {
-    return game.status === 'CANCELLED' || (game.status === 'FINAL' && hasReportedScores(game as NFLGame));
-}
-
-/**
- * The ids of the games not yet decided, by the statuses in hand. The dashboard
- * stamps this onto a reveal when it arrives (`hiddenLeftOpenGameIds`).
- * `undefined` for an empty schedule: "no games loaded yet" must not read as
- * "every game was already decided".
- */
-export function undecidedGameIds(games: readonly NFLGame[]): string[] | undefined {
-    if (games.length === 0) return undefined;
-    return games.filter((g) => !isGameDecided(g)).map((g) => g.id);
-}
-
 function hiddenGameCanPay(game: NFLGame, pickMode: string | undefined): boolean {
     if (game.status === 'CANCELLED') return false;
     if (game.status !== 'FINAL') return true;

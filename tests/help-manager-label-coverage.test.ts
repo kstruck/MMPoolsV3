@@ -134,10 +134,18 @@ describe('T4 — the NFL manager form has no un-helped label', () => {
     expect(resolvesForSomeNflCommissioner('')).toBe(false);
   });
 
-  it('every settings card the manager view renders from its own file is on the list', () => {
+  it('every NFL…Setting(s) card the manager view renders that CARRIES a helpId is on the list', () => {
     // The list above is hand-kept, so check it against the view: any
     // `NFL…Setting(s)` component the manager view renders that has a FieldLabel
-    // with a helpId must be listed, or it is unguarded again.
+    // with a helpId must be listed, or its id is unguarded again.
+    //
+    // ⚠️ WHAT THIS DOES NOT COVER, stated because the first title claimed more
+    // (the Claude pre-review of this change): a card with NO helpId at all is
+    // not required to be listed, so "no raw <label" never reaches it.
+    // `NFLBrandingSettings.tsx` is one today — it has raw `<label` elements that
+    // predate this file. Bringing it under the rule means writing its help
+    // copy, which is its own ticket, not a guard to bolt on here. It also only
+    // sees components named `NFL…Setting(s)` in this one directory.
     const view = codeOf(MANAGER_FILES[0]);
     const rendered = [...new Set([...view.matchAll(/<(NFL\w+Settings?)\b/g)].map((m) => m[1]))];
     expect(rendered).toContain('NFLPointsLeftSharingSetting');

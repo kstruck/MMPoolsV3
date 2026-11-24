@@ -5,7 +5,7 @@ import { isPoolManager, isSuperAdmin } from '../../utils/auth';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft, Users, Crown } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
-import { undecidedGameIds } from '../../utils/picksGridMax';
+import { fetchStampedReveal } from '../../utils/picksGridMax';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
@@ -407,15 +407,15 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
   useEffect(() => { authGen.current += 1; }, [viewerUid, pool.id]);
   const loadWeek = React.useCallback((w: number) => {
     const gen = authGen.current;
-    dbService.getPoolPicks(pool.id, w)
-      .then(r => {
+    // The reveal comes back stamped with the games that were open when the
+    // request was SENT. The total in it is a snapshot and the statuses on screen
+    // are live; the stamp is how the tables know a hidden game was decided
+    // since, and print "?" instead of a number that still counts it. Why before
+    // the call and not on arrival: see `fetchStampedReveal`.
+    fetchStampedReveal<PoolPicksReveal>(() => dbService.getPoolPicks(pool.id, w), gamesRef.current)
+      .then(stamped => {
         // The request outlived its own entitlement — discard it.
         if (authGen.current !== gen) return;
-        // Stamp which games were still open when this total arrived. The total is
-        // a snapshot and the statuses are live; without the stamp a hidden game
-        // decided AFTER this moment stays counted in Pts Left until the next
-        // poll (see `PoolPicksReveal.hiddenLeftOpenGameIds`).
-        const stamped: PoolPicksReveal = { ...r, hiddenLeftOpenGameIds: undecidedGameIds(gamesRef.current) };
         setReveal(prev => prev.poolId === pool.id && prev.uid === viewerUid
           ? { poolId: pool.id, uid: viewerUid, byWeek: { ...prev.byWeek, [w]: stamped } }
           : { poolId: pool.id, uid: viewerUid, byWeek: { [w]: stamped } });
