@@ -789,10 +789,11 @@ describe('current picks grid — the reveal boundary stays the server\'s', () =>
 
   it('an unrevealed cell reads "?" and never collapses into the no-pick dash', () => {
     expect(grid).toContain("cell.kind === 'HIDDEN' ? '?'");
-    // ...and the Set column uses the SAME glyph for the same fact. Inside one
-    // table "—" cannot mean both "revealed, picked nothing" and "not known".
-    // (qodo #8 — its compliance framing rejected, the overloading absorbed.)
-    expect(grid).toContain("{set === undefined ? '?' : `${set}/${weekGames.length}`}");
+    // ...and the Pts Left column (which replaced Set, Kevin 2026-11-19) uses the
+    // SAME glyph for the same fact. Inside one table "—" cannot mean both
+    // "revealed, picked nothing" and "not known". (qodo #8 — its compliance
+    // framing rejected, the overloading absorbed.)
+    expect(grid).toContain("{left === null ? '?' : left}");
   });
 
   it('the own-row reveal bypass waits for the own entry to actually load', () => {
@@ -975,7 +976,7 @@ describe('the tiebreaker explanation has ONE source, and both surfaces read it',
  * on the Majority row before ITS game map.
  */
 describe('current picks grid — the Majority row has a cell for every fixed column', () => {
-  it('Player, Set, Week Pts, W-L, Max headers ↔ label + four dashes before weekGames.map', () => {
+  it('Player, Pts Left, Week Pts, W-L, Max headers ↔ label + four dashes before weekGames.map', () => {
     const src = readFileSync(resolve(root, 'src/components/NFLPoolDashboard/NFLPicksGrid.tsx'), 'utf8');
     const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     // Every marker is asserted present before it is used to slice, so a

@@ -301,21 +301,27 @@ describe('resultsFootnote', () => {
         isMargin = false,
     ) => resultsFootnote({ view, isMargin, weekLabel: 'HOF Weekend', confidenceMode });
 
-    it("explains Max and No Points on the Pick'em weekly view, and names the week", () => {
+    // "No Points" became "Games Wrong", and Pts Left was added (Kevin, 2026-11-19).
+    it("explains Pts Left, Max and Games Wrong on the Pick'em weekly view, and names the week", () => {
         const s = f('WEEKLY');
+        expect(s).toContain('Pts Left');
         expect(s).toContain('Max');
-        expect(s).toContain('No Points');
+        expect(s).toContain('Games Wrong');
+        expect(s).not.toContain('No Points');
         expect(s).toContain('HOF Weekend');
+        expect(s).toContain('at its confidence weight');
+        expect(f('WEEKLY', false)).toContain('one point each');
     });
 
-    it('does NOT mention Max or No Points on any view that lacks those columns', () => {
+    it('does NOT mention Max, Games Wrong or Pts Left on any view that lacks those columns', () => {
         // Margin's WEEKLY is in this list: it shows a single Margin column.
         const lacking = [
             f('SEASON'), f('SUMMARY'), f('STANDINGS'), f('WEEKLY', true, true),
         ];
         for (const s of lacking) {
             expect(s, `must not mention Max: ${s}`).not.toMatch(/\bMax\b/);
-            expect(s, `must not mention No Points: ${s}`).not.toContain('No Points');
+            expect(s, `must not mention Games Wrong: ${s}`).not.toContain('Games Wrong');
+            expect(s, `must not mention Pts Left: ${s}`).not.toContain('Pts Left');
         }
     });
 
@@ -349,7 +355,10 @@ describe('resultsFootnote', () => {
 
     it('switches the weekly wording between confidence and straight scoring', () => {
         expect(f('WEEKLY', true)).toContain('confidence weight');
-        expect(f('WEEKLY', false)).toContain('every pick correct');
+        expect(f('WEEKLY', false)).toContain('one point each');
+        // Max is per player now (Kevin, 2026-11-23), not the week's ceiling.
+        expect(f('WEEKLY', false)).toContain('the points they have won plus their Pts Left');
+        expect(f('WEEKLY', false)).not.toContain('most points anyone could score');
         expect(f('WEEKLY', false)).not.toContain('confidence weight');
     });
 

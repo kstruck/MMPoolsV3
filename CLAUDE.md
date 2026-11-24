@@ -309,6 +309,53 @@ existed to stop. Written, reviewed, and holed in the same hour.
 §2b.** Codex is not automatically right — verify its claims against the code
 before acting, as with any reviewer.
 
+**The Claude pre-review is optional, runs BEFORE codex, and is NOT a round
+(added 2026-11-23).** `node scripts/agent/pre-review.mjs` runs a read-only
+Claude Agent SDK reviewer over `origin/main...HEAD`. It is paid for by the
+Claude plan's monthly API credit, which Claude Code itself cannot spend and
+which expires each billing cycle. Use it to remove the cheap findings before a
+paid codex round.
+
+⚠️ **"Paid by the credit" is a claim about BILLING, and only the Console
+billing page can confirm it** (`platform.claude.com/settings/billing`:
+"Promotional credits" must fall, the purchased balance must not). This
+paragraph said "a run costs nothing extra" until 2026-11-23, and the first real
+run cost **$1.06 of real money**. It was started from inside a Claude Code
+session, the reviewer inherited that session's `CLAUDE_CODE_*` variables, and it
+was billed as Claude Code — while the script's own check
+(`apiKeySource=ANTHROPIC_API_KEY`) passed. Measured with same-size calls on one
+key: plain API → credit; Agent SDK with no `CLAUDE*` inherited → credit; Agent
+SDK with them inherited → purchased balance. `buildChildEnv` now drops every
+inherited `CLAUDE*` and `ANTHROPIC_*` variable. If a run ever ends in
+`Credit balance is too low` with credit remaining, that is this failure again:
+read the billing page before running anything else.
+
+**Nothing in the script can refuse a wrongly billed run — only an EMPTY
+purchased balance does.** Auto-reload OFF stops the card being charged for
+*more*; it does not protect credits already bought. A misrouted run spends the
+existing purchased balance down to zero first and is refused only after that
+(on 2026-11-23 that balance was $14.77, all of it exposed). So before relying on
+a refusal, read the "Credit balance" figure at the top of the billing page: at
+$0.00 with auto-reload off, a misrouted request fails with
+`Credit balance is too low` and costs nothing; at any positive figure it is paid
+from real money, silently. After a run, check that figure did not move.
+
+```
+npm --prefix scripts/agent ci                 # once per worktree
+node scripts/agent/pre-review.mjs             # exit 0 CLEAN, 1 FINDINGS, 2 INCONCLUSIVE
+```
+
+It does not change the stopping rule, and it never substitutes for codex or
+qodo. The reason is the one this section is built on: a second model does not
+share the first one's blind spots, and this reviewer is the same model family
+as the author, so it shares them. A clean pre-review is not a clean round. Exit
+2 means the review did not complete (no key, credit exhausted, budget or turn
+limit hit) and is never "clean". The key lives in `MMP_AGENT_API_KEY` — never
+in `ANTHROPIC_API_KEY`, which Claude Code reads and which would then fail every
+session with `Credit balance too low`. Each run appends its cost to
+`%USERPROFILE%\.mmp-agent\cost-log.tsv`; whether it actually reduces codex
+rounds is unmeasured until that log has rows.
+
 **Expect several rounds. Use judgement up to 10 per artifact; past 10, ask
 Kevin first and say WHY that artifact needs more (Kevin, 2026-07-27).** The cap
 was 5 earlier that week; it was raised after a 5-round stop left two P1 findings

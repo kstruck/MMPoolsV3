@@ -1330,7 +1330,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                     } else if (isActiveIntersection) {
                                        bgClass = isOwned ? "bg-brandred-600/40" : "bg-brandred-600/20";
                                        borderClass = "border-2 border-brandred-500 animate-pulse shadow-[0_0_20px_rgba(196,52,46,0.5)]";
-                                       textClass = isOwned ? "text-white font-bold" : "text-gold-200/70";
+                                       textClass = isOwned ? "text-white font-bold" : "text-gold-300/70";
                                        zIndex = "z-30";
                                     } else if (isRowHighlighted || isColHighlighted) {
                                        // "Outline the entire row/col to current outline of winning square"
@@ -1339,13 +1339,13 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                                        if (isOwned) {
                                           if (square.isPaid) {
-                                             // Paid = Lighter Navy (Highlight Pop)
-                                             bgClass = "bg-navy-600 shadow-[inset_0_0_15px_rgba(217,188,128,0.25)] brightness-110";
+                                             // Paid = green, as everywhere else on the grid (Kevin, 2026-11-19)
+                                             bgClass = "bg-[#0F7B4A] shadow-[inset_0_0_15px_rgba(217,188,128,0.25)] brightness-110";
                                              textClass = "text-white font-bold text-shadow";
                                           } else {
                                              // Unpaid = Dark Navy
                                              bgClass = "bg-navy-800 shadow-inner";
-                                             textClass = "text-gold-200 font-bold";
+                                             textClass = "text-gold-300 font-bold";
                                           }
                                        } else {
                                           bgClass = "bg-navy-900/60";
@@ -1363,21 +1363,27 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                           );
 
                                           if (isMySquare) {
-                                             // Highlight Current User's Paid Squares
-                                             bgClass = "bg-navy-600 shadow-[0_0_15px_rgba(217,188,128,0.4)] z-20 scale-[1.02]";
+                                             // Highlight Current User's Paid Squares: green, with the gold "yours" border
+                                             bgClass = "bg-[#0F7B4A] shadow-[0_0_15px_rgba(217,188,128,0.4)] z-20 scale-[1.02]";
                                              borderClass = "border-2 border-gold-400";
                                              textClass = "text-white font-bold text-shadow-sm";
                                           } else {
-                                             // Standard Paid
-                                             bgClass = "bg-navy-700 shadow-inner";
-                                             borderClass = "border-navy-600";
+                                             // Standard Paid = GREEN (Kevin, 2026-11-19: players could not
+                                             // tell a paid square from a reserved one, both dark navy). The
+                                             // app's paid green (#0F7B4A, as on the admin "Paid" badges);
+                                             // white bold text on it is 5.3:1.
+                                             bgClass = "bg-[#0F7B4A] shadow-inner";
+                                             borderClass = "border-[#3FA875]";
                                              textClass = "text-white font-bold";
                                           }
                                        } else {
-                                          // UNPAID = Dark Navy + dashed gold
+                                          // UNPAID = Dark Navy + dashed gold. Its name is gold-300: this
+                                          // was text-gold-200, a shade the palette does not define, so no
+                                          // class was generated and the name inherited a dark colour on
+                                          // dark navy — unreadable (found with Kevin's 2026-11-19 report).
                                           bgClass = "bg-navy-800 shadow-inner";
                                           borderClass = "border border-dashed border-gold-500/70";
-                                          textClass = "text-gold-200 font-bold";
+                                          textClass = "text-gold-300 font-bold";
                                        }
                                     } else if (isAvailable) {
                                        bgClass = "bg-white hover:bg-cream cursor-pointer shadow-sm hover:shadow-lg hover:shadow-gold-500/20";
@@ -1446,7 +1452,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                                           {square.owner ? (
                                              <div className="text-center w-full px-0.5">
                                                 {isWinner ? (
-                                                   <span className={`text-[9px] font-display font-black uppercase tracking-wider mb-0 block drop-shadow-md ${isStandardWinner ? 'text-navy-900' : 'text-gold-200'}`}>
+                                                   <span className={`text-[9px] font-display font-black uppercase tracking-wider mb-0 block drop-shadow-md ${isStandardWinner ? 'text-navy-900' : 'text-gold-300'}`}>
                                                       {isHybridWinner ? 'Mega Win!' : (isStandardWinner ? 'Winner!' : 'Event!')}
                                                    </span>
                                                 ) : (
@@ -1483,7 +1489,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
                   <div className="w-full max-w-4xl mt-6 px-4 mb-24 animate-in fade-in print:hidden">
                      <div className="bg-card rounded-xl p-4 border border-line flex flex-wrap justify-center items-center gap-6 md:gap-8">
                         <div className="flex items-center gap-3">
-                           <div className="w-6 h-6 rounded bg-navy-700 border border-navy-600 shadow-sm flex items-center justify-center">
+                           <div className="w-6 h-6 rounded bg-[#0F7B4A] border border-[#3FA875] shadow-sm flex items-center justify-center">
                               <Check size={14} className="text-white" />
                            </div>
                            <span className="text-sm font-bold text-[color:var(--text)]">Paid & Confirmed</span>
@@ -1491,7 +1497,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                         {currentUser && (
                            <div className="flex items-center gap-3">
-                              <div className="w-6 h-6 rounded bg-navy-600 border-2 border-gold-400 shadow-[0_0_10px_rgba(217,188,128,0.4)] flex items-center justify-center">
+                              <div className="w-6 h-6 rounded bg-[#0F7B4A] border-2 border-gold-400 shadow-[0_0_10px_rgba(217,188,128,0.4)] flex items-center justify-center">
                                  <UserIcon size={14} className="text-gold-300" />
                               </div>
                               <span className="text-sm font-bold text-gold-600">Your Squares</span>
@@ -1500,7 +1506,7 @@ export const Grid: React.FC<GridProps> = ({ gameState, onClaimSquares, winners, 
 
                         <div className="flex items-center gap-3">
                            <div className="w-6 h-6 rounded bg-navy-800 border border-dashed border-gold-500/70 shadow-sm flex items-center justify-center">
-                              <UserIcon size={14} className="text-gold-200" />
+                              <UserIcon size={14} className="text-gold-300" />
                            </div>
                            <span className="text-sm font-bold text-[color:var(--text)]">Reserved (Unpaid)</span>
                         </div>

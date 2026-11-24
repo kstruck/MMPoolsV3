@@ -17,6 +17,21 @@ const PICKEM = ['NFL_PICKEM'] as const;
 
 export const NFL_PICKEM_TOPICS: readonly HelpTopic[] = [
   {
+    // PLAN-PTS-LEFT-HIDDEN-TOTAL (Kevin, 2026-11-23).
+    id: 'settings.shareHiddenPointsLeft',
+    title: "Show Everyone's Pts Left",
+    short: "Lets members see every player's Pts Left and Max before that player's remaining games kick off.",
+    long: [
+      "On by default. Picks on a game stay hidden from other members until that game kicks off, and so do their confidence weights. With this on, the site adds up the points each player still has riding on those hidden picks and shows the total, so Pts Left and Max show a number for everyone instead of a question mark.",
+      'Only that total is shared. Nobody sees which team a player picked, or which game carries which weight, until the game kicks off.',
+      'When only one of a player\u2019s games is still hidden, the total is that one game\u2019s weight. For a player who has picked every game, it could already be worked out from the weights shown on started games.',
+      'Off goes back to a question mark until each player\u2019s remaining games kick off. Your own row always shows your numbers.',
+    ].join('\n\n'),
+    fields: [],
+    poolTypes: PICKEM,
+    audience: HOST_ONLY,
+  },
+  {
     // ---- RELEASED BY #482 ------------------------------------------------
     //
     // This topic and `settings.lockBufferMinutes` in `nfl-shared.ts` were
@@ -257,4 +272,5 @@ export const NFL_PICKEM_PLACEMENTS: readonly HelpPlacement[] = [
   // and the manager form renders an explanation instead of the control there.
   { topic: 'nfl.manager.extendDeadline', page: 'pool.nfl.manager.settings', section: 'exceptions', order: 0 },
   { topic: 'settings.lockMode', page: 'pool.nfl.manager.settings', section: 'picks', order: 15 },
+  { topic: 'settings.shareHiddenPointsLeft', page: 'pool.nfl.manager.settings', section: 'picks', order: 16 },
 ];

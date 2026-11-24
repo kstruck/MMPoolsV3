@@ -34,6 +34,22 @@ export const POOLS_OPEN = true;
 export const SQUARES_CREATION_OPEN = true;
 
 /**
+ * The homepage "Squares are FREE for a limited time" promo (Kevin, 2026-11-19).
+ *
+ * It is a CLAIM about price, and the price lives somewhere else: Super-Admin's
+ * squares tier is one band, 11-9999 at $0, until after Thanksgiving (plan K10),
+ * and a $0 squares pool launches free at any size since #786. When Kevin sets
+ * the post-Thanksgiving prices (PLAN-SQUARES-PRICING option B), set this to
+ * `false` IN THE SAME SITTING, or the homepage promises a price that is gone.
+ *
+ * Off, the hero falls back to the "Create an NFL Pool" button. It also needs
+ * `SQUARES_CREATION_OPEN`: a promo for a closed pool type is never shown.
+ *
+ * BUILD-TIME constant: a change needs a Coolify `www` rebuild.
+ */
+export const SQUARES_FREE_PROMO = true;
+
+/**
  * 🛑 THE SEASON'S MILESTONE DATES — ONE SOURCE, BECAUSE FIVE COPIES DISAGREED.
  *
  * Kevin, 2026-08-26, on the pool-home footer: *"The dates are incorrect.

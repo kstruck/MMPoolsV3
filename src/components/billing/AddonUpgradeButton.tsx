@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { checkoutPricingType } from '../../utils/checkoutPricingType';
 import { Sparkles } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { getUserMessage } from '../../utils/errorMessages';
@@ -47,7 +48,9 @@ export const AddonUpgradeButton: React.FC<{
         purchaseKind: 'addon',
         poolId: pool.id,
         poolName: pool.name,
-        poolType: pool.type,
+        // The type checkout prices this pool as; the raw stored type can be a
+        // legacy value ('playoff', or none) that the checkout schema rejects.
+        poolType: checkoutPricingType((pool as { type?: unknown }).type) as Pool["type"],
         // Ignored by the server on this path — it prices no seats and reads the
         // pool's own allowance — but the shared schema requires the field.
         estimatedPlayers: 0,

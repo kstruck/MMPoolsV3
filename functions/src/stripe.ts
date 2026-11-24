@@ -64,6 +64,7 @@ import {
     type ProductSnapshot,
 } from "./shared/schemas/bundle";
 import { rethrowOrInternal } from "./lib/safeError";
+import { SITE_ORIGIN } from "./lib/siteConfig";
 
 const db = admin.firestore();
 
@@ -309,12 +310,15 @@ function getStripe() {
 // production origin) and builds fixed route templates.
 // =============================================================================
 
-const PRODUCTION_ORIGIN = "https://www.marchmeleepools.com";
+// The fallback origin. Per-environment since PLAN-AUTO-DEPLOY Phase 1a (a
+// staging project returns its checkouts to the staging site); production's
+// value is unchanged. It is always allowlisted, as before.
+const FALLBACK_ORIGIN = SITE_ORIGIN;
 
 /** Allowlisted origins. Extendable via BUYFLOW_ALLOWED_ORIGINS (comma-separated). */
 function allowedOrigins(): string[] {
     const base = [
-        PRODUCTION_ORIGIN,
+        FALLBACK_ORIGIN,
         "https://marchmeleepools.com",
         "https://marchmelee.com",
         "https://www.marchmelee.com",
@@ -342,8 +346,8 @@ function normalizeOrigin(raw: string | undefined): string | null {
 
 /**
  * The safe origin to build redirect URLs from. Uses the request Origin/Referer
- * ONLY when it is in the allowlist; otherwise falls back to the production
- * origin. Client-supplied redirect URLs are never used.
+ * ONLY when it is in the allowlist; otherwise falls back to the site
+ * origin (FALLBACK_ORIGIN). Client-supplied redirect URLs are never used.
  */
 function safeRedirectOrigin(rawRequest: any): string {
     const headerOrigin =
@@ -352,7 +356,7 @@ function safeRedirectOrigin(rawRequest: any): string {
     if (headerOrigin && allowedOrigins().includes(headerOrigin)) {
         return headerOrigin;
     }
-    return PRODUCTION_ORIGIN;
+    return FALLBACK_ORIGIN;
 }
 
 function poolSuccessUrl(origin: string, poolId: string): string {
@@ -404,6 +408,42 @@ export function assertCheckoutOwnership(
     throw new HttpsError("permission-denied", "Only the pool commissioner can buy or upgrade hosting for this pool.");
 }
 
+/**
+ * The pool type a hosting checkout is PRICED as: the pool's STORED type, never
+ * the one the caller sends (qodo #786, finding 1).
+ *
+ * `createCheckoutSession` used to price from the caller's `poolType`. That let
+ * an owner price any pool as the cheapest format — and once a $0 squares band
+ * is quoted `free_tier` (PLAN-SQUARES-ZERO-PRICE-FREE), it let the owner of a
+ * NON-squares pool send `poolType: "SQUARES"` and take the $0 free path. The
+ * caller's value is not needed for anything: the pool is read before pricing.
+ *
+ * A pool with no stored type is a legacy squares pool — the same convention as
+ * `createPool` (`!data.type || data.type === 'SQUARES'`) and the rules.
+ */
+export function checkoutPricingType(storedType: unknown): string {
+    // Upper-cased because the pricing page always sent `poolType.toUpperCase()`
+    // and `formatTierMap` is keyed in capitals.
+    if (typeof storedType !== "string" || storedType.trim() === "") return "SQUARES";
+    const upper = storedType.trim().toUpperCase();
+    // A legacy playoff pool is stored as `'playoff'`; the rest of the code treats
+    // it as NFL_PLAYOFFS (`playoffPools.ts`, `billing.ts`, `BillingGate`), and
+    // `formatTierMap` has no `PLAYOFF` key — so it is priced as NFL_PLAYOFFS
+    // (qodo #786 re-review, finding 1).
+    return LEGACY_PRICING_TYPE_ALIASES[upper] ?? upper;
+}
+
+/**
+ * Legacy stored types and the type they are priced as. `PLAYOFF` (stored
+ * `'playoff'`) is read by `playoffPools.ts` and `billing.ts`. `NFL_PLAYOFF` is
+ * defensive (codex round 7): no code writes it, but test fixtures use it and an
+ * old document could carry it, and mapping it costs nothing.
+ */
+const LEGACY_PRICING_TYPE_ALIASES: Readonly<Record<string, string>> = {
+    PLAYOFF: "NFL_PLAYOFFS",
+    NFL_PLAYOFF: "NFL_PLAYOFFS",
+};
+
 export const createCheckoutSession = validated(
     // Union: { bundleType } (bundle purchase) | checkoutPoolInputSchema (pool
     // purchase) — the same two shapes the old head accepted, now parsed at the
@@ -429,7 +469,9 @@ export const createCheckoutSession = validated(
     // =====================================================================
     // STANDARD POOL PURCHASE PATH
     // =====================================================================
-    const { poolId, poolName, poolType, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = input;
+    // `poolType` from the request is deliberately NOT used: the pool is priced as
+    // its STORED type (`checkoutPricingType`, below the pool read).
+    const { poolId, poolName, estimatedPlayers, addons, couponCode, usedCredit, customCreditId } = input;
     // PLAN-PER-POOL-PREMIUM C2. Default 'pool', so every client that predates
     // this field behaves exactly as before.
     const purchaseKind = input.purchaseKind ?? "pool";
@@ -444,6 +486,8 @@ export const createCheckoutSession = validated(
     // Hard-closed pool types cannot be bought (codex r3). The PERSISTED type,
     // never the client's `poolType` — the caller picks that one.
     assertPoolTypePurchasable(poolData?.type);
+    // Every price, coupon scope, session record and Stripe line below uses this.
+    const poolType = checkoutPricingType(poolData?.type);
 
     // --- Ownership gate (K17): owner/manager, or a claim+doc-verified SUPER_ADMIN ---
     const claimRole = request.auth!.token?.role;

@@ -14,6 +14,7 @@ import { recalculateGlobalStatsSchema } from "./schemas/noInputAdmin";
 import { NFL_SEASON_TYPES } from "./shared/poolTypes";
 import { computeRosterSummary, type DuesInputs, type MemberRecord } from "./shared/memberRecord";
 import { isTestPool } from "./shared/testPool";
+import { PROJECT_ID, SITE_ORIGIN } from "./lib/siteConfig";
 
 /**
  * Dues actually COLLECTED, read from a pool's Member Records — the money in the pot.
@@ -242,7 +243,7 @@ export const onPoolLocked = onDocumentUpdated("pools/{poolId}", async (event) =>
                         <p style="margin: 5px 0;"><strong>${after.awayTeam} (Col):</strong> ${awayNums}</p>
                      </div>
                      <p>Good luck!</p>`,
-                    `https://www.marchmeleepools.com/pool/${event.params.poolId}`,
+                    `${SITE_ORIGIN}/pool/${event.params.poolId}`,
                     "View Your Squares"
                 );
 
@@ -447,7 +448,7 @@ export const recalculateGlobalStats = validated(
         options: {
             timeoutSeconds: 300,
             memory: "512MiB",
-            cors: ["https://www.marchmeleepools.com", "https://gridiron-gamble-uzuqo.firebaseapp.com", "https://gridiron-gamble-uzuqo.web.app"],
+            cors: [SITE_ORIGIN, `https://${PROJECT_ID}.firebaseapp.com`, `https://${PROJECT_ID}.web.app`],
         },
     },
     // BEHAVIOR CHANGE, deliberate and signed off: the SUPER_ADMIN check used to

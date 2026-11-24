@@ -22,6 +22,7 @@ import {
 } from './lib/poolCreation';
 import { loadBillingConfig, resolveCouponForQuote } from './billing';
 import { validLaunchCouponCode } from './lib/launchCoupon';
+import { zeroPricedLaunchesFree } from './lib/quoteEngine';
 import { buildPoolSettingsUpdate, flattenSettingsPatch, touchesLockSettings } from './lib/poolUpdate';
 import { parityEditNeedsEntries, survivorParitySettingsRefusal, touchesSurvivorParitySettings } from './lib/survivorSettingsGate';
 import { tiebreakerEditNeedsEntries, touchesWeeklyTiebreakerSetting, weeklyTiebreakerRefusal } from './lib/weeklyTiebreakerGate';
@@ -234,12 +235,20 @@ export function estimatedPlayersFromPayload(data: Record<string, any> | null | u
 export function computeLaunchMode(
     data: Record<string, any> | null | undefined,
     freePlayerThreshold: number,
+    /**
+     * Above the threshold, is this pool priced at $0? Only `createPool` passes
+     * it, and only for squares (`zeroPricedLaunchesFree`,
+     * PLAN-SQUARES-ZERO-PRICE-FREE). Omitted — every other caller — the rule is
+     * exactly what it was.
+     */
+    opts?: { zeroPriced?: (estimate: number) => boolean },
 ): LaunchBillingMode {
     const hasAddon = payloadHasPaidAddon(data);
     if (hasAddon) return 'trial';
     const estimate = estimatedPlayersFromPayload(data);
     if (estimate === undefined) return 'free'; // no estimate → free (unchanged behavior)
-    return estimate <= freePlayerThreshold ? 'free' : 'trial';
+    if (estimate <= freePlayerThreshold) return 'free';
+    return opts?.zeroPriced?.(estimate) === true ? 'free' : 'trial';
 }
 
 /**
@@ -383,7 +392,11 @@ export const createPool = validated(
             (code) => resolveCouponForQuote(db, code, { userId: uid, poolType, now: now.toMillis() }),
             (request.data as Record<string, unknown> | undefined)?.couponCode,
         );
-        const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold);
+        // A squares pool priced at $0 launches free at any size — not on a trial
+        // it could never pay its way out of (PLAN-SQUARES-ZERO-PRICE-FREE).
+        const launchMode = computeLaunchMode(data, billingConfig.freePlayerThreshold, isSquaresPool
+            ? { zeroPriced: (estimate) => zeroPricedLaunchesFree(billingConfig, 'SQUARES', estimate, normalizeAddonSelection(data)) }
+            : undefined);
 
         const newPool: any = {
             ...data,

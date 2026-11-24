@@ -1,0 +1,352 @@
+# PLAN: deploys run from GitHub Actions, to staging first and then production
+
+> **STATUS: APPROVED; Phase 1a in progress.** Kevin approved D1 to D6 in §7
+> as recommended on 2026-11-20. Phase 1a (§4.10) is the first implementation
+> PR; nothing is deployed by it and no setting has been changed.
+> Review log: `PLAN-AUTO-DEPLOY-REVIEW-LOG.md`. Sweeps: `PLAN-AUTO-DEPLOY-SWEEPS.md`.
+
+Kevin, 2026-11-19, on the `www` app's dead "Deploy on push" setting: *"I want
+auto-deploy for this."* Same day, on whether a merge should deploy with no
+further click: *"GO with your recommendation for now"* (the recommendation:
+a one-click approval now, fully automatic once staging exists).
+
+**Classification (`mmp-change-control` §1): PLAN-GATED: authorization and
+production.** It gives a new principal (a GitHub Actions identity) the right
+to deploy functions, rules and indexes to `gridiron-gamble-uzuqo`, and it
+replaces the Rule 2 deploy ritual's human steps with a machine. No change to
+money, scoring, or what any user may read or write.
+
+---
+
+## 1. What is wrong today (verified on `origin/main` @ `b04f6b0b`)
+
+1. **Functions, rules and indexes deploy from one Windows checkout.**
+   `firebase deploy` packages local files, and CLAUDE.md §3 records that a
+   stale checkout has reported `Deploy complete!` while shipping old code,
+   twice.
+2. **The frontend deploys by a manual click in Coolify.** Read from Kevin's
+   Coolify pages on 2026-11-19: build strategy `Dockerfile` (built from source
+   on the server), Auto deploy set to "Deploy on push (webhooks)", API access
+   off, and the instance has no domain (the webhook URL renders as
+   `:///api/v1/deploy...`). GitHub's webhook list for the repo is empty
+   (Kevin, 2026-11-19). So the push setting is on and cannot fire.
+3. **There is no staging.** A change to rules, billing or scoring first runs
+   for real in production.
+4. **Coolify "Redeploy" builds current `main` HEAD**, not a chosen commit
+   (`mmp-deploy-and-operate` §2b). The frontend that goes live is whatever
+   `main` is at build time, which need not be the commit the functions came
+   from.
+
+## 2. The constraint that shapes the design
+
+The order of a release is not fixed. `mmp-deploy-and-operate` §1a:
+
+| Rules change | Order |
+|---|---|
+| none, or only grants | functions → rules → frontend |
+| revokes a read the live frontend still makes | functions → frontend → rules |
+| both | no order works: split into two rules deploys, planned before the branch is cut |
+
+Functions go first in every case. The 2026-11-17 squares deploy used the
+second row (functions, `www`, rules), after a full Firestore export.
+
+A pipeline that always runs one order will, on the wrong release, blank a
+page for every commissioner for the length of a build. So the pipeline must
+not guess the rules order.
+
+How often this matters, measured on `origin/main` since 2026-09-20: 35
+commits, of which 2 touch `firestore.rules`, 0 touch
+`firestore.indexes.json`, 13 touch `functions/` or `shared/`, 22 touch the
+frontend. A rules release is about one in seventeen.
+
+## 3. Decisions already made
+
+| # | Decision | Source |
+|---|---|---|
+| A1 | GitHub Actions is the only thing that deploys. Coolify's own Auto deploy is set to "Manual deployments only". | Kevin, 2026-11-19 |
+| A2 | Production waits for a one-click approval in GitHub until staging has proven itself, then becomes automatic. | Kevin, 2026-11-19 |
+| A3 | Branch model across Kevin's projects: `develop` deploys to staging, `main` deploys to production. | Kevin, 2026-11-19 |
+| A4 | MarchMelee's Coolify server is separate from `coolify.versistai.net`. | Kevin, 2026-11-19 |
+
+## 4. Proposed design
+
+### 4.1 One workflow, `.github/workflows/deploy.yml`
+
+- **Trigger:** push to `main`, and a manual "Run workflow" button.
+- **Gate job:** waits for the six required contexts (`build-and-test`,
+  `emulator-tests`, `nginx-validate`, `lint`, `secrets-scan`,
+  `security-audit`) on the pushed commit. `ci.yml` and `security-scan.yml`
+  start at the same moment as this workflow, so the gate polls until every
+  context reaches a final state, with a time limit. It continues only if all
+  six succeeded; a failure, a missing context or the time limit stops the
+  run. The ruleset's admin bypass can merge a red commit; this job means a
+  red commit still does not deploy. (codex X1.1: the first draft read the
+  checks once and would have stopped almost every green merge.)
+- **Concurrency:** one deploy at a time per environment, never cancelled
+  mid-run.
+- **Stages:** staging runs with no approval. Production runs the same steps
+  on the same commit after the approval (A2).
+- **Third-party actions pinned to commit SHAs.** The repo is public and this
+  workflow holds deploy rights.
+
+### 4.2 What each run deploys
+
+The run diffs the commit against the last commit that deployed successfully
+to that environment and deploys only the surfaces that changed. That last
+commit comes from a record the workflow writes itself, at the end of a fully
+successful run, naming the SHA it checked out. It is not GitHub's automatic
+environment record: on a manual run that record carries the SHA of the
+branch the run was started from, not the SHA that was deployed, and a later
+diff from it would skip the changes in between (codex X8.2).
+
+| Surface | Changed when | Step |
+|---|---|---|
+| Functions | `functions/**`, `shared/**`, or `firebase.json` (it sets the functions source, ignore list and predeploy build; codex X9.2) | `npm --prefix functions ci`, then: **production** `npx firebase deploy --only functions --project <id>`; **staging** `--only functions:<name>,...` built from the committed staging list in §4.9, never the bare `--only functions` (codex X7.1) |
+| Rules | `firestore.rules` | `npx firebase deploy --only firestore:rules --project <id>` |
+| Indexes | `firestore.indexes.json` | `npx firebase deploy --only firestore:indexes --project <id>` |
+| Frontend | anything the image is built from | build image, push, tell Coolify to pull that tag |
+
+`--project` is always explicit. The checkout is the commit itself, so the
+stale-tree failure in §1.1 cannot occur.
+
+**The first run in an environment has nothing to diff against.** A missing
+record never means "nothing changed", and no baseline is taken on trust:
+§1 is the evidence that production's functions and frontend may not come
+from one commit, and nothing available today can prove which revision is
+serving. So the first run in each environment, production included, deploys
+every surface: functions, indexes, the frontend image, and rules. On
+production "functions" means all of them (the CLI skips the ones whose
+source already matches, as on 2026-11-17). On staging it means the committed
+staging list from §4.9 and nothing else, on the first run as on every run:
+there is no run, first or otherwise, in which staging deploys every export
+(codex X9.1). Because
+that run deploys rules, it is always a manual run with the order chosen,
+after Kevin has compared the live ruleset in the Firebase console with
+`firestore.rules` at that commit. (codex X6.1, X8.1.)
+
+The run starts with `npm ci` at the repo root as well as in `functions/`.
+`firebase-tools` is a root devDependency, so without the root install `npx`
+on a clean runner would download whatever CLI release is current, and the
+deploy would not be reproducible (codex X3.1). The CLI that deploys is the
+one the lockfile pins, the same one the emulator jobs in `ci.yml` use.
+
+### 4.3 The rules order is chosen by a person, not guessed
+
+- **No rules change in the range:** functions → indexes → frontend, with no
+  question asked.
+- **Rules changed:** the push-triggered run deploys functions, then stops
+  with a summary that names the rules diff and the three cases in §2. Kevin
+  finishes the release with "Run workflow" and picks `rules-first` or
+  `frontend-first`. The mixed case stays a two-PR split, as today.
+
+- **The manual run is pinned to a commit.** A "Run workflow" click runs
+  whatever the chosen branch points at when it is clicked, which may be a
+  later merge than the one that stopped. So the stopped run records its
+  commit as the pending release, and the manual run takes the commit SHA as
+  a required input, runs only from `main`, checks out exactly that SHA, and
+  refuses any SHA that is not on `main` or is older than the pending
+  release. Naming a newer SHA is allowed and deploys the whole range up to
+  it, re-running the functions step first. (codex X4.1.)
+- **The gate in §4.1 runs on the SHA that will be deployed, in every run.**
+  A manual run waits for the six contexts on its input SHA exactly as a
+  push-triggered run does on the pushed commit, so naming a newer commit
+  cannot deploy one whose checks are red, missing or still running.
+  (codex X5.1.)
+- **While a release is pending, later merges do not deploy.** Their
+  push-triggered runs stop at the start and say which release is pending,
+  so production never holds the frontend of one commit against the
+  half-finished rules release of another.
+
+This costs one extra click on roughly one release in seventeen, and keeps
+the §1a classification with a human who can read the diff.
+
+### 4.4 Nothing destructive happens unattended
+
+- The workflow never passes `--force`. Deleting a deployed function (an
+  export was removed) and deleting a production index that is absent from
+  `firestore.indexes.json` both need a confirmation the CLI cannot get in
+  CI, so they stay manual actions for Kevin. **UNVERIFIED:** the exact
+  non-interactive behaviour of each (skip or abort) must be observed on the
+  staging project before production is connected.
+- The workflow does not flip any kill-switch or `system/config` field, and
+  does not run a Firestore export. A release that wants an export first, as
+  on 2026-11-17, starts with that manual step and then uses "Run workflow".
+
+### 4.5 The Cloud Run healthcheck flake
+
+`mmp-deploy-and-operate` §1c: on a mass deploy a random subset can fail the
+startup probe while the last good revision keeps serving. The workflow
+follows that procedure: on failure it retries only the failed functions once
+after a ten-minute wait, with the same bundle, then fails the run and names
+them. It does not retry further.
+
+### 4.6 Frontend: an image per commit
+
+GitHub Actions builds the `www` image from the commit, with the eight
+`VITE_*` build arguments (S4) read from the GitHub environment's variables,
+and pushes it to GHCR tagged with the commit SHA. Coolify pulls that tag.
+This closes §1.4: the frontend that goes live is the commit that was
+approved, and a rollback of the frontend is "deploy the previous SHA's
+image". Rolling back the other surfaces is not that simple: see §4.11.
+
+`tests/dockerfile-build-parity.test.ts` and `tests/dockerfile-sentry-env.test.ts`
+keep pinning the Dockerfile; the workflow builds that same file.
+
+### 4.7 Signing in to Firebase with no stored key
+
+Workload Identity Federation: GitHub's short-lived token is exchanged for a
+Google service account. The trust condition is the repository **and** the
+GitHub environment name, so only a job that has passed the environment's
+rules can obtain production credentials. No long-lived key exists to leak
+from a public repo.
+
+**UNVERIFIED:** the minimal role list for the deploy service account
+(functions, Cloud Run, Cloud Scheduler for the scheduled jobs, rules,
+indexes, read access to the four secrets in S5). It is to be taken from
+Firebase's current documentation and proven on staging, not written from
+memory.
+
+### 4.8 Proof that it landed
+
+- **Functions, three checks.** (1) The deploy's exit status. (2)
+  `functions:list` compared with the exports of `functions/src/index.ts`:
+  CLAUDE.md §3, the tell of a bad deploy is an absence. (3) A name in the
+  list does not prove the new revision is serving, since a failed update
+  leaves the last good revision live under the same name (§1c). So for every
+  function the deploy output reports as updated, the run confirms that the
+  revision now serving was created during this run. A function that fails
+  this check fails the run and is named. (codex X3.2.) **UNVERIFIED:** the
+  exact query for the serving revision's creation time; to be settled on
+  staging.
+- **Frontend:** the image writes the commit SHA into a small static file,
+  and the workflow fetches it from the live site until it matches or times
+  out.
+
+### 4.11 Rollback
+
+Running the workflow on an older SHA is a rollback only for what a deploy
+can overwrite. It is not one for what a deploy would have to delete, and
+§4.4 forbids unattended deletion. (codex X6.2.)
+
+| Surface | Rolling back to an older SHA |
+|---|---|
+| Frontend | Complete: the older image is served. |
+| Function code | Complete for functions that exist at both SHAs. |
+| Functions added since | **Left running.** Kevin deletes them by hand if they must go, after checking nothing live calls them. |
+| Indexes added since | **Left in place.** Harmless to leave; deleted by hand only if wanted. |
+| Rules | The older `firestore.rules` is deployed, and the §2 order question applies in reverse: a rollback that revokes a read the live frontend makes needs the frontend rolled back first. So a rules rollback always goes through the manual run with an order chosen. |
+| Data written by the newer code | Not touched. A release that changes stored shapes needs its own repair plan, as today. |
+
+The manual run reports which added functions and indexes it left behind, so
+a rollback never looks more complete than it is.
+
+### 4.9 Staging
+
+- A second Firebase project, on the same plan as production.
+- A second `www` app, on MarchMelee's own Coolify server (the KVM 4 that
+  serves production), in its own Coolify project with memory and CPU limits,
+  one build at a time, HTTP basic auth, at `staging.marchmeleepools.com`.
+  Re-ruled 2026-11-20 (D5): the first proposal, `coolify.versistai.net`, runs
+  on a VPS that is being retired on 2026-12-19.
+- Its own secrets: Stripe test keys, and no live Courier token, so staging
+  cannot charge a card or email a real person.
+- Staging is where every UNVERIFIED item in this plan gets observed.
+- **Scheduled jobs are decided before the first staging deploy, not after.**
+  `firebase deploy --only functions` creates and starts the Cloud Scheduler
+  job of every scheduled export at once (`runReminders` runs every 15
+  minutes and is bound to Courier). So staging never deploys "all
+  functions". It deploys from a committed list: every export is named either
+  as deployed to staging or as excluded, with a reason, and a test fails
+  when an export is in neither. Scheduled exports start in the excluded
+  list. (codex X2.2.)
+
+### 4.10 Production hosts are written into the code today
+
+Sweep S8: the production project id and site domain are hard-coded in
+`nginx.conf` (the Content-Security-Policy, the CSP report endpoint and the
+`/join` crawler proxy), in `functions/src` (including `stripe.ts`), and in
+`src`. A staging image built from this tree would have its function calls
+blocked by its own CSP, would proxy join previews to production, and its
+functions would send users and emails to the production site. (codex X1.2.)
+
+So staging needs one preparatory change before it can exist: the project id
+and the site origin become per-environment values, with production's values
+as the defaults so that production's output is byte-for-byte unchanged.
+That change touches `stripe.ts`, so it is **plan-gated (money) in its own
+right** and gets its own classification, tests and review when it is
+written. It is Phase 1a below.
+
+**Phase 1a as built (2026-11-20).** The line-by-line expansion of S8 gave
+these answers:
+
+| Where | Treatment |
+|---|---|
+| `functions/src` | One module, `functions/src/lib/siteConfig.ts`: `SITE_ORIGIN` from `MMP_SITE_ORIGIN` (set per project in `functions/.env.<projectId>`), `PROJECT_ID` from `GCLOUD_PROJECT`. Unset means production's literal. A malformed value throws at load, and so does an origin that does not match the project (a real non-production project must set its own origin, which may not be any production host (qodo #2); production's project must use production's; the emulator and `demo-*` projects are exempt), so a bad or missing staging config fails the deploy instead of linking to production (qodo #1 on #796). Used by `stripe.ts` (the fallback return origin), `emailStyles.ts` (`BASE_URL`), `joinPreview*`, `squares.ts`, `statsTrigger.ts` (link and callable CORS) and `securityNotices.ts`. |
+| `stripe.ts` allowlist | Production's alternate hosts stay in the redirect allowlist on every project: production's list must not change, and a staging project accepting them is harmless. |
+| `nginx.conf` | Unchanged values. The `www` container's start script, `scripts/docker/40-mmp-environment.sh`, rewrites the project id when `MMP_SITE_ENV=staging` and `MMP_FIREBASE_PROJECT_ID` names the staging project, and also writes the `X-Robots-Tag: noindex` include, a deny-all `robots.txt` and removes `sitemap.xml`. With nothing set it touches no file. It refuses to start for staging without a non-production project, for a non-production project served as production, and when the browser bundle was built for a different project than the one named (the Dockerfile records `VITE_FIREBASE_PROJECT_ID` in the image; qodo #1 on #796). |
+| `src`, `index.html`, `public/` | Unchanged. Canonical URLs and the support address name production on purpose (S8), and staging is noindex. The two client-side email links (`emailService.ts`, `shared/emailPromo.ts`) stay production's: staging has no live Courier token (§4.9), so those emails are never sent from staging. |
+
+Tests: `functions/src/__tests__/siteConfig.test.ts` and
+`tests/site-environment-invariants.test.ts`, which also fails if a
+production literal is added to `functions/src` outside `siteConfig.ts`.
+
+## 5. Phases
+
+Each phase is its own PR and is shippable alone.
+
+| Phase | What | Touches production? |
+|---|---|---|
+| 0 | Kevin: set the `www` app's Auto deploy to "Manual deployments only". | A setting that is already dead |
+| 1a | Code: project id and site origin become per-environment values (§4.10, S8), defaults equal to production. Includes the staging crawl rules from S8: a non-production image serves a deny-all `robots.txt`, no sitemap, and a `noindex` header, so the public staging site is never indexed (codex X5.2). Proven by tests that production's rendered `nginx.conf` and URLs are unchanged. | Yes, as an ordinary release that must change nothing observable |
+| 1b | Staging Firebase project and staging `www` app. The workflow deploys `main` to staging on every merge, with no approval. All UNVERIFIED items observed and recorded here. | No |
+| 2 | Production: the service account and trust, the `production` environment with Kevin as required reviewer, Coolify domain, API access and token, and the switch to pulling the image. The workflow gains the production stage. | Yes, first use is a release with no rules change |
+| 3 | Docs and skills: every file in sweep S1 is corrected in one PR, including CLAUDE.md §3 and the Rule 2 ritual. The manual ritual stays documented as the fallback. | No |
+| 4 | Branch switch (A3): `develop` deploys to staging, `main` to production, the ruleset names both branches, and the approval is dropped (A2). In the same PR, `ci.yml` and `security-scan.yml` gain `develop` in their `push` triggers (and `security-scan.yml` in its `pull_request` branches): both name only `main` and `master` today, so without this the gate in §4.1 would wait for six contexts that never start on `develop` (codex X2.1). Dependabot's target branch moves to `develop` with it. | Yes |
+
+## 6. Risks
+
+- **Staging is not free to stand up.** Phase 1a edits code on the money
+  path (`stripe.ts` return URLs) and the CSP. It is small, but it is a real
+  release to production before staging exists to test it. Its safety rests on
+  tests that pin production's output as unchanged.
+- **Scheduled jobs in staging.** 30 source files define `onSchedule` jobs.
+  In a second project they would run on their own data, call ESPN, send
+  through Courier and cost money. §4.9 keeps them out of staging by default;
+  each one added later is a deliberate, named choice.
+- **A partly finished release.** Functions deploy, then the run stops (a
+  rules release, or a failure). Production then has new functions with the
+  old frontend. This is the state every manual deploy already passes
+  through, and functions-first is safe by the §1a rule, but it can now last
+  until Kevin clicks.
+- **The approver is the author.** With one developer the approval is a
+  pause, not a second opinion. Its value is the moment to check the rules
+  order and whether an export is wanted.
+- **Coolify cutover.** Changing the production `www` app from "build from
+  source" to "pull an image" is a change to the live app. Phase 2 does it on
+  a release that changes nothing else, with the Coolify rollback in
+  `mmp-deploy-and-operate` §2b ready.
+- **Public repository.** The workflow must never run on `pull_request_target`
+  or on fork code. The trust condition in §4.7 is the control; the trigger
+  list is the second.
+
+## 7. DECISION NEEDED
+
+**RULED 2026-11-20: Kevin approved D1 to D6 as recommended. D5 was re-ruled the same day (see its row).**
+
+| # | Question | Recommendation | On "approve as recommended" |
+|---|---|---|---|
+| D1 | When a release changes `firestore.rules`, who picks the order? | The pipeline stops after functions and Kevin picks (§4.3). | Rules releases need one "Run workflow" click with an order chosen. |
+| D2 | Staging before production, or production first? | Staging first (Phases 1a and 1b before Phase 2). | Production auto-deploy arrives after staging has run real releases. Until then deploys stay manual. |
+| D3 | Frontend: image per commit from GHCR, or keep Coolify building from source? | Image per commit (§4.6). | The production `www` app changes build strategy in Phase 2. |
+| D4 | Function deletions and index deletions: manual only? | Yes (§4.4). | Removing an export or an index still ends with a manual command by Kevin. |
+| D5 | Where does the staging `www` app run? | MarchMelee's own Coolify server, as a separate project with limits (§4.9). Re-ruled 2026-11-20; it was `coolify.versistai.net`, which is being retired. | MarchMelee's Coolify gets an instance domain (`coolify.marchmeleepools.com`), API access and the staging project before Phase 2. The production `www` app itself is not changed until Phase 2. |
+| D6 | Which functions run in staging? | Callables and triggers yes; every scheduled job excluded until named (§4.9). | Staging cannot test a scheduled job until Kevin adds it to the list. |
+
+## 8. Out of scope
+
+- Any change to what is deployed: no function, rule, index or frontend code
+  changes in this plan beyond the workflow and the version file in §4.8.
+- App Check enforcement, which stays blocked (`mmp-change-control` §6).
+- Automating Firestore exports, kill-switch flips or backfills.
+- The repository ruleset changes (zero approvals, no bypass, branches by
+  name). Those are settings Kevin changes, tracked with Phase 4.

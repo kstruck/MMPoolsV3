@@ -10,7 +10,9 @@
 //   - each selected add-on priced from features[key].addonPrice (INCLUDING
 //     smsNotifications — the pre-overhaul client omitted SMS; that bug dies here)
 //   - coupon discount (percentage|flat), clamped so total ≥ $0
-//   - freeTierEligible = players ≤ freePlayerThreshold AND total is $0
+//   - freeTierEligible = players ≤ freePlayerThreshold AND total is $0, OR — for
+//     a pool type the free plan's participant cap does not apply to (SQUARES,
+//     plan K2) — the configured price itself is $0 (see zeroPricedLaunchesFree)
 import type { BillingConfig } from "../shared/schemas/billingConfig";
 import type {
   AddonKey,
@@ -97,6 +99,65 @@ export function computeBasePrice(
   );
 }
 
+/**
+ * Does the selection include a paid (not included-with-every-pool) add-on —
+ * whatever the config prices it at? The same test `createPool` launches by
+ * (`payloadHasPaidAddon`): a selected add-on starts a TRIAL, because the trial
+ * is what switches it on (`billingForLaunch`), and the free path never does.
+ * The zero-priced rule must read the selection the same way, or the wizard
+ * would say "free" for a pool `createPool` puts on a trial — codex round 1 on
+ * PLAN-SQUARES-ZERO-PRICE-FREE: an add-on the config prices at $0 adds no quote
+ * line but still forces the trial.
+ */
+function selectsPaidAddon(addons: Partial<Record<string, boolean>>): boolean {
+  return ADDON_KEYS.some((k) => addons[k] === true && !isIncludedAddon(k));
+}
+
+/**
+ * Pool types the free plan's PARTICIPANT CAP does not apply to. Kevin, 2026-11-17
+ * (plan K2): squares is exempt — `reserveSquare` never enforced the cap.
+ */
+export const FREE_CAP_EXEMPT_POOL_TYPES: readonly string[] = ['SQUARES'];
+
+/**
+ * A pool that is priced at $0 (base price $0, no paid add-on selected) launches FREE —
+ * for a cap-exempt pool type only (PLAN-SQUARES-ZERO-PRICE-FREE).
+ *
+ * Without this, a squares pool above `freePlayerThreshold` launched on a TRIAL
+ * even when its tier was $0 (Kevin's "free until after Thanksgiving" band,
+ * 11–9999 at $0). A trial at $0 cannot be activated — `createCheckoutSession`
+ * accepts a $0 activation only for a credit, the free tier or a full-discount
+ * coupon — so the pool went to grace and then LOCKED, and the wizard's primary
+ * button said "Start 14-day trial" for a pool that costs nothing.
+ *
+ * Why not every pool type: on any other type `free` brings the participant cap
+ * (`shared/freePlanCap.ts`) — a $0 band for 11–50 would launch free and then
+ * turn away player 11. Squares has no cap, so `free` takes nothing away.
+ *
+ * The SUBTOTAL, not the total: a coupon that discounts a priced pool to $0 is a
+ * paid pool activated with a coupon, not a free one — that stays on the trial
+ * path and the coupon's own FREE PATH, unchanged.
+ *
+ * Pure. Never throws: an unmapped format or missing tiers is "not zero-priced",
+ * which leaves the pool on the trial path exactly as before.
+ */
+export function zeroPricedLaunchesFree(
+  config: Pick<BillingConfig, "freePlayerThreshold" | "pricing" | "formatTierMap" | "features">,
+  poolType: string,
+  estimatedPlayers: number,
+  /** A partial selection is fine: an absent key is "not selected". */
+  addons: Partial<Record<string, boolean>>
+): boolean {
+  if (!FREE_CAP_EXEMPT_POOL_TYPES.includes(poolType)) return false;
+  if (selectsPaidAddon(addons)) return false;
+  try {
+    const { basePrice } = computeBasePrice(config, poolType, estimatedPlayers);
+    return basePrice === 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Priced add-on lines for the selected add-ons (only premium+priced features add a line). */
 export function computeAddonLines(
   config: Pick<BillingConfig, "features">,
@@ -169,7 +230,12 @@ export function computeQuote(args: {
   }
 
   const players = Number(estimatedPlayers) || 0;
-  const freeTierEligible = players <= config.freePlayerThreshold && total === 0;
+  // A cap-exempt type priced at $0 is free at any size — the same rule
+  // `createPool` launches by (zeroPricedLaunchesFree), so the wizard's button
+  // and the pool it creates agree.
+  const zeroPricedFree =
+    FREE_CAP_EXEMPT_POOL_TYPES.includes(poolType) && basePrice === 0 && !selectsPaidAddon(addons);
+  const freeTierEligible = (players <= config.freePlayerThreshold || zeroPricedFree) && total === 0;
 
   // Tier classification: free when eligible; otherwise premium if any add-on is
   // charged, else standard. (The webhook stamps the concrete tier from the

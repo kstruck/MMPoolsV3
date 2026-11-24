@@ -1051,7 +1051,7 @@ export const BillingInvoiceCard: React.FC<BillingInvoiceCardProps> = ({
                                             <span className="bg-[#FBF3E0] border border-[#EAD9A8] text-gold-700 text-[9px] font-display font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded">
                                                 Unlimited Access
                                             </span>
-                                            <span className="text-[9px] font-display text-gold-700 dark:text-gold-400 font-bold bg-[#FBF3E0] px-1.5 py-0.5 rounded">
+                                            <span className="text-[9px] font-display text-gold-700 font-bold bg-[#FBF3E0] px-1.5 py-0.5 rounded">
                                                 BEST VALUE
                                             </span>
                                         </div>

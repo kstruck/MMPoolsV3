@@ -77,8 +77,15 @@ export function seasonCompare(type: string | undefined, a: ResultsRow, b: Result
 }
 
 /**
- * The maximum points ONE player could have scored in a week — the denominator
- * the Weekly Results page's "Max" column reports.
+ * The maximum points ONE player could have scored in a week.
+ *
+ * 🛑 NO LONGER WHAT THE WEEK RESULTS "MAX" COLUMN SHOWS (Kevin, 2026-11-23,
+ * PLAN-PTS-LEFT-HIDDEN-TOTAL): that column is now per player — points won plus
+ * Pts Left, from `tallyGridRow` — because the week's ceiling was the same number
+ * on every row ("Max should reflect the max pts left if that user gets the
+ * remaining picks correct"). This function and `unwinnableGameIds` are kept, with
+ * their tests, as the documented week ceiling; nothing renders them today. The
+ * notes below describe the ruling they were written under.
  *
  * ⚠️ This is max POSSIBLE for the week, not max STILL ATTAINABLE — the
  * difference being that it never falls because a PLAYER's picks went wrong. It
@@ -276,7 +283,7 @@ export type ResultsView = 'WEEKLY' | 'SEASON' | 'SUMMARY' | 'STANDINGS';
  * ⚠️ It is keyed on the VIEW, not just the pool type, and that is the whole
  * point of this function existing. The first version keyed on `isMargin` alone,
  * so every Pick'em view printed the weekly caption — and the Season Summary
- * grid, which has neither a Max nor a No Points column, sat under a sentence
+ * grid, which has neither a Max nor a Games Wrong (then "No Points") column, sat under a sentence
  * explaining both of them. Caught by looking at the deployed page, not by any
  * test: a caption describing absent columns type-checks perfectly.
  *
@@ -294,7 +301,7 @@ export function resultsFootnote(opts: {
     switch (view) {
         case 'WEEKLY':
             // ⚠️ MARGIN'S WEEKLY TABLE IS NOT THE PICK'EM ONE AND NOT THE GRID.
-            // It has a single Margin column — no Max, no No Points, and not one
+            // It has a single Margin column — no Max, no Games Wrong, and not one
             // column per week. The first fix for this defect mapped it to the
             // grid caption, which put "one column per week of the season" under
             // a one-column table: the SAME defect, reintroduced by its own fix,
@@ -303,9 +310,9 @@ export function resultsFootnote(opts: {
             if (isMargin) {
                 return `Each player's margin for ${weekLabel}. A blank has not been scored yet — it is not a zero, and a real 0 is shown as 0.`;
             }
-            return `Max is the most points anyone could score in ${weekLabel} — ${
-                confidenceMode ? 'every confidence weight correct' : 'every pick correct'
-            }, counting only games that can still be won. No Points counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`;
+            return `Pts Left is how many points that player can still win in ${weekLabel} — every pick on a game not yet decided${
+                confidenceMode ? ', at its confidence weight' : ', one point each'
+            }; a ? means it is not known yet. Max is the most that player can finish ${weekLabel} with: the points they have won plus their Pts Left, if every remaining pick is correct. Games Wrong counts every graded pick that earned nothing, so a tie or a cancelled game is included there.`;
         case 'STANDINGS':
             return 'Weeks counts the weeks the scorer has published for each player. Players level on total margin points are shown as tied — the season prize tiebreaker is set by your commissioner in the pool rules.';
         case 'SEASON':

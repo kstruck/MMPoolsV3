@@ -62,6 +62,8 @@ A Member's honor-system self-report that they have sent the Entry Fee (`memberRe
 ### Billing
 The commissioner-side subscription relationship between a Commissioner and the platform for a Pool (trial, tier, price, coupon) or a Bundle. Paid via Stripe. Entirely separate from Entry Fees, which flow between Members and Commissioners.
 
+A Pool launches **free** when its expected players are at or below the free-player threshold with no paid add-on, and otherwise on a **trial** that must be paid before it ends. One exception: a Squares Pool whose configured price is $0, with no paid add-on, launches free at any size (squares has no free-plan participant cap). A hosting checkout is always priced as the Pool's stored type (`PLAN-SQUARES-ZERO-PRICE-FREE`).
+
 ### Bundle
 A prepaid multi-pool purchase made by a Commissioner. Exactly two kinds: a Credit Bundle, which grants a fixed number of Pool Credits, and an Unlimited Pass, which grants unlimited pool activations for a fixed term. Bundle products are defined by a Super Admin in the billing configuration and purchased via Stripe.
 
@@ -151,6 +153,8 @@ The boundary is the **same instant the picker's own deadline was**, so nobody is
 | Pick'em, per-game lock | per GAME, as each kicks off |
 | Pick'em in weekly-lock mode (confidence or not), Survivor, Margin | the whole WEEK at once, at its single deadline |
 | Pick'em, per-game lock, confidence points on | per GAME — pick AND weight — as each kicks off; a game that has started is closed by every path (`PLAN-CONFIDENCE-PER-GAME-LOCK`) |
+
+**Points-left total (Pick'em only, `PLAN-PTS-LEFT-HIDDEN-TOTAL`, Kevin 2026-11-23).** Before a pick reveals, `getPoolPicks` may still send ONE number per entry: the points on that entry's hidden picks whose games are not decided (confidence weights summed, or one per pick). It is never a pick, a team, or a per-game weight. It lets Pts Left and Max show a figure for every Member. The Commissioner turns it off with `settings.shareHiddenPointsLeft: false` (default on); then nothing is sent and those cells read "?" until the games kick off.
 
 **Who may read a reveal:** any **proven Member** of the Pool (Kevin's ruling, 2026-08-14 — *"make it visible for all users if pool is locked"*), the Commissioner, and Super Admin. A non-member is refused. Membership for THIS read is a **canonical Member Record** — one carrying a server-stamped `joinedAt`, which no client path can write. `participantIds` is deliberately **not** accepted here, and is separately server-owned in `firestore.rules` because it is an authorization input.
 

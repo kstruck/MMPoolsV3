@@ -579,7 +579,7 @@ export const PoolRoute: React.FC<PoolRouteProps> = ({
                 {latestWinner && (
                     <div className="flex justify-center">
                         <div className="bg-[#FBF3E0] border border-[#EAD9A8] rounded-full px-4 sm:px-8 py-2 text-gold-700 font-display font-bold tracking-[0.12em] uppercase shadow-card flex items-center gap-2 sm:gap-3 text-xs sm:text-sm">
-                            <DollarSign size={16} /> In The Money: <span className="text-[color:var(--text)] text-base sm:text-lg">{latestWinner}</span> <DollarSign size={16} />
+                            <DollarSign size={16} /> In The Money: <span className="text-ink text-base sm:text-lg">{latestWinner}</span> <DollarSign size={16} />
                         </div>
                     </div>
                 )}
