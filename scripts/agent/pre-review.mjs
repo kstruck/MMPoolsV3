@@ -30,6 +30,7 @@ import {
   buildReviewPrompt,
   classifyRun,
   costLogPath,
+  inheritedSessionVars,
   parseArgs,
   parseBinaryFiles,
   planCoverage,
@@ -78,6 +79,13 @@ async function main() {
     console.error('NOTE: the working tree has uncommitted changes. They are NOT reviewed; this reviews HEAD only.');
   }
   console.error(`Pre-review of ${range} (head ${headSha}, merge base ${mergeBase}) with ${args.model}, budget $${args['max-budget-usd']}.`);
+  const sessionVars = inheritedSessionVars(process.env);
+  if (sessionVars.length) {
+    console.error(
+      `NOTE: started from inside a Claude Code session. ${sessionVars.length} CLAUDE* variables are NOT passed to the reviewer: ` +
+        'with them it is billed as Claude Code, which the API credit does not cover.',
+    );
+  }
 
   // The reviewer never sees this checkout. It reads a throwaway worktree of
   // HEAD that holds tracked files only (see worktree.mjs for why).

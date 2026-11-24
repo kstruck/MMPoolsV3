@@ -21,7 +21,9 @@ import {
   costLogPath,
   formatCostRow,
   hasHunkChange,
+  inheritedSessionVars,
   isCreditKeySource,
+  isStrippedEnvName,
   parseArgs,
   parseBinaryFiles,
   parseVerdict,
@@ -258,6 +260,65 @@ describe('the key: where it comes from and where it must not go', () => {
     'CLAUDE_CODE_USE_FOUNDRY',
   ])('strips %s so the run cannot be routed off the credit', (name) => {
     expect(buildChildEnv({ [name]: 'x' }, 'sk-test')).not.toHaveProperty(name);
+  });
+
+  // The names a real Claude Code desktop session exported on 2026-11-23, when a
+  // pre-review started from inside it was billed as Claude Code: $1.06 of real
+  // money, with the promotional credit untouched. Measured, not invented.
+  const SESSION_VARS = [
+    'CLAUDECODE',
+    'CLAUDE_PID',
+    'CLAUDE_PREVIEW_CLASSIFIER_FLOOR',
+    'CLAUDE_AGENT_SDK_VERSION',
+    'CLAUDE_AGENT_SDK_MCP_NO_PREFIX',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CLAUDE_CODE_CHILD_SESSION',
+    'CLAUDE_CODE_SESSION_ID',
+    'CLAUDE_CODE_HOST_SESSION_ID',
+    'CLAUDE_CODE_ACCOUNT_UUID',
+    'CLAUDE_CODE_ORGANIZATION_UUID',
+    'CLAUDE_CODE_USER_EMAIL',
+    'CLAUDE_CODE_DESKTOP_APP_VERSION',
+    'CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH',
+    'CLAUDE_CODE_SESSION_ATTENDED',
+    'CLAUDE_CODE_MESSAGING_SOCKET',
+    'CLAUDE_CODE_MESSAGING_TOKEN',
+    'CLAUDE_CODE_PLUGIN_DIRS',
+    'CLAUDE_CODE_SIMPLE',
+  ];
+
+  it.each(SESSION_VARS)('drops the Claude Code session variable %s', (name) => {
+    expect(buildChildEnv({ [name]: 'x', PATH: '/bin' }, 'sk-test')).not.toHaveProperty(name);
+  });
+
+  it('a whole inherited session environment leaves exactly two CLAUDE*/ANTHROPIC_* names', () => {
+    // The rule is "nothing a session exports gets through", so assert the
+    // RESULT, not a list: whatever is in the parent, only the two names this
+    // function sets itself may remain.
+    const parent: Record<string, string> = { PATH: '/bin', HOME: '/h', ANTHROPIC_API_KEY: 'sk-from-session', ANTHROPIC_MODEL: 'm' };
+    for (const name of SESSION_VARS) parent[name] = 'x';
+    parent.CLAUDE_SOMETHING_ADDED_NEXT_YEAR = 'x';
+    const child = buildChildEnv(parent, 'sk-test');
+    const leaked = Object.keys(child).filter((k) => /^(CLAUDE|ANTHROPIC_)/i.test(k)).sort();
+    expect(leaked).toEqual(['ANTHROPIC_API_KEY', 'CLAUDE_AGENT_SDK_CLIENT_APP']);
+    // The key is the injected one, never one the session carried.
+    expect(child.ANTHROPIC_API_KEY).toBe('sk-test');
+    expect(child.PATH).toBe('/bin');
+    expect(child.HOME).toBe('/h');
+  });
+
+  it('matches names case-insensitively: Windows environment names are', () => {
+    const child = buildChildEnv({ claude_code_entrypoint: 'x', ClaudeCode: '1', anthropic_base_url: 'u', Path: 'p' }, 'sk-test');
+    expect(Object.keys(child).sort()).toEqual(['ANTHROPIC_API_KEY', 'CLAUDE_AGENT_SDK_CLIENT_APP', 'Path']);
+    expect(isStrippedEnvName('claude_code_entrypoint')).toBe(true);
+    expect(isStrippedEnvName('PATH')).toBe(false);
+    // A name that merely CONTAINS the word is not a session variable.
+    expect(isStrippedEnvName('MY_CLAUDE_NOTES')).toBe(false);
+  });
+
+  it('reports the session variables it found, so a run from inside a session says so', () => {
+    expect(inheritedSessionVars({ PATH: 'p', CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' }).sort()).toEqual(['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT']);
+    expect(inheritedSessionVars({ PATH: 'p' })).toEqual([]);
   });
 
   it('does not mutate the parent environment', () => {
