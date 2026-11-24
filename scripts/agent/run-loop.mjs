@@ -77,6 +77,7 @@ async function checkWiring({ mcpServers, cwd }) {
   const abortController = new AbortController();
   const env = stripGithubCredentials(buildChildEnv(process.env, 'sk-ant-not-a-key-wiring-check-only'));
   let tools = null;
+  let thrown = null;
   try {
     for await (const message of query({
       prompt: 'wiring check',
@@ -88,10 +89,16 @@ async function checkWiring({ mcpServers, cwd }) {
         break;
       }
     }
-  } catch {
-    /* the abort, or the rejected key: both are expected here */
+  } catch (error) {
+    // The abort, or the rejected key: both are expected once init has arrived.
+    thrown = error instanceof Error ? error.message : String(error);
   }
-  if (!tools) throw new Error('the subprocess sent no init message');
+  // No init at all means the subprocess never started properly: a sandbox that
+  // blocks it, a missing binary. Measured 2026-11-24: on the Windows box init
+  // arrives before the key is ever used (4 runs of 4); inside codex's review
+  // sandbox it did not (codex round 6 on #807). The cause is printed, because
+  // "no init message" alone sends the reader to the wrong place.
+  if (!tools) throw new Error(`the subprocess sent no init message${thrown ? ` (${thrown.slice(0, 300)})` : ''}. This check needs to start the Agent SDK's subprocess; it cannot pass where that is blocked`);
   const missing = PRUNER_ALLOWED_TOOLS.filter((name) => !tools.includes(name));
   const extra = tools.filter((name) => !PRUNER_ALLOWED_TOOLS.includes(name));
   console.error(`Tools the model would hold: ${tools.join(', ') || '(none)'}`);
