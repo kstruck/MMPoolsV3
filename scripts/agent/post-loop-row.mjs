@@ -19,7 +19,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseArgs } from './lib.mjs';
-import { commentBody, rowToPost } from './loop-lib.mjs';
+import { commentBody, postRowOnce, rowToPost } from './loop-lib.mjs';
 
 function main() {
   const args = parseArgs(process.argv.slice(2), {
@@ -40,12 +40,17 @@ function main() {
   const row = rowToPost({ loop: args.loop, fileText, dryRun: args.mode === 'dry-run' });
   console.log(row);
 
-  const r = spawnSync('gh', ['issue', 'comment', String(args.issue), '--repo', args.repo, '--body-file', '-'], {
-    encoding: 'utf8',
-    input: commentBody(row, args['run-url']),
-  });
-  if (r.error) throw new Error(`gh could not run: ${r.error.message}`);
-  if (r.status !== 0) throw new Error(`gh issue comment failed: ${String(r.stderr).trim()}`);
+  // One id per attempt of this job, so a re-run of the job posts its own row
+  // and a retry inside one attempt never posts a second.
+  const postId = `${process.env.GITHUB_RUN_ID ?? 'local'}.${process.env.GITHUB_RUN_ATTEMPT ?? '1'}.${args.loop}.${Date.now().toString(36)}`;
+  const gh = (ghArgs, input) => {
+    const r = spawnSync('gh', ghArgs, { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024 });
+    if (r.error) return { status: 127, stdout: '', stderr: `gh could not run: ${r.error.message}` };
+    return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  };
+  const failure = postRowOnce({ gh, repo: args.repo, issue: args.issue, body: commentBody(row, args['run-url'], postId), postId });
+  // The row is on stdout above either way, so a failed post still leaves it in the job log.
+  if (failure) throw new Error(`the row was NOT posted to ${args.repo}#${args.issue}: ${failure}`);
   console.error(`Posted to ${args.repo}#${args.issue}.`);
 }
 

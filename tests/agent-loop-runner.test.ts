@@ -24,7 +24,9 @@ import {
   loopExitCode,
   loopRowErrors,
   parseWarningMarker,
+  postRowOnce,
   resolveLoop,
+  rowPostMarker,
   rowToPost,
   runFailure,
   stripGithubCredentials,
@@ -891,6 +893,79 @@ describe('post-loop-row: a run is never missing from the log', () => {
     expect(body).toContain(`${LOOP_ROW_FIELDS.join('\t')}\n${good}`);
     expect(body.startsWith('```tsv\n')).toBe(true);
     expect(body).toContain('Run: https://example.test/run/1');
+  });
+
+  describe('posting the row: retried, never doubled', () => {
+    /** A fake issue. `fail` is the number of `issue comment` calls that fail; `landsAnyway` makes those failures post the comment regardless. */
+    const fakeIssue = (opts: { fail?: number; landsAnyway?: boolean; readFails?: boolean } = {}) => {
+      const posted: string[] = [];
+      let fail = opts.fail ?? 0;
+      const calls: string[] = [];
+      const gh = (args: string[], input?: string) => {
+        calls.push(args[0] === 'api' ? 'read' : 'post');
+        if (args[0] === 'api') {
+          if (opts.readFails) return { status: 1, stdout: '', stderr: 'HTTP 503' };
+          return { status: 0, stdout: posted.map((b) => JSON.stringify(b)).join('\n'), stderr: '' };
+        }
+        if (fail > 0) {
+          fail--;
+          if (opts.landsAnyway) posted.push(input!);
+          return { status: 1, stdout: '', stderr: 'HTTP 502' };
+        }
+        posted.push(input!);
+        return { status: 0, stdout: '', stderr: '' };
+      };
+      return { gh, posted, calls };
+    };
+    const post = (issue: ReturnType<typeof fakeIssue>) => postRowOnce({ gh: issue.gh, repo: 'o/r', issue: 806, body: commentBody(good, '', 'run-9.1'), postId: 'run-9.1' });
+
+    it('one clean post', () => {
+      const issue = fakeIssue();
+      expect(post(issue)).toBeNull();
+      expect(issue.calls).toEqual(['post']);
+      expect(issue.posted[0]).toContain(rowPostMarker('run-9.1'));
+      expect(issue.posted[0]).toContain(good);
+    });
+
+    it('a transient failure is retried, and the row is posted once', () => {
+      const issue = fakeIssue({ fail: 2 });
+      expect(post(issue)).toBeNull();
+      expect(issue.posted).toHaveLength(1);
+      expect(issue.calls).toEqual(['post', 'read', 'post', 'read', 'post']);
+    });
+
+    it('a lost response is NOT retried: the row is found by its marker', () => {
+      const issue = fakeIssue({ fail: 1, landsAnyway: true });
+      expect(post(issue)).toBeNull();
+      expect(issue.posted).toHaveLength(1);
+      expect(issue.calls).toEqual(['post', 'read']);
+    });
+
+    it('another run\'s row in the issue is not mistaken for this one', () => {
+      const issue = fakeIssue({ fail: 1 });
+      issue.posted.push(commentBody(good, '', 'run-8.1'));
+      expect(post(issue)).toBeNull();
+      expect(issue.posted).toHaveLength(2);
+    });
+
+    it('it gives up after three failures, and says so', () => {
+      const issue = fakeIssue({ fail: 9 });
+      expect(post(issue)).toMatch(/HTTP 502 \(after 3 attempts\)/);
+      expect(issue.posted).toEqual([]);
+    });
+
+    it('when the read-back fails it does not retry blind', () => {
+      const issue = fakeIssue({ fail: 9, readFails: true });
+      expect(post(issue)).toMatch(/could not be read back/);
+      expect(issue.calls).toEqual(['post', 'read']);
+    });
+
+    it('the script uses it, and still fails the job when the row is not posted', () => {
+      const src = read('scripts/agent/post-loop-row.mjs');
+      expect(src).toContain('postRowOnce({ gh, repo: args.repo, issue: args.issue,');
+      expect(src).toMatch(/if \(failure\) throw new Error\(`the row was NOT posted/);
+      expect(src.match(/'issue', 'comment'/g) ?? []).toHaveLength(0);
+    });
   });
 
   it('fallbackRow is a valid row', () => {

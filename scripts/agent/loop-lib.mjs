@@ -87,8 +87,45 @@ export function rowToPost({ loop, fileText, dryRun = false }) {
 }
 
 /** The comment body: the row in a code block, under its header, so it stays greppable and tab-exact. */
-export function commentBody(row, runUrl = '') {
-  return ['```tsv', LOOP_ROW_FIELDS.join('\t'), row, '```', ...(runUrl ? ['', `Run: ${runUrl}`] : [])].join('\n');
+export function commentBody(row, runUrl = '', postId = '') {
+  return [...(postId ? [rowPostMarker(postId)] : []), '```tsv', LOOP_ROW_FIELDS.join('\t'), row, '```', ...(runUrl ? ['', `Run: ${runUrl}`] : [])].join('\n');
+}
+
+/** Hidden in a loop-log comment, so a post whose response was lost can be found again. */
+export function rowPostMarker(postId) {
+  return `<!-- mmp-loop-row post=${String(postId).replace(/[^A-Za-z0-9._-]/g, '-')} -->`;
+}
+
+/** Attempts the log job makes before it gives up on posting a row. */
+export const ROW_POST_ATTEMPTS = 3;
+
+/**
+ * Post one loop-log comment: retried on failure, and never posted twice.
+ *
+ * A row that the runner produced and GitHub then refused for a moment (a 5xx,
+ * a timeout) must not be lost to a single failed call (codex round 8 on #807).
+ * But a failed call does not prove nothing was posted, and a blind retry could
+ * log one run twice. So after each failure the issue's comments are read back
+ * and searched for this post's own marker; only when it is absent is the post
+ * tried again. If the read-back fails, the next attempt is skipped the same
+ * way the pruner's comments are: a missing row turns the job red, a doubled
+ * row is quiet and wrong.
+ *
+ * `gh(args, input?)` returns `{ status, stdout, stderr }`.
+ * @returns {string | null} null when the row is posted, else the error text.
+ */
+export function postRowOnce({ gh, repo, issue, body, postId, attempts = ROW_POST_ATTEMPTS }) {
+  const marker = rowPostMarker(postId);
+  let last = '';
+  for (let i = 0; i < attempts; i++) {
+    const r = gh(['issue', 'comment', String(issue), '--repo', repo, '--body-file', '-'], body);
+    if (r.status === 0) return null;
+    last = String(r.stderr).trim().slice(0, 300) || `exit ${r.status}`;
+    const read = gh(['api', '--paginate', `repos/${repo}/issues/${issue}/comments?per_page=100`, '--jq', '.[] | .body | @json']);
+    if (read.status !== 0) return `${last}; and the issue's comments could not be read back to see whether the row was posted, so it was not retried`;
+    if (String(read.stdout).includes(JSON.stringify(marker).slice(1, -1))) return null;
+  }
+  return `${last} (after ${attempts} attempts)`;
 }
 
 /** `fallbackRow` under a name `rowToPost` can wrap without shadowing it. */
