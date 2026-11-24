@@ -12,6 +12,7 @@ import {
   buildLoopOptions,
   buildPrunerPrompt,
   closeBody,
+  closedMarker,
   commentBody,
   createPrunerSession,
   decideAction,
@@ -22,12 +23,14 @@ import {
   latestTrustedWarning,
   loopExitCode,
   loopRowErrors,
+  parseWarningMarker,
   resolveLoop,
   rowToPost,
   runFailure,
   stripGithubCredentials,
   summarizePrunerRun,
   warningBody,
+  warningMarker,
   // @ts-expect-error — plain .mjs script, no type declarations
 } from '../scripts/agent/loop-lib.mjs';
 
@@ -54,16 +57,37 @@ const read = (rel: string) => readFileSync(resolve(REPO_ROOT, rel), 'utf8');
 
 const NOW = new Date('2026-11-24T12:00:00Z');
 const daysAgo = (n: number, extraMs = 0) => new Date(NOW.getTime() - n * 86_400_000 + extraMs).toISOString();
-const warning = (createdAt: string, login = 'github-actions') => ({ author: { login }, body: `${PRUNER.WARNING_MARKER}\nstale`, createdAt });
+/** The branch head every fake PR has unless a test says otherwise. */
+const HEAD = 'a'.repeat(40);
+const RUN = 'run-1';
+const warning = (createdAt: string, login = 'github-actions[bot]', head = HEAD) => ({
+  author: { login },
+  body: `${warningMarker({ head, runId: 'an-earlier-run' })}\nstale`,
+  createdAt,
+});
 
-type FakePr = { number: number; state: string; updatedAt: string; labels: { name: string }[]; comments: unknown[]; title?: string };
+type FakeEvent = { event: string; at: string | null };
+type FakePr = { number: number; state: string; updatedAt: string; labels: { name: string }[]; comments: unknown[]; headRefOid: string; events?: FakeEvent[]; title?: string };
 
 /**
  * A fake `gh` over an in-memory repository. It records every call, and its
  * writes change the state the next read returns — so "re-read after close"
  * is exercised against something that can disagree.
  */
-function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing?: boolean; listFails?: boolean; commentsFail?: boolean } = {}) {
+type FakeOpts = {
+  failWrites?: number;
+  closeDoesNothing?: boolean;
+  listFails?: boolean;
+  commentsFail?: boolean;
+  timelineFail?: boolean;
+  /** The comment IS created, and gh still exits non-zero: a lost response. */
+  commentLandsButReportsFailure?: number;
+  /** Every `pr comment` fails and creates nothing. Closes are unaffected. */
+  commentsNeverPost?: boolean;
+  /** `pr list` returns this instead of the open PRs. */
+  listReturns?: unknown;
+};
+function fakeGithub(prs: FakePr[], opts: FakeOpts = {}) {
   const calls: string[][] = [];
   let failWrites = opts.failWrites ?? 0;
   const find = (n: string) => prs.find((p) => String(p.number) === n)!;
@@ -72,13 +96,20 @@ function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing
     const [noun, verb, n] = args;
     if (noun === 'pr' && verb === 'list') {
       if (opts.listFails) return { status: 1, stdout: '', stderr: 'HTTP 502' };
+      if (opts.listReturns !== undefined) return { status: 0, stdout: JSON.stringify(opts.listReturns), stderr: '' };
       return { status: 0, stdout: JSON.stringify(prs.filter((p) => p.state === 'OPEN')), stderr: '' };
     }
     if (noun === 'pr' && verb === 'view') {
       // Like the real call, this never carries comments: they come from REST.
-      return { status: 0, stdout: JSON.stringify({ ...find(n), comments: undefined }), stderr: '' };
+      return { status: 0, stdout: JSON.stringify({ ...find(n), comments: undefined, events: undefined }), stderr: '' };
     }
     if (noun === 'api') {
+      const t = /^repos\/o\/r\/issues\/(\d+)\/timeline\?per_page=100$/.exec(args[2]);
+      if (t && args[1] === '--paginate') {
+        if (opts.timelineFail) return { status: 1, stdout: '', stderr: 'HTTP 504' };
+        const events = (find(t[1]).events ?? []).map((e) => JSON.stringify(e));
+        return { status: 0, stdout: events.length ? `${events.join('\n')}\n` : '', stderr: '' };
+      }
       if (opts.commentsFail) return { status: 1, stdout: '', stderr: 'HTTP 503' };
       const m = /^repos\/o\/r\/issues\/(\d+)\/comments\?per_page=100$/.exec(args[2]);
       if (!m || args[1] !== '--paginate') return { status: 1, stdout: '', stderr: `unexpected gh api call: ${args.join(' ')}` };
@@ -91,7 +122,12 @@ function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing
       return { status: 1, stdout: '', stderr: 'HTTP 500' };
     }
     if (noun === 'pr' && verb === 'comment') {
-      find(n).comments.push({ author: { login: 'github-actions' }, body: input, createdAt: NOW.toISOString() });
+      if (opts.commentsNeverPost) return { status: 1, stdout: '', stderr: 'HTTP 500' };
+      find(n).comments.push({ author: { login: 'github-actions[bot]' }, body: input, createdAt: NOW.toISOString() });
+      if ((opts.commentLandsButReportsFailure ?? 0) > 0) {
+        opts.commentLandsButReportsFailure!--;
+        return { status: 1, stdout: '', stderr: 'HTTP 502 (the response was lost)' };
+      }
       return { status: 0, stdout: '', stderr: '' };
     }
     if (noun === 'pr' && verb === 'close') {
@@ -104,13 +140,13 @@ function fakeGithub(prs: FakePr[], opts: { failWrites?: number; closeDoesNothing
   return { gh, calls, writes };
 }
 
-const pr = (number: number, over: Partial<FakePr> = {}): FakePr => ({ number, state: 'OPEN', updatedAt: daysAgo(20), labels: [], comments: [], ...over });
+const pr = (number: number, over: Partial<FakePr> = {}): FakePr => ({ number, state: 'OPEN', updatedAt: daysAgo(20), labels: [], comments: [], headRefOid: HEAD, events: [], ...over });
 /** Warned 20 days ago, and the warning is the last thing that touched it. */
 const warnedPr = (number: number, over: Partial<FakePr> = {}) => pr(number, { updatedAt: daysAgo(20), comments: [warning(daysAgo(20))], ...over });
 
-const live = (prs: FakePr[], opts = {}) => {
+const live = (prs: FakePr[], opts: FakeOpts = {}) => {
   const github = fakeGithub(prs, opts);
-  return { ...github, ...createPrunerSession({ gh: github.gh, repo: 'o/r', now: NOW, dryRun: false }) };
+  return { ...github, ...createPrunerSession({ gh: github.gh, repo: 'o/r', now: NOW, dryRun: false, runId: RUN }) };
 };
 
 describe('staleness and the keep label', () => {
@@ -147,10 +183,18 @@ describe('a warning counts only from a trusted author', () => {
     expect(latestTrustedWarning([{ author: { login: 'github-actions' }, body: 'CI passed', createdAt: daysAgo(20) }])).toBeNull();
   });
 
-  it('the warning the loop posts carries the marker; the close comment does not', () => {
-    expect(warningBody()).toContain(PRUNER.WARNING_MARKER);
-    // A close comment that carried it would count as a warning if the PR were reopened.
-    expect(closeBody()).not.toContain(PRUNER.WARNING_MARKER);
+  it('the warning the loop posts carries a marker with the branch head and the run; the close comment does not', () => {
+    expect(parseWarningMarker(warningBody({ head: HEAD, runId: RUN }))).toEqual({ head: HEAD, runId: RUN });
+    // A close comment that parsed as a warning would count as one if the PR were reopened.
+    expect(parseWarningMarker(closeBody({ runId: RUN }))).toBeNull();
+    expect(closeBody({ runId: RUN })).not.toContain(PRUNER.WARNING_MARKER_PREFIX);
+    expect(closeBody({ runId: RUN })).toContain(closedMarker({ runId: RUN }));
+  });
+
+  it('a marker with no branch head is not a warning — nothing could be checked against it', () => {
+    const bare = { author: { login: 'github-actions[bot]' }, body: '<!-- mmp-loop-pr-pruner:warning -->', createdAt: daysAgo(20) };
+    const shortHead = { author: { login: 'github-actions[bot]' }, body: '<!-- mmp-loop-pr-pruner:warning head=abc123 run=x -->', createdAt: daysAgo(20) };
+    expect(latestTrustedWarning([bare, shortHead])).toBeNull();
   });
 });
 
@@ -197,6 +241,34 @@ describe('decideAction: what the rules allow for one pull request', () => {
   it('an EDIT to an older comment after the warning resets it too', () => {
     const edited = { author: { login: 'someone' }, body: 'x', createdAt: daysAgo(40), updatedAt: daysAgo(20, 2000) };
     const input = pr(1, { updatedAt: daysAgo(20, 2000), comments: [edited, warning(daysAgo(20))] });
+    expect(decideAction(input, NOW).action).toBe('WARN');
+  });
+
+  it('a push after the warning resets it, even one made in the same second', () => {
+    // The head recorded in the warning is no longer the head. No time window
+    // is involved, so a push 1 s after the warning is caught too (qodo).
+    const input = pr(1, { updatedAt: daysAgo(20, 1000), headRefOid: 'b'.repeat(40), comments: [warning(daysAgo(20))] });
+    const decision = decideAction(input, NOW);
+    expect(decision.action).toBe('WARN');
+    expect(decision.why).toMatch(/pushed to/);
+  });
+
+  it.each(['reviewed', 'labeled', 'renamed', 'reopened'])('a "%s" event 2 s after the warning resets it', (event) => {
+    const input = pr(1, { updatedAt: daysAgo(20, 2000), comments: [warning(daysAgo(20))], events: [{ event, at: daysAgo(20, 2000) }] });
+    expect(decideAction(input, NOW).action).toBe('WARN');
+  });
+
+  it('events before the warning, the warning\'s own event, and events with no time do not reset it', () => {
+    const events = [
+      { event: 'committed', at: null },
+      { event: 'labeled', at: daysAgo(40) },
+      { event: 'commented', at: daysAgo(20) },
+    ];
+    expect(decideAction(pr(1, { comments: [warning(daysAgo(20))], events }), NOW).action).toBe('CLOSE');
+  });
+
+  it('a PR read without its timeline is never closable', () => {
+    const input = pr(1, { comments: [warning(daysAgo(20))], events: undefined });
     expect(decideAction(input, NOW).action).toBe('WARN');
   });
 
@@ -305,11 +377,12 @@ describe('comments are read in full, not a first page', () => {
     expect(s.handlers.inspect_pr({ number: 7 }).allowedAction).toBe('CLOSE');
   });
 
-  it('asks REST for every page', () => {
+  it('asks REST for every page, of the comments and of the timeline', () => {
     const s = live([pr(7)]);
     s.handlers.inspect_pr({ number: 7 });
     const api = s.calls.find((c) => c[0] === 'api')!;
     expect(api.slice(0, 3)).toEqual(['api', '--paginate', 'repos/o/r/issues/7/comments?per_page=100']);
+    expect(s.calls.filter((c) => c[0] === 'api').map((c) => c.slice(1, 3))).toContainEqual(['--paginate', 'repos/o/r/issues/7/timeline?per_page=100']);
     // And the GraphQL field that returns one page is not asked for at all.
     expect(s.calls.filter((c) => c[1] === 'view').every((c) => !c.join(' ').includes('comments'))).toBe(true);
   });
@@ -321,6 +394,26 @@ describe('comments are read in full, not a first page', () => {
     expect(s.handlers.warn_pr({ number: 7 })).toMatchObject({ ok: false });
     expect(s.writes()).toEqual([]);
     expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).verdict).toBe('INCONCLUSIVE');
+  });
+});
+
+describe('the timeline is read, and a failed read is never "nothing happened"', () => {
+  it('a failed timeline read stops the close', () => {
+    const prs = [warnedPr(7)];
+    const s = live(prs, { timelineFail: true });
+    s.handlers.list_open_prs();
+    expect(s.handlers.inspect_pr({ number: 7 })).toMatchObject({ ok: false });
+    expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ ok: false });
+    expect(s.writes()).toEqual([]);
+    expect(prs[0].state).toBe('OPEN');
+  });
+
+  it('a review two seconds after the warning, seen through the real read path, turns CLOSE into WARN', () => {
+    const prs = [warnedPr(7, { updatedAt: daysAgo(20, 2000), events: [{ event: 'reviewed', at: daysAgo(20, 2000) }] })];
+    const s = live(prs);
+    s.handlers.list_open_prs();
+    expect(s.handlers.close_pr({ number: 7 })).toMatchObject({ refused: true, allowedAction: 'WARN' });
+    expect(prs[0].state).toBe('OPEN');
   });
 });
 
@@ -357,10 +450,14 @@ describe('a live run', () => {
     expect(s.handlers.inspect_pr({ number: 2 }).allowedAction).toBe('WARN');
     expect(s.handlers.inspect_pr({ number: 3 }).allowedAction).toBe('CLOSE');
     s.handlers.warn_pr({ number: 2 });
-    expect(s.handlers.close_pr({ number: 3 })).toEqual({ ok: true, closed: true, verifiedState: 'CLOSED' });
+    expect(s.handlers.close_pr({ number: 3 })).toEqual({ ok: true, closed: true, verifiedState: 'CLOSED', explanationPosted: true });
 
     expect(prs.map((p) => p.state)).toEqual(['OPEN', 'OPEN', 'CLOSED', 'OPEN']);
-    expect((prs[1].comments.at(-1) as { body: string }).body).toContain(PRUNER.WARNING_MARKER);
+    // The warning records the head it saw and the run that wrote it.
+    expect(parseWarningMarker((prs[1].comments.at(-1) as { body: string }).body)).toEqual({ head: HEAD, runId: RUN });
+    // The close is made BEFORE the comment that says "Closed".
+    const forPr3 = s.writes().filter((c) => c[2] === '3').map((c) => c[1]);
+    expect(forPr3).toEqual(['close', 'comment']);
 
     const { verdict, row } = summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW, model: 'claude-haiku-5-5', costUsd: 0.0123, turns: 6 });
     expect(verdict).toBe('CLEAN');
@@ -373,6 +470,8 @@ describe('a live run', () => {
     const r = s.handlers.close_pr({ number: 3 });
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/reads OPEN afterwards/);
+    // A PR that is not closed gets no comment saying it was.
+    expect(s.writes().map((c) => c[1])).toEqual(['close']);
     const { verdict, row } = summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW });
     expect(verdict).toBe('FINDING');
     expect(row).toContain('(0/1 verified)');
@@ -392,6 +491,71 @@ describe('a live run', () => {
     s.handlers.list_open_prs();
     expect(s.handlers.warn_pr({ number: 2 })).toMatchObject({ ok: true, warned: true });
     expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).verdict).toBe('CLEAN');
+  });
+});
+
+describe('comments are posted at most once', () => {
+  it('a lost response is not retried: the comment is found by this run\'s marker', () => {
+    const prs = [pr(2)];
+    const s = live(prs, { commentLandsButReportsFailure: 1 });
+    s.handlers.list_open_prs();
+    expect(s.handlers.warn_pr({ number: 2 })).toMatchObject({ ok: true, warned: true });
+    // ONE public comment, not two.
+    expect(s.writes()).toHaveLength(1);
+    expect(prs[0].comments).toHaveLength(1);
+    expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).verdict).toBe('CLEAN');
+  });
+
+  it('an earlier run\'s warning does not count as this run\'s comment', () => {
+    // #2 was warned by an earlier run and is stale again after a push, so it
+    // is warned again. The old warning must not be read as "already posted".
+    const prs = [pr(2, { headRefOid: 'c'.repeat(40), comments: [warning(daysAgo(60))] })];
+    const s = live(prs, { failWrites: 1 });
+    s.handlers.list_open_prs();
+    expect(s.handlers.warn_pr({ number: 2 })).toMatchObject({ ok: true, warned: true });
+    expect(s.writes()).toHaveLength(2);
+    expect(prs[0].comments).toHaveLength(2);
+  });
+
+  it('when the comments cannot be read back, it stops instead of retrying blind', () => {
+    // Every `pr comment` fails. Reads work for the rule check, then fail once
+    // a comment has been attempted, so the read-back cannot answer.
+    const github = fakeGithub([pr(2)], { commentsNeverPost: true });
+    let commentAttempted = false;
+    const gh = (args: string[], input?: string) => {
+      if (args[1] === 'comment') commentAttempted = true;
+      else if (commentAttempted && args[0] === 'api' && args[2].includes('/comments')) return { status: 1, stdout: '', stderr: 'HTTP 503' };
+      return github.gh(args, input);
+    };
+    const s = createPrunerSession({ gh, repo: 'o/r', now: NOW, dryRun: false, runId: RUN });
+    s.handlers.list_open_prs();
+    const r = s.handlers.warn_pr({ number: 2 });
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/could not be read back/);
+    // ONE attempt. A second could be a second public comment.
+    expect(github.writes()).toHaveLength(1);
+    expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).verdict).toBe('INCONCLUSIVE');
+  });
+
+  it('a verified close whose explanation cannot be posted: the PR is closed, and the row says the comment is missing', () => {
+    const prs = [warnedPr(3)];
+    const s = live(prs, { commentsNeverPost: true });
+    s.handlers.list_open_prs();
+    expect(s.handlers.close_pr({ number: 3 })).toEqual({ ok: true, closed: true, verifiedState: 'CLOSED', explanationPosted: false });
+    expect(prs[0].state).toBe('CLOSED');
+    const { verdict, row } = summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW });
+    expect(verdict).toBe('INCONCLUSIVE');
+    expect(row).toContain('(1/1 verified)');
+    expect(row).toContain('closed but the comment that explains why could not be posted: #3');
+  });
+
+  it('a close that fails posts no comment at all', () => {
+    const github = fakeGithub([warnedPr(3)]);
+    const gh = (args: string[], input?: string) => (args[1] === 'close' ? { status: 1, stdout: '', stderr: 'HTTP 500' } : github.gh(args, input));
+    const s = createPrunerSession({ gh, repo: 'o/r', now: NOW, dryRun: false, runId: RUN });
+    s.handlers.list_open_prs();
+    expect(s.handlers.close_pr({ number: 3 }).ok).toBe(false);
+    expect(github.writes()).toEqual([]);
   });
 });
 
@@ -469,6 +633,39 @@ describe('the verdict comes from the ledger, never from the model', () => {
     const { verdict, row } = summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW });
     expect(verdict).toBe('ERROR');
     expect(row).toContain('HTTP 502');
+  });
+
+  it('a list that worked, then a list that failed: ERROR, and no write after it', () => {
+    // Before the fix `listed` stayed true and this run logged CLEAN (qodo).
+    const github = fakeGithub([warnedPr(3)]);
+    let failList = false;
+    const gh = (args: string[], input?: string) => (failList && args[1] === 'list' ? { status: 1, stdout: '', stderr: 'HTTP 502' } : github.gh(args, input));
+    const s = createPrunerSession({ gh, repo: 'o/r', now: NOW, dryRun: false, runId: RUN });
+    expect(s.handlers.list_open_prs().ok).toBe(true);
+    failList = true;
+    expect(s.handlers.list_open_prs().ok).toBe(false);
+    expect(s.handlers.close_pr({ number: 3 })).toMatchObject({ refused: true });
+    expect(github.writes()).toEqual([]);
+    const { verdict, row } = summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW });
+    expect(verdict).toBe('ERROR');
+    expect(row).toContain('HTTP 502');
+  });
+
+  it.each([
+    ['not a list', { message: 'Bad credentials' }],
+    ['an entry with no number', [{ updatedAt: daysAgo(20), labels: [] }]],
+  ])('a list response that is %s is a failed list, not an empty one', (_label, listReturns) => {
+    const s = live([pr(2)], { listReturns });
+    expect(s.handlers.list_open_prs().ok).toBe(false);
+    expect(s.ledger.listed).toBe(false);
+    expect(summarizePrunerRun({ ledger: s.ledger, dryRun: false, now: NOW }).verdict).toBe('ERROR');
+  });
+
+  it('the row carries the commit the runner ran from, and `-` only when none is known', () => {
+    const ledger = emptyRun().ledger;
+    expect(summarizePrunerRun({ ledger, dryRun: false, now: NOW, commit: 'cc621457' }).row.split('\t')[2]).toBe('cc621457');
+    expect(summarizePrunerRun({ ledger, dryRun: false, now: NOW }).row.split('\t')[2]).toBe('-');
+    expect(fallbackRow({ loop: 'pr-pruner', verdict: 'ERROR', reason: 'x', now: NOW, commit: 'cc621457' }).split('\t')[2]).toBe('cc621457');
   });
 
   it('a full page from gh means the list may be cut short: INCONCLUSIVE', () => {
@@ -691,6 +888,27 @@ describe('run-loop.mjs, run for real', () => {
     }
   });
 
+  it.runIf(sdkInstalled)('a row file that cannot be written does not cost the run its row: stdout has it, exit 2', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mmp-loop-test-'));
+    try {
+      const r = run('pr-pruner', '--row-file', join(dir, 'no-such-folder', 'row.tsv'));
+      expect(r.status).toBe(2);
+      const rows = r.stdout.split('\n').filter(Boolean);
+      expect(rows).toHaveLength(1);
+      expect(loopRowErrors(rows[0])).toEqual([]);
+      expect(r.stderr).toMatch(/ROW FILE NOT WRITTEN/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(sdkInstalled)('the row names the commit the runner ran from', () => {
+    const r = run('pr-pruner');
+    const head = spawnSync('git', ['rev-parse', '--short=8', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout.trim();
+    const sha = String(process.env.GITHUB_SHA ?? '').slice(0, 8) || head;
+    expect(r.stdout.split('\t')[2]).toBe(sha);
+  });
+
   it('the default mode is dry-run, and live is passed only by name', () => {
     const src = read('scripts/agent/run-loop.mjs');
     expect(src).toContain("mode: { default: 'dry-run' }");
@@ -808,9 +1026,13 @@ describe('the charter and the skill say what the code does', () => {
     expect(skill).toContain('.github/workflows/loop-pr-pruner.yml');
   });
 
-  it('the charter says where a scheduled run\'s row goes', () => {
+  it('the charter says where a GitHub Actions run\'s row goes, manual runs included', () => {
     expect(charter).toContain('scripts/agent/post-loop-row.mjs');
     expect(charter).toMatch(/cannot push to `main`/);
+    // The workflow posts a row for a manual run too. The charter said
+    // "scheduled runs" only, which the workflow contradicted (qodo).
+    expect(charter).toMatch(/Every GitHub Actions run[^.]*started by the timer or by hand/);
+    expect(read('.github/workflows/loop-pr-pruner.yml')).toContain("if: always() && needs.prune.result != 'skipped'");
   });
 
   it('the charter does not claim loop 1 runs through the runner', () => {

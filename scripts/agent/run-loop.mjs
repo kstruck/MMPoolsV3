@@ -53,6 +53,21 @@ function gh(args, input) {
 }
 
 /**
+ * The short SHA of the checkout this runner is in, or `-`.
+ *
+ * The loop reads its procedure (SKILL.md) and its rules (loop-lib.mjs) from
+ * this checkout, so this is the version of the loop that ran. GITHUB_SHA is
+ * used first: in Actions it is exact even on a shallow clone.
+ */
+function observedCommit() {
+  const fromActions = String(process.env.GITHUB_SHA ?? '').trim();
+  if (/^[0-9a-f]{40}$/.test(fromActions)) return fromActions.slice(0, 8);
+  const r = spawnSync('git', ['rev-parse', '--short=8', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' });
+  const sha = String(r.stdout ?? '').trim();
+  return r.status === 0 && /^[0-9a-f]{7,40}$/.test(sha) ? sha : '-';
+}
+
+/**
  * `--mode check`: start the subprocess with a key that cannot work, read the
  * init message, stop. It proves the four tools register under the names the
  * allow list uses, and it cannot spend anything: the key is not a real one.
@@ -85,7 +100,7 @@ async function checkWiring({ mcpServers, cwd }) {
   console.error('WIRING OK: exactly the four loop tools, and no built-in tool. No model call was made.');
 }
 
-async function runPruner({ profile, args, dryRun }) {
+async function runPruner({ profile, args, dryRun, commit }) {
   const repo = args.repo;
   const session = createPrunerSession({ gh, repo, dryRun });
   const { createPrunerToolServer } = await import('./pruner-tools.mjs');
@@ -103,7 +118,7 @@ async function runPruner({ profile, args, dryRun }) {
     try {
       key = resolveApiKey(process.env);
     } catch (error) {
-      return summarizePrunerRun({ ledger: session.ledger, blocked: error.message, dryRun });
+      return summarizePrunerRun({ ledger: session.ledger, blocked: error.message, dryRun, commit });
     }
 
     const sessionVars = inheritedSessionVars(process.env);
@@ -131,6 +146,7 @@ async function runPruner({ profile, args, dryRun }) {
       ledger: session.ledger,
       failure: runFailure({ result, refused, error }),
       dryRun,
+      commit,
       model: model ?? args.model,
       costUsd: result?.total_cost_usd,
       turns: result?.num_turns,
@@ -139,7 +155,7 @@ async function runPruner({ profile, args, dryRun }) {
       date: new Date().toISOString(),
       script: `loop:${profile.name}`,
       model: model ?? args.model,
-      head: '-',
+      head: commit,
       verdict: summary.verdict,
       costUsd: result?.total_cost_usd,
       turns: result?.num_turns,
@@ -167,19 +183,30 @@ async function main() {
   });
   if (!MODES.includes(args.mode)) throw new Error(`--mode must be one of ${MODES.join(', ')}, got: ${args.mode}`);
 
+  const commit = observedCommit();
   let summary;
   try {
-    summary = await runPruner({ profile, args, dryRun: args.mode !== 'live' });
+    summary = await runPruner({ profile, args, dryRun: args.mode !== 'live', commit });
   } catch (error) {
     if (args.mode === 'check') throw error;
-    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error) }) };
+    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit }) };
   }
   if (!summary) return 0; // --mode check: no run, so no row
 
-  if (args['row-file']) writeFileSync(args['row-file'], `${summary.row}\n`, 'utf8');
+  // STDOUT FIRST. The row file is optional; the row is not. A path that cannot
+  // be written must not cost the run its only record (qodo on this PR).
   console.log(summary.row);
+  let exit = loopExitCode(summary.verdict);
+  if (args['row-file']) {
+    try {
+      writeFileSync(args['row-file'], `${summary.row}\n`, 'utf8');
+    } catch (error) {
+      console.error(`\nROW FILE NOT WRITTEN (${args['row-file']}): ${error instanceof Error ? error.message : String(error)}. The row is on stdout above.`);
+      exit = 2;
+    }
+  }
   console.error(`\nLOOP ${profile.name} ${summary.verdict}.`);
-  return loopExitCode(summary.verdict);
+  return exit;
 }
 
 main().then(

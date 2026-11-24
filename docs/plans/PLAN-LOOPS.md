@@ -203,17 +203,22 @@ So, for every loop:
    seeing.
 4. A cloud run that cannot push (no branch, protected target) puts the row in
    its PR instead and says so in `lesson`. **It never silently drops it.**
-5. **A scheduled GitHub Actions run posts its row as a comment on
-   kstruck/MMPoolsV3#806** (Kevin, 2026-11-24). It cannot push to `main` — the
-   branch ruleset needs an approver — and it has no PR of its own, so rule 4
-   gives it nowhere to write. `scripts/agent/post-loop-row.mjs` posts the row,
+5. **Every GitHub Actions run of a loop posts its row as a comment on
+   kstruck/MMPoolsV3#806, whether it was started by the timer or by hand**
+   (Kevin, 2026-11-24). A manual run from the Actions tab is still an
+   invocation, and "one row per invocation" has no exception for dry runs: the
+   dry run made for the billing check is exactly the run whose row should be
+   on record. A job in Actions cannot push to `main` — the branch ruleset
+   needs an approver — and it has no PR of its own, so rule 4 gives it nowhere
+   to write. `scripts/agent/post-loop-row.mjs` posts the row,
    in a job that runs no model and holds a token for issue comments only. It
    runs even when the loop job failed, and posts an `ERROR` row when that job
    left none. Read the rows with
    `gh issue view 806 --repo kstruck/MMPoolsV3 --comments`.
 
    So `LOOP-LOG.tsv` holds the rows of runs made from a checkout, and the
-   issue holds the rows of scheduled runs. Two places is a cost. It was chosen
+   issue holds the rows of runs made in GitHub Actions, scheduled and manual.
+   A dry run says `DRY RUN` in its `idea` field. Two places is a cost. It was chosen
    over a standing PR for the rows because that needs a token that can push
    branches, in a job that runs a model on a public repository.
 

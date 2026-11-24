@@ -43,7 +43,8 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  # The issue that holds one comment per run (scripts/agent/post-loop-row.mjs).
+  # The issue that holds one comment per run, scheduled or manual
+  # (scripts/agent/post-loop-row.mjs; docs/plans/PLAN-LOOPS.md, rule 5).
   LOOP_LOG_ISSUE: "806"
 
 jobs:

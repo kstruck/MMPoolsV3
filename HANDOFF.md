@@ -12,8 +12,8 @@
 > Console billing page before and after. That a run inside GitHub Actions
 > spends the promotional credit is **not yet measured**.
 >
-> Rows of scheduled runs are comments on kstruck/MMPoolsV3#806, not lines in
-> `LOOP-LOG.tsv`. The older box below that says "loops 2–5 stay parked" is
+> Rows of GitHub Actions runs, scheduled and manual, are comments on
+> kstruck/MMPoolsV3#806, not lines in `LOOP-LOG.tsv`. The older box below that says "loops 2–5 stay parked" is
 > superseded for loop 2 only; loops 3–5 are still parked. Loop 1 is ACTIVE and
 > has logged no run.
 

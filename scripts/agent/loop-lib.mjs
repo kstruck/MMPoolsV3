@@ -67,8 +67,8 @@ export function loopRowErrors(row) {
 }
 
 /** The row for a run that could not start, or that died before it produced one. */
-export function fallbackRow({ loop, verdict, reason, now = new Date() }) {
-  return formatLoopRow({ date: now.toISOString().slice(0, 10), loop, commit: '-', verdict, metric: '-', idea: 'the run did not complete', lesson: reason });
+export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-' }) {
+  return formatLoopRow({ date: now.toISOString().slice(0, 10), loop, commit, verdict, metric: '-', idea: 'the run did not complete', lesson: reason });
 }
 
 /** The row to post: the file's row when it is valid, an ERROR row that names the problem otherwise. */
@@ -130,8 +130,15 @@ export const PRUNER = Object.freeze({
   STALE_DAYS: 14,
   /** The label that exempts a PR, whatever its age. */
   KEEP_LABEL: 'keep',
-  /** Hidden in the warning comment. A later run finds its own warning by this. */
-  WARNING_MARKER: '<!-- mmp-loop-pr-pruner:warning -->',
+  /**
+   * The start of the hidden marker in a warning comment. A later run finds the
+   * loop's own warning by it. The full marker also records the branch head the
+   * PR had when it was warned and the id of the run that wrote it:
+   * `warningMarker()` / `parseWarningMarker()` below.
+   */
+  WARNING_MARKER_PREFIX: '<!-- mmp-loop-pr-pruner:warning ',
+  /** The start of the hidden marker in a close comment. It must never match the warning prefix. */
+  CLOSED_MARKER_PREFIX: '<!-- mmp-loop-pr-pruner:closed ',
   /**
    * Whose comment counts as a warning. The marker alone is NOT enough: the repo
    * is public, so anyone can post a comment that contains it, and a forged
@@ -150,14 +157,18 @@ export const PRUNER = Object.freeze({
    * read every warning as "touched since" and the loop would warn for ever
    * and never close.
    *
-   * It was 120 s first. That let a push or a review made within two minutes
-   * of the warning go unseen, and the PR be closed with no second warning
-   * (codex round 2 on this PR). 5 s keeps the measured 1 s with room, and
-   * `decideAction` separately refuses to close when any OTHER comment is
-   * newer than the warning, whatever the gap.
+   * It was 120 s first, which let a push or review made within two minutes of
+   * the warning go unseen (codex round 2 on this PR). At 5 s the same hole was
+   * still there, only smaller (qodo on this PR). So this number is no longer
+   * what decides it. `decideAction` now checks three exact signals as well,
+   * and none of them has a window:
    *
-   * What is left: a push, label or review inside those 5 seconds, followed by
-   * 14 more idle days, is closed without a second warning.
+   *   - the branch head recorded IN the warning must still be the head (a push);
+   *   - no timeline event is later than the warning (a review, a label, a rename);
+   *   - no comment was written or edited after the warning.
+   *
+   * What is left for this slack to miss: an edit to the PR's own description
+   * inside those 5 seconds. GitHub's timeline does not record one.
    */
   LAST_ACTIVITY_SLACK_MS: 5_000,
   /** Attempts per write before the PR is skipped and flagged (the skill's retry cap). */
@@ -188,15 +199,32 @@ export function hasKeepLabel(labels) {
   return (Array.isArray(labels) ? labels : []).some((l) => String(l?.name ?? '').trim().toLowerCase() === PRUNER.KEEP_LABEL);
 }
 
-/** The newest warning comment written by a trusted author, or null. */
+/** The hidden marker of a warning: the branch head at warning time, and the run that wrote it. */
+export function warningMarker({ head, runId }) {
+  return `${PRUNER.WARNING_MARKER_PREFIX}head=${head} run=${runId} -->`;
+}
+
+/** The hidden marker of a close comment. */
+export function closedMarker({ runId }) {
+  return `${PRUNER.CLOSED_MARKER_PREFIX}run=${runId} -->`;
+}
+
+/** `{ head, runId }` from a comment body that holds a well-formed warning marker, or null. */
+export function parseWarningMarker(body) {
+  const m = /<!-- mmp-loop-pr-pruner:warning head=([0-9a-f]{40}) run=([A-Za-z0-9-]{1,64}) -->/.exec(String(body ?? ''));
+  return m ? { head: m[1], runId: m[2] } : null;
+}
+
+/** The newest well-formed warning comment written by a trusted author, or null. */
 export function latestTrustedWarning(comments) {
   let latest = null;
   for (const c of Array.isArray(comments) ? comments : []) {
-    if (!String(c?.body ?? '').includes(PRUNER.WARNING_MARKER)) continue;
+    const marker = parseWarningMarker(c?.body);
+    if (!marker) continue;
     if (!PRUNER.TRUSTED_AUTHORS.includes(String(c?.author?.login ?? ''))) continue;
     const at = Date.parse(c?.createdAt);
     if (!Number.isFinite(at)) continue;
-    if (!latest || at > latest.at) latest = { at, createdAt: c.createdAt };
+    if (!latest || at > latest.at) latest = { at, createdAt: c.createdAt, head: marker.head };
   }
   return latest;
 }
@@ -208,9 +236,19 @@ export function latestTrustedWarning(comments) {
  * and that warning being the last thing that touched the PR. The last
  * condition is what "still stale after the warning" means: a PR that was
  * warned in March, worked on in April and idle again in June has a warning in
- * its history, and it must be warned AGAIN, not closed. `updatedAt` moves on
- * every comment, push, label and review, so "nothing since the warning" is
- * `updatedAt` equal to the warning's own time.
+ * its history, and it must be warned AGAIN, not closed.
+ *
+ * "The last thing that touched it" is four checks. Any one of them failing
+ * means WARN, so every doubt resolves to a comment and never to a close:
+ *
+ *   1. the branch head is the one recorded in the warning (no push since);
+ *   2. `updatedAt` is within the measured lag of the warning's own time;
+ *   3. no comment was written or edited after the warning;
+ *   4. no timeline event (review, label, rename, reopen...) is later than it.
+ *
+ * `pr.events` MUST be present. A read that could not fetch the timeline is not
+ * "no events": `readPr` throws instead, and this function treats a missing
+ * list as activity.
  *
  * @returns {{ action: 'NOT_OPEN' | 'KEEP' | 'NOT_STALE' | 'WARN' | 'CLOSE', why: string }}
  */
@@ -220,23 +258,26 @@ export function decideAction(pr, now) {
   if (!isStale(pr.updatedAt, now)) return { action: 'NOT_STALE', why: `last activity ${pr.updatedAt} is not more than ${PRUNER.STALE_DAYS} days ago` };
   const warning = latestTrustedWarning(pr.comments);
   if (!warning) return { action: 'WARN', why: 'stale, and no warning from this loop exists' };
-  const sinceWarning = Date.parse(pr.updatedAt) - warning.at;
-  if (sinceWarning > PRUNER.LAST_ACTIVITY_SLACK_MS) {
-    return { action: 'WARN', why: `stale again: something touched the PR after the warning of ${warning.createdAt}` };
-  }
-  // Comments carry their own times, so for them no slack is needed at all:
-  // any comment written or edited after the warning resets it.
+  const again = (what) => ({ action: 'WARN', why: `stale again: ${what} after the warning of ${warning.createdAt}` });
+
+  if (!pr.headRefOid || pr.headRefOid !== warning.head) return again('the branch was pushed to');
+  if (Date.parse(pr.updatedAt) - warning.at > PRUNER.LAST_ACTIVITY_SLACK_MS) return again('something touched the PR');
   const laterComment = (Array.isArray(pr.comments) ? pr.comments : []).some((c) => {
     const touched = Math.max(Date.parse(c?.createdAt) || 0, Date.parse(c?.updatedAt) || 0);
     return touched > warning.at;
   });
-  if (laterComment) return { action: 'WARN', why: `stale again: a comment was written or edited after the warning of ${warning.createdAt}` };
+  if (laterComment) return again('a comment was written or edited');
+  if (!Array.isArray(pr.events)) return again('the timeline could not be checked, so activity is assumed');
+  // Events with no time of their own (a `committed` event carries the commit's
+  // dates, not a push time) are covered by check 1.
+  const laterEvent = pr.events.find((e) => Date.parse(e?.at) > warning.at);
+  if (laterEvent) return again(`a "${String(laterEvent.event).replace(/[^a-z_-]/gi, '')}" event happened`);
   return { action: 'CLOSE', why: `warned ${warning.createdAt} and untouched since` };
 }
 
-export function warningBody() {
+export function warningBody({ head, runId }) {
   return [
-    PRUNER.WARNING_MARKER,
+    warningMarker({ head, runId }),
     `This pull request has had no activity for more than ${PRUNER.STALE_DAYS} days.`,
     '',
     `If nothing touches it, the stale-PR loop closes it on a later run, no sooner than ${PRUNER.STALE_DAYS} days from now. ` +
@@ -246,8 +287,10 @@ export function warningBody() {
   ].join('\n');
 }
 
-export function closeBody() {
+/** Posted only AFTER the pull request has been read back as CLOSED, so its past tense is true. */
+export function closeBody({ runId }) {
   return [
+    closedMarker({ runId }),
     `Closed by the stale-PR loop: this pull request was warned more than ${PRUNER.STALE_DAYS} days ago and nothing has touched it since.`,
     '',
     'Nothing is lost. The branch is untouched, and **Reopen pull request** below restores it with one click.',
@@ -266,7 +309,7 @@ export function closeBody() {
  * numbers, dates, booleans and this file's own fixed strings — never a title,
  * a body, a branch name or a comment's text.
  */
-export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true }) {
+export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true, runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }) {
   const ledger = {
     listed: false,
     listError: null,
@@ -282,6 +325,8 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
     refused: [],
     /** Writes that failed after MAX_ATTEMPTS. */
     failed: [],
+    /** PRs that WERE closed and verified, but whose explanation comment could not be posted. */
+    uncommented: [],
     /** Candidates a fresh read showed need nothing after all (activity or a label since the list). */
     settled: [],
   };
@@ -316,12 +361,31 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
       .map((line) => JSON.parse(line));
   };
 
+  /**
+   * Every timeline event of the PR, as `{ event, at }`. `at` is null for an
+   * event with no time of its own (`committed`).
+   *
+   * Same rule as `readComments`: a failed or unparseable read THROWS. An empty
+   * list here would read as "nothing happened since the warning", which is the
+   * one answer that allows a close.
+   */
+  const readEvents = (number) => {
+    const args = ['api', '--paginate', `repos/${repo}/issues/${number}/timeline?per_page=100`, '--jq', '.[] | {event: .event, at: (.created_at // .submitted_at // null)}'];
+    const r = gh(args);
+    if (r.status !== 0) throw new Error(`gh api issues/${number}/timeline failed: ${String(r.stderr).trim().slice(0, 300)}`);
+    return String(r.stdout)
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line));
+  };
+
   const readPr = (number) => ({
-    ...json(['pr', 'view', String(number), '--repo', repo, '--json', 'number,state,updatedAt,labels']),
+    ...json(['pr', 'view', String(number), '--repo', repo, '--json', 'number,state,updatedAt,labels,headRefOid']),
     comments: readComments(number),
+    events: readEvents(number),
   });
 
-  /** Run a write up to MAX_ATTEMPTS times. Returns null, or the last error text. */
+  /** Run an IDEMPOTENT write (a close) up to MAX_ATTEMPTS times. Returns null, or the last error text. */
   const attempt = (args, input) => {
     let last = '';
     for (let i = 0; i < PRUNER.MAX_ATTEMPTS; i++) {
@@ -332,25 +396,60 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
     return last;
   };
 
+  /**
+   * Post one comment, at most once. Returns null, or the error text.
+   *
+   * A comment is NOT idempotent, and a non-zero exit does not prove nothing
+   * was posted: GitHub can accept the request and the response can still be
+   * lost. So a failed attempt is never retried blind. The comments are read
+   * back and searched for this run's own marker; the retry happens only when
+   * the marker is not there. If that read fails too, it stops: one possible
+   * missing comment is better than two public ones (qodo on this PR).
+   */
+  const postCommentOnce = (number, body, marker) => {
+    let last = '';
+    for (let i = 0; i < PRUNER.MAX_ATTEMPTS; i++) {
+      const r = gh(['pr', 'comment', String(number), '--repo', repo, '--body-file', '-'], body);
+      if (r.status === 0) return null;
+      last = String(r.stderr).trim().slice(0, 300) || `exit ${r.status}`;
+      try {
+        if (readComments(number).some((c) => String(c?.body ?? '').includes(marker))) return null;
+      } catch (error) {
+        return `${last}; and the comments could not be read back to see whether it was posted (${error.message}), so it was not retried`;
+      }
+    }
+    return last;
+  };
+
   const validNumber = (number) => Number.isInteger(number) && number > 0;
 
   function listOpenPrs() {
     try {
       const prs = json(['pr', 'list', '--repo', repo, '--state', 'open', '--limit', String(PRUNER.LIST_LIMIT), '--json', 'number,updatedAt,labels']);
+      if (!Array.isArray(prs)) throw new Error('gh pr list did not return a list');
+      // Built and checked in full BEFORE the ledger is told the list succeeded.
+      const rows = prs.map((pr) => {
+        if (!Number.isInteger(pr?.number) || pr.number <= 0) throw new Error('gh pr list returned an entry with no pull request number');
+        return {
+          number: pr.number,
+          updatedAt: pr.updatedAt,
+          daysIdle: daysIdle(pr.updatedAt, now),
+          hasKeepLabel: hasKeepLabel(pr.labels),
+          stale: isStale(pr.updatedAt, now),
+        };
+      });
       ledger.listed = true;
       ledger.listError = null;
-      ledger.openCount = prs.length;
-      ledger.truncated = prs.length >= PRUNER.LIST_LIMIT;
-      const rows = prs.map((pr) => ({
-        number: pr.number,
-        updatedAt: pr.updatedAt,
-        daysIdle: daysIdle(pr.updatedAt, now),
-        hasKeepLabel: hasKeepLabel(pr.labels),
-        stale: isStale(pr.updatedAt, now),
-      }));
+      ledger.openCount = rows.length;
+      ledger.truncated = rows.length >= PRUNER.LIST_LIMIT;
       ledger.candidates = rows.filter((r) => r.stale && !r.hasKeepLabel).map((r) => r.number);
       return { ok: true, staleDays: PRUNER.STALE_DAYS, truncated: ledger.truncated, pullRequests: rows };
     } catch (error) {
+      // The LATEST list call decides. An earlier success does not survive a
+      // later failure: the run ends in ERROR, and no further write is allowed.
+      // Before this, a second failed call left `listed` true and the row CLEAN
+      // (qodo on this PR).
+      ledger.listed = false;
       ledger.listError = error.message;
       return { ok: false, error: error.message };
     }
@@ -419,7 +518,10 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
       return { ok: true, dryRun: true, wouldHave: wanted === 'WARN' ? 'posted the warning' : 'closed the pull request' };
     }
     if (wanted === 'WARN') {
-      const failure = attempt(['pr', 'comment', String(number), '--repo', repo, '--body-file', '-'], warningBody());
+      const marker = warningMarker({ head: pr.headRefOid, runId });
+      const failure = /^[0-9a-f]{40}$/.test(String(pr.headRefOid ?? ''))
+        ? postCommentOnce(number, warningBody({ head: pr.headRefOid, runId }), marker)
+        : 'the pull request has no readable branch head, so a warning could not record one';
       if (failure) {
         ledger.failed.push({ number, action: 'WARN', error: failure });
         return { ok: false, error: failure };
@@ -427,10 +529,17 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
       ledger.warned.push(number);
       return { ok: true, warned: true };
     }
-    // The comment and the close are two calls on purpose: `gh pr close --comment`
-    // takes the text as an argument, and a retry of it would post the comment twice.
-    const commentFailure = attempt(['pr', 'comment', String(number), '--repo', repo, '--body-file', '-'], closeBody());
-    const closeFailure = commentFailure ?? attempt(['pr', 'close', String(number), '--repo', repo]);
+    // ORDER MATTERS: close, read the state back, and only then explain.
+    //
+    //  - Nothing is written between the fresh read above and the close, so the
+    //    decision is as current as one API call allows. The first version
+    //    posted the comment in between, which both widened that gap and told
+    //    the PR "Closed" before it was (qodo on this PR, two findings).
+    //  - The comment says "Closed" in the past tense. It is posted only when
+    //    GitHub itself reports CLOSED.
+    //
+    // A close is idempotent, so `attempt` may retry it.
+    const closeFailure = attempt(['pr', 'close', String(number), '--repo', repo]);
     if (closeFailure) {
       ledger.failed.push({ number, action: 'CLOSE', error: closeFailure });
       return { ok: false, error: closeFailure };
@@ -447,7 +556,14 @@ export function createPrunerSession({ gh, repo, now = new Date(), dryRun = true 
       ledger.unverified.push(number);
       return { ok: false, error: `the close call succeeded but the pull request reads ${stateAfter} afterwards` };
     }
-    return { ok: true, closed: true, verifiedState: 'CLOSED' };
+    const commentFailure = postCommentOnce(number, closeBody({ runId }), closedMarker({ runId }));
+    if (commentFailure) {
+      // The PR IS closed and verified. What is missing is the explanation, and
+      // the row must say so: a PR closed with no word of why needs a person.
+      ledger.uncommented.push({ number, error: commentFailure });
+      return { ok: true, closed: true, verifiedState: 'CLOSED', explanationPosted: false };
+    }
+    return { ok: true, closed: true, verifiedState: 'CLOSED', explanationPosted: true };
   }
 
   return {
@@ -473,11 +589,16 @@ const refs = (numbers) => numbers.map((n) => `#${n}`).join(', ');
  *   FINDING       a close did not verify as CLOSED, or the model asked for a
  *                 write the rules refuse.
  *   INCONCLUSIVE  a write failed, the list may be cut short, a stale PR was
- *                 left unaccounted for, or a DRY RUN would have closed
+ *                 left unaccounted for, a PR was closed but its explanation
+ *                 could not be posted, or a DRY RUN would have closed
  *                 something (a close that did not happen cannot be verified).
+ *
+ * `commit` is the checkout the runner ran from: the row's own spec says `-`
+ * only "when no checkout was involved", and the runner reads the loop's
+ * procedure from one (qodo on this PR).
  *   CLEAN         everything else, including "0 stale".
  */
-export function summarizePrunerRun({ ledger, failure = null, blocked = null, dryRun, now = new Date(), model = null, costUsd = null, turns = null }) {
+export function summarizePrunerRun({ ledger, failure = null, blocked = null, dryRun, now = new Date(), model = null, costUsd = null, turns = null, commit = '-' }) {
   const stale = ledger.candidates.length;
   const accounted = new Set([...ledger.warned, ...ledger.closed, ...ledger.settled, ...ledger.failed.map((f) => f.number)]);
   const unhandled = ledger.candidates.filter((n) => !accounted.has(n));
@@ -495,6 +616,7 @@ export function summarizePrunerRun({ ledger, failure = null, blocked = null, dry
   if (unhandled.length) worsen('INCONCLUSIVE', `the agent left ${unhandled.length} stale PR(s) unaccounted for: ${refs(unhandled)}`);
   if (ledger.truncated) worsen('INCONCLUSIVE', `the PR list hit the ${PRUNER.LIST_LIMIT} limit and may be cut short`);
   if (ledger.failed.length) worsen('INCONCLUSIVE', `${ledger.failed.length} write(s) failed after ${PRUNER.MAX_ATTEMPTS} attempts: ${ledger.failed.map((f) => `#${f.number} ${f.action} (${f.error})`).join('; ')}`);
+  if (ledger.uncommented?.length) worsen('INCONCLUSIVE', `${ledger.uncommented.length} PR(s) were closed but the comment that explains why could not be posted: ${ledger.uncommented.map((u) => `#${u.number} (${u.error})`).join('; ')}`);
   if (ledger.refused.length) worsen('FINDING', `the agent asked for ${ledger.refused.length} write(s) the rules refuse: ${ledger.refused.map((r) => `#${r.number} asked ${r.asked}, allowed ${r.allowed}`).join('; ')}`);
   if (ledger.unverified.length) worsen('FINDING', `${ledger.unverified.length} close(s) did not read CLOSED afterwards: ${refs(ledger.unverified)}`);
   // Not when blocked: the agent never ran, so "it never listed" would blame it for that.
@@ -524,7 +646,7 @@ export function summarizePrunerRun({ ledger, failure = null, blocked = null, dry
 
   return {
     verdict,
-    row: formatLoopRow({ date: now.toISOString().slice(0, 10), loop: PRUNER.LOOP, commit: '-', verdict, metric, idea, lesson: lessons.join(' | ') }),
+    row: formatLoopRow({ date: now.toISOString().slice(0, 10), loop: PRUNER.LOOP, commit, verdict, metric, idea, lesson: lessons.join(' | ') }),
   };
 }
 

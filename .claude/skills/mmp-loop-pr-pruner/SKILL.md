@@ -33,6 +33,11 @@ Two rules are stricter in code than in the prose below, on purpose:
   not enough: anyone can post a comment that contains it.
 - **"Still stale" means nothing has touched the PR since the warning.** A PR
   that was warned, worked on, and went idle again is warned again, not closed.
+  The warning records the branch head it saw; a different head, a later
+  comment, or any later timeline event (review, label, rename) means warn
+  again. Every doubt resolves to a comment, never to a close.
+- **The comment that says "Closed" is posted after the close is verified**, not
+  before, and a comment is never retried blind.
 
 To run it by hand (a dry run unless you type `--mode live`):
 
@@ -60,8 +65,8 @@ node scripts/agent/run-loop.mjs pr-pruner
    and confirm `state` actually changed to `CLOSED`. Never report success off the
    close call's own exit code — a 200 on the write is not the state afterwards.
 5. Append **one row for this invocation** to `LOOP-LOG.tsv` — in the **primary
-   checkout**, then commit and push it. (A scheduled GitHub Actions run cannot
-   push to `main`; its row goes to the loop-log issue instead — rule 5 of
+   checkout**, then commit and push it. (A GitHub Actions run, scheduled or
+   manual, cannot push to `main`; its row goes to the loop-log issue instead — rule 5 of
    "Where the row is written".) Full rules in
    `docs/plans/PLAN-LOOPS.md` ("One row per INVOCATION" and "Where the row is
    written"); the short version: one tab-separated row per run

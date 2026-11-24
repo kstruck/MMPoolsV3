@@ -3,7 +3,7 @@
 // Usage:
 //   node scripts/agent/post-loop-row.mjs --loop pr-pruner --issue <n> --row-file row.tsv
 //
-// Why an issue and not LOOP-LOG.tsv: a scheduled GitHub Actions run cannot push
+// Why an issue and not LOOP-LOG.tsv: a GitHub Actions run cannot push
 // to `main` (the branch ruleset needs an approver), and the charter says a run
 // that cannot push must put its row somewhere durable and never drop it
 // (docs/plans/PLAN-LOOPS.md, "Where the row is written"). An issue comment
