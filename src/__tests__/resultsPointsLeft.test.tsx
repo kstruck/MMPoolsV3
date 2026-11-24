@@ -143,7 +143,7 @@ describe('NFLResults — Max is per player, and the server total fills hidden pi
 
   it("with the server's total for the hidden picks, other players show real numbers", () => {
     // Sam's hidden c3 pick carries 2: 3 (c2, live) + 2 = 5 left; won 0 → Max 5.
-    const { container } = renderResults(true, { ...SUNDAY, hiddenLeft: { u2: 2 } });
+    const { container } = renderResults(true, { ...SUNDAY, hiddenLeft: { u2: 2 }, hiddenLeftOpenGameIds: ['c2', 'c3'] });
     const c = cellsOf(container, 'Sam Sample');
     expect(c[3]).toBe('5');
     expect(c[4]).toBe('5');
@@ -158,7 +158,7 @@ describe('NFLResults — Max is per player, and the server total fills hidden pi
         <NFLResults
           pool={{ id: 'p1', type: 'NFL_PICKEM', seasonType: 2, settings: { confidenceMode: true, shareHiddenPointsLeft: false } } as never}
           entries={ENTRIES} games={GAMES} week={3} viewerUid="me"
-          reveal={{ ...SUNDAY, hiddenLeft: { u2: 2 } } as never} ownEntryLoaded view="WEEKLY"
+          reveal={{ ...SUNDAY, hiddenLeft: { u2: 2 }, hiddenLeftOpenGameIds: ['c2', 'c3'] } as never} ownEntryLoaded view="WEEKLY"
         />
       </MemoryRouter>,
     );
@@ -167,7 +167,7 @@ describe('NFLResults — Max is per player, and the server total fills hidden pi
   });
 
   it('the Current Picks grid applies the same live gate', () => {
-    expect(gridSource).toContain('hiddenLeft: shareLeft ? wk?.hiddenLeft?.[row.id] : undefined');
+    expect(gridSource).toContain('hiddenLeft: shareLeft && openAtFetch ? wk?.hiddenLeft?.[row.id] : undefined');
     expect(gridSource).toContain('const shareLeft = sharesHiddenPointsLeft(');
   });
 
@@ -187,7 +187,7 @@ describe('NFLResults — Max is per player, and the server total fills hidden pi
   });
 
   it('a row the server sent no total for still reads "?", never a guess', () => {
-    const { container } = renderResults(true, { ...SUNDAY, hiddenLeft: {} });
+    const { container } = renderResults(true, { ...SUNDAY, hiddenLeft: {}, hiddenLeftOpenGameIds: ['c2', 'c3'] });
     expect(cellsOf(container, 'Sam Sample')[3]).toBe('?');
   });
 });

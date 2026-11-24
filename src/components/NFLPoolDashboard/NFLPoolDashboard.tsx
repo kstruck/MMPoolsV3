@@ -5,7 +5,7 @@ import { isPoolManager, isSuperAdmin } from '../../utils/auth';
 import { Calendar, Lock, Settings, Share2, FileText, Mail, Phone, Trophy, Target, Timer, Flame, ArrowLeft, Users, Crown } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import type { PoolPicksReveal } from '../../services/dbService';
-import { fetchStampedReveal } from '../../utils/picksGridMax';
+import { fetchStampedReveal, needsStampedRefetch } from '../../utils/picksGridMax';
 import { logger } from '../../utils/logger';
 import type { User, Pool, NFLGame, WeeklyRecap, BanterMessage } from '../../types';
 import { nflWeekLabel } from '../../utils/nflWeekLabel';
@@ -515,6 +515,19 @@ export const NFLPoolDashboard: React.FC<NFLPoolDashboardProps> = ({
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isManager, selectedWeek, commissionerRosterDep, user?.id, loadWeek, wantsReveal]);
+
+  // (a2) ONE EXTRA FETCH WHEN THE REVEAL BEAT THE SCHEDULE. The request above
+  // can leave before the games subscription has delivered anything; the total
+  // then comes back unstamped and the tables will not use it. Fetch again as
+  // soon as the schedule is in, so the row shows a number in one round trip
+  // instead of waiting for the poll. `needsStampedRefetch` is false for any
+  // stamped reveal, so this fires at most once per unstamped response.
+  const scheduleLoaded = games.length > 0;
+  const selectedWeekReveal = revealsForPool[selectedWeek];
+  useEffect(() => {
+    if (!user || !wantsReveal) return;
+    if (needsStampedRefetch(selectedWeekReveal, scheduleLoaded)) loadWeek(selectedWeek);
+  }, [selectedWeekReveal, scheduleLoaded, selectedWeek, user, wantsReveal, loadWeek]);
 
   // (b) THE HISTORICAL COLUMNS of the Survivor/Margin grid — fetched ONCE each,
   // and only while that grid is actually on screen.

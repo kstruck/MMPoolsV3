@@ -48,7 +48,14 @@ import { gradePick, hasReportedScores } from './pickemResult';
  * the game's own `status`, the same field `gradePick` reads.
  */
 
-export type MaxUnknownReason = 'COUNT_UNKNOWN' | 'WEIGHTS_HIDDEN' | 'WEIGHT_MISSING';
+/**
+ * `TOTAL_STALE` is a Pts Left reason only: the server's hidden-points total is
+ * older than the game statuses on screen (see `tallyGridRow`). It has its own
+ * value, not a borrowed one, because the tooltip must say what is actually
+ * wrong. The first version reused `WEIGHTS_HIDDEN`, whose tooltip blames
+ * unrevealed confidence weights (qodo on #805).
+ */
+export type MaxUnknownReason = 'COUNT_UNKNOWN' | 'WEIGHTS_HIDDEN' | 'WEIGHT_MISSING' | 'TOTAL_STALE';
 
 export interface GridRowTally {
     wins: number;
@@ -121,6 +128,26 @@ export function fetchStampedReveal<R extends object>(
 }
 
 /**
+ * Should the dashboard fetch this week's reveal AGAIN, to get a stamped one?
+ *
+ * The first reveal request of a page load can leave before the schedule
+ * subscription has delivered any games. `fetchStampedReveal` then has nothing
+ * to stamp with, and the total comes back unstamped. The tables do not use an
+ * unstamped total (they print "?"), so without a second fetch the row would
+ * stay "?" until the next poll, up to five minutes for a member.
+ *
+ * True only when a refetch can actually help: there IS a total, it has no
+ * stamp, and the schedule has now loaded. A stamped reveal — even one stamped
+ * with an empty list — returns false, so this cannot loop.
+ */
+export function needsStampedRefetch(
+    reveal: { hiddenLeft?: unknown; hiddenLeftOpenGameIds?: readonly string[] } | null | undefined,
+    scheduleLoaded: boolean,
+): boolean {
+    return scheduleLoaded && !!reveal && reveal.hiddenLeft !== undefined && reveal.hiddenLeftOpenGameIds === undefined;
+}
+
+/**
  * Could a pick on this game that we cannot see still earn a point?
  *
  *   CANCELLED                  never — grades VOID.
@@ -172,8 +199,12 @@ export function tallyGridRow(args: {
      * The games that were not yet decided WHEN `hiddenLeft` WAS FETCHED
      * (`reveal.hiddenLeftOpenGameIds`, stamped by the dashboard). `hiddenLeft`
      * is a snapshot and `weekGames` is live: a hidden game in this set that is
-     * decided now may still be counted in the total. `undefined` when the
-     * dashboard could not stamp it — the total is then trusted as it was.
+     * decided now may still be counted in the total. The callers pass a total
+     * ONLY together with its stamp: an unstamped total has nothing to be checked
+     * against, so they withhold it and the row reads "?" until a stamped one
+     * arrives (qodo on #805 — the first request of a page load can beat the
+     * schedule). `undefined` here therefore means no staleness check is possible,
+     * which only a direct caller such as a test should ever rely on.
      */
     hiddenLeftOpenAtFetch?: ReadonlySet<string>;
 }): GridRowTally {
@@ -267,7 +298,7 @@ export function tallyGridRow(args: {
         const leftUpper = remaining + hiddenLeft;
         const mayOvercount = hiddenDecidedSinceFetch > 0 && hiddenLeft > 0;
         const leftPart: Pick<GridRowTally, 'left' | 'leftUnknown'> = mayOvercount
-            ? { left: null, leftUnknown: confidenceMode ? 'WEIGHTS_HIDDEN' : 'COUNT_UNKNOWN' }
+            ? { left: null, leftUnknown: 'TOTAL_STALE' }
             : { left: leftUpper };
         const left = leftUpper;
         if (weightMissing) return { ...tally, max: null, maxUnknown: 'WEIGHT_MISSING', ...leftPart };
@@ -391,6 +422,7 @@ export function pointsLeftUnknownTitle(reason: MaxUnknownReason | undefined): st
     switch (reason) {
         case 'WEIGHTS_HIDDEN': return "Their confidence weights are not revealed yet, so the points they have left are not known";
         case 'WEIGHT_MISSING': return 'A pick on this row has no stored confidence weight';
+        case 'TOTAL_STALE': return 'A game has finished or been cancelled since these points were last checked. This updates within a few minutes';
         default: return 'Not known yet';
     }
 }

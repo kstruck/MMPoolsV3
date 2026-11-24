@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import type { NFLGame } from '../types';
 import type { PicksGridCell } from '../utils/picksGrid';
-import { fetchStampedReveal, isGameDecided, pointsLeft, pointsLeftUnknownTitle, tallyGridRow, undecidedGameIds } from '../utils/picksGridMax';
+import { fetchStampedReveal, isGameDecided, needsStampedRefetch, pointsLeft, pointsLeftUnknownTitle, tallyGridRow, undecidedGameIds } from '../utils/picksGridMax';
 
 const game = (id: string, status: NFLGame['status'] = 'SCHEDULED', extra: Record<string, unknown> = {}) => ({
     id, status,
@@ -108,6 +108,38 @@ describe('fetchStampedReveal: the stamp is taken BEFORE the request, not when th
     });
 });
 
+describe('needsStampedRefetch: the first request of a page load can beat the schedule', () => {
+    // qodo on #805. The reveal request leaves before the games subscription has
+    // delivered anything, so it comes back unstamped. The tables withhold an
+    // unstamped total; this decides when fetching again will produce a stamped one.
+    it('an unstamped total, and the schedule has now loaded: fetch again', () => {
+        expect(needsStampedRefetch({ hiddenLeft: { u2: 2 } }, true)).toBe(true);
+    });
+
+    it('not while the schedule is still empty — the refetch would be unstamped too', () => {
+        expect(needsStampedRefetch({ hiddenLeft: { u2: 2 } }, false)).toBe(false);
+    });
+
+    it('never for a stamped reveal, even one stamped with an empty list: no loop', () => {
+        expect(needsStampedRefetch({ hiddenLeft: { u2: 2 }, hiddenLeftOpenGameIds: ['g3'] }, true)).toBe(false);
+        expect(needsStampedRefetch({ hiddenLeft: { u2: 2 }, hiddenLeftOpenGameIds: [] }, true)).toBe(false);
+    });
+
+    it('not when the server sent no total at all — nothing would be withheld', () => {
+        // A Survivor pool, a pre-deploy server, or the sharing setting off.
+        expect(needsStampedRefetch({}, true)).toBe(false);
+        expect(needsStampedRefetch(undefined, true)).toBe(false);
+        expect(needsStampedRefetch(null, true)).toBe(false);
+    });
+
+    it('a fetch made with the schedule loaded always clears it', async () => {
+        const stamped = await fetchStampedReveal(async () => ({ hiddenLeft: { u2: 2 } }), AT_FETCH);
+        expect(needsStampedRefetch(stamped, true)).toBe(false);
+        const unstamped = await fetchStampedReveal(async () => ({ hiddenLeft: { u2: 2 } }), []);
+        expect(needsStampedRefetch(unstamped, true)).toBe(true);
+    });
+});
+
 describe('standard scoring: a hidden game is decided after the total was fetched', () => {
     // g3 is cancelled before kickoff. It is still HIDDEN on this row, and the
     // total in hand (2) still counts the row's pick on it.
@@ -118,8 +150,12 @@ describe('standard scoring: a hidden game is decided after the total was fetched
     it('Pts Left is "?" — it is 2 or 3 and we cannot see which', () => {
         const t = tallyGridRow({ ...base, cells: row(), hiddenLeft: 2, hiddenLeftOpenAtFetch: OPEN_AT_FETCH });
         expect(pointsLeft(t)).toBeNull();
-        expect(t.leftUnknown).toBe('COUNT_UNKNOWN');
-        expect(pointsLeftUnknownTitle(t.leftUnknown)).toBe('Not known yet');
+        expect(t.leftUnknown).toBe('TOTAL_STALE');
+        // The tooltip names the real cause. It must not blame hidden weights or
+        // a missing count: neither is what is wrong here (qodo on #805).
+        expect(pointsLeftUnknownTitle(t.leftUnknown)).toBe(
+            'A game has finished or been cancelled since these points were last checked. This updates within a few minutes',
+        );
     });
 
     it('BEFORE this change the same inputs printed 3, one too high', () => {
@@ -185,11 +221,12 @@ describe('confidence scoring: the same window', () => {
     const row = () => cellsFor(NOW, pick('W', 9), pick(null, 5), HIDDEN, HIDDEN);
     const base = { weekGames: NOW, setCount: 4, revealMode: 'PER_GAME' as const, isOwnRow: false, confidenceMode: true };
 
-    it('Pts Left is "?", with the weights wording', () => {
+    it('Pts Left is "?", for the same stated reason — not "weights are hidden"', () => {
         // The total (6 + 7) may still hold the weight on the cancelled game.
         const t = tallyGridRow({ ...base, cells: row(), hiddenLeft: 13, hiddenLeftOpenAtFetch: OPEN_AT_FETCH });
         expect(pointsLeft(t)).toBeNull();
-        expect(t.leftUnknown).toBe('WEIGHTS_HIDDEN');
+        expect(t.leftUnknown).toBe('TOTAL_STALE');
+        expect(pointsLeftUnknownTitle(t.leftUnknown)).not.toMatch(/weights/i);
     });
 
     it('and exact again once a fresh total arrives', () => {

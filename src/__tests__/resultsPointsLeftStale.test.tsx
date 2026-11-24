@@ -71,16 +71,28 @@ describe('NFLResults — a hidden game is decided after the total was fetched', 
     const { container } = renderResults(slate('CANCELLED'), { ...SUNDAY, hiddenLeftOpenGameIds: ['c2', 'c3'] });
     const row = [...container.querySelectorAll('tbody tr')].find(r => r.textContent?.includes('Sam Sample'))!;
     expect(cellsOf(container, 'Sam Sample')[3]).toBe('?');
-    expect(row.querySelectorAll('td')[3].getAttribute('title')).toMatch(/not known/i);
+    expect(row.querySelectorAll('td')[3].getAttribute('title')).toMatch(/since these points were last checked/);
     // The viewer's own row is unaffected: c2 only (the cancelled c3 is not left).
     expect(cellsOf(container, 'Me Myself')[3]).toBe('5');
   });
 
-  it('a reveal that was never stamped behaves as before — the stale number, not a crash', () => {
-    // An older cached reveal, or one that arrived before the schedule loaded.
-    // This is the pre-fix behaviour; the stamp is what changes it.
-    const { container } = renderResults(slate('CANCELLED'), SUNDAY);
-    expect(cellsOf(container, 'Sam Sample')[3]).toBe('5');
+  it('an UNSTAMPED total is withheld: the row is worked out as if no total had been sent', () => {
+    // The first request of a page load can leave before the schedule has
+    // loaded, so its total has no stamp (qodo on #805). With nothing to check
+    // it against, the total is not used at all, and the dashboard fetches again
+    // for a stamped one (`needsStampedRefetch`).
+    //
+    // c3 still open: Sam has one unrevealed pick that may sit on it, with a
+    // weight nobody can see → "?". The withheld total (2) would have given 5.
+    const open = renderResults(slate('SCHEDULED'), SUNDAY);
+    expect(cellsOf(open.container, 'Sam Sample')[3]).toBe('?');
+    cleanup();
+    // c3 cancelled: no hidden game is open, so nothing hidden can be points
+    // left and the page knows the exact answer WITHOUT the total — 3, c2 only.
+    // The withheld total still counted c3 and would have printed 5: the wrong
+    // number this whole change is about.
+    const cancelled = renderResults(slate('CANCELLED'), SUNDAY);
+    expect(cellsOf(cancelled.container, 'Sam Sample')[3]).toBe('3');
   });
 
   it('the next poll clears it: a total fetched after the cancel is shown again', () => {
@@ -94,6 +106,8 @@ describe('the stamp is wired end to end', () => {
     for (const source of [resultsSource, gridSource]) {
       expect(source).toContain('const openAtFetch = wk?.hiddenLeftOpenGameIds ? new Set(wk.hiddenLeftOpenGameIds) : undefined;');
       expect(source).toContain('hiddenLeftOpenAtFetch: openAtFetch,');
+      // No stamp, no total.
+      expect(source).toContain('hiddenLeft: shareLeft && openAtFetch ? wk?.hiddenLeft?.[row.id] : undefined,');
     }
   });
 
@@ -113,5 +127,8 @@ describe('the stamp is wired end to end', () => {
     // what is stored, in both branches of the update.
     expect(code.match(/dbService\.getPoolPicks\(/g) ?? []).toHaveLength(1);
     expect(code.match(/\[w\]: stamped/g) ?? []).toHaveLength(2);
+    // And it fetches again when the first response beat the schedule.
+    expect(code).toContain('if (needsStampedRefetch(selectedWeekReveal, scheduleLoaded)) loadWeek(selectedWeek);');
+    expect(code).toContain('const scheduleLoaded = games.length > 0;');
   });
 });
