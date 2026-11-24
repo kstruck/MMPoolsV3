@@ -60,3 +60,23 @@ updates:
       - "dependencies"
       - "security"
       - "functions"
+
+  # scripts/agent — the Claude Agent SDK scripts (pre-review, probe).
+  #
+  # Its own manifest so the SDK's native binary stays out of the root install
+  # and the frontend Docker build. Nothing here is deployed: it runs on a
+  # developer machine or a CI runner, against the plan's monthly API credit.
+  - package-ecosystem: "npm"
+    directory: "/scripts/agent"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "security"

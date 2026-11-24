@@ -250,6 +250,25 @@ describe('the image installs the tree CI validated', () => {
         expect(dockerignoreExcludes('package.json', ignore)).toBe(false);
     });
 
+    it('.dockerignore excludes node_modules at ANY depth, not only the root one', () => {
+        // `scripts/` is in the build context. A bare `node_modules` line matches
+        // the root install only, so the Agent SDK under scripts/agent rode into
+        // `COPY . .` (qodo on #800).
+        //
+        // The targets are the DIRECTORIES. `dockerignoreExcludes` matches a
+        // whole path against each pattern; Docker then drops everything under
+        // a directory that matched, which this helper does not model.
+        const ignore = read('.dockerignore');
+        expect(dockerignoreExcludes('node_modules', ignore)).toBe(true);
+        expect(dockerignoreExcludes('scripts/agent/node_modules', ignore)).toBe(true);
+        expect(dockerignoreExcludes('a/b/c/node_modules', ignore)).toBe(true);
+        // The scripts themselves must stay IN: prerender.ts runs in the build.
+        expect(dockerignoreExcludes('scripts/prerender.ts', ignore)).toBe(false);
+        expect(dockerignoreExcludes('scripts/agent/lib.mjs', ignore)).toBe(false);
+        // Guard-the-guard: the root-only form does NOT cover the nested directory.
+        expect(dockerignoreExcludes('scripts/agent/node_modules', 'node_modules')).toBe(false);
+    });
+
     it('the .dockerignore check understands globs and negation', () => {
         // Guard-the-guard. A raw-line check passes all three of these, which is
         // why the first version of this test guaranteed nothing.
