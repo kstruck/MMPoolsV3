@@ -187,6 +187,25 @@ export interface PoolPicksReveal {
      * and keeps showing "?".
      */
     hiddenLeft?: Record<string, number>;
+    /**
+     * 🛑 STAMPED BY THE CLIENT — the server never sends this. The ids of the
+     * games that were NOT YET DECIDED, by the page's own live game statuses,
+     * WHEN THE REQUEST WAS SENT (`fetchStampedReveal`).
+     *
+     * `hiddenLeft` is a snapshot; the game statuses the page renders are live.
+     * A hidden game that is decided NOW but was open when the total was fetched
+     * may still be counted in that total, so Pts Left would read too high until
+     * the next poll (up to five minutes for a member). This is what lets
+     * `tallyGridRow` see that and print "?" until that poll.
+     *
+     * Not an exact window, and deliberately one-sided: the stamp is taken before
+     * the call, so it can include a game the server had already seen decided.
+     * That prints a "?" for one poll over a total that was right; it never
+     * prints a wrong number. Absent when the schedule had not loaded when the
+     * request was sent: then nothing can be compared and the total is used as
+     * before.
+     */
+    hiddenLeftOpenGameIds?: string[];
 }
 
 // --- Monetization dashboard read shapes (PLAN-BUYFLOW-OVERHAUL Phase 6) -------

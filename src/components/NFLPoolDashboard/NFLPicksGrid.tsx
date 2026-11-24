@@ -131,6 +131,11 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
   // Resolved ONCE — three separate copies of this test is how one of them ends
   // up not being updated.
   const wk = reveal && reveal.week === week ? reveal : null;
+  // The games that were open when the server's hidden-points total was fetched
+  // (stamped by the dashboard). One Set per render, shared by every row.
+  // No stamp, no total: a total that cannot be checked against the live
+  // statuses is withheld below, and the dashboard refetches for a stamped one.
+  const openAtFetch = wk?.hiddenLeftOpenGameIds ? new Set(wk.hiddenLeftOpenGameIds) : undefined;
   // The commissioner's switch, read from the LIVE pool document (qodo #801):
   // turning it off hides the totals at once, instead of after the next
   // reveal poll that would stop sending them.
@@ -264,7 +269,8 @@ export const NFLPicksGrid: React.FC<NFLPicksGridProps> = ({ pool, entries, games
                   pickMode: settings.pickMode,
                   // The server's total for this row's hidden open picks
                   // (PLAN-PTS-LEFT-HIDDEN-TOTAL) — Week Results passes the same.
-                  hiddenLeft: shareLeft ? wk?.hiddenLeft?.[row.id] : undefined,
+                  hiddenLeft: shareLeft && openAtFetch ? wk?.hiddenLeft?.[row.id] : undefined,
+                  hiddenLeftOpenAtFetch: openAtFetch,
                 });
                 const winLoss = formatWinLoss(tally);
                 const left = pointsLeft(tally);

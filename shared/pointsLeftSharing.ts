@@ -13,7 +13,19 @@
 //
 // It never carries pick content: not which team, not which game holds which
 // weight. Pure: both roots import it. The server validates the stored value
-// (functions/src/lib/poolUpdate.ts) and is the only place it gates anything.
+// (functions/src/lib/poolUpdate.ts).
+//
+// It gates in TWO places, and both read this function:
+//   - the server (`getPoolPicks`, functions/src/nflPickReveal.ts) decides whether
+//     a total is SENT at all. That is the one that matters for privacy: with the
+//     setting off, the number never leaves the server.
+//   - the client (NFLResults.tsx, NFLPicksGrid.tsx) decides whether a total it
+//     already holds is USED. A reveal fetched while the setting was on stays in
+//     memory until the next poll; without the client gate the page would keep
+//     showing those totals for up to five minutes after the commissioner turned
+//     the setting off.
+// This comment said the server "is the only place it gates anything" until the
+// Claude pre-review of #801 pointed at the client gates added by the same change.
 
 export function sharesHiddenPointsLeft(settings: { shareHiddenPointsLeft?: unknown } | null | undefined): boolean {
   const v = settings?.shareHiddenPointsLeft;

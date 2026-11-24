@@ -14,11 +14,17 @@ import view from '../components/NFLPoolDashboard/NFLManagerView.tsx?raw';
 vi.mock('../firebase', () => ({ auth: {}, db: {}, functions: {} }));
 const updatePoolSettings = vi.fn(async () => ({}));
 vi.mock('../services/dbService', () => ({ dbService: { updatePoolSettings: (...a: unknown[]) => updatePoolSettings(...(a as [])) } }));
-vi.mock('../components/ui/Toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
+// Stable spies, not a fresh `vi.fn()` per `useToast()` call: a spy made inside
+// the hook cannot be asserted on, so "an error toast was shown" was untestable.
+const toastSuccess = vi.fn();
+const toastError = vi.fn();
+vi.mock('../components/ui/Toast', () => ({
+  useToast: () => ({ success: (...a: unknown[]) => toastSuccess(...a), error: (...a: unknown[]) => toastError(...a) }),
+}));
 
 import { NFLPointsLeftSharingSetting } from '../components/NFLPoolDashboard/NFLPointsLeftSharingSetting';
 
-beforeEach(() => updatePoolSettings.mockClear());
+beforeEach(() => { updatePoolSettings.mockClear(); toastSuccess.mockClear(); toastError.mockClear(); });
 afterEach(cleanup);
 
 const pool = (settings: Record<string, unknown> = {}) => ({ id: 'p1', type: 'NFL_PICKEM', settings }) as never;
@@ -40,6 +46,23 @@ describe("Show Everyone's Pts Left", () => {
     fireEvent.click(box(container));
     await waitFor(() => expect(updatePoolSettings).toHaveBeenCalledTimes(1));
     expect(updatePoolSettings).toHaveBeenCalledWith('p1', { settings: { shareHiddenPointsLeft: false } });
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it('a REJECTED save shows an error and the switch goes back to the stored value', async () => {
+    // The Claude pre-review of #801: no test covered the failure path. The
+    // switch is optimistic, so a save that fails must not leave it showing a
+    // setting the server never stored.
+    updatePoolSettings.mockRejectedValueOnce(new Error('permission-denied'));
+    const { container } = render(<NFLPointsLeftSharingSetting pool={pool()} />);
+    expect(box(container).checked).toBe(true);
+    fireEvent.click(box(container));
+    await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+    expect(toastSuccess).not.toHaveBeenCalled();
+    // Stored value is ON (never set); the failed "turn off" must not stick.
+    await waitFor(() => expect(box(container).checked).toBe(true));
+    expect(updatePoolSettings).toHaveBeenCalledTimes(1);
   });
 });
 
