@@ -19,7 +19,7 @@ costs time, not data.
 | Asset | Backed up? | Consequence if lost |
 |---|---|---|
 | **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Bad writes/corruption in the last 7 days are recoverable **while the database still exists** — PITR is historical reads/exports of a live database, not a restore after deletion or project loss. Deletion and >7-day corruption still need the scheduled/off-region exports (items 16/17). |
-| **Firebase Auth** — user accounts, emails, password hashes | ⚠️ **code shipped, NOT YET ARMED** — `authBackupJob` (weekly) + `runAuthBackup` (on-demand, SUPER_ADMIN) export to GCS. Kill-switch OFF and dry-run by default; **the destination bucket does not exist yet.** See Step 6. | Until the bucket exists and the switch is flipped, this is still ❌ none in practice: every member loses access, even with a perfect Firestore restore. |
+| **Firebase Auth** — user accounts, emails, password hashes | ⚠️ **ARMED 2026-11-25, RESTORE NEVER TESTED** — `authBackupJob` (weekly) exports to `gs://mmpools-auth-backups`. One live export exists (198 accounts, measured in the job's log). The weekly timer has not yet fired armed, and nobody has restored from an export. See Step 6 and "What was done on 2026-11-25". | A backup that has never been restored is a hope, not a recovery. Until the drill in Step 6d.7 passes, treat a lost Auth tenant as: probably recoverable, unproven. Without the password hash parameters (Step 6d.0) it is not recoverable at all. |
 
 ✅ **PITR IS ENABLED — measured 2026-08-10, not assumed.**
 `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
@@ -42,12 +42,16 @@ export for those. The remaining exposure is: database deletion / project loss
 **Auth update (this change):** item 18's job now exists in code — weekly
 `authBackupJob` plus a SUPER_ADMIN `runAuthBackup` callable, both writing an
 `auth:import`-ready JSON to GCS, both kill-switched OFF and dry-run defaulted.
-**That does not yet make Auth backed up.** The destination bucket has not been
-created, the switch has not been flipped, and the password hash parameters that
-make a restore work at all are console state nobody has captured. Until Steps
-6a, 6b and 6d.0 are done by hand, Auth remains the un-recreatable half with
-nothing behind it — the difference is that the remaining work is now four
-console actions rather than an unwritten feature.
+**That did not make Auth backed up**, and for three months it was not: the
+bucket did not exist and the switch was off (measured 2026-09-06 and again
+2026-11-22, when the weekly run logged `disabled ... nothing to do`).
+
+**Armed 2026-11-25** (Steps 6a and 6b, done by Kevin; the record is "What was
+done on 2026-11-25" under Step 6). The bucket exists, the switch is on, and one
+live export is in the bucket. **Two things are still open, and either one can
+make the export worthless:** whether the password hash parameters were captured
+(Step 6d.0 — UNVERIFIED, see that record), and whether an export can actually
+be restored (Step 6d.7 — never run).
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the
@@ -74,9 +78,12 @@ name the bucket explicitly:
 - A live run is only possible once both are set, and a dry run rehearses the
   whole path (including the `listUsers` permission) without writing a byte.
 
-**Recommended order:** ~~15~~ → 19 → 17 → 16 → 18. Item 15 (PITR) is **done —
+**Recommended order:** ~~15~~ → 19 → 17 → 16 → ~~18~~. Item 15 (PITR) is **done —
 measured enabled 2026-08-10**; the remaining work starts at 19. Item 18's
-**Kevin half** (bucket + IAM + flipping the switch) is Step 6a.
+**Kevin half** (bucket + IAM + flipping the switch, Steps 6a and 6b) was **done
+2026-11-25**, out of this order, because the audit sweep reported that
+`AUTH_BACKUP` had never written an audit row. What is left of item 18 is the
+restore drill (Step 6d.7).
 
 ---
 
@@ -436,7 +443,51 @@ missing-index outages, and it should be treated as an incident, not a wait.
 
 ---
 
-## Step 6 — Firebase Auth export (item 18) — CODE SHIPPED, BUCKET PENDING
+## Step 6 — Firebase Auth export (item 18) — ARMED 2026-11-25, RESTORE DRILL PENDING
+
+### What was done on 2026-11-25 (the record — re-measure before you rely on it)
+
+Every line below names where it came from. "Kevin's Cloud Shell" means output
+Kevin pasted into the session that wrote this; none of it was read by that
+session directly, because it had no `gcloud`.
+
+| What | State | Source |
+|---|---|---|
+| Bucket | `gs://mmpools-auth-backups`, `location: US-EAST1`, `public_access_prevention: enforced`, `uniform_bucket_level_access: true`, `versioning_enabled: true`, both lifecycle rules (365 days live, 30 days non-current) | Kevin's Cloud Shell: `gcloud storage buckets describe gs://mmpools-auth-backups` |
+| Soft delete | `retentionDurationSeconds: '604800'` (7 days). Google's default; nobody chose it. A deleted object stays recoverable for a week, which matters for PII point 7 below | Same `describe` output |
+| Bucket IAM | Exactly three bindings: `projectOwner` on `roles/storage.legacyBucketOwner` and `roles/storage.legacyObjectOwner`, and `1042141442549-compute@developer.gserviceaccount.com` on `roles/storage.objectCreator`. The four default `projectEditor` / `projectViewer` bindings were **removed** (see Step 6a, step 7, for why) | Kevin's Cloud Shell: the policy printed by the last `remove-iam-policy-binding` |
+| The function is create-only | `roles/editor` holds no `storage.objects.*` permission and not `storage.buckets.setIamPolicy`. Checked with a control: the same command counts 11 `storage.buckets.*` permissions, so an empty result is a real "none" | Kevin's Cloud Shell: `gcloud iam roles describe roles/editor`, three greps |
+| Dry run | `[authBackup] DRY-RUN: 198 account(s) over 1 page(s), 86006 bytes, complete=true, uploaded=false, hashless=0, unsupportedMfa=0` at `2026-11-25T06:42:22Z` | `npx firebase functions:log --only authBackupJob`, read by the session and by Kevin |
+| First live export | `[authBackup] LIVE: 198 account(s) over 1 page(s), 86006 bytes, complete=true, uploaded=true, hashless=0, unsupportedMfa=0` at `2026-11-25T06:44:48Z` | Same log |
+| Objects | `auth/auth-backup-20261125-064448Z-afb308.json` and `auth/auth-backup-20261125-064448Z-afb308.manifest.json` | Kevin's Cloud Shell: `gcloud storage ls --recursive gs://mmpools-auth-backups/auth/` |
+| `system/config.authBackup` | `{ enabled: true, dryRun: false, bucket: "mmpools-auth-backups" }` — **inferred, not read.** Kevin set it in the Firestore console. The LIVE line above is the evidence: `liveRunBlockedReason` refuses a live run unless `enabled` is true and `bucket` is valid, and the job only goes live on an explicit `dryRun: false` | `functions/src/authBackup.ts` + the LIVE log line |
+
+**NOT verified, each one a way for this to be worth less than it looks:**
+
+- **Password hash parameters captured (Step 6d.0): UNVERIFIED.** Kevin was
+  given the step and told it comes first. Nothing in the session shows it was
+  done, and it cannot be checked from a repository. If it was not, every
+  restored account has a password that can never match.
+- **A restore has never been run** (Step 6d.7). `hashless=0` and the import-shape
+  test are evidence that the file is importable. They are not a restore.
+- **The weekly timer has not fired armed.** Both runs above were started by
+  hand with Cloud Scheduler's **Force run**. The first run by the schedule is
+  Sunday 2026-11-29, 03:15 ET.
+- **The account count was not compared with the Firebase console.** 198 is what
+  the job counted. Nobody recorded the Authentication tab's number beside it.
+- **Nobody opened the export.** That is deliberate (it is every user's email
+  and hash), and it means its content is known only through the manifest
+  counts in the log.
+
+Re-measure with:
+
+```
+npx firebase functions:log --only authBackupJob --lines 20 --project gridiron-gamble-uzuqo
+```
+
+and, in Cloud Shell, `gcloud storage ls --recursive gs://mmpools-auth-backups/auth/`.
+`node scripts/agent/run-loop.mjs audit-sweep --mode offline` also shows it: once
+the job has run armed, `AUTH_BACKUP` is no longer listed under "no row ever".
 
 Firestore backups do **not** contain Auth users. Losing Auth means every member
 loses access to their pools even after a byte-perfect Firestore restore, because
@@ -521,7 +572,13 @@ project produces, and the controls are:
    readable by anyone with project viewer and are NOT covered by this bucket's
    access controls.
 
-### Step 6a — Kevin: create the bucket and grant the function (does NOT exist yet)
+### Step 6a — Kevin: create the bucket and grant the function (DONE 2026-11-25)
+
+✅ **Done.** The bucket exists; the record is at the top of Step 6. The steps
+are kept because a second environment, or a rebuilt project, needs them again.
+Two of them were wrong or missing when they were first run, and are corrected
+below: the public-access check (now step 8) printed nothing, and the default
+bucket bindings (now step 7) were not mentioned at all.
 
 ⚠️ **These commands run in Google Cloud Shell (the browser terminal from Step 0),
 NOT in PowerShell on your machine.** Bucket names are written out literally — no
@@ -582,8 +639,10 @@ shell variables — so nothing breaks if you close the tab and come back.
    gcloud projects describe gridiron-gamble-uzuqo --format="value(projectNumber)"
    ```
 
-   **Expect:** a 12-digit number. The service account is
-   `<that number>-compute@developer.gserviceaccount.com`.
+   **Expect:** a number. The service account is
+   `<that number>-compute@developer.gserviceaccount.com`. For this project it
+   is `1042141442549-compute@developer.gserviceaccount.com` (read from the
+   `serviceAccountEmail` field of the function's deploy log, 2026-11-25).
 
 6. Grant it **create-only** on this bucket (substitute the number from step 5):
 
@@ -593,16 +652,108 @@ shell variables — so nothing breaks if you close the tab and come back.
 
    **Expect:** the updated IAM policy printed, containing `storage.objectCreator`.
 
-7. Confirm the bucket is not public:
+7. **Remove the four default bindings. Without this, the function is NOT
+   create-only, whatever step 6 granted.**
+
+   A new bucket comes with Google's "convenience" bindings: `projectEditor` and
+   `projectOwner` on `roles/storage.legacyBucketOwner` and
+   `roles/storage.legacyObjectOwner`, and `projectViewer` on the two legacy
+   reader roles. The function's own service account holds `roles/editor` on
+   this project (measured 2026-11-25:
+   `gcloud projects get-iam-policy gridiron-gamble-uzuqo` lists it, with
+   `1042141442549@cloudservices.gserviceaccount.com` and
+   `gridiron-gamble-uzuqo@appspot.gserviceaccount.com`). So through the
+   `projectEditor` binding it could read, overwrite and delete every export —
+   the three things PII point 4 says it must not be able to do. This step was
+   missing until 2026-11-25; the bucket was created with those bindings and
+   they were removed the same hour, before the first live export.
+
+   Four commands, one binding each:
 
    ```
-   gcloud storage buckets describe gs://mmpools-auth-backups --format="value(iamConfiguration.publicAccessPrevention,iamConfiguration.uniformBucketLevelAccess.enabled)"
+   gcloud storage buckets remove-iam-policy-binding gs://mmpools-auth-backups --member=projectEditor:gridiron-gamble-uzuqo --role=roles/storage.legacyObjectOwner
    ```
 
-   **Expect:** `enforced` and `True`. **If either is missing**, re-run step 2's
-   flags via `gcloud storage buckets update` before putting real data in it.
+   ```
+   gcloud storage buckets remove-iam-policy-binding gs://mmpools-auth-backups --member=projectEditor:gridiron-gamble-uzuqo --role=roles/storage.legacyBucketOwner
+   ```
 
-### Step 6b — Kevin: arm the job in two stages
+   ```
+   gcloud storage buckets remove-iam-policy-binding gs://mmpools-auth-backups --member=projectViewer:gridiron-gamble-uzuqo --role=roles/storage.legacyObjectReader
+   ```
+
+   ```
+   gcloud storage buckets remove-iam-policy-binding gs://mmpools-auth-backups --member=projectViewer:gridiron-gamble-uzuqo --role=roles/storage.legacyBucketReader
+   ```
+
+   **Expect**, after the fourth: a policy with exactly three bindings —
+   `projectOwner:gridiron-gamble-uzuqo` on `roles/storage.legacyBucketOwner`
+   and on `roles/storage.legacyObjectOwner`, and the compute service account on
+   `roles/storage.objectCreator`. No `projectEditor`, no `projectViewer`.
+   **If `projectOwner` is gone**, you have removed your own access; add it back
+   with the same command and `add-iam-policy-binding` before doing anything else.
+
+   Then prove that `roles/editor` gives no other way in. The first two must
+   print nothing; the third is the control and must print a number above 0
+   (it printed `11` on 2026-11-25). **An empty result with no control proves
+   nothing** — that is the lesson of step 8.
+
+   ```
+   gcloud iam roles describe roles/editor --format="value(includedPermissions)" | tr ';' '\n' | grep "storage.objects"
+   ```
+
+   ```
+   gcloud iam roles describe roles/editor --format="value(includedPermissions)" | tr ';' '\n' | grep "storage.buckets.setIamPolicy"
+   ```
+
+   ```
+   gcloud iam roles describe roles/editor --format="value(includedPermissions)" | tr ';' '\n' | grep -c "storage.buckets"
+   ```
+
+8. Confirm the bucket is not public:
+
+   ```
+   gcloud storage buckets describe gs://mmpools-auth-backups
+   ```
+
+   **Expect**, among the lines printed: `public_access_prevention: enforced`
+   and `uniform_bucket_level_access: true`. **If either is missing or says
+   anything else** (`inherited` is NOT `enforced`), re-run step 2's flags via
+   `gcloud storage buckets update` before putting real data in it.
+
+   ⚠️ **This step used a `--format="value(iamConfiguration.publicAccessPrevention,…)"`
+   one-liner until 2026-11-25, and it printed an EMPTY LINE on a correctly
+   configured bucket.** Those are the JSON API's field names; `gcloud storage`
+   prints `public_access_prevention` and `uniform_bucket_level_access`. A check
+   that prints nothing for the good case and nothing for the bad case is not a
+   check, and its "Expect" line was never true. Read the plain output.
+
+### Step 6b — Kevin: arm the job in two stages (DONE 2026-11-25)
+
+✅ **Done**, by a different route from the one written below, because the one
+written below cannot be followed: **nothing in the app calls `runAuthBackup`.**
+`grep -rn runAuthBackup src/` returns no caller (2026-11-25), so "call
+`runAuthBackup` with `{ "dryRun": true }`" has no button behind it. What was
+done instead uses the scheduled job, which reads the same gate:
+
+1. In the Firestore console, set `system/config.authBackup` to
+   `{ enabled: true, dryRun: true, bucket: "mmpools-auth-backups" }`. Note
+   `enabled: true`: the scheduled job does nothing at all while it is false,
+   dry run included. With `dryRun: true` it uploads nothing.
+2. In Cloud Scheduler
+   (`https://console.cloud.google.com/cloudscheduler?project=gridiron-gamble-uzuqo`),
+   on the row `firebase-schedule-authBackupJob-us-central1`, click **⋮** then
+   **Force run**.
+3. Read the result in the log:
+   `npx firebase functions:log --only authBackupJob --lines 30 --project gridiron-gamble-uzuqo`.
+   The line starts `[authBackup] DRY-RUN:`. The pass conditions are the ones in
+   Stage 1 below.
+4. Set `dryRun: false`, **Force run** again, and look for `[authBackup] LIVE:`
+   and the two objects, as in Stage 2 below.
+
+The two stages as first written follow. They are correct about WHAT to expect.
+They are wrong about HOW to trigger it until a caller for `runAuthBackup`
+exists.
 
 ⚠️ **Deploy first.** `authBackupJob` and `runAuthBackup` are new, so they do not
 exist in prod until a functions deploy ships them. Follow CLAUDE.md §3
@@ -657,8 +808,10 @@ produced nothing yet. After the first scheduled run, check
 
 ### Step 6c — Interim manual export (still worth running once)
 
-Until Step 6a/6b are done there is no automated Auth backup at all, and this
-takes one minute.
+Steps 6a and 6b were done on 2026-11-25, so an automated export now exists and
+this is no longer the only cover. It is still the one way to take an export
+with the CLI's own exporter, which is worth having once as a second opinion on
+the job's file. It takes one minute.
 
 ⚠️ **The export file contains every user's email and their password hashes.**
 Write it **outside the repository**, so it cannot be caught by a stray
@@ -969,7 +1122,7 @@ old documents over current ones and cannot be undone.
 | Same, noticed after a week | Scheduled backups (step 5), up to 14 weeks |
 | Database deleted, or project-level accident | Off-region export (step 4) |
 | Regional outage at the database's location | Off-region export (step 4) |
-| Auth users lost | `authBackupJob` weekly + `runAuthBackup` on demand (step 6) — **code shipped, NOT armed; bucket does not exist yet.** Until step 6a/6b are done, the only cover is the manual export in step 6c. |
+| Auth users lost | `authBackupJob` weekly (step 6) — **armed 2026-11-25; one live export in `gs://mmpools-auth-backups`.** Not yet proven: the weekly timer firing armed, and a restore (step 6d.7). `runAuthBackup` is deployed and has no caller in the app. |
 | Auth users lost, restore attempted without the hash parameters | **Nothing.** Every account comes back with a password that can never match. Step 6d.0 is the mitigation and it is a Kevin action, not code. |
 | User-uploaded files lost | **Nothing** — pending the step 3 inventory |
 
@@ -989,9 +1142,9 @@ not the same as having a backup.
 - Cloud Storage in use? _(step 3)_
 - Export bucket + region: _(step 4)_
 - Backup schedules created: _(step 5)_
-- Auth backup bucket created + IAM granted: _(step 6a)_
-- `system/config.authBackup` armed (`enabled`/`dryRun`/`bucket`): _(step 6b)_
-- Auth user count at first export: _(step 6b/6c)_
-- Password hash parameters captured, and where: _(step 6d.0 — record WHERE, never the values)_
+- Auth backup bucket created + IAM granted: **2026-11-25** — `gs://mmpools-auth-backups`, `US-EAST1`; three bindings, the four default ones removed _(step 6a; sources in the record at the top of Step 6)_
+- `system/config.authBackup` armed (`enabled`/`dryRun`/`bucket`): **2026-11-25** — `true` / `false` / `mmpools-auth-backups`, inferred from the LIVE log line, not read _(step 6b)_
+- Auth user count at first export: **198**, from the job's log at `2026-11-25T06:44:48Z`. Not compared with the Firebase console's count _(step 6b/6c)_
+- Password hash parameters captured, and where: **UNVERIFIED** — Kevin to record WHERE here _(step 6d.0 — record WHERE, never the values)_
 - Firestore restore drill outcome: _(step 7)_
-- Auth restore drill outcome: _(step 6d.5 — **never run as of this writing**)_
+- Auth restore drill outcome: _(step 6d.7 — **never run as of 2026-11-25**, the day the first export was taken. This line said "step 6d.5" until then; 6d.5 is the local-copy deletion, the drill is 6d.7)_
