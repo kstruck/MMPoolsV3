@@ -919,6 +919,15 @@ would have had an operator write off accounts that are recoverable; qodo on
   Firebase behaviour and has NOT been tested here.** The restore drill (Step
   6d.7) is where it gets proven or disproven.
 
+  **A reset needs more than the account.** It needs the Email/Password sign-in
+  method enabled, and the e-mail action link to work: the action URL, the
+  authorized domains, the e-mail template and (if used) custom SMTP. None of
+  that is in the export (Step 6d.6). In the SAME project those settings
+  survive a loss of users and nothing has to be done. In a REBUILT or
+  different project they are gone, and every reset fails until they are put
+  back by hand. So in that case: restore the configuration first, then tell
+  members to reset. The same holds for the Google bullet above.
+
 So missing parameters turn a restore from "everyone signs in as before" into
 "every password member must reset". That is a support wave and a bad day, not a
 total loss — and it is still the difference this step exists to prevent.
