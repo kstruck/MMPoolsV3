@@ -211,8 +211,7 @@ Sections in order: title with PR/merge-commit/project id → `## ✅ DONE` (chec
 
 | Convention | Usage |
 |---|---|
-| `✅` | Done items in plan status blocks and checklist DONE sections, always with commit hash where applicable |
-| `⛔` / `⚠️` / `▶️` | Parked (TEST-SUITE-BACKLOG), warning callout, remaining-steps header (checklist) |
+| status-marker emoji | The measured roster in "Status markers", immediately after this table |
 | `- [x]` / `- [ ]` | Checklist steps and smoke tests |
 | `T1...T14` | Audit tickets (AUDIT-REPORT-PRESEASON) — number sequentially, never reuse |
 | `0.1, 1.2, 5.6` | Plan items as PHASE.ITEM |
@@ -223,12 +222,131 @@ Sections in order: title with PR/merge-commit/project id → `## ✅ DONE` (chec
 | `file.ts:123` backticked cites | Every factual code claim carries one |
 | `_italic underscore block_` | Plan/audit preamble (lock provenance, methodology) |
 
+### Status markers — DESCRIPTIVE OF MEASURED PRACTICE, not a style preference
+
+This list is **what the repo actually uses**, measured, not a set somebody
+chose. Re-measure before citing it (command below); the counts are a
+point-in-time snapshot and drift like every other count in these docs.
+
+| Marker | Meaning as used | Live uses |
+|---|---|---|
+| `⚠️` | Warning callout — a caveat or trap the reader must not miss | 231 |
+| `✅` | Done / shipped — plan status blocks and checklist DONE sections, with commit hash where applicable | 144 |
+| `🛑` | **Hard stop: do not skip, do not do this.** The strongest marker, and `CLAUDE.md`'s primary "stop, read this" | 72 |
+| `⛔` | Forbidden / deliberately absent — "DO NOT SET THIS IN PROD", "must stay absent", "do not reintroduce" | 23 |
+| `❌` | Not done / cancelled / disabled — the negative state in status tables | 23 |
+| `🟢` | Live / active / restored (`CLAUDE.md` §2b "🟢 RESTORED", HANDOFF state headings) | 11 |
+| `🟡` | Partial or in-flight — shipped but not deployed, open PR, deferred findings (HANDOFF state headings) | 9 |
+| `🔴` | Blocker / critical open item | 8 |
+| `⚪` | Parked / inactive — built but deliberately not running (`PLAN-LOOPS.md`'s State column) | 4 |
+| `📌` | Pinned carried note — typically an `UNVERIFIED` claim carried forward, not re-measured | 3 |
+| `▶️` | Remaining-steps header in a deploy checklist (`## ▶️ REMAINING`) | 1 |
+
+`▶️` is rare but is **established, documented practice** — §2f above specifies
+it as the deploy-checklist REMAINING header, and the checklist it models,
+`docs/archive/PHASE0-DEPLOY-CHECKLIST.md`, uses it. Its one live count is a
+review-log line that merely *quotes* the old roster, so do not read that number
+as current usage. Frequency decides what MUST be listed, never what may be.
+
+`🟢` / `🟡` / `🔴` / `⚪` are a set: live / in-flight / blocked / parked.
+
+⛔ **Other tools' marks are NOT in this roster and are excluded from the
+census: `✓` `✔` `✗` `✖`.** `✔ Deploy complete!` is the Firebase CLI's stdout,
+and `✓ Resolved` / `✗ Dismissed` are qodo's marks on a PR — this repo writes
+*about* them, not *with* them. They are excluded by name rather than rostered,
+because on 2026-11-24 `✓` reached three uses (two of them prose quoting qodo,
+one an ad-hoc tick in a table) and the guard duly demanded it be listed. Listing
+it would have recorded another tool's vocabulary as this repo's house style. The
+repo's own done/not-done markers are `✅` and `❌`, which are different
+codepoints and count normally.
+
+`README.md` additionally
+uses per-section emoji (🚀 🏈 🏀 …) — that is existing practice and is **not**
+part of this roster, which is why the re-measure command below excludes it.
+
+**The rule this list serves is unchanged: no decorative emoji beyond the
+status-marker set in new docs.** Only the enumeration was wrong.
+
+#### Re-measure
+
+```bash
+# Uses of each status marker in LIVE tracked markdown. Reproduces the table above.
+# Excludes docs/archive/ (frozen), README.md (section emoji, carved out above),
+# and THIS skill file — the roster must not be evidence for itself.
+for m in ⚠ ✅ 🛑 ⛔ ❌ 🟢 🟡 🔴 ⚪ 📌 ▶; do
+  n=$(git ls-files -z '*.md' \
+      | grep -zZv -e '^docs/archive/' -e '^README\.md$' -e 'mmp-docs-and-writing' \
+      | xargs -0 grep -oh -- "$m" 2>/dev/null | wc -l)
+  printf '%s\t%s\n' "$m" "$n"
+done
+```
+
+That one-liner does **not** strip fenced blocks or backticked spans, so `⚠️` and
+`✅` read ~7 and ~2 high against the stricter census the test runs (which does
+strip them, because a `✔ Deploy complete!` quoted from the Firebase CLI is not
+this repo marking a status). Every other marker agrees exactly. Use the
+one-liner for a human check and the test for the gate.
+
+Count the **base codepoint** (`⚠`, `▶`), not the emoji-presentation form
+(`⚠️` = `U+26A0 U+FE0F`): some uses omit the `U+FE0F` variation selector, and
+grepping the two-codepoint form silently undercounts them. Across **all**
+tracked markdown (archive included) the base codepoint `⚠` measured 796 while
+`⚠️` measured 790 — six uses carry no variation selector.
+
+`tests/docs-state-invariants.test.ts` guards this table mechanically — see
+"status-marker roster" there. It reads this table directly (no second copy to
+drift) and checks both directions, each at the scope that answers its question:
+
+- **Forward**, over **live** docs: a marker at **3+ uses** must be listed here.
+  Below that nothing fails, so a one-off does not break the build on the author
+  who wrote it — the roster is what needs updating, not their doc.
+- **Reverse**, over **all** tracked markdown, `docs/archive/` included: a
+  marker listed here must be used *somewhere*. `▶️` passes on the archived
+  `PHASE0-DEPLOY-CHECKLIST.md` that §2f models — documented practice whose
+  model doc is finished is still practice. A marker used nowhere at all is not,
+  which keeps this table from accumulating entries on somebody's hunch.
+
+Both directions exclude this file: the roster must not be evidence for itself.
+So the drift that produced the old roster is now detectable rather than
+arguable.
+
+🟢 **The guard has already earned its keep — on its own PR.** When this table
+was first written, `⚪` was proposed for it and **rejected on measurement**: it
+had zero uses in tracked markdown and zero in history, so listing it would have
+been the same defect in the opposite direction. Then `PLAN-LOOPS.md` merged
+([#699](https://github.com/kstruck/MMPoolsV3/pull/699)) with four `⚪ Parked`
+cells in its ledger's State column, and CI went red on this very invariant
+before the PR could merge — `⚪ (U+26AA) — 4 uses ... NOT in the roster`. Both
+calls were right at the time they were made, and the table is correct now
+because a test noticed the moment practice changed. That is the whole point:
+the roster was wrong for months because nothing re-measured it, and the lag is
+now minutes.
+
+**History.** The roster read `✅ ⚠️ ⛔ ▶️` until 2026-11-18 and was wrong in two
+directions: it omitted `🛑` (then the second-most-used marker in the repo) along
+with `❌`, `🟢`, `🟡`, `🔴` and `📌`, and it glossed `⛔` as "Parked
+(TEST-SUITE-BACKLOG)" when no `⛔` in the repo has ever meant parked. It cost
+four reviews — qodo raised it and was rejected on
+[#691](https://github.com/kstruck/MMPoolsV3/pull/691) (`🟡` in a HANDOFF
+heading), [#699](https://github.com/kstruck/MMPoolsV3/pull/699) (a charter
+ledger) and [#782](https://github.com/kstruck/MMPoolsV3/pull/782) (`🟢` in a
+HANDOFF heading), and on `PLAN-SQUARES-SERVER-FIELDS-REVIEW-LOG.md` finding 10
+it was **Accepted**, which deleted a legitimate `🟢` from `README.md` to satisfy
+a roster that did not describe the repo. A stale enumeration does not merely
+generate noise; it wins arguments it should lose.
+
+⚠️ **Updating this table does not update qodo.** Its findings cite a
+qodo-side rule ("Compliance rule 2155267 permits only four specified
+status-marker emojis"), configured outside this repo. Until that rule is
+re-synced it may keep raising the nit; the answer is to point at this measured
+table and reject it, which now takes one line instead of a re-litigation.
+
 ### Voice
 
 - Imperative, dense, evidence-first. Findings state the defect in one sentence, then evidence, then consequence, then fix.
 - Exact non-negotiable phrasings recur verbatim across docs — reuse them, don't paraphrase: "one capability lives in exactly one place"; "Operations is the single home for destructive actions"; "do not delete a legacy button until its verified Operations equivalent exists"; "No 'done' without this step's evidence"; "Data unavailable → the card shows 'unavailable', never a plausible-looking substitute".
 - Premise corrections are recorded, not hidden: "My original exploration report was wrong; Codex caught it" (wizard review log round 1). Write your own corrections the same way.
-- Repo markdown docs DO use a small emoji set as status markers (✅⚠️⛔▶️) and README uses section emoji — that is existing practice. Do not add decorative emoji beyond the status-marker set in new docs.
+- Repo markdown docs DO use a small emoji set as status markers (`⚠️ ✅ 🛑 ⛔ ❌ 🟡 🟢 🔴 ▶️ 📌` — the measured roster in §3 "Status markers" carries each one's meaning and the re-measure command) and README uses section emoji — that is existing practice. Do not add decorative emoji beyond the status-marker set in new docs.
 
 ### UI copy rules that constrain any doc/text destined for the app UI
 
@@ -314,6 +432,7 @@ All facts verified 2026-07-06 against `D:\march-melee-pools` plus owner intervie
 | Seed-parsing stale section | `Select-String -Path docs\bracket-pool-architecture.md -Pattern "E1-Duke"` |
 | UI copy rules unchanged | `Select-String -Path docs\UI-REVAMP-GUIDE.md -Pattern "No emoji|Visual refactor only"` |
 | ADR count / next number | `Get-ChildItem docs\adr` |
+| **Status-marker roster matches practice** | the `for m in ⚠ ✅ 🛑 ⛔ ❌ 🟢 🟡 🔴 ⚪ 📌 ▶` loop in §3 "Status markers → Re-measure"; `npx vitest run tests/docs-state-invariants.test.ts -t "status-marker roster"` gates it |
 | Plan status blocks current | `Select-String -Path PLAN-SUPERADMIN-CONTROL.md -Pattern "^- ✅" | Measure-Object` |
 | Current test counts (never copy old ones) | `npm test` then `npm --prefix functions test` |
 | POOL_CREATED writer (merged on main, `lib/poolCreation.ts:110-112`) | `Select-String -Path functions\src\lib\poolCreation.ts -Pattern "POOL_CREATED"` |
