@@ -11,9 +11,16 @@
 // run here, in code, on this machine, and the tools return only:
 //
 //   - counts;
-//   - the names of audit actions, and only names shaped like `LIKE_THIS`;
+//   - the names of audit actions, and ONLY names in this file's own catalogue
+//     (`KNOWN_ACTIONS`). An action name is stored text: `logAdminAction` records
+//     whatever name the admin client reports, so a name outside the catalogue
+//     is counted and never shown, however name-shaped it is (qodo on #809);
 //   - the Firestore document ids of `admin_audit` rows (random auto-ids);
-//   - the names of FIELDS that are wrong in a row, never their values.
+//   - the names of FIELDS that are wrong in a row, never their values;
+//   - for a failed read, a fixed sentence and Google's error CODE, never the
+//     error's message. A Firestore message can quote a document path, and a
+//     path can hold a target id (qodo on #809). The full message goes to the
+//     operator's own stderr and nowhere else.
 //
 // No e-mail, no uid, no target id and no metadata value is ever in a tool
 // result, a log row or stdout. The test suite feeds the session rows full of
@@ -158,9 +165,17 @@ export function auditRowErrors(row) {
   return bad;
 }
 
-/** The action name when it is safe to show, else a fixed placeholder. */
-export function safeActionName(action) {
-  return typeof action === 'string' && ACTION_NAME.test(action) ? action : '(malformed name)';
+/** A pool id that can be turned into a document reference without Firestore throwing, and holds no path. */
+const POOL_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * What a failed read may say outside this machine: which step, and Google's
+ * error code when there is one. Never `error.message`.
+ */
+export function safeReadError(step, error) {
+  const code = error?.code;
+  const shown = typeof code === 'number' || (typeof code === 'string' && /^[A-Za-z0-9_./-]{1,40}$/.test(code)) ? ` (code ${code})` : '';
+  return `${step} failed${shown}; the full error is on the operator's stderr`;
 }
 
 /** A Firestore auto-id or other id-shaped string, else a placeholder. Ids are shown; anything else is not. */
@@ -182,7 +197,12 @@ const sample = (ids) => ids.slice(0, AUDIT.SAMPLE).map(safeDocId);
  *
  * The checks hold their rows in this closure. Nothing here returns a row.
  */
-export function createAuditSession({ reader, now = new Date() }) {
+export function createAuditSession({ reader, now = new Date(), log = () => {} }) {
+  /** Record a failure: the detail stays local (`log`), the safe sentence is what callers may show. */
+  const failed = (step, error) => {
+    log(`${step} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+    return safeReadError(step, error);
+  };
   const sinceIso = new Date(now.getTime() - AUDIT.WINDOW_DAYS * 86_400_000).toISOString();
   const ledger = {
     /** null until the window is read; then { ok, rows, total, error, overCap }. */
@@ -199,25 +219,31 @@ export function createAuditSession({ reader, now = new Date() }) {
     rows = null;
     try {
       const total = await reader.countWindow(sinceIso);
-      if (!Number.isInteger(total) || total < 0) throw new Error('the row count is not a number');
+      if (!Number.isInteger(total) || total < 0) return shortRead('the row count is not a number');
       if (total > AUDIT.MAX_ROWS) {
         ledger.window = { ok: false, total, overCap: true, error: `the window holds ${total} rows, over the ${AUDIT.MAX_ROWS} limit; none were read` };
         return { ok: false, total, error: ledger.window.error };
       }
       const read = await reader.readWindow(sinceIso, AUDIT.MAX_ROWS + 1);
-      if (!Array.isArray(read)) throw new Error('the reader did not return a list');
+      if (!Array.isArray(read)) return shortRead('the reader did not return a list');
       // More rows than were counted a moment ago is normal (the trail grows).
       // FEWER means the read was cut short, and a short read is not a sweep.
-      if (read.length < total) throw new Error(`counted ${total} rows but read ${read.length}`);
-      if (read.length > AUDIT.MAX_ROWS) throw new Error(`read more than the ${AUDIT.MAX_ROWS} limit`);
+      if (read.length < total) return shortRead(`counted ${total} rows but read ${read.length}`);
+      if (read.length > AUDIT.MAX_ROWS) return shortRead(`read more than the ${AUDIT.MAX_ROWS} limit`);
       rows = read;
       ledger.window = { ok: true, total: read.length };
       ledger.shape = ledger.coverage = ledger.targets = null;
       return { ok: true, collection: AUDIT.COLLECTION, windowDays: AUDIT.WINDOW_DAYS, since: sinceIso, rows: read.length };
     } catch (error) {
-      ledger.window = { ok: false, error: String(error?.message ?? error).slice(0, 300) };
+      ledger.window = { ok: false, error: failed('reading the audit window', error) };
       return { ok: false, error: ledger.window.error };
     }
+  }
+
+  /** A read that came back wrong. The text is this file's own, so it is safe to show. */
+  function shortRead(what) {
+    ledger.window = { ok: false, error: what };
+    return { ok: false, error: what };
   }
 
   function checkRowShape() {
@@ -250,7 +276,10 @@ export function createAuditSession({ reader, now = new Date() }) {
         counts.set(row.action, (counts.get(row.action) ?? 0) + 1);
       }
       const seen = [...counts.keys()].sort();
+      // Names outside the catalogue are COUNTED, never listed: the name is stored text.
       const unknown = seen.filter((a) => !KNOWN_ACTIONS.includes(a));
+      const unknownRows = unknown.reduce((n, a) => n + counts.get(a), 0);
+      const shownNames = seen.filter((a) => KNOWN_ACTIONS.includes(a));
       const silent = [];
       const neverRan = [];
       for (const action of RECURRING_ACTIONS) {
@@ -258,20 +287,21 @@ export function createAuditSession({ reader, now = new Date() }) {
         // Asked of the whole collection, not the window: has this job EVER logged?
         (await reader.actionEverWritten(action)) ? silent.push(action) : neverRan.push(action);
       }
-      ledger.coverage = { seen: seen.length, known: KNOWN_ACTIONS.length, silent, neverRan, unknown, malformedNames };
+      ledger.coverage = { seen: seen.length, known: KNOWN_ACTIONS.length, silent, neverRan, unknownNames: unknown.length, unknownRows, malformedNames };
       return {
         ok: true,
         actionTypesSeen: seen.length,
         knownActionTypes: KNOWN_ACTIONS.length,
-        counts: Object.fromEntries(seen.map((a) => [a, counts.get(a)])),
+        counts: Object.fromEntries(shownNames.map((a) => [a, counts.get(a)])),
         recurringThatWentSilent: silent,
         recurringThatNeverRan: neverRan,
-        namesNotInTheCatalogue: unknown,
+        actionNamesNotInTheCatalogue: unknown.length,
+        rowsUnderThoseNames: unknownRows,
         rowsWithAMalformedActionName: malformedNames,
         note: 'A recurring job skips its audit row while its kill switch is off. "Went silent" means: it has logged before and has not in this window. Check the kill switch before treating it as broken logging.',
       };
     } catch (error) {
-      ledger.coverage = { error: String(error?.message ?? error).slice(0, 300) };
+      ledger.coverage = { error: failed('the action coverage check', error) };
       return { ok: false, error: ledger.coverage.error };
     }
   }
@@ -284,8 +314,16 @@ export function createAuditSession({ reader, now = new Date() }) {
       // of USER_DELETED, so checking users would report the audit trail of
       // every deleted account as a problem.
       const rowsByPool = new Map();
+      let unusableTargets = 0;
       for (const row of rows) {
         if (row?.targetType !== 'pool' || typeof row.targetId !== 'string' || row.targetId === '') continue;
+        // A target id is stored text too. One with a slash, or any character a
+        // document id cannot hold, would make Firestore throw an error that
+        // QUOTES it. It is counted here and never handed to the reader.
+        if (!POOL_ID.test(row.targetId)) {
+          unusableTargets++;
+          continue;
+        }
         if (!rowsByPool.has(row.targetId)) rowsByPool.set(row.targetId, []);
         rowsByPool.get(row.targetId).push(row.id);
       }
@@ -300,10 +338,11 @@ export function createAuditSession({ reader, now = new Date() }) {
         missingPools: checked.filter((id) => !existing.has(id)).length,
         orphanRows: orphanRowIds.length,
         sampleIds: sample(orphanRowIds),
+        unusableTargets,
       };
       return { ok: true, ...ledger.targets, note: 'A row that names a pool which no longer exists is worth a look, and is not by itself an error: test pools are deleted.' };
     } catch (error) {
-      ledger.targets = { error: String(error?.message ?? error).slice(0, 300) };
+      ledger.targets = { error: failed('the targets check', error) };
       return { ok: false, error: ledger.targets.error };
     }
   }
@@ -331,6 +370,25 @@ export async function runAuditChecks(session) {
   await session.handlers.check_targets();
 }
 
+/** The project a real sweep reads. Anything else is labelled in the row and never posted. */
+export const PRODUCTION_PROJECT = 'gridiron-gamble-uzuqo';
+
+/** The label a row carries for its mode, or null for a live run. One spelling, used by every row writer. */
+export function modeLabel(mode) {
+  return mode === 'dry-run' ? 'DRY RUN' : mode === 'offline' ? 'OFFLINE (no model)' : null;
+}
+
+/** True only for a credentialed read of the production project. */
+export function isProductionSource(source) {
+  return source?.kind === 'production' && source.projectId === PRODUCTION_PROJECT;
+}
+
+/** A source in words this file controls: the kind, and a project id only when it is id-shaped. */
+export function describeSource(source) {
+  const project = typeof source?.projectId === 'string' && /^[a-z0-9-]{1,40}$/.test(source.projectId) ? source.projectId : '(unnamed)';
+  return source?.kind === 'emulator' ? `the EMULATOR (project ${project})` : `project ${project}`;
+}
+
 export const AUDIT_TOOL_NAMES = Object.freeze(['read_audit_window', 'check_row_shape', 'check_action_coverage', 'check_targets']);
 export const AUDIT_ALLOWED_TOOLS = Object.freeze(AUDIT_TOOL_NAMES.map((n) => `mcp__${AUDIT.TOOL_SERVER}__${n}`));
 
@@ -353,7 +411,7 @@ export const AUDIT_ALLOWED_TOOLS = Object.freeze(AUDIT_TOOL_NAMES.map((n) => `mc
  * Notes (a pool that no longer exists, an action name outside the catalogue, a
  * recurring job that has never run) go in the row and do not change the verdict.
  */
-export function summarizeAuditRun({ ledger, failure = null, blocked = null, mode = 'live', now = new Date(), model = null, costUsd = null, turns = null, commit = '-' }) {
+export function summarizeAuditRun({ ledger, failure = null, blocked = null, mode = 'live', now = new Date(), model = null, costUsd = null, turns = null, commit = '-', source = null }) {
   const lessons = [];
   const notes = [];
   let verdict = 'CLEAN';
@@ -369,7 +427,7 @@ export function summarizeAuditRun({ ledger, failure = null, blocked = null, mode
   if (read) {
     for (const [name, check] of [['row shape', shape], ['action coverage', coverage], ['targets', targets]]) {
       if (!check) worsen('INCONCLUSIVE', `the ${name} check was never run`);
-      else if (check.error) worsen('INCONCLUSIVE', `the ${name} check failed: ${check.error}`);
+      else if (check.error) worsen('INCONCLUSIVE', check.error);
     }
     if (targets?.notChecked) worsen('INCONCLUSIVE', `${targets.notChecked} pool target(s) were over the ${AUDIT.MAX_TARGET_LOOKUPS} lookup limit and were not checked`);
     if (coverage?.silent?.length) worsen('FINDING', `went silent (logged before, nothing in ${AUDIT.WINDOW_DAYS} days; check the kill switch first): ${coverage.silent.join(', ')}`);
@@ -378,7 +436,8 @@ export function summarizeAuditRun({ ledger, failure = null, blocked = null, mode
       worsen('FINDING', `${shape.malformed} malformed row(s) [${fields}]; ids: ${shape.sampleIds.join(', ')}${shape.malformed > shape.sampleIds.length ? ', ...' : ''}`);
     }
     if (targets?.orphanRows) notes.push(`${targets.orphanRows} row(s) name ${targets.missingPools} pool(s) that no longer exist`);
-    if (coverage?.unknown?.length) notes.push(`action name(s) outside the catalogue: ${coverage.unknown.join(', ')}`);
+    if (coverage?.unknownNames) notes.push(`${coverage.unknownNames} action name(s) outside the catalogue, on ${coverage.unknownRows} row(s) (names not shown)`);
+    if (targets?.unusableTargets) notes.push(`${targets.unusableTargets} row(s) carry a pool target id that is not id-shaped; not looked up`);
     if (coverage?.neverRan?.length) notes.push(`recurring job(s) with no row ever: ${coverage.neverRan.join(', ')}`);
   } else if (!blocked) {
     if (window?.overCap) worsen('INCONCLUSIVE', window.error);
@@ -390,7 +449,10 @@ export function summarizeAuditRun({ ledger, failure = null, blocked = null, mode
   const metric = read ? `${window.total} rows: ${shape?.malformed ?? '?'} malformed, ${coverage?.silent?.length ?? '?'} silent` : window?.overCap ? `${window.total} rows, not read` : '-';
   const spend = [model, Number.isFinite(costUsd) && `$${costUsd.toFixed(4)}`, Number.isFinite(turns) && `${turns} turns`].filter(Boolean).join(' ');
   const idea = [
-    mode === 'dry-run' ? 'DRY RUN' : mode === 'offline' ? 'OFFLINE (no model)' : null,
+    modeLabel(mode),
+    // WHERE the rows came from, in the row itself. A sweep of the emulator, or
+    // of another project, must never read as a sweep of production (qodo on #809).
+    source && !isProductionSource(source) ? `NOT PRODUCTION: ${describeSource(source)}` : null,
     `self-consistency of ${AUDIT.COLLECTION} over ${AUDIT.WINDOW_DAYS} days; integrity is INCONCLUSIVE (no independent record of admin actions exists)`,
     read && coverage && !coverage.error ? `${coverage.seen} action types seen` : null,
     ...notes,

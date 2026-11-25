@@ -43,9 +43,15 @@ What the runner does with the steps below:
 | 6 | A live run posts the row itself (charter rule 6). A dry run and an offline run print it |
 
 **Nothing personal is shown to the model, printed or posted.** Rows hold
-e-mails, user ids and free-text metadata; the model sees counts, action names
-and document ids. To look at a flagged row, open it by its id in the Firebase
-console.
+e-mails, user ids and free-text metadata; the model sees counts, document ids,
+and action names that are in the runner's own catalogue. A name outside the
+catalogue is counted and not shown: `logAdminAction` stores whatever name the
+client reports. A failed read shows Google's error code, and its full message
+goes to your own terminal only. To look at a flagged row, open it by its id in
+the Firebase console.
+
+A live run that ends `BLOCKED`, or that read the emulator or another project,
+prints its row and does not post it.
 
 Three limits of the reader, so a `CLEAN` is not read as more than it is:
 

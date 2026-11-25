@@ -17,8 +17,15 @@
 > superseded for loop 2 only; loops 3–5 are still parked. Loop 1 is ACTIVE and
 > has logged no run.
 >
-> **2026-11-25:** loop 2 is running (secret set, switch on, one clean manual dry
-> run). Loop 1 can now run through the runner, by hand, on the Windows box:
+> **2026-11-25:** loop 2 is switched on. Each part of that was read from
+> GitHub on that day, not assumed: the secret `MMP_AGENT_API_KEY` exists (Kevin's
+> `gh secret list` output, pasted in chat); the variable `MMP_LOOP_PR_PRUNER`
+> is `on` (`gh variable list`, set 05:05 UTC); one manual dry run finished
+> `success` with a `CLEAN` row (run `45550884517`, row on #806). **No scheduled
+> run had happened when this was written**, so "it runs every night" is still
+> unproven. Re-measure with
+> `gh run list --workflow loop-pr-pruner.yml --repo kstruck/MMPoolsV3 --event schedule --limit 3`.
+> Loop 1 can now run through the runner, by hand, on the Windows box:
 > `node scripts/agent/run-loop.mjs audit-sweep --mode offline` reads the last 30
 > days of `admin_audit` read-only and needs no API key. **It has not been run
 > against production**: the session that built it had no credential.

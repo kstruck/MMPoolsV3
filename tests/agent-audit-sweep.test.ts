@@ -9,16 +9,20 @@ import {
   KNOWN_ACTIONS,
   RECURRING_ACTIONS,
   auditRowErrors,
+  PRODUCTION_PROJECT,
   buildAuditPrompt,
   createAuditSession,
+  describeSource,
+  isProductionSource,
+  modeLabel,
   runAuditChecks,
-  safeActionName,
   safeDocId,
+  safeReadError,
   summarizeAuditRun,
   // @ts-expect-error — plain .mjs script, no type declarations
 } from '../scripts/agent/audit-lib.mjs';
 // @ts-expect-error — plain .mjs script, no type declarations
-import { LOOP_PROFILES, loopRowErrors, resolveLoop } from '../scripts/agent/loop-lib.mjs';
+import { LOOP_PROFILES, fallbackRow, loopRowErrors, resolveLoop } from '../scripts/agent/loop-lib.mjs';
 
 /**
  * LOOP 1, THE AUDIT SWEEP, THROUGH THE RUNNER — what must stay true.
@@ -61,8 +65,9 @@ const recurring = () => RECURRING_ACTIONS.map((action: string) => row({ action, 
 type FakeOpts = { ever?: string[]; pools?: string[]; countOverride?: number; fail?: 'count' | 'read' | 'ever' | 'pools'; readShort?: boolean };
 function fakeReader(rows: Row[], opts: FakeOpts = {}) {
   const calls: string[] = [];
+  /** An error shaped like Google's: a numeric code, and a message that quotes personal data. */
   const boom = (what: string) => {
-    throw new Error(`${what} failed: PERMISSION_DENIED for person@example.com`);
+    throw Object.assign(new Error(`${what} failed: PERMISSION_DENIED for person@example.com on pools/pool-PRIVATE-9`), { code: 7 });
   };
   return {
     calls,
@@ -93,9 +98,10 @@ function fakeReader(rows: Row[], opts: FakeOpts = {}) {
 
 async function sweep(rows: Row[], opts: FakeOpts = {}) {
   const fake = fakeReader(rows, opts);
-  const session = createAuditSession({ reader: fake.reader, now: NOW });
+  const local: string[] = [];
+  const session = createAuditSession({ reader: fake.reader, now: NOW, log: (line: string) => local.push(line) });
   await runAuditChecks(session);
-  return { ...fake, session, ...summarizeAuditRun({ ledger: session.ledger, now: NOW, commit: 'abc12345' }) };
+  return { ...fake, local, session, ...summarizeAuditRun({ ledger: session.ledger, now: NOW, commit: 'abc12345' }) };
 }
 
 describe('auditRowErrors: the shape adminAuditDoc writes', () => {
@@ -162,24 +168,78 @@ describe('nothing personal leaves the machine', () => {
     expect(logRow).toMatch(/1 row\(s\) name 1 pool\(s\) that no longer exist/);
   });
 
-  it('a reader error that quotes personal data is cut to its message, and the checks do not echo rows', async () => {
-    // The fake's error text holds an e-mail. Error text is the one place a
-    // value could ride out, so this pins what the row does with it.
-    const { row: logRow, verdict } = await sweep([row()], { fail: 'count' });
+  it('a window that cannot be read is an ERROR, and the reason is a fixed sentence', async () => {
+    const { row: logRow, verdict, local } = await sweep([row()], { fail: 'count' });
     expect(verdict).toBe('ERROR');
-    expect(logRow).toContain('count failed');
-    // Known and accepted: the error MESSAGE is shown as the SDK gave it. It
-    // comes from Google, not from a document, so it names the caller's own
-    // service account at most. This test documents that, it does not hide it.
-    expect(logRow).toContain('PERMISSION_DENIED');
+    expect(logRow).toContain("the window could not be read: reading the audit window failed (code 7); the full error is on the operator's stderr");
+    expect(local.join('\n')).toContain('PERMISSION_DENIED');
   });
 
-  it('ids and names that are not id- or name-shaped are replaced, not printed', () => {
+  it('ids that are not id-shaped are replaced, not printed', () => {
     expect(safeDocId('AbC123_-x')).toBe('AbC123_-x');
     expect(safeDocId('has spaces and <script>')).toBe('(unprintable id)');
     expect(safeDocId(undefined)).toBe('(unprintable id)');
-    expect(safeActionName('ROLE_CHANGED')).toBe('ROLE_CHANGED');
-    expect(safeActionName('Please e-mail me')).toBe('(malformed name)');
+  });
+
+  it('an action name outside the catalogue is counted and NEVER shown, however name-shaped it is', async () => {
+    // `logAdminAction` stores the name the client reports. This one is
+    // perfectly name-shaped and is a person's name and a number.
+    const rows = [...recurring(), row({ action: 'JANE_DOE_555_0100' }), row({ action: 'JANE_DOE_555_0100' }), row({ action: 'OTHER_STORED_TEXT' })];
+    const fake = fakeReader(rows);
+    const session = createAuditSession({ reader: fake.reader, now: NOW });
+    await session.handlers.read_audit_window();
+    const shown = JSON.stringify(await session.handlers.check_action_coverage());
+    const { row: logRow, verdict } = summarizeAuditRun({ ledger: session.ledger, now: NOW });
+    for (const text of [shown, logRow]) {
+      expect(text).not.toContain('JANE_DOE');
+      expect(text).not.toContain('OTHER_STORED_TEXT');
+    }
+    expect(JSON.parse(shown)).toMatchObject({ actionNamesNotInTheCatalogue: 2, rowsUnderThoseNames: 3 });
+    expect(logRow).toContain('2 action name(s) outside the catalogue, on 3 row(s) (names not shown)');
+    // Catalogue names ARE shown: they are this repo's own strings.
+    expect(shown).toContain('AUTO_CLOSE_SWEEP');
+    expect(verdict).toBe('INCONCLUSIVE'); // only because two checks were not run here
+  });
+
+  it('a pool target id that is not id-shaped is never handed to Firestore, and never shown', async () => {
+    // A slash makes Firestore throw an error that QUOTES the path.
+    const rows = [...recurring(), row({ targetType: 'pool', targetId: 'pools/pool-PRIVATE-9/secret' }), row({ targetType: 'pool', targetId: 'person@example.com' }), row({ targetType: 'pool', targetId: 'ok-id_1' })];
+    const asked: string[][] = [];
+    const fake = fakeReader(rows, { pools: ['ok-id_1'] });
+    const inner = fake.reader.existingPoolIds;
+    fake.reader.existingPoolIds = async (ids: string[]) => {
+      asked.push(ids);
+      return inner(ids);
+    };
+    const session = createAuditSession({ reader: fake.reader, now: NOW });
+    await runAuditChecks(session);
+    expect(asked).toEqual([['ok-id_1']]);
+    const { row: logRow, verdict } = summarizeAuditRun({ ledger: session.ledger, now: NOW });
+    expect(verdict).toBe('CLEAN');
+    expect(logRow).toContain('2 row(s) carry a pool target id that is not id-shaped; not looked up');
+    expect(logRow).not.toMatch(/PRIVATE|person@/);
+  });
+
+  it.each(['count', 'read', 'ever', 'pools'] as const)('a failed read (%s): the row and the tool get the error CODE, the operator gets the message', async (fail) => {
+    const rows = [row({ targetType: 'pool', targetId: 'p1' })]; // no recurring rows, so `ever` is asked
+    const fake = fakeReader(rows, { fail });
+    const local: string[] = [];
+    const session = createAuditSession({ reader: fake.reader, now: NOW, log: (line: string) => local.push(line) });
+    const shown = [await session.handlers.read_audit_window(), session.handlers.check_row_shape(), await session.handlers.check_action_coverage(), await session.handlers.check_targets()];
+    const { row: logRow } = summarizeAuditRun({ ledger: session.ledger, now: NOW });
+    const outside = JSON.stringify(shown) + logRow;
+    expect(outside).not.toMatch(/person@example\.com|pool-PRIVATE-9|PERMISSION_DENIED/);
+    expect(outside).toContain('(code 7)');
+    // The full message is kept, locally.
+    expect(local.join('\n')).toContain('PERMISSION_DENIED for person@example.com');
+  });
+
+  it('safeReadError shows a code only when it is code-shaped', () => {
+    expect(safeReadError('x', Object.assign(new Error('secret'), { code: 7 }))).toBe("x failed (code 7); the full error is on the operator's stderr");
+    expect(safeReadError('x', Object.assign(new Error('secret'), { code: 'permission-denied' }))).toContain('(code permission-denied)');
+    expect(safeReadError('x', Object.assign(new Error('secret'), { code: 'person@example.com said no' }))).toBe("x failed; the full error is on the operator's stderr");
+    expect(safeReadError('x', new Error('secret'))).not.toContain('secret');
+    expect(safeReadError('x', 'a string with secret')).not.toContain('secret');
   });
 
   it('a row with a hostile document id shows the placeholder', async () => {
@@ -332,7 +392,8 @@ describe('recurring jobs: a config choice is not a finding', () => {
   it('an action name outside the catalogue is a note — logAdminAction records names the client reports', async () => {
     const { verdict, row: logRow } = await sweep([...recurring(), row({ action: 'SOMETHING_NEW' })]);
     expect(verdict).toBe('CLEAN');
-    expect(logRow).toContain('action name(s) outside the catalogue: SOMETHING_NEW');
+    expect(logRow).toContain('1 action name(s) outside the catalogue, on 1 row(s) (names not shown)');
+    expect(logRow).not.toContain('SOMETHING_NEW');
   });
 
   it('NFL_LOCK_WATCH is not treated as recurring: it is silent all offseason by design', () => {
@@ -503,8 +564,30 @@ describe('the runner', () => {
   });
 
   it('only a LIVE run posts the row; a dry run and an offline run never do', () => {
-    expect(src).toContain("if (profile.postsOwnRow && args.mode === 'live') {");
     expect(src.match(/postRowOnce\(/g) ?? []).toHaveLength(1);
+    // Every branch that can reach the post requires live mode.
+    const gate = /const notProduction = [\s\S]*?postRowOnce\(/.exec(src)![0];
+    const conditions = [...gate.matchAll(/(?:^[ \t]*|\} else )if \(([^{]+)\) \{/gm)].map((m) => m[1]);
+    expect(conditions).toHaveLength(3);
+    for (const c of conditions) expect(c).toContain("profile.postsOwnRow && args.mode === 'live'");
+  });
+
+  it('a BLOCKED live run is not posted: a mis-set shell is not a run of the loop', () => {
+    // This is how two false rows reached the real issue. The BLOCKED branch
+    // comes FIRST, and it only prints.
+    const gate = /const notProduction = [\s\S]*?postRowOnce\(/.exec(src)![0];
+    const blocked = gate.indexOf("summary.verdict === 'BLOCKED'");
+    expect(blocked).toBeGreaterThan(-1);
+    expect(blocked).toBeLessThan(gate.indexOf('postRowOnce('));
+    expect(/summary\.verdict === 'BLOCKED'\) \{\n([\s\S]*?)\n {2}\} else if/.exec(gate)![1]).not.toContain('postRowOnce');
+  });
+
+  it('a live run that did not read production is not posted, and exits non-zero', () => {
+    const gate = /const notProduction = [\s\S]*?postRowOnce\(/.exec(src)![0];
+    expect(gate).toContain('const notProduction = summary.source && !isProductionSource(summary.source);');
+    const branch = /&& notProduction\) \{\n([\s\S]*?)\n {2}\} else if/.exec(gate)![1];
+    expect(branch).not.toContain('postRowOnce');
+    expect(branch).toContain('exit = Math.max(exit, 2);');
   });
 
   it('no test starts audit-sweep in live mode', () => {
@@ -563,6 +646,57 @@ describe('the runner', () => {
       expect(rows[0]).toMatch(/GOOGLE_APPLICATION_CREDENTIALS|firebase-admin is not installed/);
       expect(rows[0].split('\t')[5]).toMatch(/^OFFLINE \(no model\); /);
     });
+  });
+});
+
+describe('where the rows came from is in the row', () => {
+  const clean = async () => (await sweep([...recurring()])).session.ledger;
+
+  it('production is the default project with a credential, and nothing else', () => {
+    expect(isProductionSource({ kind: 'production', projectId: PRODUCTION_PROJECT })).toBe(true);
+    expect(isProductionSource({ kind: 'emulator', projectId: PRODUCTION_PROJECT })).toBe(false);
+    expect(isProductionSource({ kind: 'production', projectId: 'some-other-project' })).toBe(false);
+    expect(isProductionSource(null)).toBe(false);
+    expect(isProductionSource({})).toBe(false);
+  });
+
+  it('a production sweep says nothing extra; an emulator or other-project sweep says NOT PRODUCTION', async () => {
+    const ledger = await clean();
+    const idea = (source: unknown) => summarizeAuditRun({ ledger, now: NOW, source }).row.split('\t')[5];
+    expect(idea({ kind: 'production', projectId: PRODUCTION_PROJECT })).not.toContain('NOT PRODUCTION');
+    expect(idea({ kind: 'emulator', projectId: 'demo-mmp' })).toMatch(/^NOT PRODUCTION: the EMULATOR \(project demo-mmp\); /);
+    expect(idea({ kind: 'production', projectId: 'staging-thing' })).toMatch(/^NOT PRODUCTION: project staging-thing; /);
+  });
+
+  it('a project id that is not id-shaped is not printed', () => {
+    expect(describeSource({ kind: 'production', projectId: 'Has Spaces; and text' })).toBe('project (unnamed)');
+  });
+
+  it('the reader never labels the emulator with the production project', () => {
+    const reader = read('scripts/agent/audit-reader.mjs');
+    expect(reader).toContain("const EMULATOR_PROJECT_DEFAULT = 'demo-mmp';");
+    expect(reader).toContain('const projectId = env.GCLOUD_PROJECT || (emulator ? EMULATOR_PROJECT_DEFAULT : PRODUCTION_PROJECT);');
+    expect(reader).toContain("const source = { kind: emulator ? 'emulator' : 'production', projectId };");
+    // One spelling of the production project across the two files.
+    expect(reader).toContain(`const PRODUCTION_PROJECT = '${PRODUCTION_PROJECT}';`);
+  });
+});
+
+describe('a run that crashed keeps its mode', () => {
+  it('modeLabel is the one spelling', () => {
+    expect(modeLabel('dry-run')).toBe('DRY RUN');
+    expect(modeLabel('offline')).toBe('OFFLINE (no model)');
+    expect(modeLabel('live')).toBeNull();
+  });
+
+  it('a crashed OFFLINE run is not labelled DRY RUN — it made no model call', () => {
+    const idea = (extra: object) => fallbackRow({ loop: 'audit-sweep', verdict: 'ERROR', reason: 'x', now: NOW, ...extra }).split('\t')[5];
+    expect(idea({ dryRun: true, label: modeLabel('offline') })).toBe('OFFLINE (no model); the run did not complete');
+    expect(idea({ dryRun: true, label: modeLabel('dry-run') })).toBe('DRY RUN; the run did not complete');
+    expect(idea({ dryRun: false, label: modeLabel('live') })).toBe('the run did not complete');
+    // The pruner's callers pass no label and are unchanged.
+    expect(idea({ dryRun: true })).toBe('DRY RUN; the run did not complete');
+    expect(read('scripts/agent/run-loop.mjs')).toContain("dryRun: args.mode !== 'live', label: modeLabel(args.mode) })");
   });
 });
 

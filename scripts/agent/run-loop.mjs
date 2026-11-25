@@ -34,7 +34,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildChildEnv, costLogPath, inheritedSessionVars, parseArgs, resolveApiKey, tryAppendCostRow } from './lib.mjs';
-import { AUDIT, AUDIT_ALLOWED_TOOLS, AUDIT_SYSTEM_PROMPT, buildAuditPrompt, createAuditSession, runAuditChecks, summarizeAuditRun } from './audit-lib.mjs';
+import {
+  AUDIT,
+  AUDIT_ALLOWED_TOOLS,
+  AUDIT_SYSTEM_PROMPT,
+  buildAuditPrompt,
+  createAuditSession,
+  describeSource,
+  isProductionSource,
+  modeLabel,
+  runAuditChecks,
+  summarizeAuditRun,
+} from './audit-lib.mjs';
 import {
   PRUNER,
   PRUNER_ALLOWED_TOOLS,
@@ -242,10 +253,12 @@ async function runAuditSweep({ profile, args, commit }) {
     }
     try {
       console.error(`Loop ${profile.name}, ${mode.toUpperCase()}. Reading ${opened.describe}. READ-ONLY.`);
-      const session = createAuditSession({ reader: opened.reader });
+      const source = opened.source;
+      // A failed read's full error goes here, to the operator, and nowhere else.
+      const session = createAuditSession({ reader: opened.reader, log: (line) => console.error(`  [reader] ${line}`) });
       if (mode === 'offline') {
         await runAuditChecks(session);
-        return summarizeAuditRun({ ledger: session.ledger, mode, commit });
+        return { ...summarizeAuditRun({ ledger: session.ledger, mode, commit, source }), source };
       }
 
       const sessionVars = inheritedSessionVars(process.env);
@@ -275,6 +288,7 @@ async function runAuditSweep({ profile, args, commit }) {
         failure: runFailure({ result, refused, error }),
         mode,
         commit,
+        source,
         model: model ?? args.model,
         costUsd: result?.total_cost_usd,
         turns: result?.num_turns,
@@ -291,7 +305,7 @@ async function runAuditSweep({ profile, args, commit }) {
         note: mode,
       });
       if (logFailure) console.error(`NOTE: ${logFailure}. The outcome is unaffected.`);
-      return summary;
+      return { ...summary, source };
     } finally {
       await opened.close();
     }
@@ -323,7 +337,7 @@ async function main() {
       profile.name === AUDIT.LOOP ? await runAuditSweep({ profile, args, commit }) : await runPruner({ profile, args, dryRun: args.mode !== 'live', commit });
   } catch (error) {
     if (args.mode === 'check') throw error;
-    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit, dryRun: args.mode !== 'live' }) };
+    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit, dryRun: args.mode !== 'live', label: modeLabel(args.mode) }) };
   }
   if (!summary) return 0; // --mode check: no run, so no row
 
@@ -340,9 +354,23 @@ async function main() {
     }
   }
   // A hand-run loop has no log job behind it, so a LIVE run posts its own row.
-  // Not in dry-run, and never in offline: only a completed, model-driven live
-  // run is an invocation of the loop as the charter means it.
-  if (profile.postsOwnRow && args.mode === 'live') {
+  // Three kinds of run print their row and post nothing:
+  //
+  //  - dry-run and offline: rehearsals, not invocations;
+  //  - a BLOCKED run: no key or no credential means nothing was read and no
+  //    model was called. It is a mis-set shell, not a run of the loop, and the
+  //    public log is not where to record it. (Two false BLOCKED rows reached
+  //    the issue exactly this way on 2026-11-25; qodo on #809.) An ERROR is
+  //    different: the run started, and that is worth a row;
+  //  - a run that did not read production: the emulator, or another project.
+  //    The issue is the log of production sweeps.
+  const notProduction = summary.source && !isProductionSource(summary.source);
+  if (profile.postsOwnRow && args.mode === 'live' && summary.verdict === 'BLOCKED') {
+    console.error(`\nNot posted: the run was BLOCKED before it read anything. Fix the cause and run it again.`);
+  } else if (profile.postsOwnRow && args.mode === 'live' && notProduction) {
+    console.error(`\nNot posted: this run read ${describeSource(summary.source)}, not production. The loop log holds production sweeps only.`);
+    exit = Math.max(exit, 2);
+  } else if (profile.postsOwnRow && args.mode === 'live') {
     const postId = `hand.${profile.name}.${Date.now().toString(36)}`;
     const failure = postRowOnce({ gh, repo: args.repo, issue: args['log-issue'], body: commentBody(summary.row, '', postId), postId });
     if (failure) {

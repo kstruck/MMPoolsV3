@@ -29,7 +29,9 @@ import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-const PROJECT_ID_DEFAULT = 'gridiron-gamble-uzuqo';
+const PRODUCTION_PROJECT = 'gridiron-gamble-uzuqo';
+/** The emulator's project when none is named. A demo-* id can never reach a real project. */
+const EMULATOR_PROJECT_DEFAULT = 'demo-mmp';
 const COLLECTION = 'admin_audit';
 
 /** How to fix a missing credential. Thrown text ends up in the BLOCKED row. */
@@ -45,7 +47,11 @@ export const NO_CREDENTIAL =
  *   2. GOOGLE_APPLICATION_CREDENTIALS     -> that key file
  *   3. <repoRoot>/scripts/service-account.json (legacy, gitignored)
  *
- * @returns {{ describe: string, reader: object, close: () => Promise<void> }}
+ * `source` says what was opened, as data: `{ kind: 'emulator' | 'production', projectId }`.
+ * The caller puts it in the log row and refuses to post a row that is not
+ * about production.
+ *
+ * @returns {{ describe: string, source: object, reader: object, close: () => Promise<void> }}
  */
 export async function openAuditReader({ repoRoot, env }) {
   let admin;
@@ -54,10 +60,14 @@ export async function openAuditReader({ repoRoot, env }) {
   } catch {
     throw new Error('firebase-admin is not installed under functions/. Run: npm --prefix functions ci');
   }
-  const projectId = env.GCLOUD_PROJECT || PROJECT_ID_DEFAULT;
+  // The emulator never falls back to the production project id: an emulator
+  // run labelled with it reads as production everywhere it is printed.
+  const emulator = Boolean(env.FIRESTORE_EMULATOR_HOST);
+  const projectId = env.GCLOUD_PROJECT || (emulator ? EMULATOR_PROJECT_DEFAULT : PRODUCTION_PROJECT);
+  const source = { kind: emulator ? 'emulator' : 'production', projectId };
   let options;
   let describe;
-  if (env.FIRESTORE_EMULATOR_HOST) {
+  if (emulator) {
     options = { projectId };
     describe = `the EMULATOR at ${env.FIRESTORE_EMULATOR_HOST} (project ${projectId})`;
   } else if (env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -124,5 +134,5 @@ export async function openAuditReader({ repoRoot, env }) {
   const close = async () => {
     await db.terminate().catch(() => {});
   };
-  return { describe, reader, close };
+  return { describe, source, reader, close };
 }

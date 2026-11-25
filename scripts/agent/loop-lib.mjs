@@ -67,10 +67,13 @@ export function loopRowErrors(row) {
 }
 
 /** The row for a run that could not start, or that died before it produced one. */
-export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-', dryRun = false }) {
+export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-', dryRun = false, label = null }) {
   // A dry run that failed is still a dry run. Without the marker its ERROR row
-  // reads as a live run that broke (qodo, second pass on #807).
-  const idea = `${dryRun ? 'DRY RUN; ' : ''}the run did not complete`;
+  // reads as a live run that broke (qodo, second pass on #807). `label` is for
+  // a mode that is neither: an OFFLINE run that crashed made no model call, and
+  // "DRY RUN" would say it did (qodo on #809).
+  const marker = label ?? (dryRun ? 'DRY RUN' : null);
+  const idea = `${marker ? `${marker}; ` : ''}the run did not complete`;
   return formatLoopRow({ date: now.toISOString().slice(0, 10), loop, commit, verdict, metric: '-', idea, lesson: reason });
 }
 

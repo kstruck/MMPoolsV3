@@ -257,7 +257,11 @@ So, for every loop:
    it, and rules 1 to 3 ask the operator to append, commit and push after every
    run: loop 1 was ACTIVE for two months under those rules and logged nothing.
    One command that also logs is the fix. A dry run and an `--mode offline` run
-   print their row and post nothing; they are rehearsals, not invocations.
+   print their row and post nothing; they are rehearsals, not invocations. Two
+   more kinds of live run post nothing: one that ended `BLOCKED` (no key or no
+   credential: nothing was read, and a mis-set shell is not a run of the loop),
+   and one that did not read production (the emulator, or another project; its
+   row says `NOT PRODUCTION`). The issue is the log of production sweeps.
 
    Rules 1 to 3 still hold for a loop run from a Claude Code session with no
    runner. Two places is a cost. It was chosen
@@ -296,7 +300,10 @@ So, for every loop:
 
   Activated is not the same as running. The loop does nothing until Kevin adds
   the `MMP_AGENT_API_KEY` repository secret and sets the `MMP_LOOP_PR_PRUNER`
-  variable to `on`. (Both were done on 2026-11-25, after one manual dry run.)
+  variable to `on`. (Both were done on 2026-11-25, after one manual dry run:
+  read from GitHub that day with `gh secret list`, `gh variable list` and run
+  `45550884517`. No scheduled run had yet happened. Repository settings are
+  not in this diff, so re-measure them rather than trusting this line.)
 - **2026-11-25 — loop 1 can run through the runner** (Kevin: "Approve all four
   picks"). Its state does not change: it has been ACTIVE since 2026-09-19. What
   changes is that it now has a command, a fixed read-only reader for

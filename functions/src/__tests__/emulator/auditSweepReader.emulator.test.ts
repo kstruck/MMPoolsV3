@@ -45,7 +45,7 @@ async function seed(action: string, at: Timestamp, over: Record<string, unknown>
   return ref.id;
 }
 
-let opened: { describe: string; reader: Record<string, (...a: unknown[]) => Promise<unknown>>; close: () => Promise<void> };
+let opened: { describe: string; source: { kind: string; projectId: string }; reader: Record<string, (...a: unknown[]) => Promise<unknown>>; close: () => Promise<void> };
 let lib: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 beforeEach(async () => {
@@ -64,6 +64,23 @@ describe('audit-reader.mjs against the emulator', () => {
   it('opens the emulator, not production', () => {
     expect(process.env.FIRESTORE_EMULATOR_HOST).toBeTruthy();
     expect(opened.describe).toMatch(/^the EMULATOR at /);
+    expect(opened.source.kind).toBe('emulator');
+    // The row built from this source says so, and the runner would not post it.
+    expect(lib.isProductionSource(opened.source)).toBe(false);
+    expect(opened.source.projectId).not.toBe(lib.PRODUCTION_PROJECT);
+  });
+
+  it('with no GCLOUD_PROJECT the emulator is opened as demo-mmp, never as the production project', async () => {
+    const { openAuditReader } = await load('scripts/agent/audit-reader.mjs');
+    const env = { ...process.env };
+    delete env.GCLOUD_PROJECT;
+    const other = await openAuditReader({ repoRoot: REPO_ROOT, env });
+    try {
+      expect(other.source).toEqual({ kind: 'emulator', projectId: 'demo-mmp' });
+      expect(other.describe).not.toContain(lib.PRODUCTION_PROJECT);
+    } finally {
+      await other.close();
+    }
   });
 
   it('countWindow and readWindow agree, keep to the window, and return rows oldest first', async () => {
