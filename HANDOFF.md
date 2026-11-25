@@ -877,8 +877,9 @@
   Three things are still open, so do not read "armed" as "recoverable":
   **(1)** no restore drill has been run (`PLAN-BACKUPS-PHASE3.md` Step 6d.7);
   **(2)** whether the password hash parameters were captured is UNVERIFIED
-  (Step 6d.0) — without them a restore brings back accounts nobody can sign in
-  to; **(3)** both runs were started by hand with Cloud Scheduler's Force run,
+  (Step 6d.0) — without them a restore brings the accounts back with no working
+  password, so every password member must reset by e-mail (Google sign-in is
+  not affected); **(3)** both runs were started by hand with Cloud Scheduler's Force run,
   and the first run by the weekly timer is Sunday 2026-11-29, 03:15 ET. The
   full record, with the source of each fact, is at the top of Step 6 in
   `PLAN-BACKUPS-PHASE3.md`.

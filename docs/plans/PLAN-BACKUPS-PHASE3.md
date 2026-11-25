@@ -19,7 +19,7 @@ costs time, not data.
 | Asset | Backed up? | Consequence if lost |
 |---|---|---|
 | **Firestore** — pools, entries, picks, member records, billing charges, payout records | ✅ **PITR, 7-day window** (measured 2026-08-10) | Bad writes/corruption in the last 7 days are recoverable **while the database still exists** — PITR is historical reads/exports of a live database, not a restore after deletion or project loss. Deletion and >7-day corruption still need the scheduled/off-region exports (items 16/17). |
-| **Firebase Auth** — user accounts, emails, password hashes | ⚠️ **ARMED 2026-11-25, RESTORE NEVER TESTED** — `authBackupJob` (weekly) exports to `gs://mmpools-auth-backups`. One live export exists (198 accounts, measured in the job's log). The weekly timer has not yet fired armed, and nobody has restored from an export. See Step 6 and "What was done on 2026-11-25". | A backup that has never been restored is a hope, not a recovery. Until the drill in Step 6d.7 passes, treat a lost Auth tenant as: probably recoverable, unproven. Without the password hash parameters (Step 6d.0) it is not recoverable at all. |
+| **Firebase Auth** — user accounts, emails, password hashes | ⚠️ **ARMED 2026-11-25, RESTORE NEVER TESTED** — `authBackupJob` (weekly) exports to `gs://mmpools-auth-backups`. One live export exists (198 accounts, measured in the job's log). The weekly timer has not yet fired armed, and nobody has restored from an export. See Step 6 and "What was done on 2026-11-25". | A backup that has never been restored is a hope, not a recovery. Until the drill in Step 6d.7 passes, treat a lost Auth tenant as: probably recoverable, unproven. Without the password hash parameters (Step 6d.0) the accounts and their `uid`s still come back, and no stored password works: see Step 6d.0 for what that does and does not cost. |
 
 ✅ **PITR IS ENABLED — measured 2026-08-10, not assumed.**
 `npx firebase firestore:databases:get "(default)" --project gridiron-gamble-uzuqo --json`
@@ -48,10 +48,11 @@ bucket did not exist and the switch was off (measured 2026-09-06 and again
 
 **Armed 2026-11-25** (Steps 6a and 6b, done by Kevin; the record is "What was
 done on 2026-11-25" under Step 6). The bucket exists, the switch is on, and one
-live export is in the bucket. **Two things are still open, and either one can
-make the export worthless:** whether the password hash parameters were captured
-(Step 6d.0 — UNVERIFIED, see that record), and whether an export can actually
-be restored (Step 6d.7 — never run).
+live export is in the bucket. **Two things are still open, and each one decides
+how much the export is worth:** whether the password hash parameters were
+captured (Step 6d.0 — UNVERIFIED, see that record; without them no stored
+password works after a restore), and whether an export can actually be restored
+(Step 6d.7 — never run).
 
 Scope and corrected facts come from `PLAN-SECURITY-OBSERVABILITY.md` Phase 3
 (items 15–19, already corrected by Codex review #10/#11). This document is the
@@ -746,14 +747,45 @@ done instead uses the scheduled job, which reads the same gate:
    **Force run**.
 3. Read the result in the log:
    `npx firebase functions:log --only authBackupJob --lines 30 --project gridiron-gamble-uzuqo`.
-   The line starts `[authBackup] DRY-RUN:`. The pass conditions are the ones in
-   Stage 1 below.
-4. Set `dryRun: false`, **Force run** again, and look for `[authBackup] LIVE:`
-   and the two objects, as in Stage 2 below.
+   The scheduled job returns nothing to a caller, so the log line is the
+   result. It starts `[authBackup] DRY-RUN:`. **Pass** means all of:
 
-The two stages as first written follow. They are correct about WHAT to expect.
-They are wrong about HOW to trigger it until a caller for `runAuthBackup`
-exists.
+   - an account count close to the Firebase console's Authentication tab;
+   - `complete=true`;
+   - `uploaded=false` (it is a dry run);
+   - `hashless=0`;
+   - `unsupportedMfa=0`.
+
+   **Stop, and do not go live, if** `hashless` is above 0 (the runtime service
+   account cannot read password hashes; a live export in that state imports
+   cleanly and leaves password members unable to sign in), if the count is 0,
+   if `complete=false`, or if the line is `export failed` or
+   `enabled but no destination`. `unsupportedMfa` above 0 does not block: those
+   members lose their second factor on restore, and the export is otherwise
+   usable.
+
+   (`problem: null` and `passwordUsersMissingHash`, which Stage 1 below asks
+   for, are fields of the CALLABLE's return value. The scheduled job has no
+   return value to read. `hashless` in the log line is the same number as
+   `passwordUsersMissingHash`.)
+4. Set `dryRun: false`, **Force run** again. **Pass** means a line starting
+   `[authBackup] LIVE:` with `complete=true`, `uploaded=true`, `hashless=0`,
+   and two objects in the bucket with the same stamp and run id and no
+   `-PARTIAL` in the name:
+
+   ```
+   gcloud storage ls --recursive gs://mmpools-auth-backups/auth/
+   ```
+
+   After a run, `system/heartbeats.authBackupJob` should also show a recent
+   `at` and `ok: true`. That was not read on 2026-11-25.
+
+**The two stages below are the CALLABLE route, and it cannot be followed
+today**: nothing calls `runAuthBackup`. They are kept for the day something
+does. Two things in them do not apply to the Scheduler route above: Stage 1's
+`enabled: false` (the callable runs a dry run with the switch off; the
+scheduled job does not run at all), and the `problem` / `users` /
+`passwordUsersMissingHash` result fields.
 
 ⚠️ **Deploy first.** `authBackupJob` and `runAuthBackup` are new, so they do not
 exist in prod until a functions deploy ships them. Follow CLAUDE.md §3
@@ -864,7 +896,32 @@ EXPORT.** Firebase hashes passwords with a modified scrypt keyed by a
 **project-specific signer key**. The export carries each user's hash and salt;
 it does **not** carry the parameters needed to verify them. Import the users
 without those parameters and every account exists with a password that can never
-match — the members are locked out exactly as thoroughly as if you had no backup.
+match.
+
+**What that costs, stated exactly** (this paragraph said "locked out exactly as
+thoroughly as if you had no backup" until 2026-11-25, which overstated it and
+would have had an operator write off accounts that are recoverable; qodo on
+#813):
+
+- **Every stored password is dead.** Nobody signs in with the password they had.
+- **The accounts themselves are restored**, with their original `uid`. That is
+  the part Firestore depends on: entries, picks and member records still match
+  their owners. With no export at all, they would not.
+- **A member who signs in with Google is not affected by the missing
+  parameters.** The export keeps the link to the Google identity
+  (`providerUserInfo`), and the app has a Google sign-in path
+  (`src/services/authService.ts`). It works again once the Google provider is
+  re-enabled in the project, which is configuration the export does not carry
+  (Step 6d.6).
+- **A password member should be able to get back in by resetting the password
+  by e-mail** (`sendPasswordResetEmail`, also in `authService.ts`): the account
+  and its e-mail address exist, and a reset sets a new hash. **This is expected
+  Firebase behaviour and has NOT been tested here.** The restore drill (Step
+  6d.7) is where it gets proven or disproven.
+
+So missing parameters turn a restore from "everyone signs in as before" into
+"every password member must reset". That is a support wave and a bad day, not a
+total loss — and it is still the difference this step exists to prevent.
 
 1. Go to
    `https://console.firebase.google.com/project/gridiron-gamble-uzuqo/authentication/users`
@@ -1123,15 +1180,32 @@ old documents over current ones and cannot be undone.
 | Database deleted, or project-level accident | Off-region export (step 4) |
 | Regional outage at the database's location | Off-region export (step 4) |
 | Auth users lost | `authBackupJob` weekly (step 6) — **armed 2026-11-25; one live export in `gs://mmpools-auth-backups`.** Not yet proven: the weekly timer firing armed, and a restore (step 6d.7). `runAuthBackup` is deployed and has no caller in the app. |
-| Auth users lost, restore attempted without the hash parameters | **Nothing.** Every account comes back with a password that can never match. Step 6d.0 is the mitigation and it is a Kevin action, not code. |
+| Auth users lost, restore attempted without the hash parameters | **Partly.** Accounts and `uid`s come back; no stored password works. Google sign-in members are unaffected once the provider is re-enabled; password members must reset by e-mail (expected, untested — Step 6d.0). Step 6d.0 is the mitigation and it is a Kevin action, not code. |
 | User-uploaded files lost | **Nothing** — pending the step 3 inventory |
 
-The honest current state is that **every row of that table reads "nothing"**
-until step 2 is run.
+**Where each row stands on 2026-11-25** (this paragraph said "every row of that
+table reads 'nothing' until step 2 is run" until then; two rows had moved and
+it had not):
 
-⚠️ Two rows are load-bearing and NOT satisfied by merging the code: the Auth
-bucket (step 6a) and the hash parameters (step 6d.0). Shipping a backup job is
-not the same as having a backup.
+- **Row 1 is covered.** PITR is on — measured 2026-08-10 (Step 2).
+- **The Auth row is covered by one export**, taken 2026-11-25 (Step 6). The
+  bucket exists and the job is armed. It is not yet a proven recovery.
+- **Rows 2, 3 and 4 depend on Steps 4 and 5.** Their state was NOT measured by
+  the change that wrote this list. Read the Findings below, and measure, before
+  assuming either way.
+- **User-uploaded files: still nothing**, pending the Step 3 inventory.
+
+⚠️ Three things about Auth are load-bearing and are NOT satisfied by the export
+existing:
+
+1. **The hash parameters (Step 6d.0): UNVERIFIED.** Whether they were captured
+   cannot be seen from a repository.
+2. **A restore drill (Step 6d.7): never run.**
+3. **A run by the weekly timer: not yet.** Both runs so far were started by
+   hand. The first scheduled one is Sunday 2026-11-29, 03:15 ET.
+
+Shipping a backup job is not the same as having a backup, and having an export
+is not the same as having restored from one.
 
 ---
 
