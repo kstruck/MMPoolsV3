@@ -149,7 +149,9 @@ export const confirmPayment = validated(
         `;
 
         const emailHtml = renderEmailHtml(
-            escapeHtml(`Payment Confirmation from ${result.playerName}`),
+            // Plain text: renderEmailHtml escapes its title. Pre-escaping here
+            // double-encoded names with & < > " (qodo on #671).
+            `Payment Confirmation from ${result.playerName}`,
             bodyContent,
             `${BASE_URL}/#admin/${result.poolId}`,
             "View Pool Admin"

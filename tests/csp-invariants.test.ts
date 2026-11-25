@@ -64,12 +64,32 @@ function headerValues(src: string, name: string): string[] {
   for (const m of src.matchAll(new RegExp(`"${name}",\\s*\\n?\\s*"value":\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'g'))) {
     out.push(JSON.parse(`"${m[1]}"`) as string);
   }
+  // functions/src/lib/httpHeaders.ts: `"<Name>": "<value>",` inside
+  // COMMON_SECURITY_HEADERS (an object literal, so the key is followed by a
+  // colon — which is what keeps this from also matching firebase.json's
+  // `"key": "<Name>",` shape).
+  for (const m of src.matchAll(new RegExp(`"${name}":\\s*"((?:[^"\\\\]|\\\\.)*)"`, 'g'))) {
+    out.push(JSON.parse(`"${m[1]}"`) as string);
+  }
+  return out.map(v => v.replace(/\s+/g, ' ').trim());
+}
+
+/**
+ * The fifth CSP copy: `SITE_CSP` in the Cloud Functions header helper, which
+ * `joinPreview` puts on the SPA shell it proxies to human visitors. Declared as
+ * a double-quoted string literal (the value contains only single quotes), so
+ * one regex reads it back.
+ */
+function functionsSiteCsp(src: string): string[] {
+  const out: string[] = [];
+  for (const m of src.matchAll(/export const SITE_CSP =\s*\n?\s*"([^"]+)"/g)) out.push(m[1]);
   return out.map(v => v.replace(/\s+/g, ' ').trim());
 }
 
 const NGINX = read('nginx.conf');
 const FIREBASE = read('firebase.json');
-const ALL_CSP = [...cspValues(NGINX), ...cspValues(FIREBASE)];
+const FUNCTIONS_HEADERS = read('functions/src/lib/httpHeaders.ts');
+const ALL_CSP = [...cspValues(NGINX), ...cspValues(FIREBASE), ...functionsSiteCsp(FUNCTIONS_HEADERS)];
 
 describe('CSP — every declaration is identical', () => {
   it('nginx.conf declares it exactly three times', () => {
@@ -83,9 +103,56 @@ describe('CSP — every declaration is identical', () => {
     expect(cspValues(FIREBASE)).toHaveLength(1);
   });
 
-  it('all four declarations are byte-identical', () => {
-    const all = [...cspValues(NGINX), ...cspValues(FIREBASE)];
-    expect(new Set(all).size).toBe(1);
+  it('functions/src/lib/httpHeaders.ts declares SITE_CSP exactly once', () => {
+    // 2026-09-05: joinPreview serves the real index.html from
+    // *.cloudfunctions.net and (via the /join/** rewrite) from *.web.app. Before
+    // this copy existed it served it with NO policy at all.
+    expect(functionsSiteCsp(FUNCTIONS_HEADERS)).toHaveLength(1);
+  });
+
+  it('all five declarations are byte-identical', () => {
+    expect(ALL_CSP).toHaveLength(5);
+    expect(new Set(ALL_CSP).size).toBe(1);
+  });
+
+  it('the SITE_CSP grep is reachable — a drifted value is a second member of the set', () => {
+    const drifted = [...cspValues(NGINX), "default-src 'self'; script-src 'self';"];
+    expect(new Set(drifted).size).toBe(2);
+  });
+});
+
+describe('security headers — the functions helper matches nginx, value for value', () => {
+  // `COMMON_SECURITY_HEADERS` is what every HTML-serving Cloud Function sends.
+  // Each value is pinned to nginx's so the two surfaces cannot drift: a
+  // Referrer-Policy tightened on www but not on the unsubscribe page is exactly
+  // the split the 2026-09-05 audit scored as a FAIL.
+  const PINNED = [
+    'X-Content-Type-Options',
+    'X-Frame-Options',
+    'X-XSS-Protection',
+    'Referrer-Policy',
+    'Permissions-Policy',
+    'Strict-Transport-Security',
+  ] as const;
+
+  it.each(PINNED)('%s: functions helper equals nginx', (name) => {
+    const fromFunctions = headerValues(FUNCTIONS_HEADERS, name);
+    expect(fromFunctions, `${name} missing from httpHeaders.ts`).toHaveLength(1);
+    const fromNginx = new Set(headerValues(NGINX, name));
+    expect(fromNginx.size, `${name} differs between nginx locations`).toBe(1);
+    expect(fromFunctions[0]).toBe([...fromNginx][0]);
+  });
+
+  it('Reporting-Endpoints in the helper is the same group + URL as nginx', () => {
+    const fromFunctions = FUNCTIONS_HEADERS.match(/export const SITE_REPORTING_ENDPOINTS =\s*\n?\s*'([^']+)'/)?.[1];
+    expect(fromFunctions).toBe(headerValues(NGINX, 'Reporting-Endpoints')[0]);
+  });
+
+  it('the object-literal grep is reachable and does not match firebase.json\'s shape', () => {
+    expect(headerValues('"X-Frame-Options": "DENY",', 'X-Frame-Options')).toEqual(['DENY']);
+    // firebase.json writes `"key": "X-Frame-Options", "value": "DENY"` — the
+    // existing third regex reads that; the new fourth must NOT double-count it.
+    expect(headerValues('{ "key": "X-Frame-Options", "value": "DENY" }', 'X-Frame-Options')).toEqual(['DENY']);
   });
 });
 
