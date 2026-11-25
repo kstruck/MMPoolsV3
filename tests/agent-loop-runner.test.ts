@@ -1014,11 +1014,16 @@ describe('the model holds four tools and nothing else', () => {
     expect(env).toEqual({ PATH: '/bin', GITHUB_REPOSITORY: 'o/r' });
   });
 
-  it('run-loop.mjs strips them on BOTH paths that start a subprocess', () => {
+  it('run-loop.mjs strips them on EVERY path that starts a subprocess', () => {
     const src = read('scripts/agent/run-loop.mjs');
-    expect(src.match(/stripGithubCredentials\(buildChildEnv\(/g) ?? []).toHaveLength(2);
-    // And buildChildEnv is never handed to the SDK bare.
-    expect(src.match(/buildChildEnv\(/g) ?? []).toHaveLength(2);
+    // One function builds the subprocess environment, and it strips.
+    expect(src.match(/buildChildEnv\(/g) ?? []).toHaveLength(1);
+    expect(src.match(/stripGithubCredentials\(buildChildEnv\(/g) ?? []).toHaveLength(1);
+    // Every query() takes its env from that function: no `env:` built any other way.
+    const envs = [...src.matchAll(/\benv: ([^,\n]+),/g)].map((m) => m[1]);
+    expect(envs.length).toBeGreaterThanOrEqual(2);
+    for (const e of envs) expect(e).toBe('agentEnv(key)');
+    expect(src).toContain("const env = agentEnv('sk-ant-not-a-key-wiring-check-only');");
   });
 
   it('the tool server defines exactly those four tools', () => {
@@ -1035,8 +1040,9 @@ describe('which loops the runner will run', () => {
   });
 
   it('every other loop is refused with a reason — a parked loop cannot be started by naming it', () => {
-    expect(Object.keys(LOOP_PROFILES)).toEqual(['pr-pruner']);
-    expect(() => resolveLoop('audit-sweep')).toThrow(/production/);
+    // audit-sweep has had a profile since its read-only reader exists
+    // (tests/agent-audit-sweep.test.ts). The other three are still refused.
+    expect(Object.keys(LOOP_PROFILES)).toEqual(['pr-pruner', 'audit-sweep']);
     expect(() => resolveLoop('babysit-deps')).toThrow(/parked/);
     expect(() => resolveLoop('e2e-nightly')).toThrow(/parked/);
     expect(() => resolveLoop('next-ticket')).toThrow(/parked/);
@@ -1053,17 +1059,24 @@ describe('run-loop.mjs, run for real', () => {
   const env = { ...process.env } as Record<string, string | undefined>;
   delete env.MMP_AGENT_API_KEY;
   env.ANTHROPIC_API_KEY = 'sk-must-not-be-used';
+  // A spawned runner must never reach GitHub from a test: a token that cannot
+  // work, and no config directory (see tests/agent-audit-sweep.test.ts for why).
+  env.GH_TOKEN = 'not-a-token-tests-must-not-post';
+  env.GITHUB_TOKEN = 'not-a-token-tests-must-not-post';
+  env.GH_CONFIG_DIR = resolve(REPO_ROOT, 'tests', '__no_such_gh_config__');
   const run = (...args: string[]) => spawnSync(process.execPath, [resolve(REPO_ROOT, 'scripts/agent/run-loop.mjs'), ...args], { env, encoding: 'utf8', cwd: REPO_ROOT });
 
   it('refuses a loop it has no profile for, before anything else', () => {
-    const r = run('audit-sweep', '--mode', 'live');
+    const r = run('babysit-deps', '--mode', 'live');
     expect(r.status).toBe(2);
-    expect(r.stderr).toMatch(/cannot run "audit-sweep"/);
+    expect(r.stderr).toMatch(/cannot run "babysit-deps"/);
     expect(r.stdout).toBe('');
   });
 
   it('refuses an unknown mode and a mistyped flag', () => {
-    expect(run('pr-pruner', '--mode', 'yolo').stderr).toMatch(/--mode must be one of dry-run, live, check/);
+    expect(run('pr-pruner', '--mode', 'yolo').stderr).toMatch(/--mode must be one of dry-run, live, check for pr-pruner/);
+    // `offline` exists for audit-sweep only: the pruner without a model would do nothing.
+    expect(run('pr-pruner', '--mode', 'offline').stderr).toMatch(/--mode must be one of dry-run, live, check for pr-pruner/);
     expect(run('pr-pruner', '--mdoe', 'live').stderr).toMatch(/Unknown argument/);
     expect(run().stderr).toMatch(/Usage:/);
   });
@@ -1240,10 +1253,11 @@ describe('the charter and the skill say what the code does', () => {
     expect(read('.github/workflows/loop-pr-pruner.yml')).toContain("if: always() && needs.prune.result != 'skipped'");
   });
 
-  it('the charter does not claim loop 1 runs through the runner', () => {
-    // It cannot yet (UNRUNNABLE_LOOPS). A ledger that said otherwise would be
-    // the "docs ahead of the code" failure this charter exists to stop.
+  it('the charter says how loop 1 runs: through the runner, by hand, with no workflow', () => {
+    // Until 2026-11-25 this asserted the opposite, because the runner refused
+    // loop 1. The claim and the code moved together (tests/agent-audit-sweep.test.ts).
     const row = charter.split('\n').find((l) => l.startsWith('|') && l.includes('mmp-loop-audit-sweep'))!;
-    expect(row).not.toContain('run-loop.mjs');
+    expect(row).toContain('run-loop.mjs audit-sweep');
+    expect(row).toContain('no workflow runs it');
   });
 });

@@ -16,6 +16,12 @@
 > kstruck/MMPoolsV3#806, not lines in `LOOP-LOG.tsv`. The older box below that says "loops 2–5 stay parked" is
 > superseded for loop 2 only; loops 3–5 are still parked. Loop 1 is ACTIVE and
 > has logged no run.
+>
+> **2026-11-25:** loop 2 is running (secret set, switch on, one clean manual dry
+> run). Loop 1 can now run through the runner, by hand, on the Windows box:
+> `node scripts/agent/run-loop.mjs audit-sweep --mode offline` reads the last 30
+> days of `admin_audit` read-only and needs no API key. **It has not been run
+> against production**: the session that built it had no credential.
 
 > ## 🟢 2026-11-17 — **SQUARES IS REOPENED AND DEPLOYED. EVERY OPEN ITEM IS RULED.**
 >
