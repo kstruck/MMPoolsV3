@@ -865,14 +865,24 @@
   them yours to discard. Set work aside with a WIP commit or a tagged stash,
   never a reset. `.gitattributes` renormalise steps
   (`git rm --cached -r . && git reset --hard`) are Kevin's, in a clean tree.
-- **Firebase Auth has NO effective backup.** The code shipped (#575:
-  `authBackupJob` weekly, `runAuthBackup` on demand) but is gated on
-  `system/config.authBackup.enabled === true` plus a bucket, and it is not
-  armed — measured 2026-09-06 in `npx firebase functions:log --only
-  authBackupJob`: `[authBackupJob] disabled (system/config.authBackup.enabled
-  !== true); nothing to do.` Firestore has 7-day PITR; user accounts, emails
-  and password hashes do not. Do not read "backup job deployed" as "backed
-  up". Arming steps and the bucket work are in `PLAN-BACKUPS-PHASE3.md`.
+- **Firebase Auth is backed up since 2026-11-25, and the backup has NEVER
+  BEEN RESTORED.** `authBackupJob` (#575) is armed and wrote its first live
+  export that day — measured in `npx firebase functions:log --only
+  authBackupJob`: `[authBackup] LIVE: 198 account(s) ... complete=true,
+  uploaded=true, hashless=0` at `06:44:48Z`, two objects in
+  `gs://mmpools-auth-backups/auth/`. Until that day it had never run armed
+  (`disabled ... nothing to do` on 2026-09-06 and again on 2026-11-22); the
+  audit sweep found it, as "no `AUTH_BACKUP` row ever".
+
+  Three things are still open, so do not read "armed" as "recoverable":
+  **(1)** no restore drill has been run (`PLAN-BACKUPS-PHASE3.md` Step 6d.7);
+  **(2)** whether the password hash parameters were captured is UNVERIFIED
+  (Step 6d.0) — without them a restore brings the accounts back with no working
+  password, so every password member must reset by e-mail (Google sign-in is
+  not affected); **(3)** both runs were started by hand with Cloud Scheduler's Force run,
+  and the first run by the weekly timer is Sunday 2026-11-29, 03:15 ET. The
+  full record, with the source of each fact, is at the top of Step 6 in
+  `PLAN-BACKUPS-PHASE3.md`.
 - **`claimMySquares` — fixed in code by #758 (PLAN-SQUARES-REOPEN PR-A,
   2026-11-10); live once that PR is merged and functions are deployed.**
   `guestDeviceKey` was a bearer token written onto each square inside the
