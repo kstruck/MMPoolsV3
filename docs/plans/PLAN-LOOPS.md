@@ -1,7 +1,8 @@
 # PLAN-LOOPS — the five autonomous loops, their verifiers, and their activation state
 
-> **Status: LIVE for loop 1 (audit-sweep). Loops 2–5 remain parked.**
-> Kevin, 2026-09-19: "Go with all recommendations."
+> **Status: LIVE for loop 1 (audit-sweep) and loop 2 (pr-pruner). Loops 3–5 remain parked.**
+> Kevin, 2026-09-19: "Go with all recommendations." Loop 2: Kevin, 2026-11-24,
+> "Approve all picks".
 
 ## Why this file exists, and why it is in git
 
@@ -36,7 +37,7 @@ weakness of that loop, and it is marked.
 | # | Loop | Skill | Mutates? | Verifier (the real gate) | Runs where | State |
 |---|------|-------|----------|--------------------------|-----------|-------|
 | 1 | Audit-trail integrity sweep | `mmp-loop-audit-sweep` | No — read-only | **TWO verdicts, see the note below.** Integrity (every admin action left an audit row) is **not evaluable today** — no correlatable action record exists — so it reports `INCONCLUSIVE` by construction. Self-consistency (rows well-formed, no action type silently producing none) is evaluable: `CLEAN`/`FINDING` with counts | Needs prod Firestore credentials — **Windows box** | 🟢 **ACTIVE 2026-09-19** |
-| 2 | Stale PR pruner | `mmp-loop-pr-pruner` | Comments + closes PRs (reversible) | after a close, re-read the PR and confirm `state == CLOSED`. Never the close call's exit code | Cloud (GitHub MCP) | ⚪ Parked |
+| 2 | Stale PR pruner | `mmp-loop-pr-pruner` | Comments + closes PRs (reversible) | after a close, re-read the PR and confirm `state == CLOSED`. Never the close call's exit code | **GitHub Actions**, nightly, through the Agent SDK (`scripts/agent/run-loop.mjs`, `.github/workflows/loop-pr-pruner.yml`). By hand from any checkout with `gh` | 🟢 **ACTIVE 2026-11-24** |
 | 3 | Nightly e2e sweep | `mmp-loop-e2e-nightly` | No — beyond the test run | Playwright pass rate ≥ 95% | Needs Java + emulators — **Windows box** | ⚪ Parked |
 | 4 | Dependabot babysitter | `mmp-loop-babysit-deps` | Can merge code (highest consequence) | build exit code AND test exit code, both 0 | Cloud (GitHub MCP) + a build host | ⚪ Parked. Auto-merge is a **second, separate** approval |
 | 5 | Ticket/phase execution | `mmp-loop-next-ticket` | Yes — writes real code | the relevant tests/build for what changed | Session-invoked, not scheduled | ⚪ Parked (proceed-gate is its approval) |
@@ -68,6 +69,44 @@ Resolution (2026-09-19):
   often. Loop 1 is invoked from a session on that box; it is not cron'd in the
   cloud, and a cloud session that loads the skill must say it cannot run it
   rather than reporting a clean sweep it never performed.
+
+## The loop runner (`scripts/agent/run-loop.mjs`), added 2026-11-24
+
+The resolution above put loops 2 and 4 "in the cloud", meaning a Claude Code
+cloud session with GitHub MCP. Nothing ever scheduled one. The runner is a
+second, narrower answer for loop 2: a plain Node script that runs the loop
+through the **Claude Agent SDK**, on a GitHub Actions timer. It is paid by the
+Claude plan's monthly API credit, which Claude Code cannot spend (CLAUDE.md
+§2c has the billing rules and the key name, `MMP_AGENT_API_KEY`).
+
+What it changes about how a loop is trusted:
+
+- **The model holds no shell and no file tool.** This repository is public, so
+  a pull request's title and comments are text a stranger controls, and a model
+  with `gh` in a shell also has the API key in that shell. The model gets four
+  fixed tools instead (`list_open_prs`, `inspect_pr`, `warn_pr`, `close_pr`)
+  and is shown numbers, dates and booleans, never a title or a comment.
+- **The loop's rules are enforced in code, at write time.** `warn_pr` and
+  `close_pr` re-read the pull request and refuse anything the rules do not
+  allow, whatever the model asked. A refusal is logged as a `FINDING`.
+- **The log row is built from what the tools recorded**, never from the
+  model's own summary. That is this charter's one rule, applied to the row.
+- **The default is a dry run.** `--mode live` must be typed. The scheduled
+  workflow passes it; a manual run of the workflow defaults to dry-run.
+
+**The switch.** A scheduled run happens only while the repository variable
+`MMP_LOOP_PR_PRUNER` is `on`. Delete the variable to stop the loop.
+
+**Loop 1 does not run through the runner, and the runner refuses it.** The
+audit sweep must read production Firestore, and no fixed read-only script
+returns `admin_audit` rows. Without one, the model would need a shell that
+holds production credentials. That reader is the precondition, and it is not
+built. Loop 1 stays session-invoked on the Windows box.
+
+**Not yet measured:** that a run inside GitHub Actions is billed to the
+promotional credit and not to the purchased balance. The same code path is
+proven on the Windows box (CLAUDE.md §2c). The first Actions run needs a
+billing-page read before and after.
 
 ## The memory: `LOOP-LOG.tsv`
 
@@ -164,6 +203,38 @@ So, for every loop:
    seeing.
 4. A cloud run that cannot push (no branch, protected target) puts the row in
    its PR instead and says so in `lesson`. **It never silently drops it.**
+5. **Every GitHub Actions run of a loop posts its row as a comment on
+   kstruck/MMPoolsV3#806, whether it was started by the timer or by hand**
+   (Kevin, 2026-11-24). A manual run from the Actions tab is still an
+   invocation, and "one row per invocation" has no exception for dry runs: the
+   dry run made for the billing check is exactly the run whose row should be
+   on record. A job in Actions cannot push to `main`, and it has no PR of its
+   own, so rule 4 gives it nowhere to write.
+
+   **Why it cannot push — measured 2026-11-24, not assumed.** Ruleset
+   `11714546` ("Required Checks", enforcement `active`, on the default branch)
+   carries a `pull_request` rule with `required_approving_review_count: 1` and
+   a `required_status_checks` rule. Its only bypass actor is repository role
+   `5` (admin), so the Actions token is not exempt. Re-measure before relying
+   on this, because the whole routing rests on it:
+
+   ```
+   gh api repos/kstruck/MMPoolsV3/rulesets/11714546 -q '{enforcement, bypass: .bypass_actors, rules: [.rules[].type]}'
+   ```
+
+   If that ruleset is ever relaxed, or the Actions app is added as a bypass
+   actor, a scheduled run COULD commit its row to `LOOP-LOG.tsv`, and this
+   rule should be reconsidered rather than left standing. `scripts/agent/post-loop-row.mjs` posts the row,
+   in a job that runs no model and holds a token for issue comments only. It
+   runs even when the loop job failed, and posts an `ERROR` row when that job
+   left none. Read the rows with
+   `gh issue view 806 --repo kstruck/MMPoolsV3 --comments`.
+
+   So `LOOP-LOG.tsv` holds the rows of runs made from a checkout, and the
+   issue holds the rows of runs made in GitHub Actions, scheduled and manual.
+   A dry run says `DRY RUN` in its `idea` field. Two places is a cost. It was chosen
+   over a standing PR for the rows because that needs a token that can push
+   branches, in a job that runs a model on a public repository.
 
 ## Activation decisions, with dates
 
@@ -183,6 +254,21 @@ So, for every loop:
   here rather than only in each skill's prose.
 - **Auto-merge on loop 4 is OFF** and is a separate approval from loop 4's own
   activation. Unchanged.
+- **2026-11-24 — loop 2 ACTIVATED**, on a nightly GitHub Actions timer, through
+  the loop runner (Kevin: "Approve all picks").
+
+  ⚠️ **This overrides "watch loop 1 for two weeks before considering loop 2",
+  and the watch never happened.** On the day of this decision `LOOP-LOG.tsv`
+  on `origin/main` held its header and no rows: loop 1 has been ACTIVE since
+  2026-09-19 and has logged no run. Kevin was told that in chat before he
+  approved. Loop 2 is therefore not building on evidence from loop 1. What it
+  stands on instead is its own design: every write is checked by code, every
+  close is re-read, the first live effect on any PR is a comment, and a closed
+  PR reopens with one click.
+
+  Activated is not the same as running. The loop does nothing until Kevin adds
+  the `MMP_AGENT_API_KEY` repository secret and sets the `MMP_LOOP_PR_PRUNER`
+  variable to `on`.
 
 ## What "activated" does and does not mean
 
