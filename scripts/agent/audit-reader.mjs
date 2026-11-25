@@ -96,7 +96,7 @@ export async function openAuditReader({ repoRoot, env }) {
     },
 
     /**
-     * Up to `limit` rows of the window, oldest first, as plain objects.
+     * Up to `limit` rows of the window, oldest first, as `{ id, fields }`.
      *
      * `at` becomes an ISO string, or null when the stored value is not a
      * Timestamp. (A row with no Timestamp in `at` cannot match the window
@@ -105,9 +105,13 @@ export async function openAuditReader({ repoRoot, env }) {
      */
     async readWindow(sinceIso, limit) {
       const snap = await windowQuery(sinceIso).orderBy('at').limit(limit).get();
+      // The document id and the stored fields are kept APART. Spread together,
+      // a stored field named `id` would be overwritten by the document id and
+      // the sweep's unexpected-field check could never see it (codex round 2
+      // on #809). No name is safe to add beside stored fields: any name can be stored.
       return snap.docs.map((doc) => {
         const data = doc.data();
-        return { ...data, id: doc.id, at: data.at instanceof Timestamp ? data.at.toDate().toISOString() : null };
+        return { id: doc.id, fields: { ...data, at: data.at instanceof Timestamp ? data.at.toDate().toISOString() : null } };
       });
     },
 

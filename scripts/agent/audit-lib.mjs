@@ -142,8 +142,10 @@ const stringOrNull = (v) => v === null || typeof v === 'string';
  * The NAMES of the fields that are wrong in one row; an empty list when the
  * row matches what `adminAuditDoc` (functions/src/lib/adminAudit.ts) writes.
  *
- * `row.at` is whatever the reader produced for the Firestore Timestamp: an ISO
- * string, or null when the stored value was not a Timestamp.
+ * `row` is the STORED FIELDS of one document (the reader's `fields`), with
+ * `at` as the reader produced it for the Firestore Timestamp: an ISO string,
+ * or null when the stored value was not a Timestamp. The document id is not
+ * part of it, so a stored field named `id` is an unexpected field like any other.
  *
  * Names only. A value never leaves this function.
  */
@@ -159,8 +161,7 @@ export function auditRowErrors(row) {
   if (row.status !== 'success' && row.status !== 'error') bad.push('status');
   if (!stringOrNull(row.error)) bad.push('error');
   if (typeof row.at !== 'string' || !Number.isFinite(Date.parse(row.at))) bad.push('at');
-  // `id` is the document id the reader adds beside the stored fields.
-  const extra = Object.keys(row).filter((k) => k !== 'id' && !ROW_FIELDS.includes(k));
+  const extra = Object.keys(row).filter((k) => !ROW_FIELDS.includes(k));
   if (extra.length) bad.push('(unexpected field)');
   return bad;
 }
@@ -190,7 +191,7 @@ const sample = (ids) => ids.slice(0, AUDIT.SAMPLE).map(safeDocId);
  *
  * `reader` is the production reader (audit-reader.mjs), or a fake:
  *   countWindow(sinceIso)                 -> number of rows at or after `sinceIso`
- *   readWindow(sinceIso, limit)           -> [{ id, ...fields, at: iso|null }]
+ *   readWindow(sinceIso, limit)           -> [{ id, fields: { ...stored, at: iso|null } }]
  *   actionEverWritten(action)             -> boolean (any row, any date)
  *   existingPoolIds(ids)                  -> the subset of `ids` that exist under /pools
  * Every method may be async and may throw.
@@ -230,6 +231,7 @@ export function createAuditSession({ reader, now = new Date(), log = () => {} })
       // FEWER means the read was cut short, and a short read is not a sweep.
       if (read.length < total) return shortRead(`counted ${total} rows but read ${read.length}`);
       if (read.length > AUDIT.MAX_ROWS) return shortRead(`read more than the ${AUDIT.MAX_ROWS} limit`);
+      if (!read.every((r) => isPlainObject(r) && isPlainObject(r.fields))) return shortRead('the reader returned a row with no fields');
       rows = read;
       ledger.window = { ok: true, total: read.length };
       ledger.shape = ledger.coverage = ledger.targets = null;
@@ -252,7 +254,7 @@ export function createAuditSession({ reader, now = new Date(), log = () => {} })
     const byField = new Map();
     const malformedIds = [];
     for (const row of rows) {
-      const bad = auditRowErrors(row);
+      const bad = auditRowErrors(row.fields);
       if (!bad.length) continue;
       malformedIds.push(row.id);
       for (const field of bad) byField.set(field, (byField.get(field) ?? 0) + 1);
@@ -269,11 +271,12 @@ export function createAuditSession({ reader, now = new Date(), log = () => {} })
       const counts = new Map();
       let malformedNames = 0;
       for (const row of rows) {
-        if (typeof row?.action !== 'string' || !ACTION_NAME.test(row.action)) {
+        const action = row.fields.action;
+        if (typeof action !== 'string' || !ACTION_NAME.test(action)) {
           malformedNames++;
           continue;
         }
-        counts.set(row.action, (counts.get(row.action) ?? 0) + 1);
+        counts.set(action, (counts.get(action) ?? 0) + 1);
       }
       const seen = [...counts.keys()].sort();
       // Names outside the catalogue are COUNTED, never listed: the name is stored text.
@@ -316,16 +319,17 @@ export function createAuditSession({ reader, now = new Date(), log = () => {} })
       const rowsByPool = new Map();
       let unusableTargets = 0;
       for (const row of rows) {
-        if (row?.targetType !== 'pool' || typeof row.targetId !== 'string' || row.targetId === '') continue;
+        const { targetType, targetId } = row.fields;
+        if (targetType !== 'pool' || typeof targetId !== 'string' || targetId === '') continue;
         // A target id is stored text too. One with a slash, or any character a
         // document id cannot hold, would make Firestore throw an error that
         // QUOTES it. It is counted here and never handed to the reader.
-        if (!POOL_ID.test(row.targetId)) {
+        if (!POOL_ID.test(targetId)) {
           unusableTargets++;
           continue;
         }
-        if (!rowsByPool.has(row.targetId)) rowsByPool.set(row.targetId, []);
-        rowsByPool.get(row.targetId).push(row.id);
+        if (!rowsByPool.has(targetId)) rowsByPool.set(targetId, []);
+        rowsByPool.get(targetId).push(row.id);
       }
       const all = [...rowsByPool.keys()];
       const checked = all.slice(0, AUDIT.MAX_TARGET_LOOKUPS);

@@ -90,11 +90,11 @@ describe('audit-reader.mjs against the emulator', () => {
     const since = daysAgo(30).toDate().toISOString();
 
     expect(await opened.reader.countWindow(since)).toBe(2);
-    const rows = (await opened.reader.readWindow(since, 100)) as { id: string; at: string }[];
+    const rows = (await opened.reader.readWindow(since, 100)) as { id: string; fields: { at: string } }[];
     expect(rows.map((r) => r.id)).toEqual([a, b]);
     expect(rows.map((r) => r.id)).not.toContain(old);
     // `at` arrives as an ISO string, which is what the shape check expects.
-    for (const r of rows) expect(Number.isFinite(Date.parse(r.at))).toBe(true);
+    for (const r of rows) expect(Number.isFinite(Date.parse(r.fields.at))).toBe(true);
   });
 
   it('readWindow honours its limit', async () => {
@@ -164,9 +164,18 @@ describe('the whole sweep, with the real reader and rows the production writer w
         error: 'boom',
       }),
     ).toBe(true);
-    const rows = (await opened.reader.readWindow(daysAgo(1).toDate().toISOString(), 10)) as unknown[];
+    const rows = (await opened.reader.readWindow(daysAgo(1).toDate().toISOString(), 10)) as { id: string; fields: object }[];
     expect(rows).toHaveLength(2);
-    for (const r of rows) expect(lib.auditRowErrors(r)).toEqual([]);
+    for (const r of rows) expect(lib.auditRowErrors(r.fields)).toEqual([]);
+  });
+
+  it('a document with a stored `id` field keeps it apart from the document id, and the sweep flags it', async () => {
+    const docId = await seed('ROLE_CHANGED', daysAgo(2), { id: 'a-stored-field-named-id' });
+    const rows = (await opened.reader.readWindow(daysAgo(30).toDate().toISOString(), 10)) as { id: string; fields: Record<string, unknown> }[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(docId);
+    expect(rows[0].fields.id).toBe('a-stored-field-named-id');
+    expect(lib.auditRowErrors(rows[0].fields)).toEqual(['(unexpected field)']);
   });
 
   it('a clean trail is CLEAN, end to end', async () => {
