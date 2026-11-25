@@ -883,6 +883,23 @@
   and the first run by the weekly timer is Sunday 2026-11-29, 03:15 ET. The
   full record, with the source of each fact, is at the top of Step 6 in
   `PLAN-BACKUPS-PHASE3.md`.
+
+  One item that #813 left as "not measured" is now measured (2026-11-25,
+  `gcloud iam roles describe roles/editor`, 11 lines): the functions' runtime
+  identity holds project `roles/editor`, and that role has **no**
+  `storage.buckets.update` and **no** `storage.buckets.setIamPolicy`, so it
+  cannot change the backup bucket's versioning, lifecycle or access. It does
+  have `storage.buckets.delete`; Cloud Storage refuses to delete a bucket that
+  holds objects and the role has no `storage.objects.*` permission, so that is
+  not usable while an export is in the bucket. That refusal is documented
+  behaviour, **not tested, and not to be tested on the real bucket.**
+  **Still not assessed:** the role also holds
+  `firebasestorage.buckets.addFirebase`, which links a bucket to Firebase
+  Storage, where Security Rules and not only IAM decide access. Whether that
+  works on this bucket, and what it would expose, is unmeasured
+  (`PLAN-BACKUPS-PHASE3.md` Step 6a, step 7). The fix for all of it is a
+  dedicated least-privilege runtime service account, which is its own
+  plan-gated change.
 - **`claimMySquares` — fixed in code by #758 (PLAN-SQUARES-REOPEN PR-A,
   2026-11-10); live once that PR is merged and functions are deployed.**
   `guestDeviceKey` was a bearer token written onto each square inside the

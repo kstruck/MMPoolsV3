@@ -457,8 +457,8 @@ session directly, because it had no `gcloud`.
 | Bucket | `gs://mmpools-auth-backups`, `location: US-EAST1`, `public_access_prevention: enforced`, `uniform_bucket_level_access: true`, `versioning_enabled: true`, both lifecycle rules (365 days live, 30 days non-current) | Kevin's Cloud Shell: `gcloud storage buckets describe gs://mmpools-auth-backups` |
 | Soft delete | `retentionDurationSeconds: '604800'` (7 days). Google's default; nobody chose it. A deleted object stays recoverable for a week, which matters for PII point 7 below | Same `describe` output |
 | Bucket IAM | Exactly three bindings: `projectOwner` on `roles/storage.legacyBucketOwner` and `roles/storage.legacyObjectOwner`, and `1042141442549-compute@developer.gserviceaccount.com` on `roles/storage.objectCreator`. The four default `projectEditor` / `projectViewer` bindings were **removed** (see Step 6a, step 7, for why) | Kevin's Cloud Shell: the policy printed by the last `remove-iam-policy-binding` |
-| The function cannot read, overwrite or delete an export | `roles/editor` holds no `storage.objects.*` permission and not `storage.buckets.setIamPolicy`. Checked with a control: the same command counts 11 `storage.buckets.*` permissions, so an empty result is a real "none". **This is a measurement of the role as Google defined it that day, and it answers "does project Editor grant object access by itself": it does not** (codex round 3 on #813 asserted that it does; the three greps say otherwise) | Kevin's Cloud Shell: `gcloud iam roles describe roles/editor`, three greps |
-| What the function's identity CAN still do to the bucket | **NOT MEASURED.** `roles/editor` holds 11 `storage.buckets.*` permissions and nobody listed which. If `storage.buckets.update` is among them, an Editor identity can change this bucket's settings: turn versioning off, or set a lifecycle rule that deletes every object after a day. That is not reading the PII, and it is a way to destroy the backups. See Step 6a, step 7, for the command and the real fix | Not read |
+| The function cannot read, overwrite or delete an export | `roles/editor` holds no `storage.objects.*` permission and not `storage.buckets.setIamPolicy`. Checked with a control: the same command counts 11 lines that contain `storage.buckets` (7 `storage.buckets.*` and 4 `firebasestorage.buckets.*`; listed in Step 6a, step 7), so an empty result is a real "none". **This is a measurement of the role as Google defined it that day, and it answers "does project Editor grant object access by itself": it does not** (codex round 3 on #813 asserted that it does; the three greps say otherwise) | Kevin's Cloud Shell: `gcloud iam roles describe roles/editor`, three greps |
+| What the function's identity CAN still do to the bucket | **Measured 2026-11-25, after #813 was written** (which recorded this row as "NOT MEASURED"). The 11 lines are listed in Step 6a, step 7. `storage.buckets.update` is **not** among them, so an Editor identity cannot turn versioning off or set a lifecycle rule on this bucket. `storage.buckets.setIamPolicy` is not among them. `storage.buckets.delete` **is**. Cloud Storage refuses to delete a bucket that holds objects, and emptying it needs `storage.objects.delete`, which the role does not hold, so the permission is not usable against this bucket while it holds an export. **That refusal is Google's documented behaviour and was NOT tested here; do not test it on the real bucket.** `storage.buckets.create` is also there: the identity can create other buckets in the project, which does not touch this one. **NOT ASSESSED: the four `firebasestorage.buckets.*` lines.** `addFirebase` links a bucket to Firebase Storage; whether an Editor identity can link THIS bucket, and what a link would expose, was not measured (Step 6a, step 7) | Kevin's Cloud Shell: `gcloud iam roles describe roles/editor ... \| grep "storage.buckets"`, 11 lines pasted |
 | Dry run | `[authBackup] DRY-RUN: 198 account(s) over 1 page(s), 86006 bytes, complete=true, uploaded=false, hashless=0, unsupportedMfa=0` at `2026-11-25T06:42:22Z` | `npx firebase functions:log --only authBackupJob`, read by the session and by Kevin |
 | First live export | `[authBackup] LIVE: 198 account(s) over 1 page(s), 86006 bytes, complete=true, uploaded=true, hashless=0, unsupportedMfa=0` at `2026-11-25T06:44:48Z` | Same log |
 | Objects | `auth/auth-backup-20261125-064448Z-afb308.json` and `auth/auth-backup-20261125-064448Z-afb308.manifest.json` | Kevin's Cloud Shell: `gcloud storage ls --recursive gs://mmpools-auth-backups/auth/` |
@@ -725,14 +725,66 @@ shell variables — so nothing breaks if you close the tab and come back.
    gcloud iam roles describe roles/editor --format="value(includedPermissions)" | tr ';' '\n' | grep "storage.buckets"
    ```
 
-   If `storage.buckets.update` is in that list, an Editor identity can change
-   the bucket's versioning and lifecycle, and a lifecycle rule can delete every
-   export. **This was not run on 2026-11-25.** Bucket-level bindings cannot
-   close it, because the permission comes from the project role. The fix that
-   does is to stop running the functions as an identity with project Editor: a
-   dedicated runtime service account holding only what the functions need.
-   That is a change to every function's deployment and to authorization, so it
-   is its own plan-gated change, not a step here.
+   On 2026-11-25 it printed these 11 lines (run after #813 was written, which
+   is why #813 says it was not run):
+
+   ```
+   firebasestorage.buckets.addFirebase
+   firebasestorage.buckets.get
+   firebasestorage.buckets.list
+   firebasestorage.buckets.removeFirebase
+   storage.buckets.create
+   storage.buckets.delete
+   storage.buckets.list
+   storage.buckets.listEffectiveTags
+   storage.buckets.listTagBindings
+   storage.buckets.viewIntelligenceDetails
+   storage.buckets.viewSecurityIntelligenceDetails
+   ```
+
+   What that list means for this bucket:
+
+   - **`storage.buckets.update` is not in it.** An Editor identity cannot
+     change the bucket's versioning or lifecycle, so it cannot make a
+     lifecycle rule delete the exports.
+   - **`storage.buckets.setIamPolicy` is not in it**, as the second grep
+     above already showed.
+   - **`storage.buckets.delete` IS in it.** Cloud Storage refuses to delete a
+     bucket that still holds objects, and removing the objects needs
+     `storage.objects.delete`, which the role does not hold. So the permission
+     cannot be used against this bucket while it holds an export. That refusal
+     is Google's documented behaviour. **It was not tested here, and must not
+     be tested on the real bucket.**
+   - `storage.buckets.create` is in it: the identity can create other buckets
+     in the project. That does not touch this one.
+   - **`firebasestorage.buckets.addFirebase` and `.removeFirebase` are in it,
+     and what they allow here is NOT ASSESSED** (codex round 1 on the PR that
+     added this list). `addFirebase` links an existing Cloud Storage bucket to
+     Firebase Storage. A linked bucket can be reached through the Firebase
+     client SDKs, where Firebase Storage Security Rules decide access, not
+     only IAM. Three things were not measured, so none of them is claimed:
+     whether the call succeeds for an identity that lacks
+     `storage.buckets.setIamPolicy` on the bucket; whether this bucket is
+     linked today; and which rules a newly linked bucket would get (this
+     repository has no `storage.rules` file and no `storage` block in
+     `firebase.json`, so nothing here deploys rules for it). Until that is
+     measured, read the line above as "cannot change versioning, lifecycle or
+     IAM", **not** as "cannot open another way in". To see whether the bucket
+     is linked today, in the Firebase console open **Storage** and look at the
+     bucket list: `mmpools-auth-backups` must not be in it. If it is, stop;
+     that is a finding.
+
+   If a later run of the command prints `storage.buckets.update`, that is the
+   stop condition: an Editor identity could then change versioning and
+   lifecycle. Bucket-level bindings cannot close that, because the permission
+   comes from the project role.
+
+   Whatever the list says, the lasting fix is the same, and it also closes
+   the `firebasestorage.buckets.*` question: stop running the
+   functions as an identity with project Editor, and use a dedicated runtime
+   service account holding only what the functions need. That is a change to
+   every function's deployment and to authorization, so it is its own
+   plan-gated change, not a step here.
 
 8. Confirm the bucket is not public:
 
