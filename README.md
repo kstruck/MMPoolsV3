@@ -414,3 +414,5 @@ accepted), so check the deployed value rather than assuming:
 `npx firebase functions:secrets:access STRIPE_SECRET_KEY`. Probing the webhook
 endpoint, **400** means healthy (missing/bad signature) and **503** means the key
 is not usable in the deployed function.
+
+<!-- This line was added by a Codex agent test. -->
