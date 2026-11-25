@@ -37,6 +37,27 @@ function parseSampleRate(raw: string | undefined, fallback: number): number {
 }
 
 /**
+ * Events Sentry drops before sending. Each entry is noise the app cannot act on.
+ * Patterns are kept narrow so a real error that happens to share a word with
+ * one still reaches Sentry.
+ */
+export const SENTRY_IGNORE_ERRORS: RegExp[] = [
+    // Firestore's persistent cache setup rejects un-catchably when Safari
+    // has evicted IndexedDB (user cleared site data, or ITP's 7-day purge).
+    // The SDK falls back to memory cache and the app keeps working, so the
+    // event is pure noise — known firebase-js-sdk issue with no upstream fix.
+    /IndexedDbTransactionError/,
+    // Microsoft's email link scanner (Outlook Safe Links) opens links from
+    // emails in a headless browser, and a script of its own rejects with this
+    // string, not an Error. It is not our code and no member sees it. It paged
+    // as a high-priority issue on /pool/:id on 2026-11-25. No code in this repo
+    // produces the string; the match is still limited to the two method names
+    // the scanner is known to use, and must end the message, so anything else
+    // in this shape is still reported (qodo, PR #815).
+    /Object Not Found Matching Id:\d+, MethodName:(?:update|simulateEvent), ParamCount:\d+$/,
+];
+
+/**
  * True once Sentry.init() has actually run. NOT the same as "a DSN is set":
  * initSentry() dynamically imports a ~40kb chunk, so there is a real window
  * after page load where the DSN is configured and Sentry's GlobalHandlers
@@ -64,11 +85,7 @@ export async function initSentry(): Promise<void> {
     Sentry.init({
         dsn: import.meta.env.VITE_SENTRY_DSN,
         environment: isDev ? 'development' : 'production',
-        // Firestore's persistent cache setup rejects un-catchably when Safari
-        // has evicted IndexedDB (user cleared site data, or ITP's 7-day purge).
-        // The SDK falls back to memory cache and the app keeps working, so the
-        // event is pure noise — known firebase-js-sdk issue with no upstream fix.
-        ignoreErrors: [/IndexedDbTransactionError/],
+        ignoreErrors: SENTRY_IGNORE_ERRORS,
         integrations: [
             Sentry.browserTracingIntegration(),
             Sentry.replayIntegration({

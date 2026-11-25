@@ -52,6 +52,29 @@ describe('sentry.ts', () => {
         expect(Number.isFinite(call.replaysSessionSampleRate)).toBe(true);
     });
 
+    it('initSentry() passes the ignore list to Sentry', async () => {
+        vi.stubEnv('VITE_SENTRY_DSN', 'https://fake@o0.ingest.sentry.io/0');
+        const { initSentry, SENTRY_IGNORE_ERRORS } = await import('./sentry');
+        await initSentry();
+        expect(init.mock.calls[0][0].ignoreErrors).toBe(SENTRY_IGNORE_ERRORS);
+    });
+
+    it('the ignore list drops the Outlook link-scanner rejection and nothing broader', async () => {
+        const { SENTRY_IGNORE_ERRORS } = await import('./sentry');
+        const ignored = (msg: string) => SENTRY_IGNORE_ERRORS.some((re) => re.test(msg));
+        // The exact value Sentry reported on 2026-11-25, and the other method name the scanner uses.
+        expect(ignored('Non-Error promise rejection captured with value: Object Not Found Matching Id:1, MethodName:update, ParamCount:4')).toBe(true);
+        expect(ignored('Object Not Found Matching Id:3, MethodName:simulateEvent, ParamCount:21')).toBe(true);
+        expect(ignored('IndexedDbTransactionError: Connection to Indexed Database server lost')).toBe(true);
+        // The same shape with another method name, or with more text after it, is reported.
+        expect(ignored('Object Not Found Matching Id:1, MethodName:loadPool, ParamCount:4')).toBe(false);
+        expect(ignored('Object Not Found Matching Id:1, MethodName:update, ParamCount:4 (from pools/abc)')).toBe(false);
+        // Real errors that merely share words still go through.
+        expect(ignored('FirebaseError: Object not found')).toBe(false);
+        expect(ignored('No document to update: pools/abc')).toBe(false);
+        expect(ignored('TypeError: Cannot read properties of undefined (reading \'update\')')).toBe(false);
+    });
+
     it('captureSentryException() no-ops without a DSN', async () => {
         vi.stubEnv('VITE_SENTRY_DSN', '');
         const { captureSentryException } = await import('./sentry');
