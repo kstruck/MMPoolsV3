@@ -66,6 +66,9 @@ describe('sentry.ts', () => {
         expect(ignored('Non-Error promise rejection captured with value: Object Not Found Matching Id:1, MethodName:update, ParamCount:4')).toBe(true);
         expect(ignored('Object Not Found Matching Id:3, MethodName:simulateEvent, ParamCount:21')).toBe(true);
         expect(ignored('IndexedDbTransactionError: Connection to Indexed Database server lost')).toBe(true);
+        // The same shape with another method name, or with more text after it, is reported.
+        expect(ignored('Object Not Found Matching Id:1, MethodName:loadPool, ParamCount:4')).toBe(false);
+        expect(ignored('Object Not Found Matching Id:1, MethodName:update, ParamCount:4 (from pools/abc)')).toBe(false);
         // Real errors that merely share words still go through.
         expect(ignored('FirebaseError: Object not found')).toBe(false);
         expect(ignored('No document to update: pools/abc')).toBe(false);

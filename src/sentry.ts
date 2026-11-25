@@ -50,8 +50,11 @@ export const SENTRY_IGNORE_ERRORS: RegExp[] = [
     // Microsoft's email link scanner (Outlook Safe Links) opens links from
     // emails in a headless browser, and a script of its own rejects with this
     // string, not an Error. It is not our code and no member sees it. It paged
-    // as a high-priority issue on /pool/:id on 2026-11-25.
-    /Object Not Found Matching Id:\d+, MethodName:\w+, ParamCount:\d+/,
+    // as a high-priority issue on /pool/:id on 2026-11-25. No code in this repo
+    // produces the string; the match is still limited to the two method names
+    // the scanner is known to use, and must end the message, so anything else
+    // in this shape is still reported (qodo, PR #815).
+    /Object Not Found Matching Id:\d+, MethodName:(?:update|simulateEvent), ParamCount:\d+$/,
 ];
 
 /**
