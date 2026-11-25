@@ -67,10 +67,13 @@ export function loopRowErrors(row) {
 }
 
 /** The row for a run that could not start, or that died before it produced one. */
-export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-', dryRun = false }) {
+export function fallbackRow({ loop, verdict, reason, now = new Date(), commit = '-', dryRun = false, label = null }) {
   // A dry run that failed is still a dry run. Without the marker its ERROR row
-  // reads as a live run that broke (qodo, second pass on #807).
-  const idea = `${dryRun ? 'DRY RUN; ' : ''}the run did not complete`;
+  // reads as a live run that broke (qodo, second pass on #807). `label` is for
+  // a mode that is neither: an OFFLINE run that crashed made no model call, and
+  // "DRY RUN" would say it did (qodo on #809).
+  const marker = label ?? (dryRun ? 'DRY RUN' : null);
+  const idea = `${marker ? `${marker}; ` : ''}the run did not complete`;
   return formatLoopRow({ date: now.toISOString().slice(0, 10), loop, commit, verdict, metric: '-', idea, lesson: reason });
 }
 
@@ -784,14 +787,16 @@ export function buildLoopOptions({ cwd, env, model, maxTurns, maxBudgetUsd, syst
  * reason, so a parked loop can never be started by naming it.
  */
 export const LOOP_PROFILES = Object.freeze({
-  'pr-pruner': Object.freeze({ model: 'claude-haiku-5-5', maxBudgetUsd: 0.5, maxTurns: 60 }),
+  'pr-pruner': Object.freeze({ model: 'claude-haiku-5-5', maxBudgetUsd: 0.5, maxTurns: 60, modes: Object.freeze(['dry-run', 'live', 'check']) }),
+  // By hand, on the Windows box: it reads production Firestore through
+  // audit-reader.mjs. No workflow runs it. `offline` runs the checks with no
+  // model at all. A LIVE run posts its own row (no separate log job exists
+  // for a hand run), so `postsOwnRow` is set.
+  'audit-sweep': Object.freeze({ model: 'claude-haiku-5-5', maxBudgetUsd: 0.5, maxTurns: 20, modes: Object.freeze(['dry-run', 'live', 'check', 'offline']), postsOwnRow: true }),
 });
 
 /** Why a loop has no profile. Printed when someone asks the runner for it. */
 export const UNRUNNABLE_LOOPS = Object.freeze({
-  'audit-sweep':
-    'it must read production Firestore, and this repo has no fixed read-only script that returns admin_audit rows. ' +
-    'Without one the model would need a shell that holds production credentials. Build that reader first, as tools like the pruner\'s.',
   'e2e-nightly': 'it is parked (docs/plans/PLAN-LOOPS.md) and needs Java and the emulators.',
   'babysit-deps': 'it is parked (docs/plans/PLAN-LOOPS.md); it can merge code.',
   'next-ticket': 'it is parked (docs/plans/PLAN-LOOPS.md); it is session-invoked, not scheduled.',

@@ -36,7 +36,7 @@ weakness of that loop, and it is marked.
 
 | # | Loop | Skill | Mutates? | Verifier (the real gate) | Runs where | State |
 |---|------|-------|----------|--------------------------|-----------|-------|
-| 1 | Audit-trail integrity sweep | `mmp-loop-audit-sweep` | No — read-only | **TWO verdicts, see the note below.** Integrity (every admin action left an audit row) is **not evaluable today** — no correlatable action record exists — so it reports `INCONCLUSIVE` by construction. Self-consistency (rows well-formed, no action type silently producing none) is evaluable: `CLEAN`/`FINDING` with counts | Needs prod Firestore credentials — **Windows box** | 🟢 **ACTIVE 2026-09-19** |
+| 1 | Audit-trail integrity sweep | `mmp-loop-audit-sweep` | No — read-only | **TWO verdicts, see the note below.** Integrity (every admin action left an audit row) is **not evaluable today** — no correlatable action record exists — so it reports `INCONCLUSIVE` by construction. Self-consistency (rows well-formed, no action type silently producing none) is evaluable: `CLEAN`/`FINDING` with counts | **Windows box**, by hand, through the Agent SDK (`node scripts/agent/run-loop.mjs audit-sweep`). Needs a prod Firestore credential, so no workflow runs it | 🟢 **ACTIVE 2026-09-19** |
 | 2 | Stale PR pruner | `mmp-loop-pr-pruner` | Comments + closes PRs (reversible) | after a close, re-read the PR and confirm `state == CLOSED`. Never the close call's exit code | **GitHub Actions**, nightly, through the Agent SDK (`scripts/agent/run-loop.mjs`, `.github/workflows/loop-pr-pruner.yml`). By hand from any checkout with `gh` | 🟢 **ACTIVE 2026-11-24** |
 | 3 | Nightly e2e sweep | `mmp-loop-e2e-nightly` | No — beyond the test run | Playwright pass rate ≥ 95% | Needs Java + emulators — **Windows box** | ⚪ Parked |
 | 4 | Dependabot babysitter | `mmp-loop-babysit-deps` | Can merge code (highest consequence) | build exit code AND test exit code, both 0 | Cloud (GitHub MCP) + a build host | ⚪ Parked. Auto-merge is a **second, separate** approval |
@@ -97,11 +97,29 @@ What it changes about how a loop is trusted:
 **The switch.** A scheduled run happens only while the repository variable
 `MMP_LOOP_PR_PRUNER` is `on`. Delete the variable to stop the loop.
 
-**Loop 1 does not run through the runner, and the runner refuses it.** The
-audit sweep must read production Firestore, and no fixed read-only script
-returns `admin_audit` rows. Without one, the model would need a shell that
-holds production credentials. That reader is the precondition, and it is not
-built. Loop 1 stays session-invoked on the Windows box.
+**Loop 1 runs through the runner too, by hand, since 2026-11-25.** It could
+not at first: the audit sweep must read production Firestore, and a model with
+a shell that holds a production credential is the thing this section exists to
+avoid. What was missing was a fixed read-only reader. It is
+`scripts/agent/audit-reader.mjs`, and it is built the same way as the pruner's
+tools:
+
+- **The reader is four fixed reads.** A count, one windowed query, a limit-1
+  query per recurring job, and an existence check on pools. The tools that call
+  it take no input, so the model cannot name a collection, a document or a
+  query. A test reads the reader's source and fails on any write method.
+- **The credential can still write; the code cannot.** It is the key the census
+  script already uses. A viewer-only service account would make Google enforce
+  the same thing, and is the safer setup.
+- **Nothing personal reaches the model.** `admin_audit` rows hold e-mails, user
+  ids and free-text metadata. The checks run in code on the operator's machine,
+  and the model is shown counts, action names and document ids only.
+- **`--mode offline` runs the same checks with no model at all.** The checks
+  need no judgement; the model adds a short summary and little else. Offline is
+  the cheap way to look, and it posts nothing.
+
+It has no workflow and must not get one without a decision: a workflow would
+need a production credential in a GitHub secret, on a public repository.
 
 **Not yet measured:** that a run inside GitHub Actions is billed to the
 promotional credit and not to the purchased balance. The same code path is
@@ -232,7 +250,21 @@ So, for every loop:
 
    So `LOOP-LOG.tsv` holds the rows of runs made from a checkout, and the
    issue holds the rows of runs made in GitHub Actions, scheduled and manual.
-   A dry run says `DRY RUN` in its `idea` field. Two places is a cost. It was chosen
+   A dry run says `DRY RUN` in its `idea` field.
+6. **A LIVE run made by hand through the runner posts its own row to the same
+   issue** (Kevin, 2026-11-25). That is loop 1 today
+   (`run-loop.mjs audit-sweep --mode live`). A hand run has no log job behind
+   it, and rules 1 to 3 ask the operator to append, commit and push after every
+   run: loop 1 was ACTIVE for two months under those rules and logged nothing.
+   One command that also logs is the fix. A dry run and an `--mode offline` run
+   print their row and post nothing; they are rehearsals, not invocations. Two
+   more kinds of live run post nothing: one that ended `BLOCKED` (no key or no
+   credential: nothing was read, and a mis-set shell is not a run of the loop),
+   and one that did not read production (the emulator, or another project; its
+   row says `NOT PRODUCTION`). The issue is the log of production sweeps.
+
+   Rules 1 to 3 still hold for a loop run from a Claude Code session with no
+   runner. Two places is a cost. It was chosen
    over a standing PR for the rows because that needs a token that can push
    branches, in a job that runs a model on a public repository.
 
@@ -268,7 +300,17 @@ So, for every loop:
 
   Activated is not the same as running. The loop does nothing until Kevin adds
   the `MMP_AGENT_API_KEY` repository secret and sets the `MMP_LOOP_PR_PRUNER`
-  variable to `on`.
+  variable to `on`. (Both were done on 2026-11-25, after one manual dry run:
+  read from GitHub that day with `gh secret list`, `gh variable list` and run
+  `45550884517`. No scheduled run had yet happened. Repository settings are
+  not in this diff, so re-measure them rather than trusting this line.)
+- **2026-11-25 — loop 1 can run through the runner** (Kevin: "Approve all four
+  picks"). Its state does not change: it has been ACTIVE since 2026-09-19. What
+  changes is that it now has a command, a fixed read-only reader for
+  `admin_audit`, and a row that posts itself. The DECISION PENDING above (keep
+  it ACTIVE under the narrower self-consistency claim, or park it) is not taken
+  by this: the runner only makes the narrower claim runnable, and every row it
+  writes says the integrity half is INCONCLUSIVE.
 
 ## What "activated" does and does not mean
 

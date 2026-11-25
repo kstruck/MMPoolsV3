@@ -7,6 +7,14 @@
 //   node scripts/agent/run-loop.mjs pr-pruner --row-file row.tsv # also write the log row to a file
 //   node scripts/agent/run-loop.mjs pr-pruner --mode check       # NO model call: prove the tools register
 //
+//   node scripts/agent/run-loop.mjs audit-sweep --mode offline   # the checks in code, NO model call, row printed only
+//   node scripts/agent/run-loop.mjs audit-sweep                  # DRY RUN: model-driven, row printed only
+//   node scripts/agent/run-loop.mjs audit-sweep --mode live      # model-driven, row posted to the loop-log issue
+//
+// audit-sweep reads PRODUCTION Firestore (read-only, audit-reader.mjs). It needs
+// `npm --prefix functions ci` and a credential in GOOGLE_APPLICATION_CREDENTIALS,
+// so it runs by hand on the Windows box and nowhere else.
+//
 // 🛑 THE DEFAULT IS A DRY RUN. A live run needs `--mode live` typed out, so a
 // bare invocation, a copied command or a typo can never close a pull request.
 //
@@ -27,6 +35,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildChildEnv, costLogPath, inheritedSessionVars, parseArgs, resolveApiKey, tryAppendCostRow } from './lib.mjs';
 import {
+  AUDIT,
+  AUDIT_ALLOWED_TOOLS,
+  AUDIT_SYSTEM_PROMPT,
+  buildAuditPrompt,
+  createAuditSession,
+  describeSource,
+  isProductionSource,
+  modeLabel,
+  runAuditChecks,
+  summarizeAuditRun,
+} from './audit-lib.mjs';
+import {
   PRUNER,
   PRUNER_ALLOWED_TOOLS,
   PRUNER_SYSTEM_PROMPT,
@@ -34,7 +54,9 @@ import {
   buildPrunerPrompt,
   createPrunerSession,
   fallbackRow,
+  commentBody,
   loopExitCode,
+  postRowOnce,
   resolveLoop,
   runFailure,
   stripGithubCredentials,
@@ -43,7 +65,23 @@ import {
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_REPO = 'kstruck/MMPoolsV3';
-const MODES = ['dry-run', 'live', 'check'];
+/** The issue that holds runner rows (docs/plans/PLAN-LOOPS.md, "Where the row is written"). */
+const DEFAULT_LOG_ISSUE = 806;
+
+/**
+ * The environment of the model's subprocess: the parent's, minus everything a
+ * Claude Code session exports, minus every GitHub credential, minus the
+ * Firestore credential path. The tools run in THIS process and are the only
+ * thing that needs any of them.
+ */
+function agentEnv(key) {
+  const env = stripGithubCredentials(buildChildEnv(process.env, key));
+  for (const name of Object.keys(env)) {
+    const upper = name.toUpperCase();
+    if (upper === 'GOOGLE_APPLICATION_CREDENTIALS' || upper === 'FIREBASE_TOKEN' || upper === 'FIREBASE_CONFIG') delete env[name];
+  }
+  return env;
+}
 
 /** Run the GitHub CLI. Never throws: a missing binary is a non-zero status like any other failure. */
 function gh(args, input) {
@@ -72,16 +110,16 @@ function observedCommit() {
  * init message, stop. It proves the four tools register under the names the
  * allow list uses, and it cannot spend anything: the key is not a real one.
  */
-async function checkWiring({ mcpServers, cwd }) {
+async function checkWiring({ mcpServers, cwd, allowedTools }) {
   const { query } = await import('@anthropic-ai/claude-agent-sdk');
   const abortController = new AbortController();
-  const env = stripGithubCredentials(buildChildEnv(process.env, 'sk-ant-not-a-key-wiring-check-only'));
+  const env = agentEnv('sk-ant-not-a-key-wiring-check-only');
   let tools = null;
   let thrown = null;
   try {
     for await (const message of query({
       prompt: 'wiring check',
-      options: { ...buildLoopOptions({ cwd, env, model: 'claude-haiku-5-5', maxTurns: 1, maxBudgetUsd: 0.01, systemPrompt: 'wiring check', mcpServers, allowedTools: PRUNER_ALLOWED_TOOLS }), abortController },
+      options: { ...buildLoopOptions({ cwd, env, model: 'claude-haiku-5-5', maxTurns: 1, maxBudgetUsd: 0.01, systemPrompt: 'wiring check', mcpServers, allowedTools }), abortController },
     })) {
       if (message.type === 'system' && message.subtype === 'init') {
         tools = message.tools ?? [];
@@ -99,8 +137,8 @@ async function checkWiring({ mcpServers, cwd }) {
   // sandbox it did not (codex round 6 on #807). The cause is printed, because
   // "no init message" alone sends the reader to the wrong place.
   if (!tools) throw new Error(`the subprocess sent no init message${thrown ? ` (${thrown.slice(0, 300)})` : ''}. This check needs to start the Agent SDK's subprocess; it cannot pass where that is blocked`);
-  const missing = PRUNER_ALLOWED_TOOLS.filter((name) => !tools.includes(name));
-  const extra = tools.filter((name) => !PRUNER_ALLOWED_TOOLS.includes(name));
+  const missing = allowedTools.filter((name) => !tools.includes(name));
+  const extra = tools.filter((name) => !allowedTools.includes(name));
   console.error(`Tools the model would hold: ${tools.join(', ') || '(none)'}`);
   if (missing.length) throw new Error(`these loop tools did not register: ${missing.join(', ')}`);
   if (extra.length) throw new Error(`the model would hold tools the loop does not use: ${extra.join(', ')}`);
@@ -117,7 +155,7 @@ async function runPruner({ profile, args, dryRun, commit }) {
   const cwd = mkdtempSync(path.join(os.tmpdir(), 'mmp-loop-'));
   try {
     if (args.mode === 'check') {
-      await checkWiring({ mcpServers, cwd });
+      await checkWiring({ mcpServers, cwd, allowedTools: PRUNER_ALLOWED_TOOLS });
       return null;
     }
 
@@ -139,7 +177,7 @@ async function runPruner({ profile, args, dryRun, commit }) {
       prompt: buildPrunerPrompt({ skillText: readFileSync(path.join(REPO_ROOT, PRUNER.SKILL), 'utf8'), repo, dryRun }),
       options: buildLoopOptions({
         cwd,
-        env: stripGithubCredentials(buildChildEnv(process.env, key)),
+        env: agentEnv(key),
         model: args.model,
         maxTurns: args['max-turns'],
         maxBudgetUsd: args['max-budget-usd'],
@@ -176,9 +214,109 @@ async function runPruner({ profile, args, dryRun, commit }) {
   }
 }
 
+/**
+ * Loop 1, the audit sweep. Read-only, so `dry-run` and `live` do the same
+ * work; the difference is whether main() posts the row afterwards.
+ *
+ * Order: the API key is checked BEFORE Firestore is opened, so a run that
+ * cannot pay for a model call does not read production first. `offline` needs
+ * no key and makes no model call.
+ */
+async function runAuditSweep({ profile, args, commit }) {
+  const mode = args.mode;
+  const blockedRow = (reason) => summarizeAuditRun({ ledger: createAuditSession({ reader: {} }).ledger, blocked: reason, mode, commit });
+  const cwd = mkdtempSync(path.join(os.tmpdir(), 'mmp-loop-'));
+  try {
+    const { createAuditToolServer } = await import('./audit-tools.mjs');
+    if (mode === 'check') {
+      // No reader: the wiring check never calls a tool.
+      const mcpServers = { [AUDIT.TOOL_SERVER]: await createAuditToolServer(createAuditSession({ reader: {} }).handlers) };
+      await checkWiring({ mcpServers, cwd, allowedTools: AUDIT_ALLOWED_TOOLS });
+      return null;
+    }
+
+    let key = null;
+    if (mode !== 'offline') {
+      try {
+        key = resolveApiKey(process.env);
+      } catch (error) {
+        return blockedRow(error.message);
+      }
+    }
+
+    const { openAuditReader } = await import('./audit-reader.mjs');
+    let opened;
+    try {
+      opened = await openAuditReader({ repoRoot: REPO_ROOT, env: process.env });
+    } catch (error) {
+      return blockedRow(error instanceof Error ? error.message : String(error));
+    }
+    try {
+      console.error(`Loop ${profile.name}, ${mode.toUpperCase()}. Reading ${opened.describe}. READ-ONLY.`);
+      const source = opened.source;
+      // A failed read's full error goes here, to the operator, and nowhere else.
+      const session = createAuditSession({ reader: opened.reader, log: (line) => console.error(`  [reader] ${line}`) });
+      if (mode === 'offline') {
+        await runAuditChecks(session);
+        return { ...summarizeAuditRun({ ledger: session.ledger, mode, commit, source }), source };
+      }
+
+      const sessionVars = inheritedSessionVars(process.env);
+      if (sessionVars.length) {
+        console.error(`NOTE: started from inside a Claude Code session. ${sessionVars.length} CLAUDE* variables are NOT passed to the agent.`);
+      }
+      const mcpServers = { [AUDIT.TOOL_SERVER]: await createAuditToolServer(session.handlers) };
+      const { runQuery } = await import('./run.mjs');
+      const { result, model, refused, error } = await runQuery({
+        prompt: buildAuditPrompt({ skillText: readFileSync(path.join(REPO_ROOT, AUDIT.SKILL), 'utf8'), mode }),
+        options: buildLoopOptions({
+          cwd,
+          env: agentEnv(key),
+          model: args.model,
+          maxTurns: args['max-turns'],
+          maxBudgetUsd: args['max-budget-usd'],
+          systemPrompt: AUDIT_SYSTEM_PROMPT,
+          mcpServers,
+          allowedTools: AUDIT_ALLOWED_TOOLS,
+        }),
+      });
+      // What the model made of it, for the operator. It is not an input to the row.
+      if (result?.subtype === 'success' && !result.is_error && result.result) console.error(`\nThe agent's summary (not part of the row):\n${String(result.result).slice(0, 1500)}`);
+
+      const summary = summarizeAuditRun({
+        ledger: session.ledger,
+        failure: runFailure({ result, refused, error }),
+        mode,
+        commit,
+        source,
+        model: model ?? args.model,
+        costUsd: result?.total_cost_usd,
+        turns: result?.num_turns,
+      });
+      const logFailure = tryAppendCostRow(costLogPath(process.env), {
+        date: new Date().toISOString(),
+        script: `loop:${profile.name}`,
+        model: model ?? args.model,
+        head: commit,
+        verdict: summary.verdict,
+        costUsd: result?.total_cost_usd,
+        turns: result?.num_turns,
+        durationMs: result?.duration_ms,
+        note: mode,
+      });
+      if (logFailure) console.error(`NOTE: ${logFailure}. The outcome is unaffected.`);
+      return { ...summary, source };
+    } finally {
+      await opened.close();
+    }
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   const [loopArg, ...rest] = process.argv.slice(2);
-  if (!loopArg || loopArg.startsWith('--')) throw new Error('Usage: node scripts/agent/run-loop.mjs <loop> [--mode dry-run|live|check] [--row-file <path>]');
+  if (!loopArg || loopArg.startsWith('--')) throw new Error('Usage: node scripts/agent/run-loop.mjs <loop> [--mode dry-run|live|check|offline] [--row-file <path>]');
   const profile = resolveLoop(loopArg);
   const args = parseArgs(rest, {
     mode: { default: 'dry-run' },
@@ -187,16 +325,19 @@ async function main() {
     'max-budget-usd': { default: profile.maxBudgetUsd, type: 'number' },
     'max-turns': { default: profile.maxTurns, type: 'number' },
     'row-file': { default: '' },
+    'log-issue': { default: DEFAULT_LOG_ISSUE, type: 'number' },
   });
-  if (!MODES.includes(args.mode)) throw new Error(`--mode must be one of ${MODES.join(', ')}, got: ${args.mode}`);
+  if (!profile.modes.includes(args.mode)) throw new Error(`--mode must be one of ${profile.modes.join(', ')} for ${profile.name}, got: ${args.mode}`);
+  if (!Number.isInteger(args['log-issue'])) throw new Error('--log-issue must be an issue number');
 
   const commit = observedCommit();
   let summary;
   try {
-    summary = await runPruner({ profile, args, dryRun: args.mode !== 'live', commit });
+    summary =
+      profile.name === AUDIT.LOOP ? await runAuditSweep({ profile, args, commit }) : await runPruner({ profile, args, dryRun: args.mode !== 'live', commit });
   } catch (error) {
     if (args.mode === 'check') throw error;
-    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit, dryRun: args.mode !== 'live' }) };
+    summary = { verdict: 'ERROR', row: fallbackRow({ loop: profile.name, verdict: 'ERROR', reason: error instanceof Error ? error.message : String(error), commit, dryRun: args.mode !== 'live', label: modeLabel(args.mode) }) };
   }
   if (!summary) return 0; // --mode check: no run, so no row
 
@@ -210,6 +351,33 @@ async function main() {
     } catch (error) {
       console.error(`\nROW FILE NOT WRITTEN (${args['row-file']}): ${error instanceof Error ? error.message : String(error)}. The row is on stdout above.`);
       exit = 2;
+    }
+  }
+  // A hand-run loop has no log job behind it, so a LIVE run posts its own row.
+  // Three kinds of run print their row and post nothing:
+  //
+  //  - dry-run and offline: rehearsals, not invocations;
+  //  - a BLOCKED run: no key or no credential means nothing was read and no
+  //    model was called. It is a mis-set shell, not a run of the loop, and the
+  //    public log is not where to record it. (Two false BLOCKED rows reached
+  //    the issue exactly this way on 2026-11-25; qodo on #809.) An ERROR is
+  //    different: the run started, and that is worth a row;
+  //  - a run that did not read production: the emulator, or another project.
+  //    The issue is the log of production sweeps.
+  const notProduction = summary.source && !isProductionSource(summary.source);
+  if (profile.postsOwnRow && args.mode === 'live' && summary.verdict === 'BLOCKED') {
+    console.error(`\nNot posted: the run was BLOCKED before it read anything. Fix the cause and run it again.`);
+  } else if (profile.postsOwnRow && args.mode === 'live' && notProduction) {
+    console.error(`\nNot posted: this run read ${describeSource(summary.source)}, not production. The loop log holds production sweeps only.`);
+    exit = Math.max(exit, 2);
+  } else if (profile.postsOwnRow && args.mode === 'live') {
+    const postId = `hand.${profile.name}.${Date.now().toString(36)}`;
+    const failure = postRowOnce({ gh, repo: args.repo, issue: args['log-issue'], body: commentBody(summary.row, '', postId), postId });
+    if (failure) {
+      console.error(`\nROW NOT POSTED to ${args.repo}#${args['log-issue']}: ${failure}. The row is on stdout above.`);
+      exit = 2;
+    } else {
+      console.error(`\nRow posted to ${args.repo}#${args['log-issue']}.`);
     }
   }
   console.error(`\nLOOP ${profile.name} ${summary.verdict}.`);

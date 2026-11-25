@@ -17,6 +17,61 @@ then — two months — and ran zero times in between. The absence of
 the cloud container does not have. A cloud session that loads this skill must say
 it cannot run the sweep — never report a clean sweep it did not perform.
 
+## Run it with the runner (since 2026-11-25)
+
+```
+npm --prefix functions ci
+npm --prefix scripts/agent ci
+node scripts/agent/run-loop.mjs audit-sweep --mode offline   # the checks in code, no model call, row printed only
+node scripts/agent/run-loop.mjs audit-sweep                  # dry run: model-driven, row printed only
+node scripts/agent/run-loop.mjs audit-sweep --mode live      # model-driven, and the row is posted to the loop-log issue
+```
+
+It needs `GOOGLE_APPLICATION_CREDENTIALS` set to a service-account key file kept
+outside the repo. A model-driven run also needs `MMP_AGENT_API_KEY` (CLAUDE.md
+§2c). With either one missing, the run ends in one `BLOCKED` row that says which.
+
+What the runner does with the steps below:
+
+| Step | In the runner |
+|---|---|
+| 1 | Not needed. The action catalogue and the schema are in `scripts/agent/audit-lib.mjs`, and a test keeps the catalogue in step with `functions/src` |
+| 2 | Every row the runner writes says the integrity half is `INCONCLUSIVE` |
+| 3 | `scripts/agent/audit-reader.mjs` reads the last 30 days of `admin_audit`. It counts first, and refuses to read a window of more than 20,000 rows |
+| 4 | Three checks, in code: row shape, action coverage, targets |
+| 5 | The verdict comes from the code's ledger, not from the model's summary |
+| 6 | A live run posts the row itself (charter rule 6). A dry run and an offline run print it |
+
+**Nothing personal is shown to the model, printed or posted.** Rows hold
+e-mails, user ids and free-text metadata; the model sees counts, document ids,
+and action names that are in the runner's own catalogue. A name outside the
+catalogue is counted and not shown: `logAdminAction` stores whatever name the
+client reports. A failed read shows Google's error code, and its full message
+goes to your own terminal only. To look at a flagged row, open it by its id in
+the Firebase console.
+
+A live run that ends `BLOCKED`, or that read the emulator or another project,
+prints its row and does not post it.
+
+Three limits of the reader, so a `CLEAN` is not read as more than it is:
+
+- **The scoped trails are not read.** `pools/{id}/audit` and
+  `users/{uid}/activity` (step 3) are outside it. The top-level collection only.
+- **Targets are checked for pools only.** A user that no longer exists is what
+  `USER_DELETED` is for. A missing pool is a note in the row, not a finding:
+  test pools are deleted.
+- **A row with no Timestamp in `at` is invisible.** The window is a query on
+  `at`, and Firestore returns only rows whose `at` is a Timestamp. Such a row
+  cannot be found by this sweep at all.
+
+And one rule that is narrower than step 4's third bullet, on purpose: a
+missing action type is a `FINDING` only for the four timed jobs that write a
+row on every enabled run (`AUTO_CLOSE_SWEEP`, `NFL_FINALIZE_SWEEP`,
+`MONETIZATION_ALERTS_SWEEP`, `AUTH_BACKUP`), and only when that job has logged
+before. Each of them skips its row while its kill switch is off, so "went
+silent" means **check the kill switch first**. A hand-run action with no rows
+is not reported: nobody may have used it.
+
 ## What this checks
 
 Every destructive admin action (`setUserRole`, `fixPoolScores`, `backfillPools`, and
